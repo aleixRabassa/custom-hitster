@@ -1,0 +1,11 @@
+{
+  // Typecheck-only config for the browser side. Narrows the root to `src/` +
+  // `shared/` with DOM libs and Vite client types. Never read by Vercel.
+  // Run via `pnpm typecheck:app`.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["vite/client"]
+  },
+  "include": ["src", "shared"]
+}

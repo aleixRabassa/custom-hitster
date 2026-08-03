@@ -1,0 +1,57 @@
+{
+  // ===========================================================================
+  //  DO NOT turn this file into a solution file.
+  //
+  //  It MUST stay a real config with actual `compilerOptions`. It must NEVER
+  //  become `{ "files": [], "references": [...] }` -- which is exactly what the
+  //  Vite `react-ts` template ships and what most tutorials show.
+  //
+  //  Why: Vercel reads THIS file when it compiles `api/`, and its Node runtime
+  //  docs state that of the root tsconfig, "Most options are supported aside
+  //  from Path Mappings and Project References." A references-only root would
+  //  leave the function build with no compiler options at all -- and the failure
+  //  surfaces only at deploy time, with nothing locally to warn you.
+  //
+  //  So: no `references` array, and no `composite`. Anywhere in the repo.
+  //
+  //  This file is also what the editor falls back to (VS Code only auto-detects
+  //  files literally named `tsconfig.json`), so it is deliberately permissive:
+  //  it carries BOTH DOM and Node types so `src/` and `api/` are both pleasant
+  //  to edit. The strict DOM-vs-Node isolation is enforced by the two
+  //  `extends`-based typecheck configs instead -- see tsconfig.app.json and
+  //  tsconfig.api.json, neither of which Vercel ever reads.
+  // ===========================================================================
+  "compilerOptions": {
+    "target": "es2023",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "types": ["node", "vite/client"],
+
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "allowImportingTsExtensions": true,
+    "allowArbitraryExtensions": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+
+    // Usable from `src/` ONLY, and mirrored in vite.config.ts. Vite resolves it
+    // at bundle time, so the client is fine -- but Vercel does not support path
+    // mappings for `api/`, so functions MUST import `shared/` relatively.
+    //
+    // Paths are relative and there is no `baseUrl`: TypeScript 7 REMOVED
+    // `baseUrl` (error TS5102) and rejects non-relative path targets (TS5090).
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["src", "api", "shared"]
+}

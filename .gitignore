@@ -1,0 +1,18 @@
+node_modules/
+dist/
+coverage/
+.vercel/
+
+# Local env files. `.env.example` IS committed; real values never are.
+.env*.local
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Editor / OS. `.vscode/settings.json` and `.vscode/extensions.json` are
+# deliberately committed -- they carry the TypeScript 7 editor setup (see AGENTS.md).
+.idea/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,12 @@
+{
+  // Typecheck-only config for build-time config files that run in Node.
+  // Not wired into `pnpm typecheck` (the app/api split is what gates the phase);
+  // it exists so the editor and an explicit `tsc -p tsconfig.node.json` treat
+  // vite.config.ts as Node code rather than browser code.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    "types": ["node"]
+  },
+  "include": ["vite.config.ts"]
+}

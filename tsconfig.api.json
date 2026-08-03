@@ -1,0 +1,14 @@
+{
+  // Typecheck-only config for the serverless side, and the least obvious file in
+  // the layout: it exists ONLY so `pnpm typecheck:api` can prove that nothing
+  // under `api/` reaches for a DOM global. Vercel never reads it -- Vercel reads
+  // the root tsconfig.json, which deliberately carries DOM libs for the editor's
+  // benefit. This narrowed config is where the Node-vs-DOM boundary is actually
+  // enforced, so `lib` intentionally omits DOM.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    "types": ["node"]
+  },
+  "include": ["api", "shared"]
+}

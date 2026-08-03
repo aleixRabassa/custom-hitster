@@ -1,0 +1,6 @@
+/*
+ * Tailwind CSS v4 is CSS-first: this single import replaces the v3
+ * @tailwind base/components/utilities trio, and no tailwind.config.js exists.
+ * Design tokens (@theme) are deliberately deferred to Phase 7.
+ */
+@import 'tailwindcss';

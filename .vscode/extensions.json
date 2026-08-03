@@ -1,0 +1,10 @@
+{
+  "recommendations": [
+    // Powers IntelliSense with TypeScript 7 (the native Go compiler), which
+    // cannot be loaded through the classic `typescript.tsdk` setting.
+    "TypeScriptTeam.native-preview",
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode",
+    "bradlc.vscode-tailwindcss"
+  ]
+}

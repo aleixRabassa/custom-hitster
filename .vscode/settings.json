@@ -1,0 +1,23 @@
+{
+  // ---------------------------------------------------------------------------
+  // This repo installs TWO TypeScript compilers on purpose. See AGENTS.md.
+  //   node_modules/typescript     -> 6.0.3  (only so typescript-eslint can run)
+  //   node_modules/typescript-7   -> 7.0.2  (the real project compiler)
+  // ---------------------------------------------------------------------------
+
+  // TypeScript 7 is the native Go port and ships NO tsserver.js, so
+  // `typescript.tsdk` cannot point at it -- VS Code would show an error and
+  // silently fall back to its own bundled TypeScript. Getting TS 7 into the
+  // editor requires the native language server instead, via the extension
+  // recommended in .vscode/extensions.json.
+  "typescript.experimental.useTsgo": true,
+
+  // Fallback for anyone without that extension: use the repo's own TS 6.0.3
+  // rather than whatever version VS Code happens to bundle. When useTsgo is
+  // active this is ignored, so the two settings do not conflict.
+  // Diagnostics from this fallback are TS 6 and may differ from `pnpm typecheck`.
+  "typescript.tsdk": "node_modules/typescript/lib",
+
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode"
+}

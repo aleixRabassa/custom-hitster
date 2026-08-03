@@ -1,0 +1,6 @@
+dist/
+coverage/
+.vercel/
+node_modules/
+pnpm-lock.yaml
+docs/plans/custom-hitster-mockup.png
