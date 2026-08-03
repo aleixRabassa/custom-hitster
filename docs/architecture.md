@@ -89,9 +89,9 @@ Browser (SPA)                          Serverless (Vercel Functions)
 │                      │  normalized   │  · return {id,title,artist,     │
 │                      │  cards        │     previewUrl?}                │
 │                      │               ├─────────────────────────────────┤
-│ progressive fill     │──────────────▶│ /api/year  (batched)            │
+│ progressive fill     │──────────────▶│ /api/year  (one per track)      │
 │ (start on card 1)    │◀──────────────│  · MusicBrainz earliest release │
-│                      │  years        │  · 1 req/s queue + cache        │
+│                      │  year          │  · 1 req/s gate + cache        │
 ├──────────────────────┤               └─────────────────────────────────┘
 │ shuffle (seeded)     │                              ↓
 │ flip / swipe / audio │                     Upstash Redis (year cache)

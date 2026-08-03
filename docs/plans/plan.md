@@ -57,7 +57,7 @@ Spotify's Feb 2026 Web API changes broke the obvious implementation:
 
 - **Audience: anyone with a public link.** → No Spotify login. → The official Web API cannot serve us. → We read the **public embed endpoint** (the approach the reference repo's "scraper mode" uses).
 - **Playback: QR is always shown** on the hidden side (so a second device/phone can always scan-and-play in Spotify), **plus** in-app background playback when available — controlled by explicit **[■ Exit] / [▶ Play/Pause] / [↺ Restart]** buttons (Exit ends the game session and returns to the landing page). Background audio is additive, not a replacement for the QR.
-- **Release year comes from MusicBrainz, not Spotify.** Spotify returns the _album edition's_ date, so remasters and compilations give wrong years (a 2011 remaster of Bohemian Rhapsody → 2011). MusicBrainz's earliest release date for a recording is exactly the value Hitster needs. This makes year resolution a **core component**, not an enrichment pass. **Fallback:** if MusicBrainz has no match (or is ambiguous/unavailable), use the year from the Spotify embed data instead of leaving the card blank — flagged in the review screen so the user knows it may be a re-release date.
+- **Release year comes from MusicBrainz, not Spotify.** Spotify returns the _album edition's_ date, so remasters and compilations give wrong years (a 2011 remaster of Bohemian Rhapsody → 2011). MusicBrainz's earliest release date for a recording is exactly the value Hitster needs. This makes year resolution a **core component**, not an enrichment pass. **Fallback — tiered, MusicBrainz-only (revised 2026-08-03):** ~~use the year from the Spotify embed data~~ — **there is no Spotify year to fall back to.** The Phase 0 embed spike (§5) established that the payload carries no release date and no album name at track level, and playlist-level `releaseDate` is null. The fallback is therefore three MusicBrainz tiers: a **strict** pass (official studio album, filtered per the Phase 0 fix) marked high confidence; a **relaxed** pass with the release-group filters dropped, marked low confidence; and finally **no year at all**, left for the user to fill in on the review screen. Low-confidence years are flagged there exactly as the original "unconfirmed" wording intended.
 
 > ⚠️ **Worth knowing:** scraping the embed endpoint and hiding/reskinning the embed player are outside Spotify's Developer Terms, and these unofficial endpoints can change without notice. Acceptable for a personal project; it does mean the QR fallback (step 3 below) must always remain functional so the app degrades instead of dying.
 
@@ -75,9 +75,9 @@ Browser (SPA)                          Serverless (Vercel Functions)
 │                      │  normalized   │  · return {id,title,artist,     │
 │                      │  cards        │     previewUrl?}                │
 │                      │               ├─────────────────────────────────┤
-│ progressive fill     │──────────────▶│ /api/year  (batched)            │
+│ progressive fill     │──────────────▶│ /api/year  (one per track)      │
 │ (start on card 1)    │◀──────────────│  · MusicBrainz earliest release │
-│                      │  years        │  · 1 req/s queue + cache        │
+│                      │  year          │  · 1 req/s gate + cache        │
 ├──────────────────────┤               └─────────────────────────────────┘
 │ shuffle (seeded)     │                              ↓
 │ flip / swipe / audio │                     Cache (Upstash/Vercel KV)
@@ -112,16 +112,16 @@ Browser (SPA)                          Serverless (Vercel Functions)
 
 ## 4. Risks & Mitigations
 
-| Risk                                                       | Mitigation                                                                                                               |
-| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Embed endpoint changes/breaks                              | Isolate all scraping in one adapter module with its own tests; QR is always shown regardless, so the game stays playable |
-| Embed JSON truncates long playlists                        | **Spike this first** (Phase 0). If capped, add pagination or a manual track-paste fallback                               |
-| No `audioPreview.url` / no in-app playback for some tracks | Play/Pause button is simply disabled/hidden for that card; QR and Exit are unaffected and always work                    |
-| MusicBrainz has no match / is unavailable                  | **Fall back to the Spotify (embed) year** rather than blank; mark as "unconfirmed" in the review screen                  |
-| MusicBrainz wrong or ambiguous match                       | Manual year-edit review screen before Start; always user-overridable                                                     |
-| MusicBrainz slow (1 req/s)                                 | Global cache + progressive loading + start game on card 1                                                                |
-| Tap vs swipe gesture conflict                              | Movement threshold in `onDragEnd`; `touch-action: none`; disable pull-to-refresh                                         |
-| Autoplay blocked by browsers                               | Playback always begins from an explicit user tap                                                                         |
+| Risk                                                       | Mitigation                                                                                                                                                      |
+| ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Embed endpoint changes/breaks                              | Isolate all scraping in one adapter module with its own tests; QR is always shown regardless, so the game stays playable                                        |
+| Embed JSON truncates long playlists                        | **Spike this first** (Phase 0). If capped, add pagination or a manual track-paste fallback                                                                      |
+| No `audioPreview.url` / no in-app playback for some tracks | Play/Pause button is simply disabled/hidden for that card; QR and Exit are unaffected and always work                                                           |
+| MusicBrainz has no match / is unavailable                  | **Relaxed second MusicBrainz pass** (release-group filters dropped), marked low confidence, then no year — see §2. There is **no Spotify year to fall back to** |
+| MusicBrainz wrong or ambiguous match                       | Manual year-edit review screen before Start; always user-overridable                                                                                            |
+| MusicBrainz slow (1 req/s)                                 | Global cache + progressive loading + start game on card 1                                                                                                       |
+| Tap vs swipe gesture conflict                              | Movement threshold in `onDragEnd`; `touch-action: none`; disable pull-to-refresh                                                                                |
+| Autoplay blocked by browsers                               | Playback always begins from an explicit user tap                                                                                                                |
 
 ---
 
@@ -172,9 +172,11 @@ Browser (SPA)                          Serverless (Vercel Functions)
 
 - [ ] `parsePlaylistUrl()` — handle `open.spotify.com/playlist/{id}`, `?si=` params, `spotify:playlist:` URIs, bare IDs (+ tests)
 - [ ] `/api/playlist` — fetch, extract, normalize to `Card[]`; typed errors (private / not-found / unsupported)
-- [ ] `/api/year` — MusicBrainz lookup, 1 req/s queue, batch endpoint
+- [ ] `/api/year` — MusicBrainz lookup, ~~batch endpoint~~ **one track per request** (client sequences them; decided 2026-08-03), with the 1 req/s budget enforced by a shared out-of-process gate rather than an in-process queue
 - [ ] Cache layer behind an interface (KV in prod, in-memory locally)
-- [ ] Year-resolution logic + tests (fuzzy title match, feat./remaster/live stripping, pick earliest, **fall back to Spotify year when MusicBrainz has no confident match**)
+- [ ] Year-resolution logic + tests (fuzzy title match, feat./remaster/live stripping, pick earliest, **tiered fallback: strict pass → relaxed pass marked low-confidence → no year for manual entry**. ~~fall back to Spotify year~~ — the embed carries no year, see §2)
+
+> Detail, decisions, and execution notes, split in two: [plan.phase-2-playlist.md](./plan.phase-2-playlist.md) (checkboxes 1–2) and [plan.phase-2-year.md](./plan.phase-2-year.md) (checkboxes 3–5).
 
 ### Phase 3 — Deck & Game State
 

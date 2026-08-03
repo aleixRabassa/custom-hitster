@@ -39,7 +39,11 @@ Track-level fields available from the embed payload (union across 150 sampled tr
 
 ### `/api/year` **[planned — Phase 2]**
 
-Batched MusicBrainz lookup behind a 1 req/s queue, with a cache in front. Method and request shape are likewise undecided; `plan.md` specifies it as a batch endpoint. Returns the earliest official-album release year per track, falling back to the Spotify embed year when MusicBrainz has no confident match — flagged as unconfirmed rather than left blank.
+MusicBrainz lookup with a cache in front, **one track per request** — the client sequences the calls, so progressive loading and "playable at card 1" fall out naturally. Returns the earliest official-album release year for that track.
+
+**There is no Spotify-year fallback**, contrary to what earlier drafts of this file and `plan.md` said: the embed payload carries no release date at track level (see `/api/playlist` above). The fallback is three MusicBrainz tiers instead — a strict filtered pass (`confidence: 'high'`), a relaxed pass with the release-group filters dropped (`confidence: 'low'`), then no year at all (`confidence: 'none'`) for manual entry on the Phase 6 review screen.
+
+Because each request is a separate function invocation, the 1 req/s budget **cannot** be held by an in-process queue. It is enforced by a short-lived shared lock in Redis, which holds across concurrent instances and users; when the lock cannot be acquired the endpoint returns **429 with `retryAfterMs`** so the client backs off rather than the function blocking. Without Redis configured the gate degrades to per-instance pacing only — adequate for local development, not a real guarantee.
 
 Implementation constraints are measured, not assumed; see [`architecture.md`](./architecture.md) §4 and [`plans/plan.md`](./plans/plan.md) §5 Phase 0. In short: strip remaster/live/feat. suffixes from titles first, filter candidates by release-group type instead of trusting relevance score, always include the split artist name, use track `duration` as a tie-breaker, and guard against **missing or empty `date` fields** — common on bootleg and compilation releases, so a bare `min()` over all dates present is wrong.
 
