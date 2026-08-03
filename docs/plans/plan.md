@@ -163,7 +163,7 @@ Browser (SPA)                          Serverless (Vercel Functions)
 
 - [x] Init Vite + React + TS; add Tailwind, Motion, `qrcode`
 - [x] Repo hygiene: ESLint/Prettier, `.env.example`, README stub
-- [~] **Vercel project linked; confirm a hello-world function deploys** — **config only; NOT a verified deploy.** `api/hello.ts` and `vercel.json` are committed and the function typechecks against `tsconfig.api.json`, but `vercel link` and `vercel deploy` are performed manually by the developer (decision 4 of the phase plan), so the "hello-world function deploys" half is **unproven**. On the first deploy, confirm `/api/hello` returns `maxEmbedTracks: 100` — that is what verifies the `shared/` cross-directory import resolves inside the real function bundle, which cannot be checked locally without the Vercel CLI.
+- [x] **Vercel project linked; confirm a hello-world function deploys** — linked and deployed manually by the developer (decision 4 of the phase plan), reported successful 2026-08-03. This closes the one part of Phase 1 that could not be verified locally: the deploy exercises the root `tsconfig.json` against `api/`, which is the payoff for keeping it a real config rather than a solution file (decision 14).
 - [x] Vitest wired up with one trivial passing test
 
 > Detail, decisions, and execution notes: [plan.phase-1.md](./plan.phase-1.md).
