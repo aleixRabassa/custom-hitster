@@ -15,21 +15,27 @@ Paste playlist URL
       ↓
   [ Start ]  → fetch tracks → resolve years → shuffle
       ↓
-┌─────────────────────────┐
-│  Card, "hidden" side    │  ← QR always shown, reveal nothing
-│  QR  [▶ Play] [■ Stop]  │
-│      [↺ Restart]        │
-└─────────────────────────┘
+┌─────────────────────────────────────┐
+│      Card, "hidden" side            │  ← QR always shown, reveal nothing
+│               QR                    │
+│ [■ Exit] [▶ Play/Pause] [↺ Restart] │
+└─────────────────────────────────────┘
    tap  → flip to reveal  → Title / Artist / Year
    swipe → next card
       ↓
-  loop until deck empty OR [ End Game ]
+  loop until deck empty OR [ Exit ]
 ```
+
+**Visual mockup:**
+
+![Custom Hitster mockup — landing page, hidden QR card, reveal, and end screen](./custom-hitster-mockup.png)
+
+Left-to-right/top-to-bottom: desktop landing page (URL input + suggested playlists from Phase 6), desktop card view showing the hidden QR side, then the mobile flow — landing, hidden side (QR + Exit/Play-Pause/Restart), revealed side (title/artist/year), the CSS 3D flip mid-transition, a second revealed card, and the end-of-deck screen.
 
 **Non-negotiables from the brief**
 - Hidden side must not leak title, artist, or year — that is the whole game.
 - Tap = flip. Swipe = next card.
-- Deck ends naturally (no cards left) or manually (End Game button).
+- Deck ends naturally (no cards left) or manually (Exit button on the card, which ends the session and redirects to the landing page).
 
 ---
 
@@ -49,7 +55,7 @@ Spotify's Feb 2026 Web API changes broke the obvious implementation:
 ### Decisions taken
 
 - **Audience: anyone with a public link.** → No Spotify login. → The official Web API cannot serve us. → We read the **public embed endpoint** (the approach the reference repo's "scraper mode" uses).
-- **Playback: QR is always shown** on the hidden side (so a second device/phone can always scan-and-play in Spotify), **plus** in-app background playback when available — controlled by explicit **Play / Stop / Restart** buttons. Background audio is additive, not a replacement for the QR.
+- **Playback: QR is always shown** on the hidden side (so a second device/phone can always scan-and-play in Spotify), **plus** in-app background playback when available — controlled by explicit **[■ Exit] / [▶ Play/Pause] / [↺ Restart]** buttons (Exit ends the game session and returns to the landing page). Background audio is additive, not a replacement for the QR.
 - **Release year comes from MusicBrainz, not Spotify.** Spotify returns the *album edition's* date, so remasters and compilations give wrong years (a 2011 remaster of Bohemian Rhapsody → 2011). MusicBrainz's earliest release date for a recording is exactly the value Hitster needs. This makes year resolution a **core component**, not an enrichment pass. **Fallback:** if MusicBrainz has no match (or is ambiguous/unavailable), use the year from the Spotify embed data instead of leaving the card blank — flagged in the review screen so the user knows it may be a re-release date.
 
 > ⚠️ **Worth knowing:** scraping the embed endpoint and hiding/reskinning the embed player are outside Spotify's Developer Terms, and these unofficial endpoints can change without notice. Acceptable for a personal project; it does mean the QR fallback (step 3 below) must always remain functional so the app degrades instead of dying.
@@ -108,7 +114,7 @@ Browser (SPA)                          Serverless (Vercel Functions)
 |---|---|
 | Embed endpoint changes/breaks | Isolate all scraping in one adapter module with its own tests; QR is always shown regardless, so the game stays playable |
 | Embed JSON truncates long playlists | **Spike this first** (Phase 0). If capped, add pagination or a manual track-paste fallback |
-| No `audioPreview.url` / no in-app playback for some tracks | Play button is simply disabled/hidden for that card; QR is unaffected and always works |
+| No `audioPreview.url` / no in-app playback for some tracks | Play/Pause button is simply disabled/hidden for that card; QR and Exit are unaffected and always work |
 | MusicBrainz has no match / is unavailable | **Fall back to the Spotify (embed) year** rather than blank; mark as "unconfirmed" in the review screen |
 | MusicBrainz wrong or ambiguous match | Manual year-edit review screen before Start; always user-overridable |
 | MusicBrainz slow (1 req/s) | Global cache + progressive loading + start game on card 1 |
@@ -131,7 +137,7 @@ Browser (SPA)                          Serverless (Vercel Functions)
 - [x] Spike: confirm whether `audioPreview.url` is present per track, and measure coverage across a real 50-track playlist.
   - **Coverage: 398/400 tracks (99.5%)** across 5 genre/era-diverse playlists, each independently fetched and identity-verified via `entity.uri` (to rule out a stale/wrong playlist): Today's Top Hits (current pop, 50/50), Rock Classics (60s–2020s rock, 100/100), RapCaviar (hip-hop, 50/50), Reggae Classics (98/100), All Out 80s (100/100).
   - **The only gaps were both older reggae catalog tracks** — "Uptown Top Ranking – Remastered 2001" (Althea and Donna) and "Stir It Up" (Bob Marley & The Wailers) — consistent with the plan's general expectation that older/remastered catalog is where preview coverage is most likely to thin out. Sample is small (n=2 missing), so treat as a directional signal, not a hard rule.
-  - **Conclusion: coverage is high enough that `previewUrl` + `<audio>` is a solid primary path**, with the Play/Stop/Restart buttons simply disabled on the rare track that lacks one (per the existing risk mitigation in §4) — no need to lean on the iFrame API purely for coverage reasons. The iFrame API spike below still matters for the "hidden/no-metadata-leak" requirement specifically.
+  - **Conclusion: coverage is high enough that `previewUrl` + `<audio>` is a solid primary path**, with the Play/Pause and Restart buttons simply disabled on the rare track that lacks one (Exit and QR remain unaffected) (per the existing risk mitigation in §4) — no need to lean on the iFrame API purely for coverage reasons. The iFrame API spike below still matters for the "hidden/no-metadata-leak" requirement specifically.
   - **Methodology note:** an earlier attempt fanned this out across 5 parallel subagents that all wrote to the same generic filename (`embed.html`) in the shared scratchpad, causing a write-race — two agents silently read a different playlist's data (one caught it via `entity.name`, one didn't). Re-ran sequentially with per-playlist filenames and an `entity.uri` identity check per fetch; numbers above are from that clean run.
 - [x] Spike: Spotify **iFrame API** — can a visually hidden/covered embed be driven by `play()`/`pause()` with no metadata visible?
   - **Ruled out on Terms-of-Service grounds, independent of technical feasibility.** Spotify's official embed terms (`developer.spotify.com/documentation/embeds/terms`) state: *"You shall not obfuscate the Spotify Widgets in any way, whether by banner advertisements or by any other means, or alter the form or format of the Spotify Widgets from that made available by Spotify"* and *"You shall display the Spotify Widgets in the form made available by Spotify, without alteration..."* A hidden or covered iframe is exactly what these clauses prohibit — so even if `play()`/`pause()` could be driven on a hidden embed, doing so would violate the terms this project already accepts some risk under (§2's ⚠️ note), and there's no upside to add that specific extra violation on top when the alternative below already works.
@@ -147,7 +153,7 @@ Browser (SPA)                          Serverless (Vercel Functions)
   - **Artist-name filtering is reliable: 0 of 6 cover-vs-original lookups cross-contaminated artists** (a "Leonard Cohen" query never returned Jeff Buckley's recording or vice versa) — safe to always include the split artist name (per the subtitle-splitting need already noted in the first Phase 0 spike) in the MusicBrainz query.
   - **Missing/empty `date` fields are common on bootleg and compilation releases** (seen in the remaster and compilation batches) — earliest-date calculation needs a null/empty guard, not a bare `min()` over all dates present.
   - **Methodology:** 5 subagents fanned out in parallel, 3 tracks each, staggered start offsets (0/4/8/12/16s) plus ≥1.2s between each agent's own MusicBrainz calls, each using `curl` with a descriptive `User-Agent` header — to stay within MusicBrainz's 1 req/s policy despite 5 concurrent callers. No rate-limit errors were reported by any batch.
-- [x] **Decide the in-app playback mechanism**: **`previewUrl` + `<audio>`**, not the iFrame API. Coverage is 99.5% (measured); the iFrame API is disqualified by Spotify's own embed terms for anything hidden/covered/altered (measured above), so there's no live alternative to weigh it against anyway. Implementation notes for Phase 4: don't set `navigator.mediaSession.metadata` on the `<audio>` element (avoids leaking title/artist to OS lock-screen/notification "now playing" UI — a leak vector that exists independent of on-page hiding); call `.play()` synchronously inside the button's click handler (standard user-gesture requirement, already the plan's approach). **QR is shown regardless of this decision** — it's the permanent, always-available option; in-app Play/Stop/Restart is an addition on top, disabled for the ~0.5% of tracks without a `previewUrl`.
+- [x] **Decide the in-app playback mechanism**: **`previewUrl` + `<audio>`**, not the iFrame API. Coverage is 99.5% (measured); the iFrame API is disqualified by Spotify's own embed terms for anything hidden/covered/altered (measured above), so there's no live alternative to weigh it against anyway. Implementation notes for Phase 4: don't set `navigator.mediaSession.metadata` on the `<audio>` element (avoids leaking title/artist to OS lock-screen/notification "now playing" UI — a leak vector that exists independent of on-page hiding); call `.play()` synchronously inside the button's click handler (standard user-gesture requirement, already the plan's approach). **QR is shown regardless of this decision** — it's the permanent, always-available option; in-app Play/Pause/Restart is an addition on top, disabled for the ~0.5% of tracks without a `previewUrl` (Exit and QR remain unaffected).
 - [x] **Decide the track-source mechanism** and whether a manual-paste fallback is needed for v1: **the embed endpoint remains the sole v1 track source; no manual-paste fallback for v1.** Given the confirmed 100-track cap with no pagination signal (first Phase 0 spike above) and no reliable way to distinguish "playlist has ≤100 tracks" from "playlist was silently truncated," building and testing a manual-paste UX now would be speculative effort against a failure mode that's likely rare (most personal/shared playlists are well under 100 tracks). Instead: **when `trackList.length === 100` exactly, surface a non-blocking warning** ("this playlist may have more tracks than shown — only the first 100 could be loaded") rather than silently presenting a possibly-incomplete deck as complete. A real manual-paste or pagination fallback is deferred to a fast-follow / Phase 8 nice-to-have if the 100-track cap turns out to bite real users.
 
 ### Phase 1 — Project Skeleton
@@ -171,10 +177,10 @@ Browser (SPA)                          Serverless (Vercel Functions)
 
 ### Phase 4 — Card UI
 - [ ] Card component with CSS 3D flip; hidden side must leak **nothing**
-- [ ] Hidden side: **QR code always rendered**, plus **Play / Stop / Restart** buttons for in-app audio (Restart = replay from 0:00, not next card)
+- [ ] Hidden side: **QR code always rendered**, plus **[■ Exit] [▶ Play/Pause] [↺ Restart]** buttons — Play/Pause toggles in-app audio, Restart replays from 0:00 (not next card), Exit ends the game session and redirects to the landing page
 - [ ] Reveal side: title, artist, **year prominent** (Hitster's key value)
-- [ ] In-app audio wired to the Phase 0 winner; if unavailable for a track, disable Play/Stop/Restart but keep the QR fully functional
-- [ ] Stop audio on flip/next/end/restart — never let a track bleed into the next card or double up on itself
+- [ ] In-app audio wired to the Phase 0 winner; if unavailable for a track, disable Play/Pause and Restart but keep the QR and Exit fully functional
+- [ ] Pause/stop audio on flip/next/restart, and stop it on Exit — never let a track bleed into the next card or double up on itself
 
 ### Phase 5 — Gestures
 - [ ] Swipe-to-next with velocity/offset threshold + snap-back below threshold
@@ -195,7 +201,7 @@ Browser (SPA)                          Serverless (Vercel Functions)
   Editorial playlists like these get their tracks refreshed by Spotify periodically, so re-verify the IDs still resolve to the intended playlist (check `entity.uri` in the embed JSON, not just a 200) before shipping.
 - [ ] Loading state showing year-resolution progress
 - [ ] **Year review/edit screen** before Start (fix MusicBrainz mistakes)
-- [ ] In-game HUD: cards remaining, End Game button
+- [ ] In-game HUD: cards remaining (Exit lives on the card itself, per Phase 4 — no separate End Game button)
 - [ ] End screen: cards played, restart / new playlist
 
 ### Phase 7 — Polish
