@@ -4,7 +4,14 @@ coverage/
 .vercel/
 
 # Local env files. `.env.example` IS committed; real values never are.
-.env*.local
+#
+# `.env` is listed explicitly and NOT just via `.env*.local`: a bare `.env` is the
+# name people reach for by habit, `vercel dev` reads it too, and the old pattern let
+# one straight through into a commit on 2026-08-04. The negation keeps the example
+# file committed while everything else in the family is ignored.
+.env
+.env.*
+!.env.example
 
 # Logs
 *.log
