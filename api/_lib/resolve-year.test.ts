@@ -7,7 +7,7 @@ import {
   noWomanNoCrySearch,
   undatedSearch,
 } from './__fixtures__/musicbrainz-payloads.js';
-import { POSITIVE_TTL_SECONDS, NEGATIVE_TTL_SECONDS, createMemoryCache } from './cache.js';
+import { HIGH_CONFIDENCE_TTL_SECONDS, NO_YEAR_TTL_SECONDS, createMemoryCache } from './cache.js';
 import { resolveYear } from './resolve-year.js';
 import type { FetchLike } from './musicbrainz.js';
 import type { RateLimitGate } from './rate-limit.js';
@@ -97,7 +97,7 @@ describe('resolveYear', () => {
     });
 
     expect(cache.writes).toHaveLength(1);
-    expect(cache.writes[0]?.ttl).toBe(POSITIVE_TTL_SECONDS);
+    expect(cache.writes[0]?.ttl).toBe(HIGH_CONFIDENCE_TTL_SECONDS);
   });
 
   it('should not consume a permit when the caller had a cache hit', async () => {
@@ -227,7 +227,7 @@ describe('resolveYear', () => {
       confidence: 'none',
       reason: 'no-candidates',
     });
-    expect(cache.writes[0]?.ttl).toBe(NEGATIVE_TTL_SECONDS);
+    expect(cache.writes[0]?.ttl).toBe(NO_YEAR_TTL_SECONDS);
   });
 
   it('should not cache an upstream failure', async () => {

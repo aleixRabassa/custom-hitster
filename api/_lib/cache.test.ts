@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
-  NEGATIVE_TTL_SECONDS,
-  POSITIVE_TTL_SECONDS,
+  HIGH_CONFIDENCE_TTL_SECONDS,
+  LOW_CONFIDENCE_TTL_SECONDS,
+  NO_YEAR_TTL_SECONDS,
   createCache,
   createMemoryCache,
   createUpstashCache,
@@ -30,7 +31,7 @@ function stubFetch(result: unknown): { fetch: FetchLike; bodies: unknown[][] } {
 describe('createMemoryCache', () => {
   it('should round-trip a value through the in-memory adapter', async () => {
     const cache = createMemoryCache();
-    await cache.set('mbyear:v1:queen|bohemian rhapsody', HIGH, POSITIVE_TTL_SECONDS);
+    await cache.set('mbyear:v1:queen|bohemian rhapsody', HIGH, HIGH_CONFIDENCE_TTL_SECONDS);
 
     expect(await cache.get('mbyear:v1:queen|bohemian rhapsody')).toEqual(HIGH);
   });
@@ -47,8 +48,8 @@ describe('createMemoryCache', () => {
     // Storing a bare year would silently upgrade every cached card to high confidence and
     // defeat Phase 6's reveal-side year UI (decision 9).
     const cache = createMemoryCache();
-    await cache.set('low', LOW, POSITIVE_TTL_SECONDS);
-    await cache.set('none', NONE, NEGATIVE_TTL_SECONDS);
+    await cache.set('low', LOW, LOW_CONFIDENCE_TTL_SECONDS);
+    await cache.set('none', NONE, NO_YEAR_TTL_SECONDS);
 
     expect(await cache.get('low')).toEqual(LOW);
     expect(await cache.get('none')).toEqual(NONE);
@@ -201,11 +202,32 @@ describe('createCache', () => {
 });
 
 describe('ttlFor', () => {
-  it('should cache negative results with a shorter TTL than positive ones', () => {
+  it('should pick a TTL per confidence tier', () => {
+    expect(ttlFor(HIGH)).toBe(HIGH_CONFIDENCE_TTL_SECONDS);
+    expect(ttlFor(LOW)).toBe(LOW_CONFIDENCE_TTL_SECONDS);
+    expect(ttlFor(NONE)).toBe(NO_YEAR_TTL_SECONDS);
+  });
+
+  it('should order the tiers by how likely the answer is to change', () => {
     // Negatives ARE cached (a miss costs a full two-request round trip and the next user
-    // with the same playlist will ask again), but MusicBrainz improves over time.
-    expect(ttlFor(HIGH)).toBe(POSITIVE_TTL_SECONDS);
-    expect(ttlFor(NONE)).toBe(NEGATIVE_TTL_SECONDS);
-    expect(NEGATIVE_TTL_SECONDS).toBeLessThan(POSITIVE_TTL_SECONDS);
+    // with the same playlist will ask again) -- but they are the result most likely to
+    // improve, and a `low` year is the one most likely to be wrong, so both expire sooner
+    // than a `high` year, which is a historical fact.
+    expect(NO_YEAR_TTL_SECONDS).toBeLessThan(LOW_CONFIDENCE_TTL_SECONDS);
+    expect(LOW_CONFIDENCE_TTL_SECONDS).toBeLessThan(HIGH_CONFIDENCE_TTL_SECONDS);
+  });
+
+  it('should never expire before the edge does, for any tier', () => {
+    // THE RULE THAT SETS THESE NUMBERS. An edge miss is free -- it falls through to Redis --
+    // while a Redis miss costs two requests against a budget that is global across all
+    // users. So Redis must outlive the edge on every tier. An earlier two-tier version of
+    // this file broke the rule on `low`: 30 days in Redis against 1 day at the edge.
+    //
+    // Mirrors CACHE_CONTROL in `api/year.ts`. If that table changes, this must too.
+    const edgeSeconds = { high: 2_592_000, low: 86_400, none: 3_600 };
+
+    expect(ttlFor(HIGH)).toBeGreaterThanOrEqual(edgeSeconds.high);
+    expect(ttlFor(LOW)).toBeGreaterThanOrEqual(edgeSeconds.low);
+    expect(ttlFor(NONE)).toBeGreaterThanOrEqual(edgeSeconds.none);
   });
 });

@@ -150,7 +150,7 @@ GET /api/year?title=…&artist=…&durationMs=…
 │  neither → year: null + reason       │──▶ none
 └──────────┬───────────────────────────┘
            ▼
-   cache.set(…) — ALL THREE outcomes, negatives on a shorter TTL
+   cache.set(…) — ALL THREE outcomes, one TTL per tier (30d / 7d / 1d)
    200 {year, confidence, source?, reason?, cached, cleanedTitle, stripped}
    + Cache-Control tiered by confidence (30d / 1d / 1h)
 ```

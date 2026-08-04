@@ -58,6 +58,12 @@ const MAX_FIELD_LENGTH = 300;
  * absorb repeat requests ahead of both Redis and MusicBrainz. A `none` result is the one
  * most likely to improve as MusicBrainz's data does, so it gets a short window. `low` sits
  * between: correct often enough to cache, wrong often enough not to pin for a month.
+ *
+ * **Every value here must be <= the matching TTL in `api/_lib/cache.ts`.** An edge miss is
+ * free -- it falls through to Redis -- while a Redis miss costs two requests against a
+ * 1 req/s budget shared by every user, so Redis must never be the one to expire first.
+ * `should never expire before the edge does, for any tier` in `cache.test.ts` mirrors this
+ * table and fails if the two drift apart.
  */
 const CACHE_CONTROL: Record<'high' | 'low' | 'none', string> = {
   high: 'public, s-maxage=2592000, stale-while-revalidate=86400',

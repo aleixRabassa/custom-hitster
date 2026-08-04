@@ -135,7 +135,15 @@ Resolves ONE track's original release year from MusicBrainz, with a cache in fro
 | `cleanedTitle` | The title actually queried, after suffix stripping. Returned deliberately: when a year looks wrong, the first question is always what was searched for.                     |
 | `stripped`     | Which suffix families were removed. **Diagnostic only** — a live-labelled track still resolves to the song's original year, because Hitster asks when the SONG came out.    |
 
-`Cache-Control` is tiered by confidence, since a `high` year is a historical fact while a `none` is the result most likely to improve: `s-maxage=2592000` for `high`, `86400` for `low`, `3600` for `none`.
+**Both caches are tiered by confidence**, since a `high` year is a historical fact while a `none` is the result most likely to improve:
+
+| Tier   | Edge `s-maxage` | Redis TTL |
+| ------ | --------------- | --------- |
+| `high` | 30 days         | 30 days   |
+| `low`  | 1 day           | 7 days    |
+| `none` | 1 hour          | 1 day     |
+
+**Redis is never shorter than the edge, on any tier**, and that rule is what sets the numbers: an edge miss is free because it falls through to Redis, while a Redis miss costs two MusicBrainz requests against a budget shared by every user. A test in `api/_lib/cache.test.ts` mirrors the edge column and fails if the two drift apart.
 
 **There is no Spotify-year fallback**, contrary to what earlier drafts of this file and `plan.md` said: the embed payload carries no release date at track level (see `/api/playlist` above). The fallback is three MusicBrainz tiers instead — a strict filtered pass (`confidence: 'high'`), a relaxed pass with the release-group filters dropped (`confidence: 'low'`), then no year at all (`confidence: 'none'`). There is deliberately **no pre-Start year review screen** — the player pastes the playlist, so listing years before Start would spoil the deck; `confidence` is consumed on the card's revealed side in Phase 6 instead (see [`plans/plan.md`](./plans/plan.md) §6).
 

@@ -28,25 +28,45 @@ export interface YearCache {
 }
 
 /**
- * TTLs, with their reasoning attached because the numbers themselves are a guess until
- * there is usage data (an open question in the plan).
+ * TTLs, one per confidence tier, with their reasoning attached because the numbers
+ * themselves are a guess until there is usage data (an open question in the plan).
  *
- * Positive results get thirty days: an album's original release year is a historical fact
- * and does not change. The bound exists only so a year computed from a MusicBrainz record
- * that later gets corrected eventually washes out.
+ * ===========================================================================
+ *  THE RULE THAT SETS THESE: **Redis TTL >= the edge TTL for the same tier.**
  *
- * Negative results get one day. A miss is worth caching at all -- it costs a full
- * two-request round trip to re-derive, and the next person to paste the same playlist will
- * ask for the same track -- but MusicBrainz improves continuously, so today's unresolvable
- * track may be resolvable next week. Short enough to pick that up, long enough that one
- * unlucky playlist does not re-derive its misses on every play.
+ *  `api/year.ts` sets a `Cache-Control` per tier as well, and the two caches
+ *  are NOT interchangeable: an edge miss is free, because it falls through to
+ *  Redis, while a Redis miss costs two requests against a 1 req/s budget that
+ *  is global across all users. So Redis must never expire first.
+ *
+ *  An earlier version of this file had two tiers, not three, and violated the
+ *  rule in the direction that matters: a `low` year was pinned in Redis for
+ *  THIRTY DAYS while the edge held it for one.
+ * ===========================================================================
+ *
+ * `high` gets thirty days: an album's original release year is a historical fact and does
+ * not change. The bound exists only so a year computed from a MusicBrainz record that later
+ * gets corrected eventually washes out. Note that a scoring change does not need to wait for
+ * it -- that is what the `v1` segment in the key is for.
+ *
+ * `low` gets seven days, and this is the tier the rule above was written for. A `low` year is
+ * shown to the player with an "unconfirmed" marker (decided 2026-08-04), so it is load-bearing
+ * rather than a placeholder -- and it is also the tier most likely to be WRONG and most likely
+ * to become a `high` as MusicBrainz's data improves. A month is too long to pin one; a day
+ * would re-derive it for every replay of the same playlist within a week.
+ *
+ * `none` gets one day. A miss is worth caching at all -- it costs a full two-request round
+ * trip to re-derive, and the next person to paste the same playlist will ask for the same
+ * track -- but it is the result most likely to improve, so it gets the shortest window.
  */
-export const POSITIVE_TTL_SECONDS = 60 * 60 * 24 * 30;
-export const NEGATIVE_TTL_SECONDS = 60 * 60 * 24;
+export const HIGH_CONFIDENCE_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
+export const LOW_CONFIDENCE_TTL_SECONDS = 60 * 60 * 24 * 7; //  7 days
+export const NO_YEAR_TTL_SECONDS = 60 * 60 * 24; //  1 day
 
 /** Pick the TTL for a result. Negative results are cached too -- see decision 9. */
 export function ttlFor(result: YearResult): number {
-  return result.year === null ? NEGATIVE_TTL_SECONDS : POSITIVE_TTL_SECONDS;
+  if (result.year === null) return NO_YEAR_TTL_SECONDS;
+  return result.confidence === 'high' ? HIGH_CONFIDENCE_TTL_SECONDS : LOW_CONFIDENCE_TTL_SECONDS;
 }
 
 /**

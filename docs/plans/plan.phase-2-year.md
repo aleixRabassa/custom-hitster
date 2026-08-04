@@ -700,19 +700,33 @@ measurement. The project is not linked (`vercel link` is out of scope for this p
       shapes the adapter, but it is no longer a decision gate. Phase 3 should design its progressive
       loading against **one track per two seconds**, and note decision 21: that figure is per-user only
       when nobody else is resolving a cold playlist at the same time.
-- [ ] **What are the real TTLs?** Long for positives and short for negatives is the shape; the actual
-      values are a guess until there is usage data. Start generous on positives, conservative on
-      negatives, and revisit.
-- [ ] **Is a low-confidence year better than no year in actual play?** The premise of decision 1, and it
-      cannot be settled by reasoning. If low-confidence years turn out to be wrong often enough to
-      annoy, the answer is either a stricter relaxed pass or the second metadata source deferred above.
-      The revealed side's unconfirmed marker is where this becomes observable.
+- [x] ~~**What are the real TTLs?**~~ **Closed 2026-08-04: three tiers, set by a rule rather than a
+      guess — `high` 30 days, `low` 7 days, `none` 1 day.** The rule is **Redis TTL >= the edge
+      `Cache-Control` for the same tier**, because an edge miss is free (it falls through to Redis)
+      while a Redis miss costs two requests against a budget that is global across all users. The
+      original two-tier version violated it in the direction that mattered: a `low` year was pinned in
+      Redis for thirty days while the edge held it for one — backwards, given a `low` year is both the
+      most likely to be wrong and the most likely to become a `high` as MusicBrainz improves. The
+      numbers are still not measured, but they are now ordered by how likely each answer is to change,
+      and `cache.test.ts` fails if the two tables drift apart.
+- [x] ~~**Is a low-confidence year better than no year in actual play?**~~ **Closed 2026-08-04 by the
+      developer: yes — show it, but always warn it may be wrong.** This confirms decision 1's premise and
+      the tiered design as built. The requirement it adds is on the UI, not on this plan's output: a
+      `low` year must never render like a `high` one. Phase 6 owns the marker; `confidence` already
+      carries everything it needs. The follow-up if `low` years turn out to be wrong often enough to
+      annoy in real play is unchanged — a stricter relaxed pass, or the second metadata source deferred
+      in decision 1.
 - [x] **Should the review screen be mandatory before Start?** **Resolved in [plan.md](./plan.md) §6
       (2026-08-04): there is no pre-Start review screen.** The player pastes the playlist, so listing years
       before Start spoils the deck. `confidence` is consumed on the card's **revealed** side instead — a
       `low` value renders an "unconfirmed" marker where the year is already visible. Nothing changes in
       this plan's output: the three tiers are still exactly what that UI needs.
-- [ ] **Is the ten-second duration tolerance right?** _Now higher-stakes than when this was written:_ as
+- [x] ~~**Is the ten-second duration tolerance right?**~~ **Left at ten seconds, deliberately, 2026-08-04
+      — this needs data, not a decision.** It resolved all fourteen measured tracks, and changing it
+      blind trades a known-good value for an unmeasured one. **The observation that would mean it is too
+      narrow: real playlists showing tracks fall through to the unbounded retry** (visible as a lookup
+      making two searches instead of one). Too wide has no clean symptom, which is a reason not to widen
+      it speculatively. Background, since the constant now does more than the plan assumed:_as
       built it is also the `dur:[lo TO hi]` bound on the search query, so it decides which candidates
       exist at all, not just which one wins a tie. Too narrow and a track whose Spotify duration
       disagrees with MusicBrainz falls to the unbounded retry (costing a request); too wide and the pool
@@ -721,12 +735,26 @@ measurement. The project is not linked (`vercel link` is out of scope for this p
       Original note: derived from a single Phase 0 example (~3:42 studio
       versus ~6:35 live). Wide enough to tolerate edition differences, narrow enough to separate an
       extended mix — but it is one data point, so treat it as tunable.
-- [ ] **How should a `year: null` card behave in the deck before Phase 6 exists?** Phase 3 has to decide
-      whether such a card is playable, skipped, or blocking. Flagged here because the null case is
-      created by this plan and consumed by that one.
-- [ ] **Does the Redis gate need to be fair?** As specified, a losing caller retries and may lose again,
-      so a heavily loaded moment could starve one client. Acceptable for a personal project with
-      client-side retry; revisit only if it shows up in practice.
+- [x] ~~**How should a `year: null` card behave in the deck before Phase 6 exists?**~~ **Closed
+      2026-08-04 by the developer: playable, with a warning telling the player to check the year
+      manually.** Never skipped and never blocking — consistent with the rule that a card whose audio
+      will not play is still a playable card, because the QR always works. Phase 3 keeps such a card in
+      the deck and in play order; Phase 6 renders the warning on the card's revealed side, in the same
+      place as the `low` unconfirmed marker. Together with the answer below, that makes the revealed
+      side's year area a three-state display: a plain year (`high`), a year with an unconfirmed marker
+      (`low`), and a "check this one yourself" prompt (`none`).
+- [x] ~~**Does the Redis gate need to be fair?**~~ **Closed 2026-08-04: no — accepted as unfair, and
+      deliberately so.** The gate is a race re-run every 1.1 s, not a FIFO queue; nothing remembers who
+      has been waiting, so a losing caller may lose again. The failure it permits is real: if one
+      client's 200 ms polls keep landing just after another takes the key, its deck stalls at 429 while
+      the others fill. It is accepted because the poll period and the 1.1 s window are not multiples, so
+      phases drift rather than lock and sustained starvation needs a coincidence that keeps recurring;
+      because a 429 is a delay and not a failure; and because contention exists only for genuinely new
+      songs, since cache hits skip the gate entirely. Fairness would cost a Redis ticket queue — a
+      sorted set, several round trips per acquire, and expiry of tickets abandoned by clients that gave
+      up — replacing a three-line mechanism with a distributed-queue problem.
+      **The symptom that would justify revisiting: one client seeing sustained 429s while another
+      client's deck fills normally.** Anything short of that is the design working.
 
 ---
 

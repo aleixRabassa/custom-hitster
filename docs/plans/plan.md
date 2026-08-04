@@ -187,7 +187,9 @@ Browser (SPA)                          Serverless (Vercel Functions)
 >
 > - A cold lookup costs **1.3–3.6 s** (two paced MusicBrainz requests); a cached one costs 0 ms. A cold 100-track deck is therefore several minutes, and the 1 req/s budget is **global across all users**, not per user.
 > - `/api/year` answers **429 with `retryAfterMs`** when the gate is busy. That is the designed back-pressure signal, not an error — the progressive-loading loop must back off on it rather than treating it as a failed card, and must be **sequential, not a `Promise.all`**.
-> - A card can legitimately arrive with `year: null` and `confidence: 'none'`. Phase 3 has to decide whether such a card is playable, skipped, or blocking; the open question is recorded in [plan.phase-2-year.md](./plan.phase-2-year.md).
+> - A card can legitimately arrive with `year: null` and `confidence: 'none'`. **Decided 2026-08-04: it stays playable**, never skipped and never blocking — Phase 6 warns on the revealed side that the player should check that year manually. Same principle as an unplayable track: the QR always works, so the card still plays.
+>
+> The revealed side's year area is therefore a **three-state** display, and Phase 6 must not collapse it to two: a plain year (`high`), a year marked unconfirmed (`low` — decided 2026-08-04 that showing a possibly-wrong year beats showing none, provided it is always marked), and a "check this one yourself" prompt (`none`).
 
 ### Phase 3 — Deck & Game State
 
@@ -205,6 +207,7 @@ Browser (SPA)                          Serverless (Vercel Functions)
 - [ ] Hidden side: **QR code always rendered**, plus **[■ Exit] [▶ Play/Pause] [↺ Restart]** buttons — Play/Pause toggles in-app audio, Restart replays from 0:00 (not next card), Exit ends the game session and redirects to the landing page
 - [ ] Reveal side: title, artist, **year prominent** (Hitster's key value)
 - [ ] In-app audio wired to the Phase 0 winner; if unavailable for a track, disable Play/Pause and Restart but keep the QR and Exit fully functional
+- [ ] **Playback runs to its natural end — no auto-stop timer and no auto-advance** (decided 2026-08-04). It stops only when the player pauses, exits, or moves to the next card. Note the ceiling this runs into: `previewUrl` is a **30-second** MP3, so "the full song" is 30 seconds, not the whole track — there is no way to play more, since the app has no Spotify playback session (see §2). The QR is what gets the player to the full track.
 - [ ] Pause/stop audio on flip/next/restart, and stop it on Exit — never let a track bleed into the next card or double up on itself
 
 ### Phase 5 — Gestures
