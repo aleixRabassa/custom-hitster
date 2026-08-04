@@ -284,19 +284,26 @@ type="application/json">` element and `JSON.parse` its content. Comment that Nex
       limitation — so probing it early costs minutes and finding out late costs a migration.
   - [x] Add a trivial `api/_lib/_probe.ts` that exports a **named** function and no default export —
         the shape that would break if Vercel tried to build it as a handler
-  - [ ] Deploy, then confirm two things: the function build **succeeded** (a routed helper with no
+  - [x] Deploy, then confirm two things: the function build **succeeded** (a routed helper with no
         default export is the failure mode), and `/api/_lib/_probe` returns **404** rather than 200 or 500
   - [ ] Delete the probe and record the result in `docs/agent_findings.md` with the date. This
         probe-then-revert pattern is the repo's established habit — Phase 1 used it for the ESLint
         globals blocks and for the DOM-vs-Node typecheck isolation
+        — **result recorded; probe file deliberately still present, see below**
 
-  > **Execution note — awaiting the developer's deploy.** `api/_lib/_probe.ts` exists and is
-  > deliberately worst-case: a named export, no default. Deploys are the developer's to run (see Out of
-  > Scope), so execution paused here rather than guessing: the `shared/` half of this plan was built
-  > first because none of it depends on the answer, and the fixtures, the adapter, and the handler wait
-  > for it because they are the files that would have to move. `typecheck`, `lint`, `test`, `build` and
-  > `format:check` are all green with the probe in place, which is exactly the point — none of them can
-  > see what Vercel's router does.
+  > **Execution note — ANSWERED 2026-08-04: `api/_lib/` is not routed.** The probe deployed (commit
+  > `d577a5f`): the function build completed with no error and `GET /api/_lib/_probe` returned **404**
+  > with `X-Vercel-Error: NOT_FOUND`. So decision 3 stands, helpers stay under `api/_lib/`, and the
+  > root-level `server/` fallback is not needed. Worth what it cost: all five local checks
+  > (`typecheck`, `lint`, `test`, `build`, `format:check`) were green either way, so nothing short of a
+  > deploy could have told us.
+  >
+  > **The probe file is deliberately NOT deleted yet.** The same deploy revealed that `/api/hello`
+  > returns **500 `FUNCTION_INVOCATION_FAILED`**, though it is unchanged code that was verified working
+  > on 2026-08-03 — i.e. the standing check in `docs/development.md` §7 is red. `_probe.ts` is the only
+  > file added under `api/` between the working deploy and the failing one, so it stays until it is
+  > ruled in or out. Recorded in `docs/agent_findings.md`; this blocks the plan's **manual** deploy
+  > verification, not the offline work below.
   - [ ] **Documented fallback if it IS routed:** move the helpers to a root-level `server/` directory
         and add it to `tsconfig.api.json`'s `include`. Unambiguously outside `api/` and therefore never
         routed, relying on no convention at all — at the cost of a fourth top-level tree and two more
