@@ -91,6 +91,13 @@ export function ttlFor(result: YearResult): number {
  * instances concurrently and will discard them when idle, so entries are neither shared
  * between users nor durable. It is a development convenience and a safe default, not a
  * production cache -- which is exactly why `createCache()` logs which one it picked.
+ *
+ * AND UNDER `vercel dev` IT NEVER HITS AT ALL. Measured 2026-08-04: the local dev server
+ * runs a fresh PROCESS per invocation (three requests, three PIDs), so this map is rebuilt
+ * empty every time and `cached` is always false. `globalThis` does not rescue it either --
+ * that was tested. Nothing to fix here; it is how `vercel dev` works, and a warm production
+ * instance behaves as described above. Configure Upstash if you need the cache locally.
+ * See docs/agent_findings.md (2026-08-04).
  */
 export function createMemoryCache(): YearCache {
   const store = new Map<string, { value: YearResult; expiresAt: number }>();

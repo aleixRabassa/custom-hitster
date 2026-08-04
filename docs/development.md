@@ -109,7 +109,24 @@ A failure body is always `{"code":…,"message":…}` with a typed code; the ful
 
 **Use `npx vercel dev`, not `pnpm dev`** — same trap as above.
 
-Set `MUSICBRAINZ_USER_AGENT` in `.env.local` first, with a real contact address. You do **not** need Upstash credentials: the cache falls back to in-memory and the gate to per-instance pacing.
+Set `MUSICBRAINZ_USER_AGENT` in `.env.local` first, with a real contact address.
+
+> **Read this before resolving more than a handful of tracks locally.** `vercel dev` runs a **fresh
+> process per invocation** — measured 2026-08-04, three requests gave three different PIDs. Nothing in
+> module scope survives, and `globalThis` does not help. So with no Upstash credentials configured:
+>
+> - **the in-memory cache never hits** — the same track twice returns `cached: false` both times, and
+>   the `[year-cache] …` line printing on _every_ request rather than once is the tell;
+> - **the rate-limit gate paces nothing** — each invocation builds a gate with `nextAllowedAt = 0`, so
+>   every request is admitted and five rapid ones return `200 200 200 200 200`.
+>
+> The second one matters: your machine is then sending MusicBrainz **completely unpaced** traffic, two
+> requests per lookup, against a published limit of 1 req/s that they enforce by blocking. Single curl
+> commands are fine. **A 50-track run is ~100 unthrottled requests — configure Upstash first.** The
+> Redis gate is cross-process and works correctly under `vercel dev` for exactly that reason.
+>
+> Production is unaffected: Vercel keeps a warm instance, so module scope persists and both fallbacks
+> behave as documented.
 
 ```bash
 curl "http://localhost:3000/api/year?title=Billie%20Jean&artist=Michael%20Jackson&durationMs=293826"
@@ -126,21 +143,15 @@ Watch the cold-start log lines. They tell you which mode you are in, and they ex
 [rate-limit] using per-instance pacing (does NOT enforce the global 1 req/s)
 ```
 
-The checks worth running by hand, because each pins a decision rather than a value:
+The checks worth running by hand, because each pins a decision rather than a value. **These four work with no Upstash:**
 
 ```bash
-# Same track twice: the second must report cached:true and return instantly.
-curl -s ".../api/year?title=Billie%20Jean&artist=Michael%20Jackson&durationMs=293826" | grep -o '"cached":[a-z]*'
-
 # A remaster suffix must be stripped AND still resolve — verbatim it returns zero results.
 curl -s ".../api/year?title=Bohemian%20Rhapsody%20-%20Remastered%202011&artist=Queen&durationMs=354320"
 # expect year 1975 and cleanedTitle "Bohemian Rhapsody"
 
 # Nonsense must be year:null / confidence:none with a reason — not a wrong year, not a 500.
 curl -s ".../api/year?title=Zzzqqq%20Nope&artist=Nobody%20At%20All"
-
-# Several at once: expect a 429 with retryAfterMs, not a hang and not a MusicBrainz 503.
-for i in 1 2 3 4 5; do curl -s -o /dev/null -w "%{http_code} " ".../api/year?title=Imagine&artist=John%20Lennon&durationMs=$((187000+i))"; done
 
 # Unset MUSICBRAINZ_USER_AGENT and restart: every call must be 500 not-configured,
 # including ones that would have hit the cache.
@@ -150,9 +161,21 @@ curl -i ".../api/year?title=Billie%20Jean&artist=Michael%20Jackson"
 curl -i -X POST ".../api/year?title=Imagine&artist=John%20Lennon"
 ```
 
+**These two need Upstash configured**, because both depend on state surviving between requests, which under `vercel dev` it does not (see the warning above). Without it the first prints `cached:false` twice and the second prints five `200`s — that is the dev server, not a bug:
+
+```bash
+# Same track twice: the second must report cached:true and return instantly.
+curl -s ".../api/year?title=Billie%20Jean&artist=Michael%20Jackson&durationMs=293826" | grep -o '"cached":[a-z]*'
+
+# Several at once: expect a 429 with retryAfterMs, not a hang and not a MusicBrainz 503.
+for i in 1 2 3 4 5; do curl -s -o /dev/null -w "%{http_code} " ".../api/year?title=Imagine&artist=John%20Lennon&durationMs=$((187000+i))"; done
+```
+
 **A 429 is expected behaviour under load, not a bug.** MusicBrainz allows 1 request per second and a lookup costs two, so a client firing several cards at once will be told to come back. It carries `retryAfterMs` and a `Retry-After` header; Phase 3's progressive loading is built to back off on exactly this.
 
-Expect **1.3-3.6 s per cold track** (measured 2026-08-04) and effectively 0 ms once cached. A cold 100-track playlist is therefore several minutes — which is why progressive loading is structural rather than polish.
+Expect **1.3-3.6 s per cold track** (measured 2026-08-04 in-process, with the gate active) and effectively 0 ms once cached. A cold 100-track playlist is therefore several minutes — which is why progressive loading is structural rather than polish.
+
+**Do not take timings through `vercel dev`.** It adds roughly **four seconds per request** spawning that per-invocation process — a request returning a 500 with no network access at all still took 4-5 s. Any wall-clock number measured through it is the dev server, not the resolver, and Upstash does not change that. Measure against a real deployment when you need a figure Phase 3 can design against.
 
 > As with the embed adapter, none of the resolution logic needs `vercel dev`: `shared/year.test.ts`, `api/_lib/musicbrainz.test.ts` and `api/_lib/resolve-year.test.ts` cover it offline against captured fixtures, including a fixture-backed accuracy suite over the Phase 0 known-tricky tracks.
 

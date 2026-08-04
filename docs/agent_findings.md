@@ -316,3 +316,61 @@ what `confidence: 'low'` is for.
 shape, so there is no way to ask it for more. And `release-group?query=rgid:(a OR b OR …)` accepts
 unquoted UUIDs and returns exactly the requested groups; 50 ids is ~1.8 kB of query string and well
 within limits.
+
+## 2026-08-04 — `vercel dev` runs a FRESH PROCESS per invocation, so module-scope state never persists locally
+
+Measured, not inferred. A temporary `api/probe-tmp.ts` reporting `process.pid`, `process.uptime()`,
+a module-scope counter and a `globalThis` counter, hit three times through `vercel dev`:
+
+| Request | `pid` | `uptimeSec` | module counter | `globalThis` counter |
+| ------- | ----- | ----------- | -------------- | -------------------- |
+| 1       | 21656 | 5           | 1              | 1                    |
+| 2       | 35004 | 4           | 1              | 1                    |
+| 3       | 19788 | 4           | 1              | 1                    |
+
+Different PID every time. **This is not fixable in our code** — `globalThis` was tested precisely
+because it is the usual workaround for module reload, and it does not survive a new process either.
+Production is different: Vercel keeps a warm Lambda instance across invocations, so module scope does
+persist there (within one instance, which is what `api/_lib/cache.ts` already documents).
+
+**Two consequences that make local behaviour differ from production in ways that look like bugs:**
+
+1. **The in-memory year cache never hits under `vercel dev`.** Requesting the same track twice returns
+   `cached: false` both times. The `[year-cache] using in-memory cache` line printing on _every_ request
+   rather than once is the visible tell.
+2. **The per-instance rate-limit gate paces nothing under `vercel dev`.** Each invocation constructs a
+   gate with `nextAllowedAt = 0`, so every request is admitted immediately. Five rapid requests returned
+   `200 200 200 200 200` where the gate should have produced 429s.
+
+**The dangerous one is #2, and it is the reason this entry exists.** Without Upstash configured, local
+development sends MusicBrainz requests **completely unpaced** — two per lookup, as fast as the client
+issues them, against a service whose published limit is 1 req/s and which blocks clients that ignore it.
+A 50-track measurement run is ~100 unthrottled requests. **Configure Upstash before running anything
+that resolves more than a handful of tracks locally**; the Redis gate is cross-process and works fine
+under `vercel dev` precisely because it does not rely on process state.
+
+**It also means the 50-track wall-clock measurement is only valid with Upstash configured.** Ungated,
+the number is far too optimistic and does not reflect production at all, since production wall clock is
+dominated by the 1.1 s gate spacing. `docs/development.md` §4 has been corrected accordingly — it
+previously told the reader to expect `cached: true` on a repeat request and 429s under rapid fire, both
+of which are unobservable in the default local setup.
+
+**Third consequence, and the one that rules `vercel dev` out for performance work entirely: spawning
+that process costs about four seconds per request.** Measured the same day, from a run where
+`MUSICBRAINZ_USER_AGENT` was deliberately unset: every request returned `500 not-configured` in
+**4.1-5.7 s** despite touching no network and doing no work at all. The probe above agrees —
+`process.uptime()` was 4-5 s on arrival every time.
+
+So a wall-clock measurement taken through `vercel dev` measures the dev server, not the resolver, and no
+amount of Upstash configuration fixes that. **Take that measurement against a real deployment.** The
+in-process figure of 1.3-3.6 s per cold track (recorded in the entry above) remains the honest number
+for the resolver itself: it includes the 1.1 s gate spacing and both MusicBrainz round trips, and
+excludes only function invocation overhead.
+
+What `vercel dev` IS good for here: correctness. The 405, the `not-configured` 500, title cleaning,
+`year: null` handling and the response shape were all verified through it successfully.
+
+Seen in the same session, and consistent with the per-invocation process churn: `vercel dev` on Windows
+with Node 25.9.0 printed `Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c,
+line 76` mid-run, more than once, without affecting any response. Not traced further, and no evidence it
+involves this repo's code.

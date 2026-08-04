@@ -147,7 +147,16 @@ export function createRedisGate(config: RedisGateConfig, fetchImpl: FetchLike): 
  *
  * DOES NOT ENFORCE THE GLOBAL POLICY. It spaces calls within one warm instance only, so
  * two Vercel instances -- or two developers -- will happily exceed 1 req/s between them.
- * Good enough for `vercel dev` and for tests; never a substitute for the Redis gate.
+ * Never a substitute for the Redis gate.
+ *
+ * AND IT IS **NOT** GOOD ENOUGH FOR `vercel dev`, which an earlier version of this comment
+ * claimed. Measured 2026-08-04: the local dev server runs a fresh PROCESS per invocation, so
+ * `nextAllowedAt` is 0 on arrival every time and EVERY request is admitted immediately --
+ * five rapid requests returned five 200s where the gate should have produced 429s. Local
+ * development therefore sends MusicBrainz completely unpaced traffic unless Upstash is
+ * configured, which matters because they enforce their 1 req/s limit by blocking clients.
+ * Fine for a few curl commands; configure Upstash before resolving a whole deck locally.
+ * It remains correct under tests, which hold one process. See docs/agent_findings.md.
  *
  * The slot is reserved BEFORE the wait, not after. JavaScript's single thread makes that
  * reservation atomic, so two overlapping callers get two different slots instead of both
