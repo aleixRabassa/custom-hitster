@@ -4,11 +4,11 @@
 
 ## 1. Prerequisites
 
-| Tool       | Version     | Notes                                                                                                                       |
-| ---------- | ----------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Node.js    | **24.x**    | Pinned in `.node-version` and `engines.node`. A newer local Node works but warns — see [`toolchain.md`](./toolchain.md) §4. |
-| pnpm       | **10.29.2** | Pinned in `packageManager`. **pnpm is the only supported package manager.**                                                 |
-| Vercel CLI | any recent  | Optional. Only needed to run the serverless functions locally, or to deploy.                                                |
+| Tool       | Version     | Notes                                                                                                                                                                                                                                                             |
+| ---------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Node.js    | **24.x**    | Pinned in `.node-version` and `engines.node`. A newer local Node works but warns — see [`toolchain.md`](./toolchain.md) §4.                                                                                                                                       |
+| pnpm       | **10.29.2** | Pinned in `packageManager`. **pnpm is the only supported package manager.**                                                                                                                                                                                       |
+| Vercel CLI | any recent  | Optional, and **needs no install** — run it as `npx vercel …`. Only needed to run the serverless functions locally, or to deploy. Deliberately not a devDependency: it is a large tree for something most sessions never touch, and Phase 1 locked a minimal one. |
 
 There is **no Docker, no docker-compose, and no database to provision.** Setup is an install and a dev server.
 
@@ -56,13 +56,14 @@ Environment variables are all consumed by `/api/year`. **Only `MUSICBRAINZ_USER_
 
 `pnpm dev` starts Vite, which has no concept of Vercel Functions. **`api/` is not executable through it, and what happens instead is misleading:** `GET /api/hello` returns the _transpiled source_ of `api/hello.ts` as `text/javascript` with a **`200`** status — it does not run the handler and does not fall through to the SPA. Full explanation in [`architecture.md`](./architecture.md) §5.
 
-To actually exercise functions you need Vercel's own dev server:
+To actually exercise functions you need Vercel's own dev server. **There is nothing to install** — `npx` fetches the CLI on demand, and a bare `vercel` will just report `command not found`:
 
 ```bash
-vercel dev
+npx vercel link    # once per clone, interactive
+npx vercel dev
 ```
 
-That runs the Vite build _and_ the `api/` functions behind one origin, so relative `fetch('/api/…')` calls work exactly as they will in production.
+That runs the Vite build _and_ the `api/` functions behind one origin, so relative `fetch('/api/…')` calls work exactly as they will in production. `vercel dev` reads `.env.local` automatically, so **restart it after editing that file** — the year endpoint reads its configuration at cold start.
 
 ```bash
 curl http://localhost:3000/api/hello
@@ -73,7 +74,7 @@ Note that `vercel dev` runs functions on your **local** Node, while production r
 
 ### Exercising `/api/playlist`
 
-**Use `vercel dev`, not `pnpm dev`.** Through Vite this endpoint returns the transpiled source of `api/playlist.ts` with a `200` — a response that looks like success and proves nothing.
+**Use `npx vercel dev`, not `pnpm dev`.** Through Vite this endpoint returns the transpiled source of `api/playlist.ts` with a `200` — a response that looks like success and proves nothing.
 
 ```bash
 curl "http://localhost:3000/api/playlist?url=https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M"
@@ -106,7 +107,7 @@ A failure body is always `{"code":…,"message":…}` with a typed code; the ful
 
 ### Exercising `/api/year`
 
-**Use `vercel dev`, not `pnpm dev`** — same trap as above.
+**Use `npx vercel dev`, not `pnpm dev`** — same trap as above.
 
 Set `MUSICBRAINZ_USER_AGENT` in `.env.local` first, with a real contact address. You do **not** need Upstash credentials: the cache falls back to in-memory and the gate to per-instance pacing.
 
