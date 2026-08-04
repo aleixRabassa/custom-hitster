@@ -8,14 +8,16 @@ Custom Hitster is a **client-heavy single-page app with a thin serverless backen
 
 ## 1. Components
 
-| Component            | Technology                         | Location  | Status                                        |
-| -------------------- | ---------------------------------- | --------- | --------------------------------------------- |
-| Browser SPA          | Vite 8 + React 19 + Tailwind CSS 4 | `src/`    | **[built]** shell only                        |
-| Serverless functions | Vercel Functions (Node 24 runtime) | `api/`    | **[built]** `hello`, `playlist`               |
-| Portable shared code | TypeScript, no platform APIs       | `shared/` | **[built]** types, URL parsing, artist helper |
-| Year cache           | Upstash Redis (REST)               | —         | **[planned]** Phase 2                         |
+| Component            | Technology                         | Location  | Status                                                    |
+| -------------------- | ---------------------------------- | --------- | --------------------------------------------------------- |
+| Browser SPA          | Vite 8 + React 19 + Tailwind CSS 4 | `src/`    | **[built]** shell only                                    |
+| Serverless functions | Vercel Functions (Node 24 runtime) | `api/`    | **[built]** `hello`, `playlist`, `year`                   |
+| Portable shared code | TypeScript, no platform APIs       | `shared/` | **[built]** types, URL parsing, artist helper, year logic |
+| Year cache           | Upstash Redis (REST)               | —         | **[built]** behind `YearCache`; in-memory locally         |
 
-There is **no database, no message broker, no background worker, and no container runtime** in this project, and none are planned. The only persistent stores are the Upstash Redis cache (planned, server-side) and `localStorage` (planned, client-side).
+There is **no database, no message broker, no background worker, and no container runtime** in this project, and none are planned. The only persistent stores are the Upstash Redis cache (built, server-side, optional) and `localStorage` (planned, client-side).
+
+The Upstash dependency is **optional by design**: `createCache()` and `createRateLimitGate()` both fall back to per-instance implementations when the variables are absent, so the repo clones and runs with no accounts of any kind. Both log which mode they picked at cold start, because a silent fallback in production looks exactly like a cache that never hits.
 
 ### Ports
 
@@ -114,21 +116,58 @@ Playlist ingestion, as built. No caller exists yet — Phase 6 wires the landing
 
 `api/hello.ts` has no behaviour worth testing. It exists to pin down four things before Phase 2 depends on them: the default-export handler signature, the `@vercel/node` request/response types, the relative `shared/` import, and membership in `tsconfig.api.json`. The `maxEmbedTracks` field in its response is there to prove the shared constant genuinely **resolved and bundled** on the Node side rather than merely type-checking.
 
-### Planned — the full loop
+### Year resolution — built
+
+```
+GET /api/year?title=…&artist=…&durationMs=…
+        │
+        ▼
+┌──────────────────────────────────────┐
+│ api/_lib/resolve-year.ts             │
+│  1. cleanTrackTitle()                │   "… - Remastered 2011" returns ZERO
+│                                      │   results verbatim, so this is mandatory
+│  2. cache.get(mbyear:v1:artist|title)│──▶ HIT: return, cached:true
+│                                      │        NO gate, NO request
+│  3. MISS ▼                           │
+└──────────┬───────────────────────────┘
+           ▼
+┌──────────────────────────────────────┐
+│ api/_lib/musicbrainz.ts              │
+│  gate.acquire() ─── busy ────────────┼──▶ 429 + retryAfterMs
+│  ① recording?query=… AND dur:[±10s]  │──▶ MusicBrainz  (limit=100)
+│     └ flatten rec → release → group  │
+│  gate.acquire()                      │
+│  ② release-group?query=rgid:(a OR b) │──▶ MusicBrainz  (ONE batched call)
+│     └ attach first-release-date      │      — the ALBUM's original date
+└──────────┬───────────────────────────┘
+           ▼
+┌──────────────────────────────────────┐
+│ shared/year.ts  pickBestRecording()  │
+│  strict  → official studio album,    │──▶ high / release-group
+│            earliest group date       │
+│  relaxed → no group filter,          │──▶ low  / recording
+│            recording first-release   │
+│  neither → year: null + reason       │──▶ none
+└──────────┬───────────────────────────┘
+           ▼
+   cache.set(…) — ALL THREE outcomes, negatives on a shorter TTL
+   200 {year, confidence, source?, reason?, cached, cleanedTitle, stripped}
+   + Cache-Control tiered by confidence (30d / 1d / 1h)
+```
+
+Three orderings in that diagram are load-bearing and easy to "tidy" into bugs. **The cache is read before the gate**, so a replayed deck costs nothing and waits for nothing. **The second MusicBrainz call is batched**, so the request count is two regardless of whether the pool held 12 candidates or 842. **The year comes from the release GROUP's `first-release-date`, never from the release date inlined in the search response** — the latter is the reissue date and is wrong by decades (Billie Jean 2012, Bohemian Rhapsody 2001).
+
+### Planned — the rest of the loop
 
 ```
 Browser (SPA)                          Serverless (Vercel Functions)
 ┌──────────────────────┐               ┌─────────────────────────────────┐
-│ Paste URL → Start    │──────────────▶│ /api/playlist                   │
-│                      │               │  · parse playlist id            │
-│                      │               │  · fetch open.spotify.com/embed │
-│                      │◀──────────────│  · extract trackList JSON       │
-│                      │  normalized   │  · return {id,title,artist,     │
-│                      │  cards        │     previewUrl?}                │
-│                      │               ├─────────────────────────────────┤
+│ Paste URL → Start    │──────────────▶│ /api/playlist          [built]  │
+│                      │◀──────────────│                                 │
+│                      │  normalized   ├─────────────────────────────────┤
 │ progressive fill     │──────────────▶│ /api/year  (one per track)      │
-│ (start on card 1)    │◀──────────────│  · MusicBrainz earliest release │
-│                      │  year          │  · 1 req/s gate + cache        │
+│ (start on card 1)    │◀──────────────│                        [built]  │
+│  · back off on 429   │  year          │  · 1 req/s gate + cache        │
 ├──────────────────────┤               └─────────────────────────────────┘
 │ shuffle (seeded)     │                              ↓
 │ flip / swipe / audio │                     Upstash Redis (year cache)
@@ -142,17 +181,17 @@ Browser (SPA)                          Serverless (Vercel Functions)
 2. **`User-Agent`** — MusicBrainz requires a descriptive one and browsers cannot set that header. It also rate-limits to 1 req/s.
 3. **Shared cache** — a year cache across all users makes repeat playlists instant.
 
-**Why progressive loading is structural, not polish:** MusicBrainz at 1 req/s means a 100-track playlist takes ~100 s worst case. Years resolve in the background, the game starts as soon as **card 1** is ready, and it only blocks if the player outruns the resolver.
+**Why progressive loading is structural, not polish:** a lookup costs two paced MusicBrainz requests, so a cold 100-track playlist takes **~3-5 minutes** — measured 1.3-3.6 s per track on 2026-08-04, against a warm cache 0 ms. Years resolve in the background, the game starts as soon as **card 1** is ready, and it only blocks if the player outruns the resolver. Two invariants fall out of that, both easy to violate without any test failing: **shuffle runs before resolution** (so the resolver walks the deck in play order and card 1 is genuinely the card the player sees first), and the resolver is a **sequential loop, not a fan-out** — a `Promise.all` over 100 cards turns the shared 1 req/s gate into ~99 429s. See [`plans/plan.md`](./plans/plan.md) §1 and §3.
 
 ---
 
 ## 4. External dependencies
 
-| Service                                                | Access                            | Auth                 | Notes                                                                                                                                                                                                                              |
-| ------------------------------------------------------ | --------------------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Spotify embed (`open.spotify.com/embed/playlist/{id}`) | Server-side `fetch` **[built]**   | **None** — anonymous | Unofficial. Parse `<script id="__NEXT_DATA__">`; tracks at `props.pageProps.state.data.entity.trackList`. All of it confined to `api/_lib/spotify-embed.ts`. **A missing playlist returns HTTP 200** — branch on `pageProps.state` |
-| MusicBrainz (`/ws/2/recording`)                        | Server-side `fetch` **[planned]** | `User-Agent` string  | 1 req/s; supplies the **original** release year                                                                                                                                                                                    |
-| Upstash Redis                                          | REST **[planned]**                | URL + token          | Production only; in-memory fallback locally                                                                                                                                                                                        |
+| Service                                                 | Access                          | Auth                 | Notes                                                                                                                                                                                                                              |
+| ------------------------------------------------------- | ------------------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Spotify embed (`open.spotify.com/embed/playlist/{id}`)  | Server-side `fetch` **[built]** | **None** — anonymous | Unofficial. Parse `<script id="__NEXT_DATA__">`; tracks at `props.pageProps.state.data.entity.trackList`. All of it confined to `api/_lib/spotify-embed.ts`. **A missing playlist returns HTTP 200** — branch on `pageProps.state` |
+| MusicBrainz (`/ws/2/recording` + `/ws/2/release-group`) | Server-side `fetch` **[built]** | `User-Agent` string  | 1 req/s, globally across all users. **Two** requests per lookup — a search plus one batched release-group call. All of it confined to `api/_lib/musicbrainz.ts`                                                                    |
+| Upstash Redis                                           | REST **[built]**                | URL + token          | Production only, and **optional everywhere**: backs both the year cache and the 1 req/s gate, with per-instance fallbacks locally                                                                                                  |
 
 ### There are no Spotify credentials, and none are needed
 
@@ -164,12 +203,22 @@ If you are about to add a `SPOTIFY_CLIENT_ID`, read [`plans/plan.md`](./plans/pl
 
 Spotify reports the _album edition's_ date, which turns a 2011 remaster of Bohemian Rhapsody into a 2011 song. MusicBrainz's earliest release date for a recording is exactly the value Hitster needs. This makes year resolution a **core component**, not an enrichment pass.
 
-Phase 0 measured that a naive "top-scored recording" lookup is **~6% accurate** (1 of 18 tricky tracks), because MusicBrainz has no canonical recording per song — every bootleg, live take, and reissue is its own entity, and dozens tie at the maximum relevance score. The verified fix (correct in all 12 cases tried) is to bias the candidate pool toward `release-group` entries with `primary-type: Album`, no Live/Compilation/Remix/Bootleg `secondary-types`, and release `status: Official`. Two hard constraints on implementing it:
+Phase 0 measured that a naive "top-scored recording" lookup is **~6% accurate** (1 of 18 tricky tracks), because MusicBrainz has no canonical recording per song — every bootleg, live take, and reissue is its own entity, and dozens tie at the maximum relevance score. The verified fix is to bias the candidate pool toward `release-group` entries with `primary-type: Album`, no Live/Compilation/Remix/DJ-mix `secondary-types`, and release `status: Official`. Two hard constraints on implementing it:
 
 - **Titles must be stripped** of `- Remastered YYYY` / `- Remaster` / `- Live` / `(feat. X)` suffixes before querying. Remaster-suffixed titles returned **zero** results in every case tested — mandatory, not an optimization.
 - **The fix must not depend on the album name.** The embed endpoint carries no album name at track level, so filtering must use MusicBrainz-side signals only.
 
-Full measurements are in [`plans/plan.md`](./plans/plan.md) §5 Phase 0.
+As built, the filter is that fix plus three things Phase 0 did not have, all measured on 2026-08-04 and all necessary to reach **14 of 14** on the known-tricky set:
+
+- **The year comes from the release group's `first-release-date`, not the release date the search inlines.** A release group holds every pressing; the search returns whichever one matched, which is nearly always a reissue. This is what the second request buys.
+- **`limit=100` and a `dur:[±10s]` bound on the query.** MusicBrainz ties dozens of candidates at the maximum score and orders them arbitrarily, so the original recording is often not on page one. At `limit=25` the same algorithm scores 2 of 13; the duration bound shrinks most pools below 100 outright.
+- **The filters run client-side, never in the Lucene query.** Pushing `primarytype:album AND status:official` into the query looks like the obvious optimisation and returns **zero** results for Hallelujah / Leonard Cohen.
+
+**Three confidence tiers, not one answer.** The strict pass reports `high`. When it finds nothing — 1 track in 14, always a huge candidate pool — a relaxed pass drops the release-group filters and reports `low`, which Phase 6 marks as unconfirmed on the card's revealed side. Only when that also fails does a card get `year: null` for manual entry. There is **no Spotify-year fallback**; the embed payload has no release date at track level, and earlier drafts of this file said otherwise in error.
+
+**Cache keys carry a `v1` schema segment** (`mbyear:v1:{artist}|{title}`) precisely so a change to any of the above can invalidate every previously cached year in one edit. Without it, improved scoring would be masked indefinitely by entries computed under the old logic.
+
+Full measurements are in [`plans/plan.md`](./plans/plan.md) §5 Phase 0 and [`agent_findings.md`](./agent_findings.md) (2026-08-04).
 
 ---
 
@@ -205,15 +254,15 @@ An SPA needs a catch-all rewrite so unmatched paths return `index.html` and clie
 
 Everything below is **not built**, except where a row says otherwise. The authoritative source for what belongs in which phase is [`plans/plan.md`](./plans/plan.md) §5 — **do not build ahead of the current phase.**
 
-| Phase | Adds                                                                                                                                                                                                         |
-| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 2     | ~~`parsePlaylistUrl()`, `/api/playlist`~~ **[built]** · still to come: `/api/year`, cache behind an interface, year-resolution logic                                                                         |
-| 3     | `GameState`, reducer (`START`/`FLIP`/`NEXT`/`END`), seeded Fisher–Yates shuffle, localStorage resume, progressive loading. The `Card` type itself is **[built]** — Phase 3 must not widen it with game state |
-| 4     | Card component with CSS 3D flip, QR rendering, `previewUrl` + `<audio>` playback                                                                                                                             |
-| 5     | Swipe-to-next, tap-to-flip, stacked-deck visuals, keyboard controls                                                                                                                                          |
-| 6     | Landing page, suggested playlists, loading state, **year review/edit screen**, HUD, end screen                                                                                                               |
-| 7     | Visual design, `@theme` design tokens, error/offline states, responsive, a11y, Lighthouse                                                                                                                    |
-| 8     | Out of v1: shareable deck URL, PWA, PDF export, difficulty filters, multiplayer scoring                                                                                                                      |
+| Phase | Adds                                                                                                                                                                                                                                          |
+| ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2     | ~~`parsePlaylistUrl()`, `/api/playlist`, `/api/year`, the `YearCache` interface, the 1 req/s gate, year-resolution logic~~ **[built] — phase complete**                                                                                       |
+| 3     | `GameState`, reducer (`START`/`FLIP`/`NEXT`/`END`), seeded Fisher–Yates shuffle, localStorage resume, progressive loading (sequential, backing off on 429). The `Card` type itself is **[built]** — Phase 3 must not widen it with game state |
+| 4     | Card component with CSS 3D flip, QR rendering, `previewUrl` + `<audio>` playback                                                                                                                                                              |
+| 5     | Swipe-to-next, tap-to-flip, stacked-deck visuals, keyboard controls                                                                                                                                                                           |
+| 6     | Landing page, suggested playlists, loading state, **reveal-side unconfirmed-year marking**, HUD, end screen                                                                                                                                   |
+| 7     | Visual design, `@theme` design tokens, error/offline states, responsive, a11y, Lighthouse                                                                                                                                                     |
+| 8     | Out of v1: shareable deck URL, PWA, PDF export, difficulty filters, multiplayer scoring                                                                                                                                                       |
 
 Two dependencies are already installed with **no importers yet**, deliberately, so Phase 1 locks one coherent dependency tree: `motion` (Phase 5 gestures) and `qrcode` + `@types/qrcode` (Phase 4 QR).
 

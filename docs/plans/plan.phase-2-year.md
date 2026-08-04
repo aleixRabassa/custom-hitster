@@ -63,13 +63,13 @@ If the playlist plan has not landed yet, this plan can still be built against a 
 
 ### Produces for downstream plans
 
-| Output                                       | Consumed by                                                                   |
-| -------------------------------------------- | ----------------------------------------------------------------------------- |
-| `GET /api/year`, one track per request       | Phase 3 progressive loading — background fill, playable at card 1             |
-| `yearConfidence` (`high` / `low` / `none`)   | Phase 6 year review/edit screen, to mark which years need checking            |
-| `retryAfterMs` on a 429                      | Phase 3's back-off loop when the rate-limit gate is busy                      |
-| `cleanTrackTitle()` in `shared/year.ts`      | Phase 6 review screen, to show the cleaned title actually used for the lookup |
-| `YearCache` interface in `api/_lib/cache.ts` | Any later server-side caching need (a playlist snapshot cache, for instance)  |
+| Output                                       | Consumed by                                                                         |
+| -------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `GET /api/year`, one track per request       | Phase 3 progressive loading — background fill, playable at card 1                   |
+| `yearConfidence` (`high` / `low` / `none`)   | Phase 6 reveal-side year UI, to mark which years are unconfirmed                    |
+| `retryAfterMs` on a 429                      | Phase 3's back-off loop when the rate-limit gate is busy                            |
+| `cleanTrackTitle()` in `shared/year.ts`      | Phase 6 reveal-side year UI, to show the cleaned title actually used for the lookup |
+| `YearCache` interface in `api/_lib/cache.ts` | Any later server-side caching need (a playlist snapshot cache, for instance)        |
 
 ---
 
@@ -118,7 +118,7 @@ cannot supply.
 The relaxed second pass exists because the fallback [plan.md](./plan.md) documents does not exist. With
 no Spotify year available, a strict-only design would leave blank cards on exactly the classic-rock
 catalogue where the strict filters most often find nothing. The relaxed pass drops the filters, still
-requires a non-empty date, and returns `confidence: 'low'` so Phase 6's review screen can flag it as
+requires a non-empty date, and returns `confidence: 'low'` so Phase 6's reveal-side year UI can flag it as
 worth checking. Only when that also fails does the card get `year: null` for manual entry.
 
 Chosen over **strict-pass-only**, which never shows a wrong year but produces visibly blank decks —
@@ -140,209 +140,224 @@ that guarantee holds and where it does not.
 
 ## Implementation Steps
 
-- [ ] **Map what the MusicBrainz recording search returns, and design for a two-request lookup** —
+- [x] **Map what the MusicBrainz recording search returns, and design for a two-request lookup** —
       **a second request per track is explicitly acceptable** (developer decision 2026-08-04: a player
       spends well over two seconds on a card, so the resolver stays ahead of play at one track per two
       seconds). This step therefore shapes the adapter rather than gating the design, but it still comes
       first, because "how many requests and which ones" is the adapter's core structure.
-  - [ ] Issue a recording search for one known-tricky track with releases and release-groups requested,
+  - [x] Issue a recording search for one known-tricky track with releases and release-groups requested,
         and inspect whether each embedded release carries its `release-group`'s `primary-type` **and**
         `secondary-types`, plus the release's own `status` and `date`
-  - [ ] If all four are present: a **single** search may be enough for most tracks. Prefer it when it
+  - [x] If all four are present: a **single** search may be enough for most tracks. Prefer it when it
         works — a spare request is permitted, not free, because the 1 req/s budget is **global across all
         users** (see decision 21)
-  - [ ] If any of the four is missing, or the search's inlined release list looks partial, use the
+  - [x] If any of the four is missing, or the search's inlined release list looks partial, use the
         **two-request shape**: search to pick the best candidate recording, then one follow-up that
         returns that recording's full release list with release-groups attached. Prefer a single
         browse-style call keyed on the chosen recording over per-candidate detail fetches — the point of
         a fixed two-request budget is that it stays two regardless of how many candidates tied
-  - [ ] **Never let the request count scale with the candidate pool.** Phase 0 saw 706 candidates for
+  - [x] **Never let the request count scale with the candidate pool.** Phase 0 saw 706 candidates for
         "Like a Rolling Stone" and 842 for "Stairway to Heaven"; a per-candidate detail fetch would be
         minutes per track. Bound it at two, or at a small constant
-  - [ ] Note the upside, since the extra request is now affordable: filtering on a recording's **full**
+  - [x] Note the upside, since the extra request is now affordable: filtering on a recording's **full**
         release list is more reliable than filtering on whatever the search chose to inline, so the
         second request buys accuracy rather than merely working around a missing field
-  - [ ] Write the answer into `docs/agent_findings.md` with the date and the exact queries used, so no
+  - [x] Write the answer into `docs/agent_findings.md` with the date and the exact queries used, so no
         future session has to re-measure it
-  - [ ] Respect 1 req/s while doing this, with a descriptive `User-Agent` — the same rules the code
+  - [x] Respect 1 req/s while doing this, with a descriptive `User-Agent` — the same rules the code
         will follow
 
-- [ ] **Add the year types to `shared/types.ts`** — `YearConfidence` as `'high' | 'low' | 'none'`;
+  > **Execution note (2026-08-04).** All four fields are inlined and the inlined release list is
+  > complete — so on the step's own terms one request would suffice. It is still **two**, for a reason
+  > the step did not anticipate: the search inlines whichever _release_ matched, which is nearly always
+  > a reissue, so the earliest official-studio-album release date is wrong by decades (Billie Jean 2012,
+  > Bohemian Rhapsody 2001, Sweet Child O' Mine 2018). The second request is a **batched
+  > `release-group?query=rgid:(… OR …)` lookup** for the release group's own `first-release-date`, which
+  > is the album's original release date and the field the search never returns. One query covers every
+  > surviving candidate, so the count stays at two however large the pool. Two further corrections to
+  > the plan's assumptions, both measured: `limit=100` is **load-bearing** — at the "modest candidate
+  > limit" the plan asked for (25) the same algorithm scores 2/13 instead of 12/13 — and pushing the
+  > filters into the Lucene query **must not** be done, as it returns zero results for
+  > Hallelujah / Leonard Cohen. Full measurements, including decision 20's resolution (Free Bird
+  > generalises; Like a Rolling Stone does not and lands in the relaxed tier), in
+  > [`docs/agent_findings.md`](../agent_findings.md).
+
+- [x] **Add the year types to `shared/types.ts`** — `YearConfidence` as `'high' | 'low' | 'none'`;
       `YearResult` as a discriminated union carrying either a year with its confidence and source, or a
       null year with a machine-readable reason; and `RecordingCandidate` as the **normalized** shape the
       scorer works on — release-group primary type, secondary types, release status, release date,
       recording length, and artist credit. Normalizing before scoring is what keeps every scoring test
       free of raw MusicBrainz JSON.
 
-- [ ] **Write `cleanTrackTitle()` in `shared/year.ts`** — mandatory, not an optimization. Phase 0 found
+- [x] **Write `cleanTrackTitle()` in `shared/year.ts`** — mandatory, not an optimization. Phase 0 found
       that remaster-suffixed titles as Spotify actually presents them ("Bohemian Rhapsody - Remastered
       2011") returned **zero** MusicBrainz results in every case tested. The literal suffix breaks the
       query outright.
-  - [ ] Strip trailing remaster suffixes: `- Remastered YYYY`, `- Remaster`, `- YYYY Remaster`,
+  - [x] Strip trailing remaster suffixes: `- Remastered YYYY`, `- Remaster`, `- YYYY Remaster`,
         `- YYYY Digital Remaster`, and similar variants
-  - [ ] Strip trailing version suffixes: `- Live`, `- Live at …`, `- Live in …`, `- Single Version`,
+  - [x] Strip trailing version suffixes: `- Live`, `- Live at …`, `- Live in …`, `- Single Version`,
         `- Album Version`, `- Radio Edit`, `- Mono`, `- Stereo`, `- Extended Mix`,
         `- Anniversary Edition`
-  - [ ] Strip parenthesised and bracketed `(feat. …)`, `(with …)`, `[Explicit]`, `(Remastered)`,
+  - [x] Strip parenthesised and bracketed `(feat. …)`, `(with …)`, `[Explicit]`, `(Remastered)`,
         `(Live)`, and `- From "…"` soundtrack tails
-  - [ ] Return the cleaned title **plus flags** for what was stripped (remaster, live, feature). The
-        flags are diagnostic, surfaced in the response and useful in the Phase 6 review screen; they do
+  - [x] Return the cleaned title **plus flags** for what was stripped (remaster, live, feature). The
+        flags are diagnostic, surfaced in the response and useful in the Phase 6 reveal-side year UI; they do
         **not** relax the studio-album filter, because the value Hitster wants is the song's original
         year even when the playlist holds a live take
-  - [ ] Handle the suffix appearing more than once, and never return an empty string — if stripping
+  - [x] Handle the suffix appearing more than once, and never return an empty string — if stripping
         would empty the title, keep the original
-  - [ ] Escape or strip characters that would break a Lucene-style query (quotes, colons, brackets),
+  - [x] Escape or strip characters that would break a Lucene-style query (quotes, colons, brackets),
         since the search query wraps the title in quotes
 
-- [ ] **Write `normalizeForCacheKey()` in `shared/year.ts`** — lowercase, strip diacritics, collapse
+- [x] **Write `normalizeForCacheKey()` in `shared/year.ts`** — lowercase, strip diacritics, collapse
       whitespace, drop punctuation, applied to the cleaned title and the artist. A stable key is what
       makes the shared cache actually hit across users who paste playlists containing the same song with
       cosmetically different titles.
 
-- [ ] **Write `pickBestRecording()` in `shared/year.ts`** — the heart of the plan, and pure: it takes
+- [x] **Write `pickBestRecording()` in `shared/year.ts`** — the heart of the plan, and pure: it takes
       `RecordingCandidate[]` plus the track's duration and a mode, and returns a `YearResult`. No
       network, no cache, no env — so every accuracy claim below is unit-testable.
-  - [ ] **Strict mode:** keep only candidates whose release-group `primary-type` is `Album`, that carry
+  - [x] **Strict mode:** keep only candidates whose release-group `primary-type` is `Album`, that carry
         **no** `secondary-types` of Live, Compilation, Remix, or Bootleg, and whose release `status` is
         `Official`. This is the combination Phase 0 verified correct in all 12 cases it was tried on
-  - [ ] **Never filter on album name.** The embed endpoint has no album name at track level (Phase 0),
+  - [x] **Never filter on album name.** The embed endpoint has no album name at track level (Phase 0),
         and two of Phase 0's own batches used a known album title as a shortcut only available with
         ground truth on hand. Any implementation that needs an album name is wrong for this codebase
-  - [ ] Among survivors, take the **earliest non-empty** release date. Phase 0 found missing and empty
+  - [x] Among survivors, take the **earliest non-empty** release date. Phase 0 found missing and empty
         `date` fields are common on bootleg and compilation releases, so a bare minimum over all dates
         present is wrong — filter first, then compare
-  - [ ] Handle date granularity: values arrive as `YYYY`, `YYYY-MM`, or `YYYY-MM-DD`. Compare on the
+  - [x] Handle date granularity: values arrive as `YYYY`, `YYYY-MM`, or `YYYY-MM-DD`. Compare on the
         year, and treat a bare year as earlier-or-equal to any dated value in the same year
-  - [ ] Use the track's `durationMs` as a **tie-breaker within the filtered set**, preferring the
+  - [x] Use the track's `durationMs` as a **tie-breaker within the filtered set**, preferring the
         candidate whose recording length is closest, with a tolerance of roughly ten seconds. Phase 0
         found this reliably separates a ~3:42 studio "No Woman No Cry" from its ~6:35 live counterpart
         when the disambiguation text is absent or unhelpful
-  - [ ] Ignore candidates whose artist credit does not plausibly match the requested artist. Phase 0
+  - [x] Ignore candidates whose artist credit does not plausibly match the requested artist. Phase 0
         measured artist filtering as reliable — 0 of 6 cover-versus-original lookups cross-contaminated
         — so this is a safe, high-value filter
-  - [ ] **Relaxed mode:** drop the release-group and status filters entirely, still require a non-empty
+  - [x] **Relaxed mode:** drop the release-group and status filters entirely, still require a non-empty
         date and a plausible artist, still prefer the closest duration, and take the earliest year.
         Return `confidence: 'low'`
-  - [ ] Return `{year: null, confidence: 'none', reason}` when even relaxed mode finds nothing, with the
+  - [x] Return `{year: null, confidence: 'none', reason}` when even relaxed mode finds nothing, with the
         reason distinguishing "no candidates at all" from "candidates but none dated" — the two point at
         different fixes
-  - [ ] Reject implausible years (before roughly 1900, or in the future) as a final sanity guard
+  - [x] Reject implausible years (before roughly 1900, or in the future) as a final sanity guard
 
-- [ ] **Write the cache layer in `api/_lib/cache.ts`** — one small interface, two adapters, selected at
+- [x] **Write the cache layer in `api/_lib/cache.ts`** — one small interface, two adapters, selected at
       runtime. The interface is what [plan.md](./plan.md) checkbox 4 asks for, and it is what keeps
       local development credential-free.
-  - [ ] Define `YearCache` with `get` and `set` (the latter taking a TTL in seconds). Deliberately
+  - [x] Define `YearCache` with `get` and `set` (the latter taking a TTL in seconds). Deliberately
         minimal — no `delete`, no `mget`, nothing this plan does not use
-  - [ ] In-memory adapter over a module-scope map. Comment its real limitation: it lives only as long as
+  - [x] In-memory adapter over a module-scope map. Comment its real limitation: it lives only as long as
         one warm serverless instance, so it is a development convenience and not a production cache
-  - [ ] Upstash adapter over the REST API using the global `fetch`, sending commands as a JSON array in
+  - [x] Upstash adapter over the REST API using the global `fetch`, sending commands as a JSON array in
         a POST body rather than building them into the URL path. The body form avoids URL-encoding
         problems with keys that contain spaces or punctuation, which normalized artist–title keys will
-  - [ ] `createCache()` returns the Upstash adapter when `UPSTASH_REDIS_REST_URL` is set and the
+  - [x] `createCache()` returns the Upstash adapter when `UPSTASH_REDIS_REST_URL` is set and the
         in-memory one otherwise. Log which one was selected once per cold start — silently falling back
         to in-memory in production would look like a cache that simply never hits
-  - [ ] **A cache failure must never fail a lookup.** Treat a read error as a miss and a write error as
+  - [x] **A cache failure must never fail a lookup.** Treat a read error as a miss and a write error as
         a no-op, both logged. The cache is a latency optimisation; MusicBrainz is the source of truth
-  - [ ] Key format `mbyear:v1:{normalizedArtist}|{normalizedTitle}`. The `v1` segment is load-bearing:
+  - [x] Key format `mbyear:v1:{normalizedArtist}|{normalizedTitle}`. The `v1` segment is load-bearing:
         when the scoring logic changes, every previously cached year was computed by the old logic, and
         bumping the version invalidates them all in one edit instead of poisoning results indefinitely
-  - [ ] Store the whole `YearResult` as JSON, not a bare year, so confidence and source survive a cache
+  - [x] Store the whole `YearResult` as JSON, not a bare year, so confidence and source survive a cache
         hit — otherwise every cached card would report high confidence
-  - [ ] **Cache negative results too**, with a shorter TTL. A classic-rock miss costs a full MusicBrainz
+  - [x] **Cache negative results too**, with a shorter TTL. A classic-rock miss costs a full MusicBrainz
         round trip to re-derive and will be requested again by the next user with the same playlist
-  - [ ] TTLs: long for positive results (an original release year does not change), short for negatives
+  - [x] TTLs: long for positive results (an original release year does not change), short for negatives
         (MusicBrainz data improves over time). Put both in named constants with the reasoning beside them
 
-- [ ] **Write the rate-limit gate in `api/_lib/rate-limit.ts`** — the direct consequence of the
+- [x] **Write the rate-limit gate in `api/_lib/rate-limit.ts`** — the direct consequence of the
       one-request-per-track protocol, and the piece most likely to be misunderstood later, so its two
       modes and their differing guarantees are documented in the module itself.
-  - [ ] **With Redis configured:** acquire a short-lived exclusive key with set-if-not-exists and an
+  - [x] **With Redis configured:** acquire a short-lived exclusive key with set-if-not-exists and an
         expiry just over one second. Whoever acquires it may call MusicBrainz. This genuinely enforces
         1 req/s across concurrent function instances and concurrent users, which is what MusicBrainz's
         policy actually requires
-  - [ ] If the key cannot be acquired, wait briefly and retry a small number of times, then give up and
+  - [x] If the key cannot be acquired, wait briefly and retry a small number of times, then give up and
         let the handler return **429 with `retryAfterMs`**. Do not queue inside the function — that
         burns wall-clock on a metered invocation and risks the function timeout for no benefit when the
         client can simply come back
-  - [ ] **Without Redis:** a module-scope timestamp gate that spaces calls within a single warm
+  - [x] **Without Redis:** a module-scope timestamp gate that spaces calls within a single warm
         instance. Comment plainly that this is per-instance only and does **not** enforce the global
         policy — it is a local-development stand-in
-  - [ ] **Cache hits must skip the gate entirely.** Once a playlist has been seen, the whole deck should
+  - [x] **Cache hits must skip the gate entirely.** Once a playlist has been seen, the whole deck should
         resolve at cache speed with no pacing at all; gating cache hits would make the common case as
         slow as the cold one
 
-- [ ] **Write the MusicBrainz adapter in `api/_lib/musicbrainz.ts`** — all HTTP and all response-shape
+- [x] **Write the MusicBrainz adapter in `api/_lib/musicbrainz.ts`** — all HTTP and all response-shape
       knowledge, with `fetch` injected so tests run offline.
-  - [ ] Build the recording search query from the cleaned title and the artist, quoting both fields, and
+  - [x] Build the recording search query from the cleaned title and the artist, quoting both fields, and
         request JSON with releases and release-groups included per the step-1 finding
-  - [ ] Send `User-Agent` from `MUSICBRAINZ_USER_AGENT`. MusicBrainz blocks anonymous traffic and this
+  - [x] Send `User-Agent` from `MUSICBRAINZ_USER_AGENT`. MusicBrainz blocks anonymous traffic and this
         is also the reason year lookups must run server-side at all — browsers cannot set the header.
         Fail loudly if the variable is unset rather than sending a default
-  - [ ] Request a modest candidate limit. Phase 0 saw 706 matching recordings for "Like a Rolling Stone"
+  - [x] Request a modest candidate limit. Phase 0 saw 706 matching recordings for "Like a Rolling Stone"
         and 842 for "Stairway to Heaven"; the filters do the work, not the page size, and a large page
         just costs transfer and parse time
-  - [ ] **Try the full joined artist string first, and `primaryArtistGuess()` only if that returns zero
+  - [x] **Try the full joined artist string first, and `primaryArtistGuess()` only if that returns zero
         results.** This ordering is what makes the guess's known lossiness harmless for artists whose
         names contain a comma — "Earth, Wind & Fire" matches on the full string and never reaches the
         guess. Count the retry against the rate-limit budget
-  - [ ] Normalize the response into `RecordingCandidate[]` — flattening recording → releases →
+  - [x] Normalize the response into `RecordingCandidate[]` — flattening recording → releases →
         release-group — and hand it to `pickBestRecording()`. The adapter makes **no** scoring decisions;
         that separation is what keeps the accuracy logic testable
-  - [ ] Retry once, after a short delay, on 503 — MusicBrainz uses it for rate-limit rejection. Do not
+  - [x] Retry once, after a short delay, on 503 — MusicBrainz uses it for rate-limit rejection. Do not
         retry 400 or 404
-  - [ ] Return a typed error union rather than throwing, matching the style of the playlist plan's
+  - [x] Return a typed error union rather than throwing, matching the style of the playlist plan's
         adapter
 
-- [ ] **Write the `GET /api/year` handler in `api/year.ts`** — copy the `api/hello.ts` shape: default
+- [x] **Write the `GET /api/year` handler in `api/year.ts`** — copy the `api/hello.ts` shape: default
       export, `@vercel/node` types, extensionless **relative** `shared/` imports, never the `@/` alias.
-  - [ ] Accept `title`, `artist`, and `durationMs` as query parameters. Guard the method (405 with an
+  - [x] Accept `title`, `artist`, and `durationMs` as query parameters. Guard the method (405 with an
         `Allow` header) and validate inputs (400 when title or artist is missing or absurdly long)
-  - [ ] Clean the title, build the cache key, and **check the cache first**. On a hit, return
+  - [x] Clean the title, build the cache key, and **check the cache first**. On a hit, return
         immediately with `cached: true` and no rate-limit involvement — this is the path most requests
         take once a playlist has been played once
-  - [ ] On a miss, acquire the rate-limit permit; if unavailable, return **429 with `retryAfterMs`** so
+  - [x] On a miss, acquire the rate-limit permit; if unavailable, return **429 with `retryAfterMs`** so
         Phase 3 backs off and retries that card later
-  - [ ] Run the strict pass, then the relaxed pass, then fall through to a null year — writing the
+  - [x] Run the strict pass, then the relaxed pass, then fall through to a null year — writing the
         result to the cache in all three cases, negatives included
-  - [ ] Return `{year, confidence, source, cached, cleanedTitle}` and the strip flags. `cleanedTitle` is
+  - [x] Return `{year, confidence, source, cached, cleanedTitle}` and the strip flags. `cleanedTitle` is
         included deliberately: when a year looks wrong, the first question is always what was actually
-        queried, and Phase 6's review screen can show it
-  - [ ] Set a long `Cache-Control` header on successful high-confidence responses so the edge absorbs
+        queried, and Phase 6's reveal-side year UI can show it
+  - [x] Set a long `Cache-Control` header on successful high-confidence responses so the edge absorbs
         repeat requests ahead of both Redis and MusicBrainz. Keep it short for `none` results, which are
         the ones most likely to improve
-  - [ ] Return **500 with an explicit message when `MUSICBRAINZ_USER_AGENT` is unset**, rather than
+  - [x] Return **500 with an explicit message when `MUSICBRAINZ_USER_AGENT` is unset**, rather than
         letting MusicBrainz reject the call in a way that is confusing to diagnose
-  - [ ] Wrap the handler so an unexpected throw becomes a 500 with a generic body, and never echo raw
+  - [x] Wrap the handler so an unexpected throw becomes a 500 with a generic body, and never echo raw
         upstream payloads or the Upstash token
 
-- [ ] **Capture MusicBrainz fixtures into `api/_lib/__fixtures__/`** — reuse the tracks Phase 0 already
+- [x] **Capture MusicBrainz fixtures into `api/_lib/__fixtures__/`** — reuse the tracks Phase 0 already
       established ground truth for, so the tests assert against known-correct years rather than
       whatever the code currently produces.
-  - [ ] A compilation-era track (Billie Jean, Sweet Child O' Mine, or Hotel California — all three
+  - [x] A compilation-era track (Billie Jean, Sweet Child O' Mine, or Hotel California — all three
         resolved correctly under the verified fix)
-  - [ ] A famous-live-version track (Wish You Were Here, No Woman No Cry, or Layla)
-  - [ ] A cover-versus-original pair (Hallelujah by Cohen and by Buckley, or All Along the Watchtower by
+  - [x] A famous-live-version track (Wish You Were Here, No Woman No Cry, or Layla)
+  - [x] A cover-versus-original pair (Hallelujah by Cohen and by Buckley, or All Along the Watchtower by
         Dylan and by Hendrix), to pin artist disambiguation
-  - [ ] One of the two tracks the fix was **never re-verified on** — Free Bird or Like a Rolling Stone.
+  - [x] One of the two tracks the fix was **never re-verified on** — Free Bird or Like a Rolling Stone.
         Phase 0 expected the fix to generalise but did not confirm it. Whatever the fixture shows is a
         genuine finding either way, and belongs in `docs/agent_findings.md`
-  - [ ] A remaster-suffixed title returning zero results, to pin the title-cleaning requirement
-  - [ ] A response whose releases have empty or missing `date` fields, to pin the null guard
-  - [ ] Trim each fixture to the fields the adapter reads, and record which query and date produced it
+  - [x] A remaster-suffixed title returning zero results, to pin the title-cleaning requirement
+  - [x] A response whose releases have empty or missing `date` fields, to pin the null guard
+  - [x] Trim each fixture to the fields the adapter reads, and record which query and date produced it
 
-- [ ] **Verify the accuracy claim end to end** — the point of the plan is a correct year, and Phase 0's
+- [x] **Verify the accuracy claim end to end** — the point of the plan is a correct year, and Phase 0's
       6%-accurate baseline is the thing being beaten. Run the fixture-backed suite and confirm each
       known-tricky track resolves to its known-correct year, then check a handful of live lookups
       against real MusicBrainz through `vercel dev`. If a track that Phase 0 verified now fails, treat
       it as a real regression in the logic, not a fixture problem.
 
-- [ ] **Run the full local verification pass** — `pnpm typecheck && pnpm lint && pnpm test && pnpm build`,
+- [x] **Run the full local verification pass** — `pnpm typecheck && pnpm lint && pnpm test && pnpm build`,
       all four green, plus the manual checks below. Confirm the suite passes with **no** Upstash
       credentials present, since that is how a new contributor will run it.
 
-- [ ] **Update the documentation** — see Documentation Updates, including the two `plan.md` corrections.
+- [x] **Update the documentation** — see Documentation Updates, including the two `plan.md` corrections.
 
-- [ ] **Tick Phase 2 checkboxes 3–5 in `docs/plans/plan.md`** — and adjust the wording of checkbox 5,
+- [x] **Tick Phase 2 checkboxes 3–5 in `docs/plans/plan.md`** — and adjust the wording of checkbox 5,
       which currently promises the Spotify-year fallback that does not exist.
 
 ---
@@ -355,114 +370,114 @@ files and `tsconfig.api.json` already covers `api/`, so no configuration changes
 
 ### `shared/year.test.ts` — title cleaning
 
-- [ ] `should strip a "- Remastered YYYY" suffix` — covers the exact form Phase 0 measured returning
+- [x] `should strip a "- Remastered YYYY" suffix` — covers the exact form Phase 0 measured returning
       **zero** MusicBrainz results, using "Bohemian Rhapsody - Remastered 2011"
-- [ ] `should strip "- Remaster", "- YYYY Remaster", and digital-remaster variants` — covers the suffix
+- [x] `should strip "- Remaster", "- YYYY Remaster", and digital-remaster variants` — covers the suffix
       family, not just the one sampled form
-- [ ] `should strip live suffixes including "- Live at …"` — covers live-version titles
-- [ ] `should strip "(feat. …)" and "(with …)"` — covers featured-artist noise in the title
-- [ ] `should strip edition, edit, and mix suffixes` — covers Single Version, Radio Edit, Mono, Extended Mix
-- [ ] `should strip multiple suffixes from one title` — covers a title carrying both a feature and a
+- [x] `should strip live suffixes including "- Live at …"` — covers live-version titles
+- [x] `should strip "(feat. …)" and "(with …)"` — covers featured-artist noise in the title
+- [x] `should strip edition, edit, and mix suffixes` — covers Single Version, Radio Edit, Mono, Extended Mix
+- [x] `should strip multiple suffixes from one title` — covers a title carrying both a feature and a
       remaster tag, which single-pass stripping would half-handle
-- [ ] `should leave a clean title untouched` — guards against over-eager stripping mangling ordinary titles
-- [ ] `should not strip a suffix-like phrase that is part of the real title` — covers the false-positive
+- [x] `should leave a clean title untouched` — guards against over-eager stripping mangling ordinary titles
+- [x] `should not strip a suffix-like phrase that is part of the real title` — covers the false-positive
       risk directly (a song genuinely titled with the word "Live" in it)
-- [ ] `should never return an empty title` — covers the degenerate case where stripping would consume
+- [x] `should never return an empty title` — covers the degenerate case where stripping would consume
       everything
-- [ ] `should report which suffix families were stripped` — covers the diagnostic flags the response and
-      the Phase 6 review screen consume
-- [ ] `should neutralise query-breaking characters` — covers quotes and colons that would corrupt the
+- [x] `should report which suffix families were stripped` — covers the diagnostic flags the response and
+      the Phase 6 reveal-side year UI consume
+- [x] `should neutralise query-breaking characters` — covers quotes and colons that would corrupt the
       search query
 
 ### `shared/year.test.ts` — cache-key normalization
 
-- [ ] `should produce the same key for titles differing only by case, punctuation, or whitespace` —
+- [x] `should produce the same key for titles differing only by case, punctuation, or whitespace` —
       covers the shared cache actually hitting across cosmetic variation
-- [ ] `should produce the same key for titles differing only by diacritics` — covers accented artist
+- [x] `should produce the same key for titles differing only by diacritics` — covers accented artist
       and track names
-- [ ] `should produce different keys for genuinely different tracks` — covers that normalization is not
+- [x] `should produce different keys for genuinely different tracks` — covers that normalization is not
       so aggressive it collides distinct songs
-- [ ] `should include the schema version segment` — covers that a logic change can invalidate the cache
+- [x] `should include the schema version segment` — covers that a logic change can invalidate the cache
       wholesale
 
 ### `shared/year.test.ts` — candidate selection
 
-- [ ] `should prefer an official studio album over a live release` — covers the core strict filter,
+- [x] `should prefer an official studio album over a live release` — covers the core strict filter,
       built from the live-version case Phase 0 verified
-- [ ] `should prefer an official studio album over a compilation` — covers the `secondary-types`
+- [x] `should prefer an official studio album over a compilation` — covers the `secondary-types`
       Compilation exclusion, i.e. the Billie Jean / Hotel California class of failure
-- [ ] `should exclude remix and bootleg release groups` — covers the remaining excluded secondary types,
+- [x] `should exclude remix and bootleg release groups` — covers the remaining excluded secondary types,
       built from the Stairway-to-Heaven-bootleg case that produced a 2025 year
-- [ ] `should exclude non-official releases` — covers the release `status` filter
-- [ ] `should take the earliest date among surviving candidates` — covers the earliest-release rule that
+- [x] `should exclude non-official releases` — covers the release `status` filter
+- [x] `should take the earliest date among surviving candidates` — covers the earliest-release rule that
       is the whole point of using MusicBrainz over Spotify
-- [ ] `should ignore candidates with a missing or empty date rather than treating them as earliest` —
+- [x] `should ignore candidates with a missing or empty date rather than treating them as earliest` —
       covers the Phase 0 finding that a bare minimum over all dates present is wrong. Directly guards
       the most likely silent bug in the plan
-- [ ] `should compare dates of differing granularity correctly` — covers `YYYY` against `YYYY-MM-DD`
-- [ ] `should use duration to break a tie between studio and extended versions` — covers the ~3:42
+- [x] `should compare dates of differing granularity correctly` — covers `YYYY` against `YYYY-MM-DD`
+- [x] `should use duration to break a tie between studio and extended versions` — covers the ~3:42
       versus ~6:35 "No Woman No Cry" case Phase 0 identified
-- [ ] `should not let duration override the release-group filter` — covers precedence, so a
+- [x] `should not let duration override the release-group filter` — covers precedence, so a
       closer-duration bootleg cannot beat a correctly filtered album
-- [ ] `should exclude candidates whose artist credit does not match` — covers the cover-versus-original
+- [x] `should exclude candidates whose artist credit does not match` — covers the cover-versus-original
       separation Phase 0 measured as reliable, using the Hallelujah pair
-- [ ] `should return high confidence from strict mode` — covers the confidence contract
-- [ ] `should return low confidence from relaxed mode` — covers the tiered fallback's marking, which is
+- [x] `should return high confidence from strict mode` — covers the confidence contract
+- [x] `should return low confidence from relaxed mode` — covers the tiered fallback's marking, which is
       what lets Phase 6 flag a year as worth checking
-- [ ] `should return relaxed results when the strict filters exclude everything` — covers the tier
+- [x] `should return relaxed results when the strict filters exclude everything` — covers the tier
       transition, the case the missing Spotify-year fallback was supposed to handle
-- [ ] `should return a null year with a reason when no candidate has a date` — covers the third tier,
+- [x] `should return a null year with a reason when no candidate has a date` — covers the third tier,
       asserting the reason distinguishes "no candidates" from "none dated"
-- [ ] `should reject an implausible year` — covers the sanity guard against a corrupt date
-- [ ] `should resolve each known-tricky Phase 0 track to its verified year` — the accuracy test, run
+- [x] `should reject an implausible year` — covers the sanity guard against a corrupt date
+- [x] `should resolve each known-tricky Phase 0 track to its verified year` — the accuracy test, run
       over the captured fixtures. This is the test that demonstrates the plan beat the measured
       6%-accurate baseline, and the one that would catch a regression in scoring
 
 ### `api/_lib/cache.test.ts`
 
-- [ ] `should round-trip a value through the in-memory adapter` — covers the local path
-- [ ] `should return a miss for an unknown key` — covers the miss contract the handler branches on
-- [ ] `should preserve confidence and source through a round trip` — covers storing the whole result
+- [x] `should round-trip a value through the in-memory adapter` — covers the local path
+- [x] `should return a miss for an unknown key` — covers the miss contract the handler branches on
+- [x] `should preserve confidence and source through a round trip` — covers storing the whole result
       rather than a bare year, which would silently upgrade every cached card to high confidence
-- [ ] `should send a set-with-expiry command to Upstash` — covers the REST adapter's write, asserted
+- [x] `should send a set-with-expiry command to Upstash` — covers the REST adapter's write, asserted
       against an injected fetch
-- [ ] `should handle keys containing spaces and punctuation` — covers why commands go in the request
+- [x] `should handle keys containing spaces and punctuation` — covers why commands go in the request
       body rather than the URL
-- [ ] `should treat an Upstash read failure as a miss` — covers cache-failure isolation
-- [ ] `should treat an Upstash write failure as a no-op` — same, on the write path
-- [ ] `should select the in-memory adapter when no Upstash URL is configured` — covers `createCache()`
+- [x] `should treat an Upstash read failure as a miss` — covers cache-failure isolation
+- [x] `should treat an Upstash write failure as a no-op` — same, on the write path
+- [x] `should select the in-memory adapter when no Upstash URL is configured` — covers `createCache()`
       selection, i.e. that a contributor with no credentials gets a working cache
-- [ ] `should select the Upstash adapter when the URL is configured` — covers the other branch, so
+- [x] `should select the Upstash adapter when the URL is configured` — covers the other branch, so
       production does not silently run on the in-memory cache
 
 ### `api/_lib/rate-limit.test.ts`
 
-- [ ] `should allow one call and block a concurrent second within the window` — covers the gate's core
+- [x] `should allow one call and block a concurrent second within the window` — covers the gate's core
       behaviour
-- [ ] `should allow a second call after the window elapses` — covers release by expiry
-- [ ] `should report a retry delay when the permit cannot be acquired` — covers the value the 429
+- [x] `should allow a second call after the window elapses` — covers release by expiry
+- [x] `should report a retry delay when the permit cannot be acquired` — covers the value the 429
       response carries and Phase 3 backs off on
-- [ ] `should fall back to per-instance pacing when Redis is unavailable` — covers the local mode,
+- [x] `should fall back to per-instance pacing when Redis is unavailable` — covers the local mode,
       including the documented weaker guarantee
-- [ ] `should not consume a permit when the caller had a cache hit` — covers that the common path is
+- [x] `should not consume a permit when the caller had a cache hit` — covers that the common path is
       never paced
 
 ### `api/_lib/musicbrainz.test.ts`
 
-- [ ] `should build a quoted recording query from the cleaned title and artist` — covers query
+- [x] `should build a quoted recording query from the cleaned title and artist` — covers query
       construction against an injected fetch
-- [ ] `should send the configured User-Agent` — covers the requirement MusicBrainz enforces by blocking
+- [x] `should send the configured User-Agent` — covers the requirement MusicBrainz enforces by blocking
       anonymous traffic
-- [ ] `should fail clearly when the User-Agent variable is unset` — covers the loud-failure decision
-- [ ] `should normalize a response into candidates with release-group and status fields` — covers the
+- [x] `should fail clearly when the User-Agent variable is unset` — covers the loud-failure decision
+- [x] `should normalize a response into candidates with release-group and status fields` — covers the
       flattening the scorer depends on
-- [ ] `should retry once on a 503 and succeed on the retry` — covers rate-limit rejection handling
-- [ ] `should not retry a 400 or 404` — covers that only the transient status is retried
-- [ ] `should retry with the primary-artist guess when the full artist string returns zero results` —
+- [x] `should retry once on a 503 and succeed on the retry` — covers rate-limit rejection handling
+- [x] `should not retry a 400 or 404` — covers that only the transient status is retried
+- [x] `should retry with the primary-artist guess when the full artist string returns zero results` —
       covers the two-attempt ordering that makes the lossy guess safe
-- [ ] `should not retry with the guess when the full string returned candidates` — covers that the
+- [x] `should not retry with the guess when the full string returned candidates` — covers that the
       normal path costs one request, not two, against the rate-limit budget
-- [ ] `should return a typed error rather than throwing when fetch rejects` — covers the error contract
+- [x] `should return a typed error rather than throwing when fetch rejects` — covers the error contract
 
 `api/year.ts` is left to manual verification, like the playlist handler: it is a method guard, a cache
 read, a gate acquisition, two calls to already-tested code, and a status mapping. Logic that grows there
@@ -478,49 +493,49 @@ should move into the adapter or `shared/year.ts` instead.
       risk-table mitigation both promised "use the year from the Spotify embed data", which the Phase 0
       spike in the same document contradicts — no release date and no album name at track level, and a
       null playlist-level `releaseDate`. Both now describe the tiered strategy, keeping the "mark as
-      unconfirmed in the review screen" intent that the `low` confidence value serves. Phase 2
+      unconfirmed" intent that the `low` confidence value serves. Phase 2
       checkbox 5 is reworded the same way, checkbox 3 no longer says "batch endpoint", and a pointer to
-      both phase-2 plan files was added. **Still to do during execution: tick checkboxes 3–5.**
-- [ ] `docs/api.md` — the `/api/year` section's **fallback and batching claims are already corrected**
+      both phase-2 plan files was added. **Done during execution (2026-08-04): checkboxes 3–5 ticked, each annotated with what execution actually produced, plus a Phase 2 completion note listing the three findings Phase 3 has to design against.**
+- [x] `docs/api.md` — the `/api/year` section's **fallback and batching claims are already corrected**
       (2026-08-03): it now states one-track-per-request, the three confidence tiers, that no Spotify
       year exists, and the 429 + `retryAfterMs` back-pressure contract with its Redis-versus-local
       caveat. Still to do during execution: flip the section from `[planned — Phase 2]` to `[built]`,
       document the actual query parameters and response fields (including `cleanedTitle`), extend §4's
       configuration table with the runtime consequence of omitting each variable, and add the year
       endpoint's error table to §5
-- [ ] `docs/architecture.md` — the §3 data-flow diagram **already says one-per-track and "1 req/s gate"**
+- [x] `docs/architecture.md` — the §3 data-flow diagram **already says one-per-track and "1 req/s gate"**
       (corrected 2026-08-03; it previously showed a batched endpoint and an in-process queue). Still to
       do during execution: mark the year cache and the year path `[built]` in §1 and §7, and extend §4 —
       which already documents the verified release-group fix accurately — with the relaxed second tier,
       the three confidence values, and a note that cache-key versioning exists so a scoring change can
       invalidate previously cached years
-- [ ] `docs/development.md` — how to exercise `/api/year` through `vercel dev`, that
+- [x] `docs/development.md` — how to exercise `/api/year` through `vercel dev`, that
       `MUSICBRAINZ_USER_AGENT` is required locally while Upstash credentials are not, what the log line
       naming the selected cache adapter means, and that a 429 is expected behaviour under load rather
       than a bug
-- [ ] `docs/agent_findings.md` — dated (ISO 8601) entries for: the step-1 answer about which fields the
+- [x] `docs/agent_findings.md` — dated (ISO 8601) entries for: the step-1 answer about which fields the
       recording search returns and therefore whether a lookup costs one request or two; whether the
       verified fix generalises to Free Bird and Like a Rolling Stone, which Phase 0 expected but never
       confirmed; any MusicBrainz response-shape surprise; and the real-world hit rate of the strict pass
       versus the relaxed pass once a few playlists have been run. Tell the developer when an entry is
       added, per `AGENTS.md`
-- [ ] `docs/plans/plan.phase-2-year.md` — tick implementation steps as they complete and append
+- [x] `docs/plans/plan.phase-2-year.md` — tick implementation steps as they complete and append
       execution notes where reality differed, in the style of [plan.phase-1.md](./plan.phase-1.md)
-- [ ] Inline comment in `shared/year.ts` above the strict filter — cite the Phase 0 measurement (naive
+- [x] Inline comment in `shared/year.ts` above the strict filter — cite the Phase 0 measurement (naive
       lookup ~6% accurate, 1 of 18; the filter correct in all 12 cases tried) and state explicitly that
       the filter **must not** use an album name because the embed provides none. Without this, the
       filter looks like arbitrary over-engineering and is a prime candidate for "simplification"
-- [ ] Inline comment in `shared/year.ts` above the earliest-date logic — cite the finding that missing
+- [x] Inline comment in `shared/year.ts` above the earliest-date logic — cite the finding that missing
       and empty `date` fields are common on bootleg and compilation releases, so a bare minimum over
       present dates is wrong
-- [ ] Inline comment in `shared/year.ts` above the title cleaner — record that remaster-suffixed titles
+- [x] Inline comment in `shared/year.ts` above the title cleaner — record that remaster-suffixed titles
       returned **zero** results in every Phase 0 case, so this is mandatory rather than a nicety
-- [ ] Inline comment in `api/_lib/rate-limit.ts` — state the two modes and their **different**
+- [x] Inline comment in `api/_lib/rate-limit.ts` — state the two modes and their **different**
       guarantees: Redis-backed enforces 1 req/s globally, per-instance pacing does not. Also record why
       one-request-per-track puts the gate here instead of in an in-process queue
-- [ ] Inline comment in `api/_lib/cache.ts` — explain the `v1` key segment as a deliberate invalidation
+- [x] Inline comment in `api/_lib/cache.ts` — explain the `v1` key segment as a deliberate invalidation
       lever, and note that the in-memory adapter survives only within one warm instance
-- [ ] `.env.example` — no new variables, but confirm the existing comments still describe reality now
+- [x] `.env.example` — no new variables, but confirm the existing comments still describe reality now
       that the code reads them, and note that a missing `MUSICBRAINZ_USER_AGENT` produces a 500 with an
       explicit message rather than a confusing upstream rejection
 
@@ -559,6 +574,96 @@ should move into the adapter or `shared/year.ts` instead.
 
 ---
 
+## Execution Notes (2026-08-04)
+
+Everything below is a place where reality differed from the plan. Where the plan was simply right,
+there is nothing here.
+
+### The lookup shape changed, and the accuracy came from somewhere the plan did not expect
+
+Step 1 asked whether the recording search returns all four filter fields. It does, and its inlined
+release list is complete — so on the step's own terms, **one** request would have sufficed. It is still
+two, for a reason the plan did not anticipate: **the release date inlined in the search response is the
+reissue date, not the original.** Filtering to official studio albums and taking the earliest inlined
+date gives Billie Jean 2012, Bohemian Rhapsody 2001, Sweet Child O' Mine 2018, Hotel California 2001,
+Layla 1990. The second request is a batched `release-group?query=rgid:(… OR …)` lookup for the release
+group's own `first-release-date`, which is the album's original release date and gets all five right.
+One query covers every candidate, so the count stays at two however large the pool (decision 19a holds).
+
+The plan's Chosen Approach says "take the earliest non-empty date" among survivors. As built, the strict
+pass takes the earliest **release-group first-release-date** and deliberately ignores `releaseDate`
+entirely. `shared/year.ts` carries the measurement table in a comment above that line, because the wrong
+field is sitting right there in the same object and this is the most reversion-prone rule in the module.
+
+### Two of the plan's own instructions had to be overridden, both measured
+
+- **"Request a modest candidate limit"** — wrong, and expensively so. `limit=100` is load-bearing:
+  MusicBrainz ties dozens of candidates at `score: 100` and orders them arbitrarily, so the original
+  recording is frequently not on page one. Measured, the same algorithm scores **2 of 13** at `limit=25`
+  and **12 of 13** at `limit=100`. 100 is also the endpoint's maximum.
+- **A `dur:[±10s]` bound was added to the query**, which the plan did not call for — it only described
+  duration as a local tie-breaker. In the query it is worth far more: it collapses most pools below the
+  100-result page limit, which is what took the suite from 12/13 to **14/14** and fixed "Stairway to
+  Heaven" (842 candidates unbounded, 31 bounded). The local duration preference is still implemented as
+  the plan specifies and measured neutral on top of it — it covers the case the query bound cannot, a
+  track whose duration Spotify did not supply. `DURATION_TOLERANCE_MS` is shared by both so they cannot
+  drift apart.
+
+A third thing was tried and rejected: pushing the filters into the Lucene query
+(`primarytype:album AND status:official AND -secondarytype:compilation …`). It looks like the obvious
+optimisation, collapses Billie Jean's pool from 124 to 9 — and returns **zero** results for Hallelujah /
+Leonard Cohen. Filters run client-side over a wide pool.
+
+### Decision 20 resolved: one generalises, one does not
+
+**Free Bird generalises** (1973, exact). **Like a Rolling Stone** does not, unaided: its unbounded pool
+is 707 candidates and the top 100 contain no official studio album at all, so the strict pass finds
+nothing and it lands in the relaxed tier, which returned 1966 on one run and 1963 on another. With the
+`dur:` bound it resolves correctly to 1965 and stays there. Both are captured as fixtures.
+
+### Structural deviations
+
+- **`api/_lib/resolve-year.ts` was added**, which the plan does not list. The plan leaves `api/year.ts`
+  to manual verification on the grounds that it is "a method guard, a cache read, a gate acquisition,
+  two calls to already-tested code, and a status mapping" — but three of those are the orderings the
+  plan cares most about (cache before gate, strict before relaxed, cache all three outcomes), and they
+  are untestable inside a handler. They live in an injectable module instead, so
+  `should not consume a permit when the caller had a cache hit` is a real assertion rather than prose.
+  `api/year.ts` stays the thin HTTP shell the plan describes.
+- **Fixtures are split across two files, not one.** The plan puts them all in
+  `api/_lib/__fixtures__/`, but it also puts the accuracy suite in `shared/year.test.ts` — and
+  `tsconfig.app.json` covers `src` + `shared` only, so a `shared/` test importing from `api/` would drag
+  Node-side code into the browser typecheck. Normalized candidates therefore live in
+  `shared/__fixtures__/year-candidates.ts` and raw payloads in
+  `api/_lib/__fixtures__/musicbrainz-payloads.ts`. Both were captured on the same date with the same two
+  queries, and the adapter test runs end to end over its raw fixture so a shape change breaks something.
+
+### One bug the live check caught that no unit test would have
+
+With the `MUSICBRAINZ_USER_AGENT` guard only in the adapter, it was reached **only on a cache miss** — so
+a deployment with no user agent served warm tracks happily and 500'd on cold ones, i.e. looked
+intermittently broken. That is exactly the confusing-to-diagnose failure decision 17 exists to prevent.
+The check moved ahead of the cache read, and
+`should report not-configured even when the answer is already cached` now pins it.
+
+### Live verification
+
+Eight tracks through the real pipeline against live MusicBrainz, all correct, all `high`:
+Billie Jean 1982, Bohemian Rhapsody 1975 (from the remaster-suffixed title, cleaned), Stairway to Heaven
+1971, Hallelujah/Buckley 1994, Hallelujah/Cohen 1984, Free Bird 1973, Like a Rolling Stone 1965, Hotel
+California 1976. A repeat lookup returned `cached: true` in 0 ms; a nonsense title returned
+`year: null, confidence: 'none', reason: 'no-candidates'`; an unset user agent returned
+`not-configured`.
+
+**Cold-lookup latency: 1.3–3.6 s per track**, which is the number Phase 3 must design against. Note it is
+per user only when nobody else is resolving a cold playlist at the same time (decision 21).
+
+**Not done, and left for the developer:** `vercel dev` HTTP-level checks and the 50-track wall-clock
+measurement. The project is not linked (`vercel link` is out of scope for this plan), and there is no
+`.env.local`. The curl checklist is written up in [`development.md`](../development.md) §4.
+
+---
+
 ## Assumptions & Decisions
 
 | #   | Assumption / Decision                                                                                                                                                                              | Rationale                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
@@ -571,7 +676,7 @@ should move into the adapter or `shared/year.ts` instead.
 | 6   | **Upstash is reached over plain REST with the global `fetch`; no client library is installed**                                                                                                     | The operations needed are a get and a set-with-expiry. A dependency would add cold-start weight to a latency-sensitive function for no capability gain, and Phase 1 deliberately locked a minimal dependency tree.                                                                                                                                                                                                                                                                   |
 | 7   | **Commands go in a POST body as a JSON array, not built into the URL path**                                                                                                                        | Normalized artist–title keys contain spaces and punctuation. Path-encoded commands make that a source of subtle encoding bugs; a body does not.                                                                                                                                                                                                                                                                                                                                      |
 | 8   | **Cache keys carry a `v1` schema segment**                                                                                                                                                         | When the scoring logic changes, every cached year was computed by the old logic. Bumping one segment invalidates them all in a single edit; without it, improved logic would be masked indefinitely by stale entries.                                                                                                                                                                                                                                                                |
-| 9   | **The whole result is cached, not a bare year, and negatives are cached too**                                                                                                                      | Storing only the year would make every cache hit report high confidence, quietly defeating the Phase 6 review screen. Negatives are cached because a miss costs a full round trip and the next user with the same playlist will ask again — with a shorter TTL, since MusicBrainz data improves.                                                                                                                                                                                     |
+| 9   | **The whole result is cached, not a bare year, and negatives are cached too**                                                                                                                      | Storing only the year would make every cache hit report high confidence, quietly defeating the Phase 6 reveal-side year UI. Negatives are cached because a miss costs a full round trip and the next user with the same playlist will ask again — with a shorter TTL, since MusicBrainz data improves.                                                                                                                                                                               |
 | 10  | **A cache failure degrades to a miss and never fails a lookup**                                                                                                                                    | The cache is a latency optimisation; MusicBrainz is the source of truth. An Upstash outage should make the app slow, not broken.                                                                                                                                                                                                                                                                                                                                                     |
 | 11  | **Cache hits bypass the rate-limit gate**                                                                                                                                                          | Once a playlist has been played, the whole deck should resolve at cache speed. Gating hits would make the common case as slow as the cold one for no benefit — nothing leaves the building.                                                                                                                                                                                                                                                                                          |
 | 12  | **When the gate is busy, respond 429 with `retryAfterMs` instead of queueing inside the function**                                                                                                 | Queueing burns wall-clock on a metered invocation and risks the function timeout, when the client is already sequencing and can simply come back. It also makes back-pressure visible to Phase 3 rather than hidden in latency.                                                                                                                                                                                                                                                      |
@@ -580,7 +685,7 @@ should move into the adapter or `shared/year.ts` instead.
 | 15  | **The full joined artist string is queried first; `primaryArtistGuess()` is a second attempt only**                                                                                                | This ordering is what makes the guess's known lossiness harmless: "Earth, Wind & Fire" matches on the full string and never reaches a guess that would truncate it. Phase 0 measured artist filtering as reliable (0 of 6 cover lookups cross-contaminated), so including the artist is always worth the cost.                                                                                                                                                                       |
 | 16  | **Scoring is pure and operates on a normalized candidate shape, never on raw MusicBrainz JSON**                                                                                                    | Every accuracy claim in this plan is then a unit test over fixtures, with no network and no rate limit. It also confines a MusicBrainz shape change to the adapter.                                                                                                                                                                                                                                                                                                                  |
 | 17  | **A missing `MUSICBRAINZ_USER_AGENT` fails loudly with a 500**                                                                                                                                     | MusicBrainz blocks anonymous traffic, so a default or absent agent produces a remote rejection that is confusing to diagnose. Failing at the boundary names the actual problem.                                                                                                                                                                                                                                                                                                      |
-| 18  | **`cleanedTitle` is returned to the client**                                                                                                                                                       | When a year looks wrong, the first question is always what was actually queried. Cheap to include, and Phase 6's review screen can show it.                                                                                                                                                                                                                                                                                                                                          |
+| 18  | **`cleanedTitle` is returned to the client**                                                                                                                                                       | When a year looks wrong, the first question is always what was actually queried. Cheap to include, and Phase 6's reveal-side year UI can show it.                                                                                                                                                                                                                                                                                                                                    |
 | 19  | **Up to two MusicBrainz requests per track is acceptable** — a search plus one follow-up for the chosen recording's full release list                                                              | Developer decision, 2026-08-04: a player spends well over two seconds on a card, so a resolver running at one track per two seconds stays ahead of play, and card 1 is still ready within about two seconds of Start. This removes what was the plan's main open risk — the lookup shape no longer has to be settled before the design can proceed. The extra request also **buys accuracy**: filtering a recording's full release list beats filtering whatever the search inlined. |
 | 19a | **But the request count must never scale with the candidate pool** — bounded at two, or a small constant                                                                                           | Phase 0 saw 706 candidates for "Like a Rolling Stone" and 842 for "Stairway to Heaven". A per-candidate detail fetch would be minutes per track, which is a different order of problem from two seconds and is not covered by decision 19.                                                                                                                                                                                                                                           |
 | 20  | **Assumed: the fix generalises to Free Bird and Like a Rolling Stone**                                                                                                                             | Phase 0 stated the same release-group signals were present for both but did **not** re-verify them. Recorded as an assumption, and a fixture is captured specifically to test it — whatever it shows is a real finding.                                                                                                                                                                                                                                                              |
@@ -601,11 +706,19 @@ should move into the adapter or `shared/year.ts` instead.
 - [ ] **Is a low-confidence year better than no year in actual play?** The premise of decision 1, and it
       cannot be settled by reasoning. If low-confidence years turn out to be wrong often enough to
       annoy, the answer is either a stricter relaxed pass or the second metadata source deferred above.
-      Phase 6's review screen is where this becomes observable.
-- [ ] **Should the review screen be mandatory before Start?** Already open in [plan.md](./plan.md) §6 and
-      still Phase 6's call — but the tiered confidence values are what make a good answer possible, so
-      it is worth revisiting once real hit rates exist for `high`, `low`, and `none`.
-- [ ] **Is the ten-second duration tolerance right?** Derived from a single Phase 0 example (~3:42 studio
+      The revealed side's unconfirmed marker is where this becomes observable.
+- [x] **Should the review screen be mandatory before Start?** **Resolved in [plan.md](./plan.md) §6
+      (2026-08-04): there is no pre-Start review screen.** The player pastes the playlist, so listing years
+      before Start spoils the deck. `confidence` is consumed on the card's **revealed** side instead — a
+      `low` value renders an "unconfirmed" marker where the year is already visible. Nothing changes in
+      this plan's output: the three tiers are still exactly what that UI needs.
+- [ ] **Is the ten-second duration tolerance right?** _Now higher-stakes than when this was written:_ as
+      built it is also the `dur:[lo TO hi]` bound on the search query, so it decides which candidates
+      exist at all, not just which one wins a tie. Too narrow and a track whose Spotify duration
+      disagrees with MusicBrainz falls to the unbounded retry (costing a request); too wide and the pool
+      stops shrinking below the 100-result page limit, which is where the accuracy comes from. Ten
+      seconds resolved all fourteen measured tracks, but that is one value tested, not a search.
+      Original note: derived from a single Phase 0 example (~3:42 studio
       versus ~6:35 live). Wide enough to tolerate edition differences, narrow enough to separate an
       extended mix — but it is one data point, so treat it as tunable.
 - [ ] **How should a `year: null` card behave in the deck before Phase 6 exists?** Phase 3 has to decide
@@ -625,8 +738,10 @@ should move into the adapter or `shared/year.ts` instead.
   considered and deferred; see decision 1. Revisit only if low-confidence years prove unhelpful.
 - **The client-side sequencing loop, progressive fill, and blocking when the player outruns the
   resolver** — Phase 3. This plan provides the per-track endpoint and the 429 back-off signal that loop
-  is built on.
-- **The year review/edit screen and the "unconfirmed year" UI** — Phase 6. This plan produces the
+  is built on. Two constraints from [plan.md](./plan.md) §1/§3 that this endpoint's shape assumes:
+  Start gates on **card 1's year alone**, and the loop walks the **already-shuffled** deck order, one
+  request at a time — a `Promise.all` over the deck would turn the 1 req/s gate into ~99 429s.
+- **The reveal-side "unconfirmed year" marking and any year correction** — Phase 6. This plan produces the
   `confidence` value those screens render.
 - **A playlist snapshot cache in Redis** — the playlist plan uses an edge `Cache-Control` header instead.
   The `YearCache` interface is available if a later phase wants one.

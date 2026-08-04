@@ -8,17 +8,19 @@ Several decisions in this repo look like mistakes and are not. If something seem
 
 ## Documentation Index
 
-| File                                                         | What it covers                                                                                            |
-| ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
-| [`docs/architecture.md`](./docs/architecture.md)             | Components, import boundaries between `src`/`api`/`shared`, data flow, external services, planned phases  |
-| [`docs/api.md`](./docs/api.md)                               | The `api/` surface, handler conventions, environment variable reference                                   |
-| [`docs/toolchain.md`](./docs/toolchain.md)                   | The two TypeScript installs, the four tsconfigs, ESLint/Prettier, pnpm and the Node pin, Tailwind, Vitest |
-| [`docs/development.md`](./docs/development.md)               | Setup, scripts, running functions locally, tests, deploy, known limitations                               |
-| [`docs/agent_findings.md`](./docs/agent_findings.md)         | Running log of discoveries and gotchas found while working here                                           |
-| [`docs/plans/plan.md`](./docs/plans/plan.md)                 | **Authoritative phase plan** — what belongs in which phase, plus all Phase 0 research findings            |
-| [`docs/plans/plan.phase-1.md`](./docs/plans/plan.phase-1.md) | Phase 1 detail, decisions, and execution notes                                                            |
+| File                                                                           | What it covers                                                                                            |
+| ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
+| [`docs/architecture.md`](./docs/architecture.md)                               | Components, import boundaries between `src`/`api`/`shared`, data flow, external services, planned phases  |
+| [`docs/api.md`](./docs/api.md)                                                 | The `api/` surface, handler conventions, environment variable reference                                   |
+| [`docs/toolchain.md`](./docs/toolchain.md)                                     | The two TypeScript installs, the four tsconfigs, ESLint/Prettier, pnpm and the Node pin, Tailwind, Vitest |
+| [`docs/development.md`](./docs/development.md)                                 | Setup, scripts, running functions locally, tests, deploy, known limitations                               |
+| [`docs/agent_findings.md`](./docs/agent_findings.md)                           | Running log of discoveries and gotchas found while working here                                           |
+| [`docs/plans/plan.md`](./docs/plans/plan.md)                                   | **Authoritative phase plan** — what belongs in which phase, plus all Phase 0 research findings            |
+| [`docs/plans/plan.phase-1.md`](./docs/plans/plan.phase-1.md)                   | Phase 1 detail, decisions, and execution notes                                                            |
+| [`docs/plans/plan.phase-2-playlist.md`](./docs/plans/plan.phase-2-playlist.md) | Phase 2, first half — URL parsing, the embed adapter, `/api/playlist`                                     |
+| [`docs/plans/plan.phase-2-year.md`](./docs/plans/plan.phase-2-year.md)         | Phase 2, second half — the cache, the MusicBrainz adapter, year resolution, `/api/year`                   |
 
-**Do not build ahead of the current phase.** The plan defers things deliberately. Current phase: **2 (data layer), half done** — playlist ingestion is built (`parsePlaylistUrl()`, the embed adapter, `/api/playlist`); year resolution, the cache, and `/api/year` are next, per [`docs/plans/plan.phase-2-year.md`](./docs/plans/plan.phase-2-year.md).
+**Do not build ahead of the current phase.** The plan defers things deliberately. Current phase: **2 (data layer) is complete** — playlist ingestion (`parsePlaylistUrl()`, the embed adapter, `/api/playlist`) and year resolution (`shared/year.ts`, the MusicBrainz adapter, the `YearCache` interface, the 1 req/s gate, `/api/year`) are both built. **Phase 3 — game state, seeded shuffle, and progressive loading — is next**, per [`docs/plans/plan.md`](./docs/plans/plan.md) §5.
 
 ---
 

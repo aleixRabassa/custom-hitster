@@ -13,7 +13,9 @@ A web app that turns a public Spotify playlist link into a playable digital Hits
 ```
 Paste playlist URL
       ↓
-  [ Start ]  → fetch tracks → resolve years → shuffle
+  [ Start ]  → fetch tracks → shuffle → resolve year of card 1 ONLY
+                                             └─ cards 2..n resolve in the
+                                                background, during play
       ↓
 ┌─────────────────────────────────────┐
 │      Card, "hidden" side            │  ← QR always shown, reveal nothing
@@ -37,6 +39,7 @@ Left-to-right/top-to-bottom: desktop landing page (URL input + suggested playlis
 - Hidden side must not leak title, artist, or year — that is the whole game.
 - Tap = flip. Swipe = next card.
 - Deck ends naturally (no cards left) or manually (Exit button on the card, which ends the session and redirects to the landing page).
+- **Start waits on exactly one year — card 1's. Never on the whole deck.** At MusicBrainz's 1 req/s a 100-track playlist is ~100 s (~200 s at the two-requests-per-track figure of [plan.phase-2-year.md](./plan.phase-2-year.md) decision 19); resolving up front would mean minutes of loading screen before the first card. Cards 2..n resolve in the background while the player is looking at card 1. See §3.
 
 ---
 
@@ -57,7 +60,7 @@ Spotify's Feb 2026 Web API changes broke the obvious implementation:
 
 - **Audience: anyone with a public link.** → No Spotify login. → The official Web API cannot serve us. → We read the **public embed endpoint** (the approach the reference repo's "scraper mode" uses).
 - **Playback: QR is always shown** on the hidden side (so a second device/phone can always scan-and-play in Spotify), **plus** in-app background playback when available — controlled by explicit **[■ Exit] / [▶ Play/Pause] / [↺ Restart]** buttons (Exit ends the game session and returns to the landing page). Background audio is additive, not a replacement for the QR.
-- **Release year comes from MusicBrainz, not Spotify.** Spotify returns the _album edition's_ date, so remasters and compilations give wrong years (a 2011 remaster of Bohemian Rhapsody → 2011). MusicBrainz's earliest release date for a recording is exactly the value Hitster needs. This makes year resolution a **core component**, not an enrichment pass. **Fallback — tiered, MusicBrainz-only (revised 2026-08-03):** ~~use the year from the Spotify embed data~~ — **there is no Spotify year to fall back to.** The Phase 0 embed spike (§5) established that the payload carries no release date and no album name at track level, and playlist-level `releaseDate` is null. The fallback is therefore three MusicBrainz tiers: a **strict** pass (official studio album, filtered per the Phase 0 fix) marked high confidence; a **relaxed** pass with the release-group filters dropped, marked low confidence; and finally **no year at all**, left for the user to fill in on the review screen. Low-confidence years are flagged there exactly as the original "unconfirmed" wording intended.
+- **Release year comes from MusicBrainz, not Spotify.** Spotify returns the _album edition's_ date, so remasters and compilations give wrong years (a 2011 remaster of Bohemian Rhapsody → 2011). MusicBrainz's earliest release date for a recording is exactly the value Hitster needs. This makes year resolution a **core component**, not an enrichment pass. **Fallback — tiered, MusicBrainz-only (revised 2026-08-03):** ~~use the year from the Spotify embed data~~ — **there is no Spotify year to fall back to.** The Phase 0 embed spike (§5) established that the payload carries no release date and no album name at track level, and playlist-level `releaseDate` is null. The fallback is therefore three MusicBrainz tiers: a **strict** pass (official studio album, filtered per the Phase 0 fix) marked high confidence; a **relaxed** pass with the release-group filters dropped, marked low confidence; and finally **no year at all**. Low-confidence years are flagged exactly as the original "unconfirmed" wording intended — but **on the card's revealed side, never on a pre-Start screen**: the player is the one pasting the playlist, so a list of years before Start would spoil the whole deck (§6).
 
 > ⚠️ **Worth knowing:** scraping the embed endpoint and hiding/reskinning the embed player are outside Spotify's Developer Terms, and these unofficial endpoints can change without notice. Acceptable for a personal project; it does mean the QR fallback (step 3 below) must always remain functional so the app degrades instead of dying.
 
@@ -93,6 +96,8 @@ Browser (SPA)                          Serverless (Vercel Functions)
 
 **Why progressive loading matters:** MusicBrainz at 1 req/s means a 100-track playlist takes ~100s worst case. So: resolve years in the background, start the game as soon as **card 1** is ready, and only block if the player outruns the resolver.
 
+**Shuffle before resolving, not after** — the ordering matters and the two are easy to get backwards. Resolution must run **in final deck order**, so "resolve card 1 first" means the first card of the _shuffled_ deck, not the first track of the playlist. Resolve-then-shuffle would spend the first request on a track that lands somewhere random in the deck, leaving the actual card 1 unresolved and Start blocked on a lookup that already finished for someone else's card. Shuffle is pure and instant (seeded Fisher–Yates, no network), so there is no reason to defer it.
+
 ### Recommended Stack
 
 | Layer              | Choice                                                                     | Why                                                                                                                  |
@@ -118,7 +123,7 @@ Browser (SPA)                          Serverless (Vercel Functions)
 | Embed JSON truncates long playlists                        | **Spike this first** (Phase 0). If capped, add pagination or a manual track-paste fallback                                                                      |
 | No `audioPreview.url` / no in-app playback for some tracks | Play/Pause button is simply disabled/hidden for that card; QR and Exit are unaffected and always work                                                           |
 | MusicBrainz has no match / is unavailable                  | **Relaxed second MusicBrainz pass** (release-group filters dropped), marked low confidence, then no year — see §2. There is **no Spotify year to fall back to** |
-| MusicBrainz wrong or ambiguous match                       | Manual year-edit review screen before Start; always user-overridable                                                                                            |
+| MusicBrainz wrong or ambiguous match                       | Low-confidence years flagged **as unconfirmed on the revealed side**, editable there — never in a pre-Start list, which would spoil the deck (§6)               |
 | MusicBrainz slow (1 req/s)                                 | Global cache + progressive loading + start game on card 1                                                                                                       |
 | Tap vs swipe gesture conflict                              | Movement threshold in `onDragEnd`; `touch-action: none`; disable pull-to-refresh                                                                                |
 | Autoplay blocked by browsers                               | Playback always begins from an explicit user tap                                                                                                                |
@@ -172,18 +177,27 @@ Browser (SPA)                          Serverless (Vercel Functions)
 
 - [x] `parsePlaylistUrl()` — handle `open.spotify.com/playlist/{id}`, `?si=` params, `spotify:playlist:` URIs, bare IDs (+ tests) — also locale-prefixed paths (`/intl-es/`), which turned out to be a real form Spotify serves
 - [x] `/api/playlist` — fetch, extract, normalize to `Card[]`; typed errors (**`not-found-or-private`** / `unsupported-entity` / `invalid-url` / `upstream-unavailable` / `unexpected-payload`). Note the deviation from the wording here: `private` and `not-found` collapse into one code because Spotify gives no signal that separates them — see [plan.phase-2-playlist.md](./plan.phase-2-playlist.md) decision 8
-- [ ] `/api/year` — MusicBrainz lookup, ~~batch endpoint~~ **one track per request** (client sequences them; decided 2026-08-03), with the 1 req/s budget enforced by a shared out-of-process gate rather than an in-process queue
-- [ ] Cache layer behind an interface (KV in prod, in-memory locally)
-- [ ] Year-resolution logic + tests (fuzzy title match, feat./remaster/live stripping, pick earliest, **tiered fallback: strict pass → relaxed pass marked low-confidence → no year for manual entry**. ~~fall back to Spotify year~~ — the embed carries no year, see §2)
+- [x] `/api/year` — MusicBrainz lookup, ~~batch endpoint~~ **one track per request** (client sequences them; decided 2026-08-03), with the 1 req/s budget enforced by a shared out-of-process gate rather than an in-process queue. Built as **two** MusicBrainz requests per lookup, not one: a recording search plus one batched release-group call for the album's `first-release-date`, which is where the accuracy comes from (2026-08-04)
+- [x] Cache layer behind an interface (KV in prod, in-memory locally) — `YearCache` in `api/_lib/cache.ts`. The same Upstash variables also back the rate-limit gate, so a deployment has both or neither
+- [x] Year-resolution logic + tests (fuzzy title match, feat./remaster/live stripping, pick earliest, **tiered fallback: strict pass → relaxed pass marked low-confidence → no year for manual entry**. ~~fall back to Spotify year~~ — the embed carries no year, see §2). Measured **14 of 14** known-tricky tracks exact against the ~6% naive baseline, live-verified 2026-08-04
 
 > Detail, decisions, and execution notes, split in two: [plan.phase-2-playlist.md](./plan.phase-2-playlist.md) (checkboxes 1–2) and [plan.phase-2-year.md](./plan.phase-2-year.md) (checkboxes 3–5).
+>
+> **Phase 2 is complete (2026-08-04).** Three findings from execution that Phase 3 has to design against, all in [`agent_findings.md`](../agent_findings.md):
+>
+> - A cold lookup costs **1.3–3.6 s** (two paced MusicBrainz requests); a cached one costs 0 ms. A cold 100-track deck is therefore several minutes, and the 1 req/s budget is **global across all users**, not per user.
+> - `/api/year` answers **429 with `retryAfterMs`** when the gate is busy. That is the designed back-pressure signal, not an error — the progressive-loading loop must back off on it rather than treating it as a failed card, and must be **sequential, not a `Promise.all`**.
+> - A card can legitimately arrive with `year: null` and `confidence: 'none'`. Phase 3 has to decide whether such a card is playable, skipped, or blocking; the open question is recorded in [plan.phase-2-year.md](./plan.phase-2-year.md).
 
 ### Phase 3 — Deck & Game State
 
 - [ ] `Card` and `GameState` types; reducer with `START`, `FLIP`, `NEXT`, `END`
-- [ ] Seeded Fisher–Yates shuffle (reproducible decks) + tests
+- [ ] Seeded Fisher–Yates shuffle (reproducible decks) + tests — runs **before** year resolution, so the resolver walks the deck in play order (§3)
 - [ ] localStorage persist/resume mid-game
-- [ ] Progressive loading: playable at card 1, background-fill the rest, block gracefully if the player outruns the resolver
+- [ ] **Progressive loading — `START` gates on card 1's year alone, never on the deck.** Background-fill cards 2..n in deck order while play proceeds; block gracefully only if the player outruns the resolver. Concretely:
+  - [ ] The resolver is a **sequential loop over the shuffled deck**, one `/api/year` call at a time, honouring a 429's `retryAfterMs`. Not a `Promise.all` over all 100 cards — that would stampede the 1 req/s gate into ~99 rejections
+  - [ ] `START` dispatches as soon as card 1 has a year; the loop keeps running across the whole session
+  - [ ] A test that asserts the game is playable while cards 2..n are still `undefined` — this is the invariant that regresses silently, because a deck of cached years resolves fast enough to hide a blocking implementation in local testing
 
 ### Phase 4 — Card UI
 
@@ -217,13 +231,15 @@ Browser (SPA)                          Serverless (Vercel Functions)
   - the `truncated` warning ("this playlist may have more tracks than shown — only the first 100 could be loaded"), per the Phase 0 track-source decision
   - a `skippedCount` note ("n tracks could not be read and were left out") — **decided 2026-08-04: yes, this surfaces.** Normally `0`, so nothing renders in the common case. A deck missing one malformed track is still playable, so this is a note, not an error. Rationale in [plan.phase-2-playlist.md](./plan.phase-2-playlist.md) Open Questions
 - [ ] Loading state showing year-resolution progress
-- [ ] **Year review/edit screen** before Start (fix MusicBrainz mistakes)
+- [ ] **Unconfirmed-year marking on the revealed side** (not a pre-Start review screen — that would spoil
+      the deck; resolved in §6). A `low`-confidence year renders with an "unconfirmed" marker, and the
+      correction affordance lives there, after the reveal. Any load-time wording is count-only — never
+      titles or years
 - [ ] In-game HUD: cards remaining (Exit lives on the card itself, per Phase 4 — no separate End Game button)
 - [ ] End screen: cards played, restart / new playlist
 
 ### Phase 7 — Polish
 
-- [ ] Card visual design (take cues from the reference repo's neon-ring aesthetic)
 - [ ] Empty/error/offline states; friendly message for private playlists
 - [ ] Responsive: phone, tablet, desktop
 - [ ] Basic a11y: focus states, ARIA on controls, respect `prefers-reduced-motion`
@@ -232,12 +248,11 @@ Browser (SPA)                          Serverless (Vercel Functions)
 
 ### Phase 8 — Nice-to-haves (explicitly out of v1)
 
+- [ ] Card visual design (take cues from the reference repo's neon-ring aesthetic)
 - [ ] Shareable deck URL (playlist id + shuffle seed = whole deck)
 - [ ] PWA / offline via `vite-plugin-pwa`
 - [ ] Multiple decks / saved playlists
 - [ ] Printable PDF export (the reference repo's actual purpose)
-- [ ] Difficulty filters (e.g. decade ranges)
-- [ ] Multi-player scoring / timeline placement
 
 ---
 
@@ -245,7 +260,18 @@ Browser (SPA)                          Serverless (Vercel Functions)
 
 - [ ] Card art direction — reuse the reference repo's neon-ring look, or something new?
 - [x] Is a manual "paste track links" fallback wanted in v1 if the embed scrape proves unreliable? — **Resolved in Phase 0 (§5): no, deferred past v1.** A 100-tracks-exactly warning banner substitutes for it; see the track-source-mechanism decision.
-- [ ] Should year review be mandatory before Start, or skippable with a "years may be off" warning?
+- [x] Should year review be mandatory before Start, or skippable with a "years may be off" warning? —
+      **Resolved 2026-08-04: neither. There is no pre-Start year review at all.** The person pasting the
+      playlist is a player, so any screen listing years before Start hands them the answers to the whole
+      deck — the same leak §1's non-negotiable forbids, just moved off the card. Instead: **warn when a
+      year might be wrong, at the moment the year is already visible.** A `low`-confidence year is marked
+      unconfirmed on the card's revealed side, where the player has seen it anyway; year editing, if
+      offered at all, lives there too (post-reveal, so it spoils nothing) rather than in a pre-Start list.
+      A load-time notice may say "some years could not be confirmed" **without naming tracks or years** —
+      count only.
+- [ ] **Follow-on:** what happens to a `confidence: 'none'` card (no year at all)? Options: leave it out
+      of the deck with a count-only notice (mirrors `skippedCount`), or keep it and reveal "year unknown".
+      Cannot be fixed pre-Start any more, so this is now a real fork. Phase 3/6 call.
 
 ---
 

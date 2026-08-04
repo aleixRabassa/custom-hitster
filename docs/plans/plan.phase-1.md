@@ -324,7 +324,7 @@ All three pass (`pnpm test` → 1 file, 3 tests).
 - Game state, the reducer, seeded shuffle, and localStorage persistence — Phase 3.
 - The card component, CSS 3D flip, QR rendering, and audio playback — Phase 4. `qrcode` and `motion` are installed but unused.
 - Gestures, swipe thresholds, and keyboard controls — Phase 5.
-- The landing page, suggested playlists, loading state, year review screen, HUD, and end screen — Phase 6.
+- The landing page, suggested playlists, loading state, reveal-side unconfirmed-year marking, HUD, and end screen — Phase 6.
 - Visual design, design tokens, responsive work, accessibility, and Lighthouse passes — Phase 7.
 - **Running `vercel link`, `vercel deploy`, or any other Vercel CLI command** — the developer performs these manually after this phase. `vercel dev` is offered as an optional local check only.
 - Provisioning the Upstash or Vercel KV instance itself.

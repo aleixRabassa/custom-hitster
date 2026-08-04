@@ -160,3 +160,159 @@ carry a perfectly good 22-char ID and still fail today:
   network call.
 
 Neither is in this plan's scope; both are recorded here so Phase 6 can decide whether to handle them.
+
+## 2026-08-04 — ANSWERED: a year lookup costs **two** MusicBrainz requests, and the second one is where the accuracy comes from
+
+Step 1 of [`plan.phase-2-year.md`](./plans/plan.phase-2-year.md), measured live against
+`musicbrainz.org/ws/2` with `User-Agent: custom-hitster/0.1.0 ( … )`, 1 req/s, 2026-08-04.
+Ground truth is the Phase 0 track list in [`plan.md`](./plans/plan.md) §5.
+
+**All four fields the strict filter needs ARE inlined in the recording search**, so the search alone
+would be enough on paper:
+
+```
+GET /ws/2/recording?query=recording:"<title>" AND artist:"<artist>"&fmt=json&limit=100
+```
+
+Each `recordings[].releases[]` carries `status` and `date`, and its `release-group` carries
+`primary-type` and `secondary-types`. **No `inc=` parameter is involved** — the search endpoint ignores
+`inc=` and always returns this fixed shape. The inlined release list is also **complete, not partial**:
+for two recordings checked against `GET /ws/2/recording/{id}?inc=releases+release-groups`, the lookup
+returned exactly the same releases (1 and 5 respectively). Recordings additionally carry
+`first-release-date` and `length`.
+
+**But filtering the search response alone gives the wrong year, and this is the trap.** A release-group
+holds every pressing of an album, and the search inlines whichever _release_ matched — usually a
+reissue. Filtering to official studio albums and taking the earliest inlined release date yields:
+
+| Track                               | Correct | Earliest inlined official-album release |
+| ----------------------------------- | ------- | --------------------------------------- |
+| Billie Jean / Michael Jackson       | 1982    | **2012** (Bad 25)                       |
+| Bohemian Rhapsody / Queen           | 1975    | **2001** (A Night at the Opera reissue) |
+| Sweet Child O' Mine / Guns N' Roses | 1987    | **2018** (Appetite reissue)             |
+| Hotel California / Eagles           | 1976    | **2001**                                |
+| Layla / Derek and the Dominos       | 1970    | **1990**                                |
+
+**The fix is a second request against the release-group index**, which exposes the field the search
+never returns — the release group's own `first-release-date`, i.e. the album's original release date:
+
+```
+GET /ws/2/release-group?query=rgid:(<id> OR <id> OR …)&fmt=json&limit=100
+```
+
+One batched query covers every surviving candidate, so **the request count stays at two regardless of
+pool size** (decision 19a). 50 IDs is ~1.8 kB of query string; comfortably within limits.
+
+**Measured accuracy of `search(limit=100)` → strict filter → batched release-group `first-release-date`:
+12 of 13 known-tricky tracks exact**, against Phase 0's ~6% naive baseline. Correct on Billie Jean 1982,
+Sweet Child O' Mine 1987, Hotel California 1976, Free Bird 1973, No Woman No Cry 1974, Wish You Were
+Here 1975, Stairway to Heaven 1971, Bohemian Rhapsody 1975, Hallelujah/Buckley 1994,
+Hallelujah/Cohen 1984, All Along the Watchtower/Hendrix 1968, Layla 1970, Smells Like Teen Spirit 1991,
+Imagine 1971.
+
+**Three things that look like tuning knobs and are not:**
+
+1. **`limit=100` is load-bearing, not a page-size preference.** The plan asked for "a modest candidate
+   limit". At `limit=25` the same algorithm scores **2 of 13** — the original studio recording is simply
+   absent from the first page, because MusicBrainz ties dozens of candidates at `score: 100` and returns
+   them in no useful order. 100 is the endpoint's maximum. **Do not reduce it.**
+2. **Do NOT push the filters into the Lucene query.** `AND primarytype:album AND status:official AND
+-secondarytype:compilation …` looks like the obvious optimisation and collapses the pool from 124 to
+   9 for Billie Jean — but it drops the right recordings too, and returns **zero** results for
+   Hallelujah / Leonard Cohen, which resolves correctly without it. Filter client-side, over a wide pool.
+3. **The recording's own `first-release-date` is not a substitute.** Taking the minimum across
+   artist-matching recordings scores 10 of 13 and is off by a year on several (Sweet Child 1988, No
+   Woman No Cry 1973). It is used only for the relaxed second tier, where `low` confidence is honest.
+
+**Decision 20 resolved, one way each.** **Free Bird generalises** (1973, exact). **Like a Rolling Stone
+does not**: it is the single failure. Its pool is 707 candidates, the top 100 contain no official studio
+album release at all, so the strict pass finds zero release-groups and it falls through to the relaxed
+tier — which returned 1966 on one run and 1963 on another, since which 100 of 707 come back is not
+stable. Correct answer 1965. This is exactly the case the tiered design exists for; it resolves with
+`confidence: 'low'`. A query-level-filtered retry _does_ surface Highway 61 Revisited and would fix it,
+but it is a third request on the global 1 req/s budget (decision 21) and it breaks other tracks — see
+point 2. Deferred deliberately.
+
+**Two other confirmations.** `"Bohemian Rhapsody - Remastered 2011"` returns **`count: 0`** while
+`"Bohemian Rhapsody"` returns 224 — the Phase 0 title-cleaning requirement re-verified verbatim, and it
+is a correctness requirement, not an optimisation. And a **503 with `{"error": "The MusicBrainz web
+server is currently busy…"}` was hit once during ~40 paced requests**, so the single 503 retry the plan
+specifies is a real need, not defensive coding.
+
+## 2026-08-04 — The year-review screen was a spoiler surface; there is no pre-Start year UI
+
+Developer decision closing `plan.md` §6's last open question ("mandatory or skippable year review before
+Start?"): **neither — the screen does not exist.** The reasoning generalizes beyond this one screen and is
+worth remembering when building Phase 3/6 UI:
+
+- **The person pasting the playlist is a player.** There is no host role in this app. So any pre-Start
+  screen listing title/artist/**year** hands that player the answers to the entire deck — the same leak
+  §1's non-negotiable forbids on the hidden side, just relocated off the card.
+- **Treat "leaks nothing" as a property of the whole app, not of the card component.** Loading screens,
+  progress text, notices, `localStorage` inspection, and OS media-session metadata (already flagged in
+  the Phase 0 playback decision) are all leak surfaces. Notices about year quality must be **count-only**
+  — "n years could not be confirmed", never which tracks or what years.
+- **Where `confidence` is consumed instead:** the card's **revealed** side, marking a `low` year as
+  unconfirmed. Any year-correction affordance lives there too, post-reveal, where the player has already
+  seen the value. Nothing in Phase 2's contract changes — the three tiers are still exactly what that UI
+  needs.
+- **Side benefit:** this removes a conflict nobody had noticed. A mandatory pre-Start review would have
+  required all ~100 years up front, which at 1 req/s means waiting out the full MusicBrainz crawl and
+  silently deleting the progressive-loading design (`plan.md` §3).
+- **Left open deliberately:** what happens to a `confidence: 'none'` card. It can no longer be fixed
+  before Start, so it is either dropped from the deck with a count-only notice or revealed as "year
+  unknown". Recorded as a follow-on question in §6.
+
+Docs synced: `plan.md` §2/§4/Phase 6/§6, `plan.phase-2-year.md` (open question + consumer table),
+`architecture.md`, `development.md`, `api.md`, `plan.phase-1.md`.
+
+## 2026-08-04 — Year resolution, as built: `dur:` in the query is what took it from 12/13 to 14/14
+
+Follow-up to the entry above, from executing [`plan.phase-2-year.md`](./plans/plan.phase-2-year.md).
+The previous entry's conclusion still holds; this records what changed once the code existed.
+
+**Adding a duration bound to the search query is the single highest-value change of the whole plan**, and
+the plan did not call for it — it treated duration only as a local tie-breaker:
+
+```
+recording:"<cleaned title>" AND artist:"<artist>" AND dur:[<durationMs-10000> TO <durationMs+10000>]
+```
+
+Spotify gives an exact `durationMs` per track, so this costs nothing. It works because it fixes the
+**pool**, not the ranking: "Stairway to Heaven" is 842 candidates unbounded and **31** bounded, "Like a
+Rolling Stone" 707 and **82**, "Smells Like Teen Spirit" 527 and **74**. Every measured track drops below
+the 100-result page limit, so truncation stops deciding the answer and the result stops varying between
+runs. Score went from 12/13 to **14/14**, and it is what fixed Stairway to Heaven and stabilised Like a
+Rolling Stone (which had returned 1966 on one run and 1963 on another).
+
+The **local** duration preference the plan specified is implemented too and measured **neutral** on top
+of the query bound — kept because it covers the one case the bound cannot, a track whose duration
+Spotify did not supply. Both spend the same exported `DURATION_TOLERANCE_MS`.
+
+**`limit=100` is load-bearing and the plan's "request a modest candidate limit" was wrong.** Same
+algorithm, same tracks: **2 of 13** at `limit=25`, **12 of 13** at `limit=100`. MusicBrainz ties dozens of
+candidates at `score: 100` and orders them arbitrarily, so a smaller page is not a smaller version of the
+same answer — it is a different, worse one. 100 is the endpoint's maximum. Do not reduce it.
+
+**A guard that only runs on a cache miss makes a hard failure look intermittent.** Found by the live
+check, not by any unit test: with the `MUSICBRAINZ_USER_AGENT` check living only in the adapter, a
+deployment with no user agent served every **cached** track happily and returned 500 only on cold ones.
+That is the confusing-to-diagnose failure the loud-failure decision exists to prevent, so the check moved
+ahead of the cache read in `api/_lib/resolve-year.ts`. **General lesson for anything else added behind
+this cache: a configuration check belongs in front of it, not behind it.**
+
+**Measured latency, which Phase 3 has to design against.** Eight tracks through the real pipeline against
+live MusicBrainz: **1.3–3.6 s per cold track** (two requests paced at 1.1 s plus network), **0 ms** on a
+cache hit. A cold 100-track deck is therefore several minutes. Per-user only while nobody else is
+resolving a cold playlist — the 1 req/s budget is global.
+
+**Strict-versus-relaxed hit rate, on the known-tricky set only:** 14/14 strict, so the relaxed tier never
+fired. That set is curated for difficulty, not representative, and the real ratio needs an ordinary
+playlist to measure — still open. What is now known is that the relaxed tier is measurably worse when it
+does fire (off by a year on Sweet Child O' Mine and No Woman No Cry in earlier measurements), which is
+what `confidence: 'low'` is for.
+
+**Two smaller shape notes.** The recording search **ignores `inc=`** — it always returns the same fixed
+shape, so there is no way to ask it for more. And `release-group?query=rgid:(a OR b OR …)` accepts
+unquoted UUIDs and returns exactly the requested groups; 50 ids is ~1.8 kB of query string and well
+within limits.
