@@ -170,8 +170,8 @@ Browser (SPA)                          Serverless (Vercel Functions)
 
 ### Phase 2 — Data Layer
 
-- [ ] `parsePlaylistUrl()` — handle `open.spotify.com/playlist/{id}`, `?si=` params, `spotify:playlist:` URIs, bare IDs (+ tests)
-- [ ] `/api/playlist` — fetch, extract, normalize to `Card[]`; typed errors (private / not-found / unsupported)
+- [x] `parsePlaylistUrl()` — handle `open.spotify.com/playlist/{id}`, `?si=` params, `spotify:playlist:` URIs, bare IDs (+ tests) — also locale-prefixed paths (`/intl-es/`), which turned out to be a real form Spotify serves
+- [x] `/api/playlist` — fetch, extract, normalize to `Card[]`; typed errors (**`not-found-or-private`** / `unsupported-entity` / `invalid-url` / `upstream-unavailable` / `unexpected-payload`). Note the deviation from the wording here: `private` and `not-found` collapse into one code because Spotify gives no signal that separates them — see [plan.phase-2-playlist.md](./plan.phase-2-playlist.md) decision 8
 - [ ] `/api/year` — MusicBrainz lookup, ~~batch endpoint~~ **one track per request** (client sequences them; decided 2026-08-03), with the 1 req/s budget enforced by a shared out-of-process gate rather than an in-process queue
 - [ ] Cache layer behind an interface (KV in prod, in-memory locally)
 - [ ] Year-resolution logic + tests (fuzzy title match, feat./remaster/live stripping, pick earliest, **tiered fallback: strict pass → relaxed pass marked low-confidence → no year for manual entry**. ~~fall back to Spotify year~~ — the embed carries no year, see §2)
@@ -213,6 +213,9 @@ Browser (SPA)                          Serverless (Vercel Functions)
 
   Editorial playlists like these get their tracks refreshed by Spotify periodically, so re-verify the IDs still resolve to the intended playlist (check `entity.uri` in the embed JSON, not just a 200) before shipping.
 
+- [ ] **Non-blocking notices from `/api/playlist`**, both shown only when they apply and neither ever blocking Start:
+  - the `truncated` warning ("this playlist may have more tracks than shown — only the first 100 could be loaded"), per the Phase 0 track-source decision
+  - a `skippedCount` note ("n tracks could not be read and were left out") — **decided 2026-08-04: yes, this surfaces.** Normally `0`, so nothing renders in the common case. A deck missing one malformed track is still playable, so this is a note, not an error. Rationale in [plan.phase-2-playlist.md](./plan.phase-2-playlist.md) Open Questions
 - [ ] Loading state showing year-resolution progress
 - [ ] **Year review/edit screen** before Start (fix MusicBrainz mistakes)
 - [ ] In-game HUD: cards remaining (Exit lives on the card itself, per Phase 4 — no separate End Game button)

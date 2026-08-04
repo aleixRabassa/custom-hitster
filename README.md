@@ -4,7 +4,7 @@ Turn any public Spotify playlist link into a playable digital [Hitster](https://
 
 Built with **Vite 8 + React 19 + TypeScript + Tailwind CSS v4**, with a thin **Vercel Functions** backend that exists only to do what a browser can't: reach a CORS-blocked endpoint, set a custom `User-Agent`, and hold a cache shared across users.
 
-> **Status: Phase 1 (project skeleton).** The toolchain, serverless function directory, and test harness are in place and verified. **There is no game yet** — `src/App.tsx` is a placeholder. See [`docs/plans/plan.md`](./docs/plans/plan.md) for the phase plan.
+> **Status: Phase 2 (data layer), half built.** The toolchain and test harness are in place, and playlist ingestion works: `GET /api/playlist?url=<any Spotify playlist link>` returns a normalized deck. Year resolution (MusicBrainz) and the cache are the remaining Phase 2 work. **There is no game yet** — `src/App.tsx` is a placeholder and nothing in the browser calls the API. See [`docs/plans/plan.md`](./docs/plans/plan.md) for the phase plan.
 
 ---
 

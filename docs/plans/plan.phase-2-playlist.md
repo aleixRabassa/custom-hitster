@@ -44,14 +44,15 @@ this plan cites them at the point of use.
 
 ### Produces for downstream plans
 
-| Output                                               | Consumed by                                                                        |
-| ---------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `TrackRef` type (title, artist, durationMs)          | [plan.phase-2-year.md](./plan.phase-2-year.md) — the input shape for a year lookup |
-| `Card` type, with `year`/`yearConfidence` unresolved | plan.phase-2-year.md (fills them), Phase 3 (`GameState`), Phase 4 (card rendering) |
-| `parsePlaylistUrl()` in `shared/`                    | Phase 6 landing-page input validation, reused unchanged                            |
-| `PlaylistErrorCode` union                            | Phase 6 inline error states and the friendly private-playlist message in Phase 7   |
-| `truncated` flag on the playlist response            | Phase 6 non-blocking "may have more than 100 tracks" warning banner                |
-| `GET /api/playlist`                                  | Phase 3 progressive loading, Phase 6 Start flow                                    |
+| Output                                               | Consumed by                                                                                                  |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `TrackRef` type (title, artist, durationMs)          | [plan.phase-2-year.md](./plan.phase-2-year.md) — the input shape for a year lookup                           |
+| `Card` type, with `year`/`yearConfidence` unresolved | plan.phase-2-year.md (fills them), Phase 3 (`GameState`), Phase 4 (card rendering)                           |
+| `parsePlaylistUrl()` in `shared/`                    | Phase 6 landing-page input validation, reused unchanged                                                      |
+| `PlaylistErrorCode` union                            | Phase 6 inline error states and the friendly private-playlist message in Phase 7                             |
+| `truncated` flag on the playlist response            | Phase 6 non-blocking "may have more than 100 tracks" warning banner                                          |
+| `skippedCount` on the playlist response              | Phase 6 non-blocking "n tracks could not be read" note — **developer decided 2026-08-04 that this surfaces** |
+| `GET /api/playlist`                                  | Phase 3 progressive loading, Phase 6 Start flow                                                              |
 
 ---
 
@@ -199,83 +200,83 @@ implemented in either order.
   > slightly wider term is the safer failure direction. Recorded here because a future reader comparing
   > code to plan will notice the difference.
 
-- [ ] **Capture the test fixtures into `api/_lib/__fixtures__/`** — do this before the adapter so the
+- [x] **Capture the test fixtures into `api/_lib/__fixtures__/`** — do this before the adapter so the
       adapter is written against real payload shapes rather than remembered ones.
-  - [ ] A healthy playlist payload, **trimmed to a handful of tracks** — a full 100-track page is
+  - [x] A healthy playlist payload, **trimmed to a handful of tracks** — a full 100-track page is
         large enough to make the test suite unpleasant to read and slow to diff. Keep at least one
         track with `audioPreview` absent and one with `isPlayable: false`, since those are the branches
         that matter
-  - [ ] The **404-shaped** payload: HTTP 200 with `pageProps` carrying `{status: 404, …}` and no
+  - [x] The **404-shaped** payload: HTTP 200 with `pageProps` carrying `{status: 404, …}` and no
         `state` key. This is the fixture that proves the non-obvious error branch
-  - [ ] A malformed payload: valid HTML, `__NEXT_DATA__` present, but the `trackList` path missing
-  - [ ] A page with no `__NEXT_DATA__` script at all — what a Spotify redesign or a captcha wall would
+  - [x] A malformed payload: valid HTML, `__NEXT_DATA__` present, but the `trackList` path missing
+  - [x] A page with no `__NEXT_DATA__` script at all — what a Spotify redesign or a captcha wall would
         look like
-  - [ ] An exactly-100-track payload (may be synthesised by repeating a fixture track) to exercise the
+  - [x] An exactly-100-track payload (may be synthesised by repeating a fixture track) to exercise the
         truncation flag at its boundary
-  - [ ] Record in a fixture README, or a header comment, **when and from which playlist ID** each
+  - [x] Record in a fixture README, or a header comment, **when and from which playlist ID** each
         fixture was captured. Unofficial payloads drift; a fixture with no provenance cannot be
         re-verified later
 
-- [ ] **Write the embed adapter in `api/_lib/spotify-embed.ts`** — the one module allowed to know that
+- [x] **Write the embed adapter in `api/_lib/spotify-embed.ts`** — the one module allowed to know that
       the track source is a scraped HTML page. Everything Phase 0 measured about the endpoint is
       encoded here and nowhere else, so a future Spotify change has exactly one blast radius.
-  - [ ] Export a single function taking the playlist ID plus an injected `fetch`-shaped function, and
+  - [x] Export a single function taking the playlist ID plus an injected `fetch`-shaped function, and
         returning the same discriminated union style as the parser (`{ok: true, …}` / `{ok: false, code}`).
         The injection is what makes every test below run offline
-  - [ ] Request `open.spotify.com/embed/playlist/{id}` with a normal browser `User-Agent`. Phase 0
+  - [x] Request `open.spotify.com/embed/playlist/{id}` with a normal browser `User-Agent`. Phase 0
         used one and got HTTP 200; do not assume a default or absent agent behaves the same
-  - [ ] Extract the payload with a non-greedy match on the `<script id="__NEXT_DATA__"
+  - [x] Extract the payload with a non-greedy match on the `<script id="__NEXT_DATA__"
 type="application/json">` element and `JSON.parse` its content. Comment that Next.js escapes
         `</script>` inside embedded JSON, which is why the naive terminator is safe here — otherwise
         this looks like a bug waiting to happen
-  - [ ] **Branch on the presence of `props.pageProps.state`, never on the HTTP status code.** Phase 0
+  - [x] **Branch on the presence of `props.pageProps.state`, never on the HTTP status code.** Phase 0
         established that a nonexistent playlist ID still returns **HTTP 200**, with `pageProps`
         carrying `{status: 404, …}` instead of `state`. Status-based error handling would treat a
         missing playlist as a success and hand the UI an empty deck. Map this case to
         `not-found-or-private`
-  - [ ] Map a genuinely failed request or a non-200 response to `upstream-unavailable`, and a
+  - [x] Map a genuinely failed request or a non-200 response to `upstream-unavailable`, and a
         200 whose payload is present but structurally wrong to `unexpected-payload`. Keeping these
         distinct matters operationally: the first is transient, the second means the scrape broke
-  - [ ] Read tracks from `props.pageProps.state.data.entity.trackList` and the playlist summary from
+  - [x] Read tracks from `props.pageProps.state.data.entity.trackList` and the playlist summary from
         the same `entity` (`name`/`title`, `id`, `subtitle` as the owner label)
-  - [ ] **Verify `entity.uri` matches the requested playlist ID** and return `unexpected-payload` if
+  - [x] **Verify `entity.uri` matches the requested playlist ID** and return `unexpected-payload` if
         not. Phase 0 hit exactly this class of bug during its own spike — parallel agents overwrote a
         shared scratch file and two of them silently analysed the wrong playlist. A cheap identity
         assertion turns a silent wrong-deck into a loud error
-  - [ ] Normalize each entry to a `Card`: derive `id` from the track `uri` (`spotify:track:{id}`),
+  - [x] Normalize each entry to a `Card`: derive `id` from the track `uri` (`spotify:track:{id}`),
         `title` from `title`, `artist` from `subtitle` verbatim, `durationMs` from `duration`,
         `previewUrl` from `audioPreview.url` when present, and `isPlayable` from `isPlayable`
-  - [ ] **Keep unplayable tracks in the deck** rather than filtering them out. The QR code is always
+  - [x] **Keep unplayable tracks in the deck** rather than filtering them out. The QR code is always
         rendered and always works (a [plan.md](./plan.md) §2 non-negotiable), so an unplayable track is
         still a fully playable _card_ — only Phase 4's Play/Pause and Restart buttons are affected
-  - [ ] Skip only entries that cannot yield a usable card at all — no track ID or no title — and count
+  - [x] Skip only entries that cannot yield a usable card at all — no track ID or no title — and count
         how many were skipped so the response can report it rather than quietly shrinking the deck
-  - [ ] Set `truncated` when `trackList.length === MAX_EMBED_TRACKS`, importing the constant from
+  - [x] Set `truncated` when `trackList.length === MAX_EMBED_TRACKS`, importing the constant from
         `../shared/constants` by relative path. Do not re-litigate the number here: Phase 0 established
         the cap by observing real truncation, and that there is **no pagination signal of any kind** in
         the payload, which is why a boolean flag is the honest maximum this layer can report
 
-- [ ] **Write the `GET /api/playlist` handler in `api/playlist.ts`** — copy the shape of `api/hello.ts`
+- [x] **Write the `GET /api/playlist` handler in `api/playlist.ts`** — copy the shape of `api/hello.ts`
       exactly: default-export `handler`, `VercelRequest`/`VercelResponse` from `@vercel/node`,
       extensionless **relative** imports of `shared/`. This is the pattern the 2026-08-03 deploy
       validated in production; the `@/` alias must not appear anywhere under `api/`.
-  - [ ] Guard the method — anything but `GET` returns 405 with an `Allow` header
-  - [ ] Read the `url` query parameter, handle it being absent or repeated (Vercel's query values can
+  - [x] Guard the method — anything but `GET` returns 405 with an `Allow` header
+  - [x] Read the `url` query parameter, handle it being absent or repeated (Vercel's query values can
         be arrays), and return 400 `invalid-url` if unusable
-  - [ ] Run `parsePlaylistUrl()`, returning 400 with the typed code on failure
-  - [ ] Call the adapter with the real global `fetch`, and map its error union to statuses: 404 for
+  - [x] Run `parsePlaylistUrl()`, returning 400 with the typed code on failure
+  - [x] Call the adapter with the real global `fetch`, and map its error union to statuses: 404 for
         `not-found-or-private`, 502 for `upstream-unavailable`, 502 for `unexpected-payload`
-  - [ ] On success return the `PlaylistResult` with a `Cache-Control` response header carrying a short
+  - [x] On success return the `PlaylistResult` with a `Cache-Control` response header carrying a short
         `s-maxage` plus `stale-while-revalidate`, giving playlist-snapshot caching at Vercel's edge
         with **no Redis dependency**. Keep the window short — a playlist's contents can change, and
         Phase 6's suggested editorial playlists change on Spotify's own schedule
-  - [ ] Never include the raw upstream HTML or the parse error text in the response body. It is
+  - [x] Never include the raw upstream HTML or the parse error text in the response body. It is
         unbounded, and the embed payload contains an anonymous Spotify bearer token (Phase 0 found one
         at `state.settings.session.accessToken`) that must not be forwarded to the client
-  - [ ] Wrap the whole handler so an unexpected throw becomes a 500 with a generic body rather than a
+  - [x] Wrap the whole handler so an unexpected throw becomes a 500 with a generic body rather than a
         stack trace
 
-- [ ] **Settle the `api/_lib/` routing question with a throwaway probe deploy, as the FIRST step of
+- [x] **Settle the `api/_lib/` routing question with a throwaway probe deploy, as the FIRST step of
       execution** — before any real helper exists. Vercel's convention is that `_`-prefixed paths under
       `api/` are excluded from function routing, which is the entire reason the directory is named that
       way. It is only observable on a real deploy: `typecheck`, `lint`, `test`, and `build` all pass
@@ -286,10 +287,10 @@ type="application/json">` element and `JSON.parse` its content. Comment that Nex
         the shape that would break if Vercel tried to build it as a handler
   - [x] Deploy, then confirm two things: the function build **succeeded** (a routed helper with no
         default export is the failure mode), and `/api/_lib/_probe` returns **404** rather than 200 or 500
-  - [ ] Delete the probe and record the result in `docs/agent_findings.md` with the date. This
+  - [x] Delete the probe and record the result in `docs/agent_findings.md` with the date. This
         probe-then-revert pattern is the repo's established habit — Phase 1 used it for the ESLint
-        globals blocks and for the DOM-vs-Node typecheck isolation
-        — **result recorded; probe file deliberately still present, see below**
+        globals blocks and for the DOM-vs-Node typecheck isolation — **done: all three probe files
+        deleted, result recorded**
 
   > **Execution note — ANSWERED 2026-08-04: `api/_lib/` is not routed.** The probe deployed (commit
   > `d577a5f`): the function build completed with no error and `GET /api/_lib/_probe` returned **404**
@@ -309,20 +310,43 @@ type="application/json">` element and `JSON.parse` its content. Comment that Nex
   > in production" when only the _build_ had ever been proven. Both corrected, along with `AGENTS.md`
   > and `docs/development.md`. All three probe files are now deleted. Full detail in
   > `docs/agent_findings.md`.
-  - [ ] **Documented fallback if it IS routed:** move the helpers to a root-level `server/` directory
+  - [x] ~~**Documented fallback if it IS routed:**~~ **not needed — the probe returned 404.** move the helpers to a root-level `server/` directory
         and add it to `tsconfig.api.json`'s `include`. Unambiguously outside `api/` and therefore never
         routed, relying on no convention at all — at the cost of a fourth top-level tree and two more
         import rules to document in `AGENTS.md` and `docs/architecture.md` §2. Cheap to adopt on day one
         if the probe fails; tedious once ten files import each other
 
-- [ ] **Run the full local verification pass** — `pnpm typecheck && pnpm lint && pnpm test && pnpm build`,
+- [x] **Run the full local verification pass** — `pnpm typecheck && pnpm lint && pnpm test && pnpm build`,
       all four green, plus the manual checks in Testing Strategy below. Grep for `@/` under `api/`
       before any deploy.
 
-- [ ] **Update the documentation** — see Documentation Updates. `docs/` is the source of truth per
+  > **Execution note:** all four green, plus `pnpm format:check`. 37 tests across 4 files. Both
+  > deploy-safety greps clean: no `@/` import under `api/` (the only matches are prose in comments), and
+  > every relative import there ends in `.js`.
+  >
+  > **Most of the Testing Strategy's manual list was verified without `vercel dev`,** by running the
+  > adapter against the live endpoint through a throwaway Vitest file (deleted afterwards) — Vitest
+  > resolves `.js`→`.ts` and injects the real global `fetch`, so this exercises the true end-to-end path
+  > minus the handler. Results: Today's Top Hits → 50 cards, 0 skipped, `truncated: false`, previews on
+  > 50/50, titles and artists correct ("Shakira, Burna Boy" arriving as one joined string as expected);
+  > a well-formed nonexistent ID → `not-found-or-private` **against real bytes**, which is the live
+  > counterpart of the most important unit test; Rock Classics → exactly 100 cards with
+  > `truncated: true`; and a real payload served under a mismatched ID → `unexpected-payload`, so the
+  > identity assertion fires on genuine data rather than only on a fixture.
+  >
+  > That live run also **caught a fixture defect**: the second fixture track carried an invented `uri`
+  > and preview URL, which would have made the provenance README's "captured verbatim" claim false.
+  > Corrected to the real values, and the README now records which fields are genuine.
+  >
+  > **Still outstanding and genuinely requiring `vercel dev` or a deploy:** the handler's own surface —
+  > the 405 + `Allow` header, the 400s for `invalid-url`/`unsupported-entity`, the repeated-`?url=`
+  > array case, and the `Cache-Control` header actually being sent. All are thin code paths, which is
+  > why the plan left this file untested by design.
+
+- [x] **Update the documentation** — see Documentation Updates. `docs/` is the source of truth per
       `AGENTS.md`, so this is a step, not a postscript.
 
-- [ ] **Tick Phase 2 checkboxes 1–2 in `docs/plans/plan.md`** — and only those two. The remaining three
+- [x] **Tick Phase 2 checkboxes 1–2 in `docs/plans/plan.md`** — and only those two. The remaining three
       belong to the sibling plan.
 
 ---
@@ -370,36 +394,36 @@ no configuration changes are needed.
 
 ### `api/_lib/spotify-embed.test.ts`
 
-- [ ] `should normalize a healthy payload into cards` — covers the happy path end to end against the
+- [x] `should normalize a healthy payload into cards` — covers the happy path end to end against the
       trimmed fixture: card count, and `id`/`title`/`artist`/`durationMs` mapping
-- [ ] `should derive the track id from the spotify:track: uri` — covers ID extraction specifically,
+- [x] `should derive the track id from the spotify:track: uri` — covers ID extraction specifically,
       since the payload has no bare `id` at track level
-- [ ] `should keep the joined subtitle verbatim as the display artist` — covers the deliberate
+- [x] `should keep the joined subtitle verbatim as the display artist` — covers the deliberate
       no-splitting decision, guarding against a future "improvement"
-- [ ] `should set previewUrl when audioPreview is present and leave it undefined when absent` — covers
+- [x] `should set previewUrl when audioPreview is present and leave it undefined when absent` — covers
       the optional-audio branch that Phase 4's disabled Play/Pause depends on
-- [ ] `should keep tracks whose isPlayable is false` — covers the decision not to filter them, since
+- [x] `should keep tracks whose isPlayable is false` — covers the decision not to filter them, since
       the QR still works for those cards
-- [ ] `should skip entries with no track id or no title and report the skipped count` — covers
+- [x] `should skip entries with no track id or no title and report the skipped count` — covers
       defensive normalization without silent deck shrinkage
-- [ ] `should return not-found-or-private for a 200 response whose pageProps has no state key` —
+- [x] `should return not-found-or-private for a 200 response whose pageProps has no state key` —
       **the most important test in this plan.** Covers the Phase 0 finding that a missing playlist
       arrives as HTTP 200. If this regresses, a bad link produces an empty deck instead of an error
-- [ ] `should return upstream-unavailable for a non-200 response` — covers transient upstream failure
-- [ ] `should return upstream-unavailable when fetch itself rejects` — covers the network-error branch
-- [ ] `should return unexpected-payload when the __NEXT_DATA__ script is absent` — covers a redesign
+- [x] `should return upstream-unavailable for a non-200 response` — covers transient upstream failure
+- [x] `should return upstream-unavailable when fetch itself rejects` — covers the network-error branch
+- [x] `should return unexpected-payload when the __NEXT_DATA__ script is absent` — covers a redesign
       or captcha wall
-- [ ] `should return unexpected-payload when the trackList path is missing` — covers a payload shape
+- [x] `should return unexpected-payload when the trackList path is missing` — covers a payload shape
       change
-- [ ] `should return unexpected-payload when entity.uri does not match the requested id` — covers the
+- [x] `should return unexpected-payload when entity.uri does not match the requested id` — covers the
       identity assertion, i.e. the wrong-playlist class of bug Phase 0 hit in its own spike
-- [ ] `should set truncated when the track list length equals MAX_EMBED_TRACKS` — covers the boundary
+- [x] `should set truncated when the track list length equals MAX_EMBED_TRACKS` — covers the boundary
       at exactly 100
-- [ ] `should leave truncated false below the cap` — covers the other side of the boundary, so the
+- [x] `should leave truncated false below the cap` — covers the other side of the boundary, so the
       warning cannot fire on every playlist
-- [ ] `should send a browser User-Agent header` — covers the request-shaping requirement Phase 0
+- [x] `should send a browser User-Agent header` — covers the request-shaping requirement Phase 0
       relied on, asserted against the injected fetch
-- [ ] `should not include the upstream access token anywhere in its result` — covers that the anonymous
+- [x] `should not include the upstream access token anywhere in its result` — covers that the anonymous
       bearer token Phase 0 found in the payload is not leaked outward
 
 `api/playlist.ts` itself is left to manual verification and is deliberately thin for that reason: it
@@ -410,37 +434,37 @@ logic worth testing, that logic belongs in the adapter instead.
 
 ## Documentation Updates
 
-- [ ] `docs/api.md` — replace the `[planned — Phase 2]` `/api/playlist` section with the built endpoint:
+- [x] `docs/api.md` — replace the `[planned — Phase 2]` `/api/playlist` section with the built endpoint:
       method, the `url` query parameter and every accepted input form, the success body, and a table
       mapping each `PlaylistErrorCode` to its HTTP status. Add `api/playlist.ts` and the `api/_lib/`
       helper directory to the §2 layout listing, noting that `_`-prefixed paths are not routed. Fill in
       §5 Error handling, which currently says only that there is nothing to document yet — and lead with
       the 200-means-not-found trap
-- [ ] `docs/architecture.md` — flip the playlist path from `[planned]` to `[built]` in §1 and §7,
+- [x] `docs/architecture.md` — flip the playlist path from `[planned]` to `[built]` in §1 and §7,
       update the §3 data-flow diagram to show the real request shape, and add a line to §2 about where
       server-only helper modules live and why they cannot live in `shared/` (env access fails
       `typecheck:app`)
-- [ ] `docs/development.md` — a short section on exercising `/api/playlist` locally: use `vercel dev`
+- [x] `docs/development.md` — a short section on exercising `/api/playlist` locally: use `vercel dev`
       on port 3000, **not** `pnpm dev`, and restate why a 200 from Vite proves nothing. Include a
       sample invocation and the expected shape of a failure
-- [ ] `docs/agent_findings.md` — dated (ISO 8601) entries for: whether `api/_lib/` is routed by Vercel,
+- [x] `docs/agent_findings.md` — dated (ISO 8601) entries for: whether `api/_lib/` is routed by Vercel,
       any drift found between the Phase 0 payload description and what the endpoint returns today, and
       the resolution of the ID-length assumption if a 22-character check turns out to be too strict.
       Tell the developer when an entry is added, per `AGENTS.md`
-- [ ] `docs/plans/plan.md` — tick Phase 2 checkboxes 1–2. The §2 and §4 Spotify-year-fallback
+- [x] `docs/plans/plan.md` — tick Phase 2 checkboxes 1–2. The §2 and §4 Spotify-year-fallback
       corrections were **already applied at planning time (2026-08-03)** and are owned by
       [plan.phase-2-year.md](./plan.phase-2-year.md); nothing about them is left to do here.
-- [ ] `docs/plans/plan.phase-2-playlist.md` — tick implementation steps as they complete, and append
+- [x] `docs/plans/plan.phase-2-playlist.md` — tick implementation steps as they complete, and append
       execution notes where reality differed from the plan, matching the style of
       [plan.phase-1.md](./plan.phase-1.md)
-- [ ] Inline comment in `shared/artists.ts` — state the separator hazard and name the four failing
+- [x] Inline comment in `shared/artists.ts` — state the separator hazard and name the four failing
       artist names, so the "obvious" split is never introduced later
-- [ ] Inline comment in `api/_lib/spotify-embed.ts` — cite the Phase 0 finding for the 200-with-404-body
+- [x] Inline comment in `api/_lib/spotify-embed.ts` — cite the Phase 0 finding for the 200-with-404-body
       error shape directly above the branch that handles it. This is the single most reversion-prone
       line in the plan: it reads like a mistake to anyone who has not read the finding
-- [ ] Inline comment in `shared/types.ts` — note that `Card` carries `year`/`yearConfidence` that this
+- [x] Inline comment in `shared/types.ts` — note that `Card` carries `year`/`yearConfidence` that this
       plan never fills, and that Phase 3 owns `GameState` and must not widen `Card` with game state
-- [ ] Fixture provenance note in `api/_lib/__fixtures__/` — which playlist ID and what date each
+- [x] Fixture provenance note in `api/_lib/__fixtures__/` — which playlist ID and what date each
       fixture came from, and that they are trimmed rather than verbatim captures
 
 ---
@@ -493,24 +517,42 @@ logic worth testing, that logic belongs in the adapter instead.
 | 12  | **Playlist snapshot caching via a `Cache-Control` edge header, not Redis**                                                                        | Keeps this plan free of any dependency on the sibling plan's cache layer, so the two are independently shippable and order-independent. A short window because playlist contents change — and Phase 6's suggested editorial playlists are refreshed on Spotify's own schedule.                                                                                                                                                                                       |
 | 13  | **The card's `year` is left unresolved here**                                                                                                     | Year resolution is the sibling plan. The field exists on the type so Phase 3 and Phase 4 have a stable shape to build against, but nothing in this plan sets it.                                                                                                                                                                                                                                                                                                     |
 | 14  | **The embed `entity.uri` is asserted against the requested ID**                                                                                   | Cheap insurance against the exact bug Phase 0 hit during its own spike, where two parallel agents silently analysed the wrong playlist because of a shared-file write race. Turns a silent wrong-deck into a loud error.                                                                                                                                                                                                                                             |
-| 15  | **Track IDs are assumed to be 22 base62 characters**                                                                                              | True of every Spotify ID observed, and a useful early rejection. Recorded as an assumption rather than a fact because it is a format convention, not a documented guarantee — if a valid link is ever rejected, this is the first thing to relax.                                                                                                                                                                                                                    |
+| 15  | ~~**Track IDs are assumed to be 22 base62 characters**~~ **Upgraded from assumption to fact, 2026-08-04, by spike**                               | Not a convention after all: an ID is base62 of a 128-bit GID zero-padded to `ceil(128 / log2 62)` = 22, so no valid ID of another length can exist, and seven real playlists across every provenance confirmed it. **Do not relax the length** if a link is ever rejected — the cause will be the legacy `/user/{u}/playlist/{id}` form or a `spotify.link` short URL. See `docs/agent_findings.md`.                                                                 |
 
 ---
 
 ## Open Questions
 
-- [ ] **Is `api/_lib/` really excluded from Vercel's function routing?** Still genuinely unknown — it is
-      only observable on a real deploy. What is **no longer open is how it gets answered**: keep
-      `api/_lib/` and settle it with a throwaway probe deploy as the first step of execution
-      (developer-accepted 2026-08-04; see decisions 3 and 3a, and step 1 of Implementation Steps). This
-      entry stays unticked only until the probe runs, and the answer belongs in
-      `docs/agent_findings.md`.
-- [ ] **Is the 22-character base62 ID check too strict?** No counter-example is known, and rejecting
-      early gives a better error than a 404 from Spotify. If a user ever reports a valid link being
-      rejected, relax to a permissive base62 length range.
-- [ ] **How long should the `s-maxage` window be?** Long enough to make a repeated Start instant, short
-      enough that editing a playlist and retrying reflects the change. Start conservative — a few
-      minutes — and revisit in Phase 6 when the real Start flow exists and the trade-off is observable.
+- [x] ~~**Is `api/_lib/` really excluded from Vercel's function routing?**~~ **Answered 2026-08-04: yes.**
+      The probe deployed and `GET /api/_lib/_probe` returned **404 `NOT_FOUND`** with the function build
+      completing cleanly, so a named-export-only helper there neither routes nor breaks the build.
+      Decision 3 stands, the `server/` fallback was not needed, and the probe cost minutes. Recorded in
+      `docs/agent_findings.md`. It remains a convention rather than a documented contract, so this is the
+      entry to revisit if `api/_lib/` ever starts answering requests.
+- [x] ~~**Is the 22-character base62 ID check too strict?**~~ **Answered 2026-08-04 by spike: no — and
+      the "relax it" guidance this question carried was wrong, so it is removed rather than deferred.**
+      22 is arithmetic, not a convention: a Spotify ID is base62 of a 128-bit GID left-padded with `0`,
+      and `ceil(128 / log2 62)` is exactly 22, so **no valid ID of another length can exist** and no
+      length relaxation could ever rescue a real link. Verified against seven real playlists across
+      editorial, algorithmic, chart, viral and user-created provenance — all 22. If anything the check is
+      too **loose**: only ~12.6% of the 22-char base62 space decodes to a valid 128-bit GID (the leading
+      character must be `0`–`7`), and the rest are forwarded to Spotify and come back as
+      `not-found-or-private` — one wasted round trip on a typo. Tightening that is optional, costs a
+      BigInt decode in `shared/`, and is **deliberately left undone.** The spike also found that
+      **`pageProps.status` is not always 404** — an undecodable ID yields **500**, a shape Phase 0 never
+      saw; both are HTTP 200 with no `state`, so the adapter is already correct and this is a second
+      independent vindication of decision 7. What _will_ actually reject a valid link, neither of which is
+      length: the legacy `open.spotify.com/user/{u}/playlist/{id}` form (still live, `301`s to
+      `/playlist/{id}`, currently mis-reported as `unsupported-entity`) and `spotify.link/…` share-sheet
+      short URLs — both recorded in `docs/agent_findings.md` as **Phase 6 decisions**, not this plan's.
+
+- [x] ~~**How long should the `s-maxage` window be?**~~ **Settled 2026-08-04 (developer): keep the
+      provisional numbers — `s-maxage=300, stale-while-revalidate=600`.** Five minutes fresh, ten more
+      served stale while revalidating: long enough that a repeated Start is instant, short enough that
+      editing a playlist and retrying reflects the change. No code change needed; the header already
+      carries these values. Explicitly a tuning figure with no usage data behind it, so Phase 6 may
+      revisit it once the real Start flow makes the trade-off observable — but it is not a blocker and
+      not a design question.
 - [x] ~~**Does the embed payload still match the Phase 0 field inventory?**~~ **Re-confirmed live
       2026-08-04, before the adapter was written: yes, with no drift that touches this plan.** Checked
       Today's Top Hits, Rock Classics, and a nonexistent-but-well-formed ID. The `__NEXT_DATA__`
@@ -519,8 +561,15 @@ logic worth testing, that logic belongs in the adapter instead.
       `pageProps.state`** error shape are all exactly as Phase 0 recorded. The only difference is
       additive: playlist-level `authors`, `hasVideo`, `relatedEntityUri` and `type` are present and were
       not in Phase 0's list. Full detail in `docs/agent_findings.md`.
-- [ ] **Should the skipped-track count surface in the UI?** The response reports it, but whether Phase 6
-      shows it is that phase's call. Deliberately left undecided rather than pre-empted.
+- [x] ~~**Should the skipped-track count surface in the UI?**~~ **Answered 2026-08-04 (developer): yes,
+      surface it.** Nothing changes on the API side — `skippedCount` is already on every successful
+      response — so this becomes a **Phase 6 deliverable**, recorded in that phase's checklist in
+      [plan.md](./plan.md) §5 so it cannot be lost between plans. Guidance for whoever builds it: it is
+      normally `0`, so the UI must render nothing at all in the common case; when it is non-zero it
+      belongs beside the `truncated` warning as another non-blocking note ("2 tracks could not be read
+      and were left out"), never as a blocking error, because a deck missing one malformed track is still
+      perfectly playable. The reason it surfaces at all is that a silently shorter deck is
+      indistinguishable from a shorter playlist — the same class of problem `truncated` exists to solve.
 
 ---
 

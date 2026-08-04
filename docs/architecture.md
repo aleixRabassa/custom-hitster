@@ -2,18 +2,18 @@
 
 Custom Hitster is a **client-heavy single-page app with a thin serverless backend**. The game itself — shuffle, flip, swipe, audio, progress — runs entirely in the browser. The backend exists only to do the three things a browser cannot: reach a CORS-blocked endpoint, set a custom `User-Agent`, and hold a cache shared across all users.
 
-> **Implementation status: Phase 1 (skeleton).** Only the shell and one reference function exist today. Sections below are marked **[built]** or **[planned]** throughout; planned shapes come from [`plans/plan.md`](./plans/plan.md) §3 and are recorded here because they determine where new code belongs, not because they exist.
+> **Implementation status: Phase 1 (skeleton) complete; Phase 2 playlist ingestion built.** The shell, `/api/hello`, and the playlist path (`parsePlaylistUrl()`, the embed adapter, `/api/playlist`) exist today. Year resolution and the cache do not. Sections below are marked **[built]** or **[planned]** throughout; planned shapes come from [`plans/plan.md`](./plans/plan.md) §3 and are recorded here because they determine where new code belongs, not because they exist.
 
 ---
 
 ## 1. Components
 
-| Component            | Technology                         | Location  | Status                   |
-| -------------------- | ---------------------------------- | --------- | ------------------------ |
-| Browser SPA          | Vite 8 + React 19 + Tailwind CSS 4 | `src/`    | **[built]** shell only   |
-| Serverless functions | Vercel Functions (Node 24 runtime) | `api/`    | **[built]** `hello` only |
-| Portable shared code | TypeScript, no platform APIs       | `shared/` | **[built]** one constant |
-| Year cache           | Upstash Redis (REST)               | —         | **[planned]** Phase 2    |
+| Component            | Technology                         | Location  | Status                                        |
+| -------------------- | ---------------------------------- | --------- | --------------------------------------------- |
+| Browser SPA          | Vite 8 + React 19 + Tailwind CSS 4 | `src/`    | **[built]** shell only                        |
+| Serverless functions | Vercel Functions (Node 24 runtime) | `api/`    | **[built]** `hello`, `playlist`               |
+| Portable shared code | TypeScript, no platform APIs       | `shared/` | **[built]** types, URL parsing, artist helper |
+| Year cache           | Upstash Redis (REST)               | —         | **[planned]** Phase 2                         |
 
 There is **no database, no message broker, no background worker, and no container runtime** in this project, and none are planned. The only persistent stores are the Upstash Redis cache (planned, server-side) and `localStorage` (planned, client-side).
 
@@ -58,6 +58,7 @@ shared/   Used by BOTH.             No DOM APIs, no Node APIs. Pure, portable co
 - **The `.js` extension on those relative imports is mandatory, not cosmetic** — `'../shared/constants.js'`. `package.json` declares `"type": "module"`, so a deployed function is ESM, and Node's ESM resolver does not guess extensions the way CommonJS does. Vercel **transpiles** functions rather than bundling them, so the specifier reaches Node verbatim. The rule covers all of `api/` and any `shared/`→`shared/` **runtime** import; type-only imports erase and are exempt. TypeScript resolves the `.js` specifier back to the `.ts` source, and so does Vite, so the identical form works in the browser build and under Vitest.
 - The `@/` alias is declared in `tsconfig.json` and mirrored in `vite.config.ts`. Vite resolves it at bundle time, which is why the client side is unaffected by Vercel's limitation.
 - The boundary is enforced by `pnpm typecheck` running **twice**, once per narrowed config — see [`toolchain.md`](./toolchain.md) §2.
+- **Server-only helpers live in `api/_lib/`, and cannot live in `shared/`.** That is a hard gate, not a preference: `tsconfig.app.json` supplies only `vite/client` types and includes `shared/`, so a single `process.env` reference there fails `pnpm typecheck:app`. Anything needing env access, a Node API, or knowledge of an upstream wire format belongs under `api/_lib/` — which Vercel does not route, since `_`-prefixed paths are excluded (probe-verified 2026-08-04, see [`agent_findings.md`](./agent_findings.md)). Tests and fixtures sit there too, beside the code they cover. "Just put it in `shared/`" is the obvious wrong move.
 
 Both halves of the `api/`→`shared/` rule are now proven in production, and the extension half was learned the hard way. **Correction to what this section previously claimed:** the 2026-08-03 deploy proved only that the build _succeeded_ — `/api/hello` was never actually requested, and when it finally was (2026-08-04) it returned **500 `FUNCTION_INVOCATION_FAILED`** because of the missing extension. A pair of throwaway probe functions differing only in that extension settled it: extensionless → 500, `.js` → `200 {"maxEmbedTracks":100}`. Full detail in [`agent_findings.md`](./agent_findings.md).
 
@@ -71,13 +72,44 @@ The aliased side has deliberately never been tried on Vercel — per Vercel's ow
 
 ```
 Browser                                  Vercel Function
-┌────────────────────┐                   ┌──────────────────────────┐
-│ src/main.tsx       │                   │ api/hello.ts             │
-│   └─ src/App.tsx   │   GET /api/hello  │   imports MAX_EMBED_TRACKS│
-│      (placeholder) │ ─────────────────▶│   from ../shared/constants│
-│                    │ ◀─────────────────│   returns {ok, message,   │
-└────────────────────┘   JSON            │            maxEmbedTracks}│
-                                         └──────────────────────────┘
+┌────────────────────┐                   ┌──────────────────────────────┐
+│ src/main.tsx       │                   │ api/hello.ts                 │
+│   └─ src/App.tsx   │   GET /api/hello  │   imports MAX_EMBED_TRACKS    │
+│      (placeholder) │ ─────────────────▶│   from ../shared/constants.js │
+│                    │ ◀─────────────────│   returns {ok, message,       │
+└────────────────────┘   JSON            │            maxEmbedTracks}    │
+                                         └──────────────────────────────┘
+```
+
+Playlist ingestion, as built. No caller exists yet — Phase 6 wires the landing page to it:
+
+```
+                       GET /api/playlist?url=<any accepted form>
+                                    │
+                                    ▼
+                     ┌──────────────────────────────────────┐
+                     │ api/playlist.ts                      │
+                     │  · guard method (405 + Allow)        │
+                     │  · read `url` (may be string[])      │
+                     │  · parsePlaylistUrl()  → shared/     │
+                     │  · map error code → HTTP status      │
+                     └───────────────┬──────────────────────┘
+                                     │ playlist id + global fetch
+                                     ▼
+                     ┌──────────────────────────────────────┐
+                     │ api/_lib/spotify-embed.ts            │
+                     │  · GET open.spotify.com/embed/…      │  ──▶ Spotify
+                     │    with a browser User-Agent          │      (anonymous)
+                     │  · extract <script __NEXT_DATA__>    │  ◀── HTTP 200 HTML
+                     │  · BRANCH ON pageProps.state,        │
+                     │    NOT on the HTTP status            │
+                     │  · assert entity.uri === requested   │
+                     │  · normalize trackList → Card[]      │
+                     └───────────────┬──────────────────────┘
+                                     ▼
+        200 {playlist, cards[], truncated, skippedCount}
+        + Cache-Control: s-maxage=300, stale-while-revalidate=600
+        (edge snapshot cache — no Redis dependency)
 ```
 
 `api/hello.ts` has no behaviour worth testing. It exists to pin down four things before Phase 2 depends on them: the default-export handler signature, the `@vercel/node` request/response types, the relative `shared/` import, and membership in `tsconfig.api.json`. The `maxEmbedTracks` field in its response is there to prove the shared constant genuinely **resolved and bundled** on the Node side rather than merely type-checking.
@@ -116,11 +148,11 @@ Browser (SPA)                          Serverless (Vercel Functions)
 
 ## 4. External dependencies
 
-| Service                                                | Access                            | Auth                 | Notes                                                                                                    |
-| ------------------------------------------------------ | --------------------------------- | -------------------- | -------------------------------------------------------------------------------------------------------- |
-| Spotify embed (`open.spotify.com/embed/playlist/{id}`) | Server-side `fetch` **[planned]** | **None** — anonymous | Unofficial. Parse `<script id="__NEXT_DATA__">`; tracks at `props.pageProps.state.data.entity.trackList` |
-| MusicBrainz (`/ws/2/recording`)                        | Server-side `fetch` **[planned]** | `User-Agent` string  | 1 req/s; supplies the **original** release year                                                          |
-| Upstash Redis                                          | REST **[planned]**                | URL + token          | Production only; in-memory fallback locally                                                              |
+| Service                                                | Access                            | Auth                 | Notes                                                                                                                                                                                                                              |
+| ------------------------------------------------------ | --------------------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Spotify embed (`open.spotify.com/embed/playlist/{id}`) | Server-side `fetch` **[built]**   | **None** — anonymous | Unofficial. Parse `<script id="__NEXT_DATA__">`; tracks at `props.pageProps.state.data.entity.trackList`. All of it confined to `api/_lib/spotify-embed.ts`. **A missing playlist returns HTTP 200** — branch on `pageProps.state` |
+| MusicBrainz (`/ws/2/recording`)                        | Server-side `fetch` **[planned]** | `User-Agent` string  | 1 req/s; supplies the **original** release year                                                                                                                                                                                    |
+| Upstash Redis                                          | REST **[planned]**                | URL + token          | Production only; in-memory fallback locally                                                                                                                                                                                        |
 
 ### There are no Spotify credentials, and none are needed
 
@@ -171,17 +203,17 @@ An SPA needs a catch-all rewrite so unmatched paths return `index.html` and clie
 
 ## 7. Planned components
 
-Everything below is **not built**. The authoritative source for what belongs in which phase is [`plans/plan.md`](./plans/plan.md) §5 — **do not build ahead of the current phase.**
+Everything below is **not built**, except where a row says otherwise. The authoritative source for what belongs in which phase is [`plans/plan.md`](./plans/plan.md) §5 — **do not build ahead of the current phase.**
 
-| Phase | Adds                                                                                                                                     |
-| ----- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| 2     | `parsePlaylistUrl()`, `/api/playlist`, `/api/year`, cache behind an interface, year-resolution logic                                     |
-| 3     | `Card` / `GameState` types, reducer (`START`/`FLIP`/`NEXT`/`END`), seeded Fisher–Yates shuffle, localStorage resume, progressive loading |
-| 4     | Card component with CSS 3D flip, QR rendering, `previewUrl` + `<audio>` playback                                                         |
-| 5     | Swipe-to-next, tap-to-flip, stacked-deck visuals, keyboard controls                                                                      |
-| 6     | Landing page, suggested playlists, loading state, **year review/edit screen**, HUD, end screen                                           |
-| 7     | Visual design, `@theme` design tokens, error/offline states, responsive, a11y, Lighthouse                                                |
-| 8     | Out of v1: shareable deck URL, PWA, PDF export, difficulty filters, multiplayer scoring                                                  |
+| Phase | Adds                                                                                                                                                                                                         |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 2     | ~~`parsePlaylistUrl()`, `/api/playlist`~~ **[built]** · still to come: `/api/year`, cache behind an interface, year-resolution logic                                                                         |
+| 3     | `GameState`, reducer (`START`/`FLIP`/`NEXT`/`END`), seeded Fisher–Yates shuffle, localStorage resume, progressive loading. The `Card` type itself is **[built]** — Phase 3 must not widen it with game state |
+| 4     | Card component with CSS 3D flip, QR rendering, `previewUrl` + `<audio>` playback                                                                                                                             |
+| 5     | Swipe-to-next, tap-to-flip, stacked-deck visuals, keyboard controls                                                                                                                                          |
+| 6     | Landing page, suggested playlists, loading state, **year review/edit screen**, HUD, end screen                                                                                                               |
+| 7     | Visual design, `@theme` design tokens, error/offline states, responsive, a11y, Lighthouse                                                                                                                    |
+| 8     | Out of v1: shareable deck URL, PWA, PDF export, difficulty filters, multiplayer scoring                                                                                                                      |
 
 Two dependencies are already installed with **no importers yet**, deliberately, so Phase 1 locks one coherent dependency tree: `motion` (Phase 5 gestures) and `qrcode` + `@types/qrcode` (Phase 4 QR).
 

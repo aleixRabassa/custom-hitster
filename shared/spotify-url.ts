@@ -30,10 +30,18 @@ export type ParsePlaylistUrlResult =
   { ok: true; id: string } | { ok: false; code: PlaylistUrlErrorCode };
 
 /**
- * Spotify IDs are 22 base62 characters. Recorded as an assumption, not a documented
- * guarantee (plan.phase-2-playlist.md decision 15): it holds for every ID observed and
- * it turns a typo into a good error message instead of a Spotify 404. If a real link
- * is ever rejected, relaxing this length check is the first thing to try.
+ * Spotify IDs are 22 base62 characters. **22 is arithmetic, not a convention** (spike of
+ * 2026-08-04, docs/agent_findings.md): an ID is the base62 encoding of a 128-bit GID,
+ * left-padded with `0`, and `ceil(128 / log2 62)` is exactly 22. No valid ID of any
+ * other length can exist, so DO NOT relax this length if a real link is ever rejected --
+ * the cause will be the legacy `/user/{u}/playlist/{id}` path or a `spotify.link` short
+ * URL, both of which carry a perfectly good 22-character ID.
+ *
+ * This is deliberately a little too LOOSE rather than too strict: only ~12.6% of the
+ * 22-char base62 space decodes to a value below 2^128 (the leading character must be
+ * `0`-`7`). The rest are well-formed here, get forwarded to Spotify, and come back as
+ * `not-found-or-private` -- one wasted round trip on a typo, which is the cheap direction
+ * to be wrong in. Rejecting them here would need a BigInt decode for a better error.
  */
 const SPOTIFY_ID_PATTERN = /^[0-9A-Za-z]{22}$/;
 

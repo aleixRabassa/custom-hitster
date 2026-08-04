@@ -71,6 +71,39 @@ curl http://localhost:3000/api/hello
 
 Note that `vercel dev` runs functions on your **local** Node, while production runs 24.x.
 
+### Exercising `/api/playlist`
+
+**Use `vercel dev`, not `pnpm dev`.** Through Vite this endpoint returns the transpiled source of `api/playlist.ts` with a `200` — a response that looks like success and proves nothing.
+
+```bash
+curl "http://localhost:3000/api/playlist?url=https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M"
+```
+
+Expect `{"playlist":{…},"cards":[…],"truncated":false,"skippedCount":0}` — 50 cards for that playlist, titles and artists that look right, and `previewUrl` present on nearly all of them.
+
+The checks worth running by hand, because each pins a decision rather than a value:
+
+```bash
+# A well-formed but nonexistent ID must be 404 — NOT a 200 with an empty deck.
+curl -i "http://localhost:3000/api/playlist?url=0000000000000000000000"
+
+# An album link is a distinct error from junk: 400 unsupported-entity vs 400 invalid-url.
+curl -i "http://localhost:3000/api/playlist?url=https://open.spotify.com/album/0000000000000000000000"
+curl -i "http://localhost:3000/api/playlist?url=nonsense"
+
+# A playlist over the cap: exactly 100 cards and truncated=true (Rock Classics).
+curl -s "http://localhost:3000/api/playlist?url=37i9dQZF1DWXRqgorJj26U" | grep -o '"truncated":[a-z]*'
+
+# Wrong verb: 405 with an Allow header.
+curl -i -X POST "http://localhost:3000/api/playlist?url=37i9dQZF1DXcBWIGoYBM5M"
+```
+
+Also confirm the response carries **no** upstream HTML and **no** `accessToken` — the embed payload contains an anonymous Spotify bearer token that must never reach the client. An adapter test asserts this, but it is worth eyeballing once.
+
+A failure body is always `{"code":…,"message":…}` with a typed code; the full table is in [`api.md`](./api.md) §1.
+
+> Adapter behaviour itself does **not** need `vercel dev` — `api/_lib/spotify-embed.test.ts` covers every branch offline against captured fixtures, which is why the manual list above is short and about the handler.
+
 ---
 
 ## 5. Running tests

@@ -85,7 +85,9 @@ Proven by two throwaway functions differing in exactly one character sequence, d
 | `/api/hello`       | `'../shared/constants'`    | `500 FUNCTION_INVOCATION_FAILED` |
 
 So the cross-directory `shared/` import is fine; only the extension was missing. `api/hello.ts` is
-fixed, and all three probe files are deleted.
+fixed, all three probe files are deleted, and the fix is **confirmed in production**: after redeploying,
+`GET /api/hello` returns `200 {"ok":true,"message":"custom-hitster api is alive","maxEmbedTracks":100}`.
+That is the first time `docs/development.md` §7's standing check has actually passed.
 
 **Why this went unnoticed for a day, and why it matters more than the bug itself:**
 
@@ -106,46 +108,55 @@ throwaway `shared/` module and Vitest run, since `shared/`→`shared/` runtime i
 too. Type-only imports erase and are exempt. Rule recorded in `AGENTS.md`, `docs/architecture.md` §2,
 `docs/api.md` §3 and `docs/development.md` §7.
 
-## 2026-08-04 — `/api/hello` returns 500 FUNCTION_INVOCATION_FAILED in production (superseded — solved above)
+## 2026-08-04 — ANSWERED: the 22-character ID check is **not** too strict — 22 is exact, not a convention
 
-Found while running the probe checks above, on the same deployment:
+Spike of the last open question in [`plan.phase-2-playlist.md`](./plans/plan.phase-2-playlist.md).
+Verdict: **do not relax it.** The plan's own guidance — _"if a valid link is ever rejected, relax to a
+permissive base62 length range"_ — was wrong, and is now corrected in the plan, in decision 15, and in
+the comment above `SPOTIFY_ID_PATTERN` in `shared/spotify-url.ts`.
 
-```
-GET /api/hello  ->  500, X-Vercel-Error: FUNCTION_INVOCATION_FAILED
-GET /           ->  200  (the SPA serves normally)
-```
+**22 is arithmetic, not a habit.** A Spotify ID is the base62 encoding of a 128-bit GID, left-padded
+with `0`. `ceil(128 / log2 62)` = `ceil(21.50)` = **22**, and the padding removes the only way a shorter
+one could arise. No valid Spotify ID of any other length can exist, so no length relaxation can ever
+rescue a real link. Confirmed against seven real playlists spanning every provenance that might have
+differed — editorial, algorithmic (Discover Weekly, Daily Mix), chart, viral, and user-created — all
+exactly 22.
 
-`api/hello.ts` is unchanged since Phase 1, when the same request was verified returning
-`maxEmbedTracks: 100` (2026-08-03). The build log for this deploy shows no error and no warning about
-`api/`. So the function is built and routed but throws at invocation — which means the cause is a
-runtime module/resolution problem, not a compile problem, and it is invisible to all five local checks.
+**The endpoint distinguishes "undecodable" from "missing", and the spike found a second error status.**
+Probing `open.spotify.com/embed/playlist/{id}` with deliberately malformed IDs:
 
-**The standing check in `docs/development.md` §7 is therefore currently red, and any manual verification
-of `/api/playlist` through a deploy is untrustworthy until this is understood.** Leading hypothesis to
-test first: the extensionless relative import `'../shared/constants'` resolving under
-`"type": "module"` — if the function is transpiled rather than bundled, ESM requires the file
-extension and Node throws `ERR_MODULE_NOT_FOUND` at import time. That is unconfirmed. The Vercel
-**runtime** log for the failed invocation names the actual error in one line and is the next thing to
-read. Do not delete `api/_lib/_probe.ts` until this is dated: it is the only file added under `api/`
-between the working deploy and the failing one, so it is the cheapest thing to rule in or out.
+| ID                        | len | decodes to < 2^128 | `pageProps.status`         |
+| ------------------------- | --- | ------------------ | -------------------------- |
+| `37i9dQZF1DXcBWIGoYBM5M`  | 22  | yes                | _(none — `state` present)_ |
+| `37i9dQZF1DXcBWIGoYBM5`   | 21  | —                  | **500**                    |
+| `37i9dQZF1DXcBWIGoYBM5MA` | 23  | —                  | **500**                    |
+| `0000000000000000000001`  | 22  | yes                | 404                        |
+| `7000000000000000000000`  | 22  | yes                | 404                        |
+| `8000000000000000000000`  | 22  | **no**             | **500**                    |
+| `aaaaaaaaaaaaaaaaaaaaaa`  | 22  | **no**             | **500**                    |
 
-Two throwaway diagnostics were added to settle it in one deploy without depending on log retention:
-`api/ping.ts` (no runtime imports at all) and `api/ping-shared.ts` (identical to `hello.ts` except the
-specifier carries an explicit `.js` extension). Reading all three responses together identifies the
-cause: `ping` alone failing means the runtime or builder, `ping-shared` succeeding where `hello` fails
-means the extensionless ESM specifier, and both `shared`-importing functions failing means
-cross-directory imports are broken regardless of extension. **Delete all three probe files once the
-answer is recorded here.** Note also that Phase 1's claim of a working deploy may be weaker than it
-reads: `plan.md` says only "reported successful", which is consistent with the build succeeding and
-`/api/hello` never actually having been requested — in which case this was never a regression at all,
-and `docs/development.md` §7's standing check has simply never passed.
+Decodability predicted 404-vs-500 in every case. **`pageProps.status` is therefore not always 404** —
+Phase 0 only ever observed that value and the adapter's comment names it specifically. Both shapes are
+HTTP 200 with **no `state` key**, so `api/_lib/spotify-embed.ts` already handles both correctly and needs
+no change. This is a second, independent vindication of decision 7 (**branch on `state`, never on the
+status**): a handler keying on `status === 404` would have missed the 500 case entirely.
 
-`api/_lib/_probe.ts` was added as a throwaway probe: a **named** export with **no default**, which is
-the shape that breaks if Vercel builds it as a function. The whole `api/_lib/` helper convention
-(`plan.phase-2-playlist.md` decisions 3/3a) depends on `_`-prefixed paths being excluded from function
-routing, and **no local check can tell**: `typecheck`, `lint`, `test`, `build` and `format:check` are
-all green either way, because none of them know what Vercel's router does. Answer expected from the
-developer's next deploy — the two things to confirm are that the function build succeeded and that
-`/api/_lib/_probe` returns 404 (not 200, not 500). **This entry must be updated with the result, and
-the probe file deleted, once the deploy has run.** If it turns out to be routed, the documented
-fallback is a root-level `server/` tree added to `tsconfig.api.json`'s `include`.
+**If anything the regex is too loose, not too strict.** Only **~12.6%** of the 22-char base62 space
+decodes to a valid 128-bit GID (`2^128 / 62^22`); the leading character must be `0`–`7`. The other ~87%
+pass `/^[0-9A-Za-z]{22}$/`, get forwarded to Spotify, and come back as `not-found-or-private`. That is
+honest and harmless — just one wasted upstream round trip on a typo. Tightening is **optional** and left
+undone: it would return 400 `invalid-url` instead of 404 and skip the fetch, at the cost of a BigInt
+decode in `shared/`.
+
+**What to actually suspect when a valid link is rejected** — it will not be the length. Two live shapes
+carry a perfectly good 22-char ID and still fail today:
+
+- **Legacy `open.spotify.com/user/{user}/playlist/{id}`** — still served: it answers `301` to
+  `/playlist/{id}`. `parsePlaylistUrl()` sees entity `user` and returns **`unsupported-entity`**, so a
+  link that genuinely is a playlist gets told it is not one. The clearest real bug this spike found,
+  though still only reachable via old shared links.
+- **`spotify.link/…` short URLs** (what the mobile share sheet produces) — a `307` to the real URL.
+  Rejected as `invalid-url`, and unfixable inside `shared/` by design, since resolving one needs a
+  network call.
+
+Neither is in this plan's scope; both are recorded here so Phase 6 can decide whether to handle them.
