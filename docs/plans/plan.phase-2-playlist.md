@@ -113,56 +113,91 @@ implemented in either order.
 
 ## Implementation Steps
 
-- [ ] **Define the shared types in `shared/types.ts`** — the vocabulary everything downstream uses, so
+- [x] **Define the shared types in `shared/types.ts`** — the vocabulary everything downstream uses, so
       this lands first. No DOM and no Node types may appear in this file; it is checked by both
       tsconfigs, which is the point.
-  - [ ] `TrackRef` — the minimal input a year lookup needs: `title`, `artist`, `durationMs`. Kept
+  - [x] `TrackRef` — the minimal input a year lookup needs: `title`, `artist`, `durationMs`. Kept
         separate from `Card` so the sibling plan's `/api/year` depends on a small stable shape rather
         than the whole card
-  - [ ] `Card` — `id` (Spotify track ID), `title`, `artist` (the raw joined string, see the artist
+  - [x] `Card` — `id` (Spotify track ID), `title`, `artist` (the raw joined string, see the artist
         step), `durationMs`, `previewUrl` optional, `isPlayable`, and `year` / `yearConfidence` left
         unresolved by this plan. Document in a comment that Phase 3 owns `GameState` and must not
         widen `Card` with game state
-  - [ ] `PlaylistSummary` — `id`, `name`, and the owner label from the embed's playlist-level
+  - [x] `PlaylistSummary` — `id`, `name`, and the owner label from the embed's playlist-level
         `subtitle` field
-  - [ ] `PlaylistResult` — `playlist`, `cards`, `truncated`
-  - [ ] `PlaylistErrorCode` — a string-literal union: `invalid-url`, `unsupported-entity`,
+  - [x] `PlaylistResult` — `playlist`, `cards`, `truncated`
+  - [x] `PlaylistErrorCode` — a string-literal union: `invalid-url`, `unsupported-entity`,
         `not-found-or-private`, `upstream-unavailable`, `unexpected-payload`. Comment each with the
         HTTP status the handler maps it to, so the mapping is documented next to the codes themselves
 
-- [ ] **Write `parsePlaylistUrl()` in `shared/spotify-url.ts`** — returns a discriminated union
+  > **Execution note — three additions to what the step listed, each forced by another step.**
+  > (1) `PlaylistResult` also carries `skippedCount`, because the adapter step requires the skipped
+  > count to be reported rather than swallowed, and Open Question 5 assumes the response carries it.
+  > (2) `YearConfidence` (`'high' | 'low' | 'none'`) is declared here rather than left to
+  > [plan.phase-2-year.md](./plan.phase-2-year.md), since `Card.yearConfidence` has to reference
+  > something and typing it as `string` would be worse; the sibling plan adds `YearResult` and
+  > `RecordingCandidate` alongside it instead of redefining it. (3) `Card.year` is
+  > `number | null | undefined`, not just optional: `undefined` means "not looked up yet" and `null`
+  > means "looked up, nothing found", and Phase 3's progressive loading needs to tell those apart.
+  > Also added `PlaylistErrorResult` for the error response body, so the handler has a typed shape.
+
+- [x] **Write `parsePlaylistUrl()` in `shared/spotify-url.ts`** — returns a discriminated union
       (`{ok: true, id}` / `{ok: false, code}`) rather than throwing or returning `null`. The union is
       what lets Phase 6's landing form show a specific inline message per failure without duplicating
       any parsing, and it is why this is not a one-line regex.
-  - [ ] Accept `https://open.spotify.com/playlist/{id}`, tolerating `?si=`, `?utm_source=` and any
+  - [x] Accept `https://open.spotify.com/playlist/{id}`, tolerating `?si=`, `?utm_source=` and any
         other query parameters, a trailing slash, a URL fragment, `http`, and surrounding whitespace
-  - [ ] Accept **locale-prefixed paths** such as `open.spotify.com/intl-es/playlist/{id}`. Spotify
+  - [x] Accept **locale-prefixed paths** such as `open.spotify.com/intl-es/playlist/{id}`. Spotify
         really does serve these and a shared link copied from a localised client carries the prefix —
         easy to miss and a confusing failure for the developer's own locale
-  - [ ] Accept the `spotify:playlist:{id}` URI form
-  - [ ] Accept a bare ID with no URL around it
-  - [ ] Validate the ID as exactly 22 base62 characters and reject anything else as `invalid-url`
-  - [ ] Return `unsupported-entity` — distinct from `invalid-url` — for a well-formed Spotify URL
+  - [x] Accept the `spotify:playlist:{id}` URI form
+  - [x] Accept a bare ID with no URL around it
+  - [x] Validate the ID as exactly 22 base62 characters and reject anything else as `invalid-url`
+  - [x] Return `unsupported-entity` — distinct from `invalid-url` — for a well-formed Spotify URL
         pointing at an album, track, artist, show, or episode. This is a likely user mistake and
         deserves its own message, not "that is not a valid link"
-  - [ ] Reject non-Spotify hosts, and reject hosts that merely _contain_ `open.spotify.com` as a
+  - [x] Reject non-Spotify hosts, and reject hosts that merely _contain_ `open.spotify.com` as a
         substring (a look-alike domain must not pass), as `invalid-url`
-  - [ ] Note in a comment that this function performs **no** network call and cannot tell whether the
+  - [x] Note in a comment that this function performs **no** network call and cannot tell whether the
         playlist exists — that is the adapter's job
 
-- [ ] **Write the artist helper in `shared/artists.ts`** — Phase 0 found that track `subtitle` is the
+  > **Execution note:** implemented with anchored regexes and **no use of the global `URL`**. `URL`
+  > exists in both runtimes and would have type-checked under both tsconfigs, but `shared/` is the one
+  > tree with no platform globals at all (see `eslint.config.js`), and keeping it literally
+  > platform-free costs nothing here. Anchoring also settles the look-alike-host requirement directly:
+  > a literal `/` or end-of-input must follow `open.spotify.com`, which rejects
+  > `open.spotify.com.evil.example`, `notopen.spotify.com`, `evil.example/open.spotify.com/...` and the
+  > userinfo trick `open.spotify.com@evil.example` — all four of which pass a naive `includes()`.
+  > The entity is checked **before** the ID, so an album link reports `unsupported-entity` regardless
+  > of whether its ID is well-formed. `user` and `collection` are treated as known non-playlist
+  > entities alongside the five the step names, since a profile link deserves the same message.
+  > The error code type is `Extract<PlaylistErrorCode, 'invalid-url' | 'unsupported-entity'>` rather
+  > than a second hand-written union, so the two cannot drift.
+
+- [x] **Write the artist helper in `shared/artists.ts`** — Phase 0 found that track `subtitle` is the
       artist name(s) as **one joined string**, not a structured array, and flagged it as needing
       splitting. Splitting it is a trap, so this step is where the trap is documented and contained.
-  - [ ] Keep the raw `subtitle` verbatim as the card's display `artist`. Do **not** split for display:
+  - [x] Keep the raw `subtitle` verbatim as the card's display `artist`. Do **not** split for display:
         the separators Spotify joins with (`, ` and `&`) also occur _inside_ real artist names, so
         splitting would render "Earth, Wind & Fire" as three artists
-  - [ ] Provide `primaryArtistGuess()`, used only to build a MusicBrainz query in the sibling plan.
-        Take the segment before the first `, ` and trim a leading/trailing `&`-joined tail
-  - [ ] Comment explicitly that the guess is **lossy and known-wrong** for comma-containing artist
+  - [x] Provide `primaryArtistGuess()`, used only to build a MusicBrainz query in the sibling plan.
+        Take the segment before the first `, ` and ~~trim a leading/trailing `&`-joined tail~~ —
+        **deliberately narrowed during execution; see the note below**
+  - [x] Comment explicitly that the guess is **lossy and known-wrong** for comma-containing artist
         names, and that the sibling plan's contract is therefore to query the full string first and
         fall back to the guess only on zero results. That ordering is what makes the lossiness safe
-  - [ ] Strip a `feat.` / `featuring` / `with` tail from the guess if present, since a featured artist
+  - [x] Strip a `feat.` / `featuring` / `with` tail from the guess if present, since a featured artist
         in the subtitle harms the MusicBrainz match
+
+  > **Deviation — the `&`-joined tail is NOT trimmed.** The step asked for it, but it contradicts this
+  > plan's own test list, which holds "Simon & Garfunkel" up as a name that must survive intact. Both
+  > are the same string shape — "X & Y" is either two artists or one artist's real name — so no rule
+  > can separate them, and trimming corrupts the real name. Splitting on `,` only means two of the four
+  > hazard names ("Simon & Garfunkel", "Florence + The Machine") come out exactly right and the
+  > lossiness is confined to the comma cases, which the tests then assert and document. The guess is a
+  > second-attempt query term only ([plan.phase-2-year.md](./plan.phase-2-year.md) decision 15), so a
+  > slightly wider term is the safer failure direction. Recorded here because a future reader comparing
+  > code to plan will notice the difference.
 
 - [ ] **Capture the test fixtures into `api/_lib/__fixtures__/`** — do this before the adapter so the
       adapter is written against real payload shapes rather than remembered ones.
@@ -247,13 +282,21 @@ type="application/json">` element and `JSON.parse` its content. Comment that Nex
       either way, because none of them know what Vercel's router does. This repo has already been bitten
       twice by exactly this class of failure — the solution-file `tsconfig.json` and the path-alias
       limitation — so probing it early costs minutes and finding out late costs a migration.
-  - [ ] Add a trivial `api/_lib/_probe.ts` that exports a **named** function and no default export —
+  - [x] Add a trivial `api/_lib/_probe.ts` that exports a **named** function and no default export —
         the shape that would break if Vercel tried to build it as a handler
   - [ ] Deploy, then confirm two things: the function build **succeeded** (a routed helper with no
         default export is the failure mode), and `/api/_lib/_probe` returns **404** rather than 200 or 500
   - [ ] Delete the probe and record the result in `docs/agent_findings.md` with the date. This
         probe-then-revert pattern is the repo's established habit — Phase 1 used it for the ESLint
         globals blocks and for the DOM-vs-Node typecheck isolation
+
+  > **Execution note — awaiting the developer's deploy.** `api/_lib/_probe.ts` exists and is
+  > deliberately worst-case: a named export, no default. Deploys are the developer's to run (see Out of
+  > Scope), so execution paused here rather than guessing: the `shared/` half of this plan was built
+  > first because none of it depends on the answer, and the fixtures, the adapter, and the handler wait
+  > for it because they are the files that would have to move. `typecheck`, `lint`, `test`, `build` and
+  > `format:check` are all green with the probe in place, which is exactly the point — none of them can
+  > see what Vercel's router does.
   - [ ] **Documented fallback if it IS routed:** move the helpers to a root-level `server/` directory
         and add it to `tsconfig.api.json`'s `include`. Unambiguously outside `api/` and therefore never
         routed, relying on no convention at all — at the cost of a fourth top-level tree and two more
@@ -281,37 +324,37 @@ no configuration changes are needed.
 
 ### `shared/spotify-url.test.ts`
 
-- [ ] `should parse a plain open.spotify.com playlist URL` — covers the base accepted form
-- [ ] `should parse a URL carrying an ?si= share parameter` — covers the form users actually paste,
+- [x] `should parse a plain open.spotify.com playlist URL` — covers the base accepted form
+- [x] `should parse a URL carrying an ?si= share parameter` — covers the form users actually paste,
       since Spotify's own share button appends it
-- [ ] `should ignore additional query parameters and a URL fragment` — covers `?utm_source=` and `#…`
-- [ ] `should parse a locale-prefixed path` — covers `open.spotify.com/intl-es/playlist/{id}`
-- [ ] `should parse a URL with a trailing slash, http scheme, and surrounding whitespace` — covers
+- [x] `should ignore additional query parameters and a URL fragment` — covers `?utm_source=` and `#…`
+- [x] `should parse a locale-prefixed path` — covers `open.spotify.com/intl-es/playlist/{id}`
+- [x] `should parse a URL with a trailing slash, http scheme, and surrounding whitespace` — covers
       normalization of sloppy paste input
-- [ ] `should parse a spotify:playlist: URI` — covers the desktop-client copy form
-- [ ] `should parse a bare 22-character ID` — covers the form the Phase 6 suggested-playlist buttons use
-- [ ] `should reject an album, track, artist, and show URL as unsupported-entity` — covers the
+- [x] `should parse a spotify:playlist: URI` — covers the desktop-client copy form
+- [x] `should parse a bare 22-character ID` — covers the form the Phase 6 suggested-playlist buttons use
+- [x] `should reject an album, track, artist, and show URL as unsupported-entity` — covers the
       wrong-entity branch, asserting the code is `unsupported-entity` and **not** `invalid-url`,
       because Phase 6 renders a different message for each
-- [ ] `should reject a non-Spotify host as invalid-url` — covers host validation
-- [ ] `should reject a look-alike host containing open.spotify.com as a substring` — covers that host
+- [x] `should reject a non-Spotify host as invalid-url` — covers host validation
+- [x] `should reject a look-alike host containing open.spotify.com as a substring` — covers that host
       matching is not a naive `includes`
-- [ ] `should reject an ID of the wrong length or with non-base62 characters` — covers ID validation
-- [ ] `should reject empty and whitespace-only input` — covers the landing form's initial state
-- [ ] `should never throw for arbitrary input` — covers the union-return contract across a list of
+- [x] `should reject an ID of the wrong length or with non-base62 characters` — covers ID validation
+- [x] `should reject empty and whitespace-only input` — covers the landing form's initial state
+- [x] `should never throw for arbitrary input` — covers the union-return contract across a list of
       junk inputs, since Phase 6 calls this on every keystroke
 
 ### `shared/artists.test.ts`
 
-- [ ] `should return the sole artist unchanged for a single-artist subtitle` — covers the common case
-- [ ] `should take the first artist from a comma-joined subtitle` — covers the multi-artist case
-- [ ] `should not split artist names that themselves contain a separator` — covers the hazard, with
+- [x] `should return the sole artist unchanged for a single-artist subtitle` — covers the common case
+- [x] `should take the first artist from a comma-joined subtitle` — covers the multi-artist case
+- [x] `should not split artist names that themselves contain a separator` — covers the hazard, with
       "Earth, Wind & Fire", "Simon & Garfunkel", "Tyler, The Creator", and "Florence + The Machine".
       This test documents a **known limitation** for the comma-containing names: it asserts the
       guess's actual behaviour and carries a comment pointing at the sibling plan's full-string-first
       query order, which is what makes the limitation harmless
-- [ ] `should strip a feat./with tail from the guess` — covers featured-artist removal
-- [ ] `should handle an empty subtitle without throwing` — covers the degenerate input
+- [x] `should strip a feat./with tail from the guess` — covers featured-artist removal
+- [x] `should handle an empty subtitle without throwing` — covers the degenerate input
 
 ### `api/_lib/spotify-embed.test.ts`
 
@@ -456,9 +499,14 @@ logic worth testing, that logic belongs in the adapter instead.
 - [ ] **How long should the `s-maxage` window be?** Long enough to make a repeated Start instant, short
       enough that editing a playlist and retrying reflects the change. Start conservative — a few
       minutes — and revisit in Phase 6 when the real Start flow exists and the trade-off is observable.
-- [ ] **Does the embed payload still match the Phase 0 field inventory?** The findings are from
-      Aug 2026 and the endpoint is unofficial and unversioned. Re-confirm against a live playlist at
-      the start of execution; a drift here changes the adapter, not the plan's structure.
+- [x] ~~**Does the embed payload still match the Phase 0 field inventory?**~~ **Re-confirmed live
+      2026-08-04, before the adapter was written: yes, with no drift that touches this plan.** Checked
+      Today's Top Hits, Rock Classics, and a nonexistent-but-well-formed ID. The `__NEXT_DATA__`
+      location, the `entity.trackList` path, every track-level field, the 100-track cap, the absent
+      year/album at track level, the `accessToken` leak, and — critically — the **HTTP 200 with no
+      `pageProps.state`** error shape are all exactly as Phase 0 recorded. The only difference is
+      additive: playlist-level `authors`, `hasVideo`, `relatedEntityUri` and `type` are present and were
+      not in Phase 0's list. Full detail in `docs/agent_findings.md`.
 - [ ] **Should the skipped-track count surface in the UI?** The response reports it, but whether Phase 6
       shows it is that phase's call. Deliberately left undecided rather than pre-empted.
 
