@@ -9,6 +9,12 @@ coverage/
 # name people reach for by habit, `vercel dev` reads it too, and the old pattern let
 # one straight through into a commit on 2026-08-04. The negation keeps the example
 # file committed while everything else in the family is ignored.
+#
+# KEEP `!.env.example` LAST in this family. Later patterns win, so a broad `.env*`
+# added anywhere below would silently re-ignore it -- which `vercel link` did on
+# 2026-08-04, appending its own `.env*` to the end of this file. `.env.example` only
+# stayed in the repo because it was already tracked. If the CLI adds that line again,
+# delete it rather than leaving it after the negation.
 .env
 .env.*
 !.env.example
@@ -23,3 +29,5 @@ pnpm-debug.log*
 .idea/
 .DS_Store
 Thumbs.db
+
+.vercel
