@@ -298,12 +298,17 @@ type="application/json">` element and `JSON.parse` its content. Comment that Nex
   > (`typecheck`, `lint`, `test`, `build`, `format:check`) were green either way, so nothing short of a
   > deploy could have told us.
   >
-  > **The probe file is deliberately NOT deleted yet.** The same deploy revealed that `/api/hello`
-  > returns **500 `FUNCTION_INVOCATION_FAILED`**, though it is unchanged code that was verified working
-  > on 2026-08-03 — i.e. the standing check in `docs/development.md` §7 is red. `_probe.ts` is the only
-  > file added under `api/` between the working deploy and the failing one, so it stays until it is
-  > ruled in or out. Recorded in `docs/agent_findings.md`; this blocks the plan's **manual** deploy
-  > verification, not the offline work below.
+  > **The same deploy exposed an unrelated, more serious bug, now fixed:** `/api/hello` returned **500
+  > `FUNCTION_INVOCATION_FAILED`**. Cause was the extensionless specifier `'../shared/constants'` — a
+  > `"type": "module"` function is ESM, Node's ESM resolver does not guess extensions, and Vercel
+  > transpiles rather than bundles. Settled with two more throwaway functions differing only in the
+  > extension (`.js` → 200 with `maxEmbedTracks: 100`, extensionless → 500). **This changes how every
+  > file in the rest of this plan imports:** `api/playlist.ts` → `./_lib/spotify-embed.js`,
+  > `api/_lib/spotify-embed.ts` → `../../shared/constants.js`, and so on. `docs/api.md` had actively
+  > prescribed the wrong form, and `docs/architecture.md` claimed the relative-import path was "proven
+  > in production" when only the _build_ had ever been proven. Both corrected, along with `AGENTS.md`
+  > and `docs/development.md`. All three probe files are now deleted. Full detail in
+  > `docs/agent_findings.md`.
   - [ ] **Documented fallback if it IS routed:** move the helpers to a root-level `server/` directory
         and add it to `tsconfig.api.json`'s `include`. Unambiguously outside `api/` and therefore never
         routed, relying on no convention at all — at the cost of a fourth top-level tree and two more

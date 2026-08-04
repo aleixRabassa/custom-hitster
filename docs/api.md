@@ -24,7 +24,9 @@ It ignores the request entirely (method, query, and body are all unread) and tak
 }
 ```
 
-`maxEmbedTracks` echoes `MAX_EMBED_TRACKS` from `shared/constants.ts`. It is not informational — it is the assertion that the shared constant **resolved and bundled** from the Node side, rather than merely type-checking. After any deploy that touches the layout, confirm it still returns `100`; that is the check that the cross-directory import survived the real function build.
+`maxEmbedTracks` echoes `MAX_EMBED_TRACKS` from `shared/constants.ts`. It is not informational — it is the assertion that the shared constant **resolved** on the Node side, rather than merely type-checking. After any deploy that touches the layout, confirm it still returns `100`; that is the check that the cross-directory import survived the real function build.
+
+**And actually make the request.** On 2026-08-04 this endpoint was found returning `500 FUNCTION_INVOCATION_FAILED` — its import lacked the `.js` extension an ESM function needs — after a clean build and five green local checks. It had shipped that way since 2026-08-03 because nobody had requested it. See [`agent_findings.md`](./agent_findings.md).
 
 ### `/api/playlist` **[planned — Phase 2]**
 
@@ -67,7 +69,8 @@ Files under `api/` are type-checked **only** by `tsconfig.api.json` (`pnpm typec
 ```ts
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-import { MAX_EMBED_TRACKS } from '../shared/constants';
+// The `.js` is required, not stylistic -- see the rule table below.
+import { MAX_EMBED_TRACKS } from '../shared/constants.js';
 
 export default function handler(_req: VercelRequest, res: VercelResponse) {
   res.status(200).json({
@@ -80,15 +83,15 @@ export default function handler(_req: VercelRequest, res: VercelResponse) {
 
 Rules this establishes:
 
-| Rule                                                      | Why                                                                                                                               |
-| --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| **Default-export a single `handler` function**            | Vercel's Node runtime entry contract.                                                                                             |
-| **Type params as `VercelRequest` / `VercelResponse`**     | From `@vercel/node`, a dev dependency.                                                                                            |
-| **Import `shared/` by RELATIVE path — never `@/`**        | Vercel does not support tsconfig path mappings for functions. An aliased import type-checks locally and **fails at deploy time**. |
-| **Write imports extensionless** (`'../shared/constants'`) | Matches the dominant Vercel convention; `src/` is normalised the same way.                                                        |
-| **No DOM APIs**                                           | `tsconfig.api.json` omits the DOM lib, so `document`/`window` fail with `TS2584`.                                                 |
-| **Prefix unused params with `_`**                         | `noUnusedParameters` is on; `@typescript-eslint/no-unused-vars` also reports them.                                                |
-| **Never put secrets in `api/` source**                    | The Vite dev server serves that source as transpiled text — see [`architecture.md`](./architecture.md) §5.                        |
+| Rule                                                             | Why                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Default-export a single `handler` function**                   | Vercel's Node runtime entry contract.                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| **Type params as `VercelRequest` / `VercelResponse`**            | From `@vercel/node`, a dev dependency.                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| **Import `shared/` by RELATIVE path — never `@/`**               | Vercel does not support tsconfig path mappings for functions. An aliased import type-checks locally and **fails at deploy time**.                                                                                                                                                                                                                                                                                                                                       |
+| **End relative imports with `.js`** (`'../shared/constants.js'`) | **Corrected 2026-08-04 — this table previously said the opposite.** `"type": "module"` makes a deployed function ESM, and Node's ESM resolver does not guess extensions; Vercel transpiles rather than bundles, so the specifier reaches Node verbatim. Extensionless gives `FUNCTION_INVOCATION_FAILED` at runtime after a clean build, and **no local check catches it** — that is precisely how `/api/hello` shipped broken. Type-only imports erase and are exempt. |
+| **No DOM APIs**                                                  | `tsconfig.api.json` omits the DOM lib, so `document`/`window` fail with `TS2584`.                                                                                                                                                                                                                                                                                                                                                                                       |
+| **Prefix unused params with `_`**                                | `noUnusedParameters` is on; `@typescript-eslint/no-unused-vars` also reports them.                                                                                                                                                                                                                                                                                                                                                                                      |
+| **Never put secrets in `api/` source**                           | The Vite dev server serves that source as transpiled text — see [`architecture.md`](./architecture.md) §5.                                                                                                                                                                                                                                                                                                                                                              |
 
 Node globals (`process`, etc.) are available: `eslint.config.js` gives `api/**/*.ts` the Node globals block, and `tsconfig.api.json` supplies `@types/node`.
 

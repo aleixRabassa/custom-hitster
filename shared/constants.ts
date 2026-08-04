@@ -2,7 +2,11 @@
  * Constants shared by the browser app (`src/`) and the serverless functions (`api/`).
  *
  * `api/` must import this module by RELATIVE path, never through the `@/` alias --
- * Vercel does not support tsconfig path mappings when compiling functions.
+ * Vercel does not support tsconfig path mappings when compiling functions -- and the
+ * specifier must carry an explicit `.js` extension (`'../shared/constants.js'`),
+ * because a deployed function is ESM and Node's ESM resolver does not guess
+ * extensions. Extensionless fails only at runtime, only on Vercel, with a clean build.
+ * See AGENTS.md and docs/architecture.md §2.
  */
 
 /**

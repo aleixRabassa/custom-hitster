@@ -2,7 +2,10 @@
  * Types shared by the browser app (`src/`) and the serverless functions (`api/`).
  *
  * `api/` must import this module by RELATIVE path, never through the `@/` alias --
- * Vercel does not support tsconfig path mappings when compiling functions.
+ * Vercel does not support tsconfig path mappings when compiling functions. A RUNTIME
+ * import of this module from `api/` also needs an explicit `.js` extension (see
+ * `shared/constants.ts`); `import type` erases entirely and is exempt, which is how
+ * most consumers of this file import it.
  *
  * This file is checked by BOTH `tsconfig.app.json` and `tsconfig.api.json`, which is
  * the point: no DOM types and no Node types may appear here, so neither side can be

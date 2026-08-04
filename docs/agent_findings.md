@@ -68,7 +68,45 @@ The 6.0.3 install exists only so `typescript-eslint` can load (see `docs/toolcha
 compiler that produces the deployed functions is not the one `pnpm typecheck` runs. Worth knowing before
 using a TS 7-only syntax feature in `api/`.
 
-## 2026-08-04 — `/api/hello` returns 500 FUNCTION_INVOCATION_FAILED in production (open)
+## 2026-08-04 — SOLVED: relative imports under `api/` need an explicit `.js` extension
+
+`/api/hello` returned **500 `FUNCTION_INVOCATION_FAILED`** in production while the SPA served fine and
+the build log was clean. **Cause: the extensionless specifier `'../shared/constants'`.** `package.json`
+declares `"type": "module"`, so a deployed function is ESM; Node's ESM resolver does not guess
+extensions the way CommonJS does, and Vercel **transpiles** functions rather than bundling them, so the
+specifier reaches Node verbatim and the import throws at load time.
+
+Proven by two throwaway functions differing in exactly one character sequence, deployed together:
+
+| Route              | Import                     | Result                           |
+| ------------------ | -------------------------- | -------------------------------- |
+| `/api/ping`        | none (type-only, erased)   | `200 {"probe":"ping"}`           |
+| `/api/ping-shared` | `'../shared/constants.js'` | `200 {"maxEmbedTracks":100}`     |
+| `/api/hello`       | `'../shared/constants'`    | `500 FUNCTION_INVOCATION_FAILED` |
+
+So the cross-directory `shared/` import is fine; only the extension was missing. `api/hello.ts` is
+fixed, and all three probe files are deleted.
+
+**Why this went unnoticed for a day, and why it matters more than the bug itself:**
+
+- `docs/api.md` §3 actively prescribed the wrong thing — a rule row reading _"Write imports
+  extensionless — matches the dominant Vercel convention"_. Corrected in place.
+- `docs/architecture.md` §2 claimed the relative-import side was _"proven in production (deploy of
+  2026-08-03)"_. It was not: that deploy proved only that the **build** succeeded. `/api/hello` had
+  never actually been requested. A deploy that "succeeded" is not evidence that a function runs.
+- **All five local checks pass either way** — `typecheck`, `lint`, `test`, `build`, `format:check` —
+  because none of them model Node's ESM resolution of the deployed output. This is now the **third**
+  deploy-time-only failure in this repo (after the solution-file `tsconfig.json` and the path-mapping
+  limitation), and the pattern is identical every time: a local green build proving nothing about
+  production.
+
+Verified that TypeScript (both narrowed configs) and Vite both resolve a `.js` specifier back to the
+`.ts` source, so the rule is safe for `shared/` code that the browser also imports — checked with a
+throwaway `shared/` module and Vitest run, since `shared/`→`shared/` runtime imports need the extension
+too. Type-only imports erase and are exempt. Rule recorded in `AGENTS.md`, `docs/architecture.md` §2,
+`docs/api.md` §3 and `docs/development.md` §7.
+
+## 2026-08-04 — `/api/hello` returns 500 FUNCTION_INVOCATION_FAILED in production (superseded — solved above)
 
 Found while running the probe checks above, on the same deployment:
 

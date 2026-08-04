@@ -98,15 +98,22 @@ All four must pass. **There are no pre-commit hooks and no CI workflow**, so not
 
 ## 7. Deploy
 
-The Vercel project is **linked and has been deployed** (first successful deploy 2026-08-03). `vercel.json` declares the build command, output directory, and the SPA rewrite that excludes `/api/*`.
+The Vercel project is **linked and deploys** (first deploy 2026-08-03; deploys can also run from a push to `main`, as the 2026-08-04 build log shows). `vercel.json` declares the build command, output directory, and the SPA rewrite that excludes `/api/*`.
 
 ```bash
 vercel deploy
 ```
 
-**After a deploy that touches the `src`/`api`/`shared` layout, confirm `/api/hello` still returns `maxEmbedTracks: 100`.** That single check verifies the relative `shared/` import resolved inside the real function bundle — the one part of this layout that cannot be fully verified locally.
+**After a deploy that touches the `src`/`api`/`shared` layout, confirm `/api/hello` really returns `maxEmbedTracks: 100`.** That single check verifies the relative `shared/` import resolved inside the real function — the one part of this layout that cannot be verified locally at all.
 
-Also **grep for `@/` under `api/` before deploying.** An aliased import there type-checks locally and fails only at deploy time.
+**Actually run it.** On 2026-08-04 this check was run for the first time and returned **500 `FUNCTION_INVOCATION_FAILED`**: the import had no `.js` extension, which a `"type": "module"` ESM function cannot resolve. The build log was clean, and `typecheck`, `lint`, `test`, `build` and `format:check` were all green. A deploy that "succeeded" is not evidence that a function runs — only a request is.
+
+Two things to check before deploying, neither of which any local tool can see:
+
+- **Grep for `@/` under `api/`.** An aliased import there type-checks locally and fails only at deploy time.
+- **Check every relative import under `api/` ends in `.js`.** Same failure class, discovered the same way — see [`architecture.md`](./architecture.md) §2.
+
+If a function returns `FUNCTION_INVOCATION_FAILED`, the Vercel **runtime** log (`vercel logs <deployment-url>`, or the dashboard's Runtime Logs) names the underlying error; the build log will not mention it. Retention is short, so request the failing route again to generate a fresh entry before looking.
 
 ---
 

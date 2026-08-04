@@ -33,7 +33,7 @@ This is the single most consequential structural rule in the repo, because viola
 
 ```
 src/      React SPA (browser).      May use the `@/` alias. May use DOM APIs.
-api/      Vercel Functions (Node).  MUST import shared/ by RELATIVE path. No DOM APIs.
+api/      Vercel Functions (Node).  MUST import shared/ by RELATIVE path + `.js`. No DOM APIs.
 shared/   Used by BOTH.             No DOM APIs, no Node APIs. Pure, portable code.
 ```
 
@@ -44,6 +44,8 @@ shared/   Used by BOTH.             No DOM APIs, no Node APIs. Pure, portable co
       └────┬─────┘                   └────┬─────┘
            │  @/ alias OK                 │  RELATIVE path ONLY
            │  ../shared/… also OK         │  `@/…` breaks on deploy
+           │                              │  …and the `.js` extension
+           │                              │  is REQUIRED at runtime
            └───────────┐     ┌────────────┘
                        ▼     ▼
                    ┌─────────────┐
@@ -53,10 +55,13 @@ shared/   Used by BOTH.             No DOM APIs, no Node APIs. Pure, portable co
 
 - **`shared/` sits at the repository root, not under `src/`.** This keeps the boundary symmetrical: neither side reaches into the other's tree, and both reference `shared/` by plain relative path.
 - **`api/` must never import via the `@/` alias.** Vercel's Node runtime documentation states that of the root `tsconfig.json`, _"Most options are supported aside from Path Mappings and Project References."_ An aliased import inside a function type-checks locally and then **fails to resolve at deploy time**. Use `../shared/…`; `api/hello.ts` is the reference shape.
+- **The `.js` extension on those relative imports is mandatory, not cosmetic** — `'../shared/constants.js'`. `package.json` declares `"type": "module"`, so a deployed function is ESM, and Node's ESM resolver does not guess extensions the way CommonJS does. Vercel **transpiles** functions rather than bundling them, so the specifier reaches Node verbatim. The rule covers all of `api/` and any `shared/`→`shared/` **runtime** import; type-only imports erase and are exempt. TypeScript resolves the `.js` specifier back to the `.ts` source, and so does Vite, so the identical form works in the browser build and under Vitest.
 - The `@/` alias is declared in `tsconfig.json` and mirrored in `vite.config.ts`. Vite resolves it at bundle time, which is why the client side is unaffected by Vercel's limitation.
 - The boundary is enforced by `pnpm typecheck` running **twice**, once per narrowed config — see [`toolchain.md`](./toolchain.md) §2.
 
-The relative-import side is proven in production (deploy of 2026-08-03). The aliased side has deliberately never been tried on Vercel — per Vercel's own docs it should not be. **Grep for `@/` under `api/` before deploying.**
+Both halves of the `api/`→`shared/` rule are now proven in production, and the extension half was learned the hard way. **Correction to what this section previously claimed:** the 2026-08-03 deploy proved only that the build _succeeded_ — `/api/hello` was never actually requested, and when it finally was (2026-08-04) it returned **500 `FUNCTION_INVOCATION_FAILED`** because of the missing extension. A pair of throwaway probe functions differing only in that extension settled it: extensionless → 500, `.js` → `200 {"maxEmbedTracks":100}`. Full detail in [`agent_findings.md`](./agent_findings.md).
+
+The aliased side has deliberately never been tried on Vercel — per Vercel's own docs it should not be. **Grep for `@/` under `api/` before deploying, and check that every relative import there ends in `.js`.** Neither `typecheck`, `lint`, `test`, `build`, nor `format:check` can see either mistake.
 
 ---
 

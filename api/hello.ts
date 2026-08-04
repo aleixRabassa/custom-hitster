@@ -4,7 +4,17 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 // alias. Vercel's Node runtime does not support tsconfig path mappings, so an
 // aliased import here would type-check locally and then fail to resolve at
 // deploy time. Phase 2's /api/playlist and /api/year must copy this shape.
-import { MAX_EMBED_TRACKS } from '../shared/constants';
+//
+// The `.js` EXTENSION IS LOAD-BEARING and must not be "cleaned up". `package.json`
+// declares `"type": "module"`, so the deployed function is ESM, and Node's ESM
+// resolver -- unlike CommonJS -- does not guess extensions. Vercel transpiles this
+// file rather than bundling it, so the specifier reaches Node verbatim: without the
+// extension the import throws ERR_MODULE_NOT_FOUND and the function returns
+// FUNCTION_INVOCATION_FAILED, after a build that logs no error at all. Measured on a
+// real deploy 2026-08-04 (docs/agent_findings.md); every local check passes either
+// way. TypeScript resolves the `.js` specifier back to `constants.ts`, and so does
+// Vite, so the same form works in the browser build and under Vitest.
+import { MAX_EMBED_TRACKS } from '../shared/constants.js';
 
 /**
  * Hello-world function. It exists purely to establish, before Phase 2 depends on
