@@ -129,142 +129,142 @@ wait is therefore one lookup, not a queue drain.
 
 ## Implementation Steps
 
-- [ ] **Define the game types in `src/game/types.ts`** — client-only, so they stay out of
+- [x] **Define the game types in `src/game/types.ts`** — client-only, so they stay out of
       `shared/types.ts`, whose comment already reserves `GameState` for this phase while forbidding
       any of it from widening `Card`.
-  - [ ] `GameStatus` as `'idle' | 'preparing' | 'playing' | 'ended'`. `preparing` is the card-1 gate
+  - [x] `GameStatus` as `'idle' | 'preparing' | 'playing' | 'ended'`. `preparing` is the card-1 gate
         and the only state Phase 6 may render a loading screen for
-  - [ ] `GameState` holding: `status`, `playlist` (the `PlaylistSummary`, or null when idle), `seed`,
+  - [x] `GameState` holding: `status`, `playlist` (the `PlaylistSummary`, or null when idle), `seed`,
         `deck` (the shuffled `Card[]`, with years filled in place as they arrive), `currentIndex`,
         `isFlipped`, and `yearLookupsUnavailable` (a hard-stop flag — see the resolver step)
-  - [ ] `GameAction` as a discriminated union on `type`: `START`, `YEAR_RESOLVED`, `YEAR_LOOKUPS_UNAVAILABLE`,
+  - [x] `GameAction` as a discriminated union on `type`: `START`, `YEAR_RESOLVED`, `YEAR_LOOKUPS_UNAVAILABLE`,
         `FLIP`, `NEXT`, `RESUME`, `END`. [plan.md](./plan.md) names only the first, `FLIP`, `NEXT` and
         `END`; document beside the union why the other three exist — `YEAR_RESOLVED` is how the
         resolver reports back, `RESUME` is how a persisted session re-enters, and
         `YEAR_LOOKUPS_UNAVAILABLE` is the deployment-fault stop
-  - [ ] `PersistedSession` as the serialized shape, with an explicit numeric `version` field. Keep it
+  - [x] `PersistedSession` as the serialized shape, with an explicit numeric `version` field. Keep it
         structurally separate from `GameState` even where they currently coincide, so a future state
         field can be added without silently changing the storage format
 
-- [ ] **Write the seeded shuffle in `src/game/shuffle.ts`** — pure, no `Math.random()`, no `Date.now()`.
+- [x] **Write the seeded shuffle in `src/game/shuffle.ts`** — pure, no `Math.random()`, no `Date.now()`.
       It runs **before** year resolution, which is the ordering [plan.md](./plan.md) §3 spends a
       paragraph on: resolution must walk the deck in **play** order, or the first request is spent on a
       track that lands somewhere random in the deck.
-  - [ ] Accept a **string** seed, not a number. A string is what a Phase 8 shareable URL would carry,
+  - [x] Accept a **string** seed, not a number. A string is what a Phase 8 shareable URL would carry,
         and it costs nothing now
-  - [ ] Derive the generator's 32-bit state from the seed with a small string-hash step, then use a
+  - [x] Derive the generator's 32-bit state from the seed with a small string-hash step, then use a
         mulberry32-style generator. Both are a handful of lines; do not add a dependency
-  - [ ] Fisher–Yates, iterating downwards, returning a **new** array and never mutating the input
-  - [ ] Add `generateSeed()` as a separate export that produces a short random string from
+  - [x] Fisher–Yates, iterating downwards, returning a **new** array and never mutating the input
+  - [x] Add `generateSeed()` as a separate export that produces a short random string from
         `crypto.getRandomValues`. Keep it out of `shuffleDeck()` so the shuffle itself stays pure and
         the browser API sits in exactly one named place
-  - [ ] Inline comment: why the shuffle is seeded at all (reproducible decks, resume, and Phase 8's
+  - [x] Inline comment: why the shuffle is seeded at all (reproducible decks, resume, and Phase 8's
         shareable URL) and why it must precede resolution
 
-- [ ] **Write `gameReducer` in `src/game/reducer.ts`** — pure, exhaustive over the action union, and
+- [x] **Write `gameReducer` in `src/game/reducer.ts`** — pure, exhaustive over the action union, and
       never mutating state.
-  - [ ] `START` takes `{cards, playlist, seed?}`. It **shuffles first**, synchronously, then sets
+  - [x] `START` takes `{cards, playlist, seed?}`. It **shuffles first**, synchronously, then sets
         `currentIndex` to 0, `isFlipped` false, and status to `preparing` — so the resolver is only
         ever handed an already-shuffled deck and "card 1" always means the first card of the shuffled
         deck (decision 15). Accepting an optional seed is what makes Phase 8 a caller change rather
         than a reducer change
-  - [ ] `START` on an already-running session replaces it wholesale — starting a new playlist mid-game
+  - [x] `START` on an already-running session replaces it wholesale — starting a new playlist mid-game
         must not merge into the old deck
-  - [ ] `YEAR_RESOLVED` matches **by card id, not by index**, and writes `year` and `yearConfidence`
+  - [x] `YEAR_RESOLVED` matches **by card id, not by index**, and writes `year` and `yearConfidence`
         onto that card. Matching by index would corrupt the deck the moment the resolver's ordering and
         the deck's ordering diverge, which the priority jump makes routine
-  - [ ] **The card-1 gate:** while status is `preparing`, a `YEAR_RESOLVED` for the card at index 0
+  - [x] **The card-1 gate:** while status is `preparing`, a `YEAR_RESOLVED` for the card at index 0
         transitions status to `playing` — regardless of whether it carried a year. A `null` year is a
         completed lookup, and its card is playable
-  - [ ] `YEAR_LOOKUPS_UNAVAILABLE` sets the flag and, if still `preparing`, transitions to `playing`
+  - [x] `YEAR_LOOKUPS_UNAVAILABLE` sets the flag and, if still `preparing`, transitions to `playing`
         anyway. A deployment with no `MUSICBRAINZ_USER_AGENT` must not leave the player staring at a
         loading screen forever — the deck is still playable, just yearless
-  - [ ] `FLIP` toggles `isFlipped`. It is **never** gated on the year having arrived; the pending state
+  - [x] `FLIP` toggles `isFlipped`. It is **never** gated on the year having arrived; the pending state
         belongs to the year slot alone
-  - [ ] `NEXT` advances `currentIndex` and resets `isFlipped` to false. Advancing past the last card
+  - [x] `NEXT` advances `currentIndex` and resets `isFlipped` to false. Advancing past the last card
         sets status to `ended` and leaves `currentIndex` at the last card rather than out of bounds
-  - [ ] `END` sets status to `ended` — this is the Exit button's action, and Phase 6 redirects on it
-  - [ ] `RESUME` replaces the whole state from a validated persisted session
-  - [ ] Actions that do not apply to the current status are **no-ops that return the same object
+  - [x] `END` sets status to `ended` — this is the Exit button's action, and Phase 6 redirects on it
+  - [x] `RESUME` replaces the whole state from a validated persisted session
+  - [x] Actions that do not apply to the current status are **no-ops that return the same object
         reference**, not throws. A late `YEAR_RESOLVED` arriving after `END` is normal, not an error
-  - [ ] Export derived selectors as plain functions beside the reducer, not as state fields:
+  - [x] Export derived selectors as plain functions beside the reducer, not as state fields:
         `currentCard`, `isCurrentYearPending` (the current card's `year` is `undefined`),
         `cardsRemaining`, and `resolvedCount` (for Phase 6's count-only progress text). Deriving rather
         than storing is what stops them going stale
 
-- [ ] **Write the year client in `src/game/year-client.ts`** — a thin, typed wrapper over
+- [x] **Write the year client in `src/game/year-client.ts`** — a thin, typed wrapper over
       `GET /api/year` with `fetch` injected, mirroring how the Phase 2 adapters were made testable.
-  - [ ] Build the query from a `TrackRef` — `title`, `artist`, `durationMs` — URL-encoded. Pass the raw
+  - [x] Build the query from a `TrackRef` — `title`, `artist`, `durationMs` — URL-encoded. Pass the raw
         joined artist string; the server does the cleaning and the primary-artist fallback, and
         duplicating that here would let the two drift
-  - [ ] Return a typed outcome union rather than throwing: success carrying the `YearLookupResult`, or
+  - [x] Return a typed outcome union rather than throwing: success carrying the `YearLookupResult`, or
         a failure carrying the `YearErrorCode` plus `retryAfterMs` when present. Add a client-only
         `network` code for a rejected fetch, which has no HTTP status
-  - [ ] Read `retryAfterMs` from the **body**, falling back to the `Retry-After` header (seconds) if
+  - [x] Read `retryAfterMs` from the **body**, falling back to the `Retry-After` header (seconds) if
         the body is unparseable. The body is the primary contract; the header is the safety net
-  - [ ] Accept an `AbortSignal` and pass it through, so ending a session cancels the request in flight
+  - [x] Accept an `AbortSignal` and pass it through, so ending a session cancels the request in flight
         instead of resolving into a dead reducer
 
-- [ ] **Write the resolver in `src/game/resolver.ts`** — the heart of this plan. Framework-free, with
+- [x] **Write the resolver in `src/game/resolver.ts`** — the heart of this plan. Framework-free, with
       the lookup function, a `sleep`, and the result callback all injected. It must never import React.
-  - [ ] **Strictly sequential: exactly one lookup in flight at any moment.** [plan.md](./plan.md) §5
+  - [x] **Strictly sequential: exactly one lookup in flight at any moment.** [plan.md](./plan.md) §5
         calls this out explicitly — a `Promise.all` over 100 cards would stampede the global 1 req/s
         gate into ~99 rejections
-  - [ ] Walk the deck in order from index 0, skipping cards that already carry a resolved year (a
+  - [x] Walk the deck in order from index 0, skipping cards that already carry a resolved year (a
         resumed session arrives with most of the deck already filled)
-  - [ ] **Priority jump:** expose `prioritize(cardId)`. Before each iteration the loop checks for a
+  - [x] **Priority jump:** expose `prioritize(cardId)`. Before each iteration the loop checks for a
         pending priority card that is still unresolved and takes it next, then resumes ordered walking
         from where it was. Setting a priority must never restart the crawl from the beginning
-  - [ ] **On 429: back off and retry the same card.** This is designed back-pressure, not a failure —
+  - [x] **On 429: back off and retry the same card.** This is designed back-pressure, not a failure —
         the card is not marked resolved and not skipped. Wait the server's `retryAfterMs`, clamped into
         a sane range and with a little jitter so two tabs do not resynchronise onto the same gate
-  - [ ] **On `upstream-unavailable`, `unexpected-payload` or `network`: retry a small number of times
+  - [x] **On `upstream-unavailable`, `unexpected-payload` or `network`: retry a small number of times
         with exponential back-off**, then move the card to a deferred list and continue. Run the
         deferred list once more after the main crawl finishes; only then does the card settle at
         `year: null, confidence: 'none'`. A transient MusicBrainz blip must not permanently blank a
         third of the deck
-  - [ ] **On `not-configured`: stop the entire crawl** and report `YEAR_LOOKUPS_UNAVAILABLE`. It is a
+  - [x] **On `not-configured`: stop the entire crawl** and report `YEAR_LOOKUPS_UNAVAILABLE`. It is a
         deployment fault that will fail identically for every remaining card, and hammering 100 cards
         with 500s helps nobody. This is the one error that ends the loop
-  - [ ] **On `invalid-request`: do not retry** — the input is wrong, so settle that card at `none` and
+  - [x] **On `invalid-request`: do not retry** — the input is wrong, so settle that card at `none` and
         move on
-  - [ ] Expose `start()`, `prioritize()` and `stop()`. `stop()` aborts the in-flight request and
+  - [x] Expose `start()`, `prioritize()` and `stop()`. `stop()` aborts the in-flight request and
         guarantees no further callbacks fire, so a `YEAR_RESOLVED` can never land after `END`
-  - [ ] The loop must survive a callback that throws — a consumer bug should not silently kill the
+  - [x] The loop must survive a callback that throws — a consumer bug should not silently kill the
         crawl for the rest of the deck
-  - [ ] Inline comment citing the measurements this design exists for: 1.3–3.6 s per cold lookup, 0 ms
+  - [x] Inline comment citing the measurements this design exists for: 1.3–3.6 s per cold lookup, 0 ms
         cached, and the budget being **global across all users**, not per user. Without that note the
         sequential loop reads like an obvious candidate for parallelisation
 
-- [ ] **Write persistence in `src/game/persistence.ts`** — a `Storage`-shaped dependency injected, so
+- [x] **Write persistence in `src/game/persistence.ts`** — a `Storage`-shaped dependency injected, so
       the tests run under the node environment with a plain in-memory stub and no jsdom.
-  - [ ] Key `hitster:session:v1`. The `v1` segment is the same deliberate invalidation lever
+  - [x] Key `hitster:session:v1`. The `v1` segment is the same deliberate invalidation lever
         `api/_lib/cache.ts` uses: when the persisted shape changes, bump it and every incompatible save
         is discarded in one edit instead of crashing a resume path
-  - [ ] Persist the full session — playlist summary, seed, the shuffled deck **including every year
+  - [x] Persist the full session — playlist summary, seed, the shuffled deck **including every year
         already resolved**, `currentIndex`, `isFlipped`, `status`. Keeping the resolved years is the
         point: a reload then costs zero MusicBrainz requests
-  - [ ] `loadSession()` validates before trusting: version match, expected fields present, deck a
+  - [x] `loadSession()` validates before trusting: version match, expected fields present, deck a
         non-empty array, `currentIndex` in range. Anything else returns null and clears the key. It
         must **never throw** — a corrupt save should cost the player a game, not the whole app
-  - [ ] `saveSession()` swallows and logs write failures (quota, private-mode restrictions). Same
+  - [x] `saveSession()` swallows and logs write failures (quota, private-mode restrictions). Same
         principle as the year cache: persistence is a convenience, never a correctness dependency
-  - [ ] `clearSession()` on `END`, and before a `START` that replaces an existing session
-  - [ ] Comment the leak surface honestly: the saved deck contains every title, artist and resolved
+  - [x] `clearSession()` on `END`, and before a `START` that replaces an existing session
+  - [x] Comment the leak surface honestly: the saved deck contains every title, artist and resolved
         year, so a player with devtools open can read the whole deck. That is the same exposure the
         in-memory deck already has and is not worth obfuscating — but the 2026-08-04 "leaks nothing is
         a property of the whole app" finding means it should be written down rather than discovered
 
-- [ ] **Write the wiring hook in `src/game/use-game-session.ts`** — deliberately thin. Every branch it
+- [x] **Write the wiring hook in `src/game/use-game-session.ts`** — deliberately thin. Every branch it
       contains is a candidate to be pushed down into one of the tested modules.
-  - [ ] `useReducer(gameReducer, …)` with a lazy initializer that attempts `loadSession()` once
-  - [ ] One effect starts the resolver when status becomes `preparing`, feeding results in as
+  - [x] `useReducer(gameReducer, …)` with a lazy initializer that attempts `loadSession()` once
+  - [x] One effect starts the resolver when status becomes `preparing`, feeding results in as
         `YEAR_RESOLVED`, and calls `stop()` on unmount or when status becomes `ended`
-  - [ ] One effect calls `resolver.prioritize()` when `currentIndex` changes
-  - [ ] One effect persists on state change and clears on `ended`
-  - [ ] Return the state, the derived selectors, and narrow callbacks (`start`, `flip`, `next`, `end`)
+  - [x] One effect calls `resolver.prioritize()` when `currentIndex` changes
+  - [x] One effect persists on state change and clears on `ended`
+  - [x] Return the state, the derived selectors, and narrow callbacks (`start`, `flip`, `next`, `end`)
         rather than the raw `dispatch`, so Phase 4 and Phase 6 cannot invent transitions
-  - [ ] Guard against React 19 StrictMode's double-invoked effects starting two resolvers — an
+  - [x] Guard against React 19 StrictMode's double-invoked effects starting two resolvers — an
         idempotent `start()` and a real cleanup, verified by watching the request count in the browser
 
 - [ ] **Verify progressive loading against a real playlist** — the invariant that
@@ -279,7 +279,7 @@ wait is therefore one lookup, not a queue drain.
   - [ ] **Measure the wall clock for a 50-track cold deck.** This number is still owed from Phase 2,
         which could not measure it locally, and it belongs in `agent_findings.md`
 
-- [ ] **Run the full local verification pass** — `pnpm typecheck && pnpm lint && pnpm test && pnpm build`,
+- [x] **Run the full local verification pass** — `pnpm typecheck && pnpm lint && pnpm test && pnpm build`,
       all four green. There are no hooks and no CI; the checks are ours to run.
 
 - [ ] **Update the documentation** — see Documentation Updates, including closing
@@ -298,109 +298,109 @@ explicitly, matching `shared/year.test.ts`. `vite.config.ts` already includes `s
 
 ### `src/game/shuffle.test.ts`
 
-- [ ] `should produce the same order for the same seed` — covers reproducibility, the property resume
+- [x] `should produce the same order for the same seed` — covers reproducibility, the property resume
       and Phase 8's shareable URL both rest on
-- [ ] `should produce a different order for a different seed` — covers that the seed is actually
+- [x] `should produce a different order for a different seed` — covers that the seed is actually
       threaded into the generator rather than ignored
-- [ ] `should return a permutation containing every input card exactly once` — covers the classic
+- [x] `should return a permutation containing every input card exactly once` — covers the classic
       Fisher–Yates off-by-one that silently duplicates or drops an element
-- [ ] `should not mutate the input array` — covers purity, which the reducer relies on
-- [ ] `should handle an empty deck and a single-card deck` — covers the degenerate bounds
-- [ ] `should not leave most cards in their original position` — a coarse distribution sanity check
+- [x] `should not mutate the input array` — covers purity, which the reducer relies on
+- [x] `should handle an empty deck and a single-card deck` — covers the degenerate bounds
+- [x] `should not leave most cards in their original position` — a coarse distribution sanity check
       that catches a generator returning a constant
-- [ ] `should generate distinct seeds on repeated calls` — covers `generateSeed()`
+- [x] `should generate distinct seeds on repeated calls` — covers `generateSeed()`
 
 ### `src/game/reducer.test.ts` — transitions
 
-- [ ] `should shuffle the deck on START and enter preparing` — covers the entry transition and that
+- [x] `should shuffle the deck on START and enter preparing` — covers the entry transition and that
       shuffling happens before any resolution
-- [ ] `should use an explicitly supplied seed on START` — covers the Phase 8 forward-compatibility hook
-- [ ] `should replace an existing session when START is dispatched again` — covers starting a new
+- [x] `should use an explicitly supplied seed on START` — covers the Phase 8 forward-compatibility hook
+- [x] `should replace an existing session when START is dispatched again` — covers starting a new
       playlist mid-game, which must not merge decks
-- [ ] `should record a resolved year on the matching card by id` — covers the core write path
-- [ ] `should not disturb other cards when one year resolves` — covers immutable update correctness
-- [ ] `should ignore a YEAR_RESOLVED for an unknown card id` — covers a stale callback after a deck swap
-- [ ] `should toggle isFlipped on FLIP` — covers reveal and un-reveal
-- [ ] `should advance the index and reset the flip on NEXT` — covers the card 4/5 will drive most often
-- [ ] `should enter ended when NEXT is dispatched on the last card` — covers the natural deck end
-- [ ] `should enter ended on END` — covers the Exit button's action
-- [ ] `should treat a YEAR_RESOLVED arriving after END as a no-op returning the same reference` —
+- [x] `should record a resolved year on the matching card by id` — covers the core write path
+- [x] `should not disturb other cards when one year resolves` — covers immutable update correctness
+- [x] `should ignore a YEAR_RESOLVED for an unknown card id` — covers a stale callback after a deck swap
+- [x] `should toggle isFlipped on FLIP` — covers reveal and un-reveal
+- [x] `should advance the index and reset the flip on NEXT` — covers the card 4/5 will drive most often
+- [x] `should enter ended when NEXT is dispatched on the last card` — covers the natural deck end
+- [x] `should enter ended on END` — covers the Exit button's action
+- [x] `should treat a YEAR_RESOLVED arriving after END as a no-op returning the same reference` —
       covers the late-callback case, which is normal rather than exceptional
-- [ ] `should restore a full session on RESUME` — covers the persistence re-entry path
+- [x] `should restore a full session on RESUME` — covers the persistence re-entry path
 
 ### `src/game/reducer.test.ts` — the card-1 gate
 
-- [ ] `should stay preparing until card 1 resolves` — covers the gate existing at all
-- [ ] `should enter playing when card 1 resolves, even with a null year` — covers the refinement of
+- [x] `should stay preparing until card 1 resolves` — covers the gate existing at all
+- [x] `should enter playing when card 1 resolves, even with a null year` — covers the refinement of
       `plan.md`'s wording; gating on "has a year" would hang forever on a legitimately yearless card
-- [ ] `should stay preparing when a card other than card 1 resolves first` — covers that the gate is
+- [x] `should stay preparing when a card other than card 1 resolves first` — covers that the gate is
       card 1 specifically, not "any year"
-- [ ] `should enter playing on YEAR_LOOKUPS_UNAVAILABLE while preparing` — covers that a misconfigured
+- [x] `should enter playing on YEAR_LOOKUPS_UNAVAILABLE while preparing` — covers that a misconfigured
       deployment yields a yearless but playable deck, not an infinite loading screen
-- [ ] **`should be fully playable while cards 2..n are still undefined`** — flip, next, and end all
+- [x] **`should be fully playable while cards 2..n are still undefined`** — flip, next, and end all
       work on a deck where only card 1 has resolved. **This is the invariant `plan.md` §5 singles out
       as the one that regresses silently**; it is the most important test in this plan
-- [ ] `should report the current card's year as pending when it is undefined` — covers
+- [x] `should report the current card's year as pending when it is undefined` — covers
       `isCurrentYearPending`, which is the whole of Phase 4's blocking behaviour
-- [ ] `should not report pending for a card resolved to a null year` — covers the distinction between
+- [x] `should not report pending for a card resolved to a null year` — covers the distinction between
       "not looked up yet" and "looked up, nothing found"; collapsing them would spin forever on a
       `none` card
 
 ### `src/game/year-client.test.ts`
 
-- [ ] `should build the query from title, artist and durationMs` — covers request construction against
+- [x] `should build the query from title, artist and durationMs` — covers request construction against
       an injected fetch
-- [ ] `should URL-encode titles and artists containing punctuation` — covers the very common
+- [x] `should URL-encode titles and artists containing punctuation` — covers the very common
       apostrophe/ampersand case
-- [ ] `should send the raw joined artist string unmodified` — covers that cleaning stays server-side
-- [ ] `should return the parsed result on 200` — covers the success path
-- [ ] `should surface retryAfterMs from a 429 body` — covers the back-pressure contract the resolver
+- [x] `should send the raw joined artist string unmodified` — covers that cleaning stays server-side
+- [x] `should return the parsed result on 200` — covers the success path
+- [x] `should surface retryAfterMs from a 429 body` — covers the back-pressure contract the resolver
       depends on
-- [ ] `should fall back to the Retry-After header when the body is unparseable` — covers the safety net
-- [ ] `should map each error status onto its typed code` — covers 400, 429, 500 and 502 mapping
-- [ ] `should return a network outcome instead of throwing when fetch rejects` — covers the offline case
-- [ ] `should abort an in-flight request when the signal fires` — covers session teardown
+- [x] `should fall back to the Retry-After header when the body is unparseable` — covers the safety net
+- [x] `should map each error status onto its typed code` — covers 400, 429, 500 and 502 mapping
+- [x] `should return a network outcome instead of throwing when fetch rejects` — covers the offline case
+- [x] `should abort an in-flight request when the signal fires` — covers session teardown
 
 ### `src/game/resolver.test.ts`
 
-- [ ] `should resolve cards in deck order` — covers the ordering `plan.md` §3 insists on
-- [ ] `should never have more than one lookup in flight` — asserted with a concurrency counter in the
+- [x] `should resolve cards in deck order` — covers the ordering `plan.md` §3 insists on
+- [x] `should never have more than one lookup in flight` — asserted with a concurrency counter in the
       fake lookup. Directly guards against the `Promise.all` mistake the plan warns about
-- [ ] `should skip cards that already have a resolved year` — covers the resumed-session path, which
+- [x] `should skip cards that already have a resolved year` — covers the resumed-session path, which
       must not re-spend the global budget on work already done
-- [ ] `should resolve a prioritized card next` — covers the player outrunning the crawl
-- [ ] `should resume ordered walking after servicing a priority` — covers that the jump does not
+- [x] `should resolve a prioritized card next` — covers the player outrunning the crawl
+- [x] `should resume ordered walking after servicing a priority` — covers that the jump does not
       restart the crawl or lose its place
-- [ ] `should ignore a priority for a card that is already resolved` — covers the common case where the
+- [x] `should ignore a priority for a card that is already resolved` — covers the common case where the
       player advances onto a card the crawl already handled
-- [ ] `should wait the reported retryAfterMs and retry the same card on 429` — covers back-off, with a
+- [x] `should wait the reported retryAfterMs and retry the same card on 429` — covers back-off, with a
       fake clock asserting the delay
-- [ ] `should not mark a card resolved because of a 429` — covers that back-pressure is not failure.
+- [x] `should not mark a card resolved because of a 429` — covers that back-pressure is not failure.
       The single most likely misreading of the Phase 2 contract
-- [ ] `should retry a transient upstream error with exponential back-off` — covers the retry policy
-- [ ] `should defer a persistently failing card and retry it after the crawl` — covers the deferred
+- [x] `should retry a transient upstream error with exponential back-off` — covers the retry policy
+- [x] `should defer a persistently failing card and retry it after the crawl` — covers the deferred
       pass that stops a blip from blanking the deck
-- [ ] `should settle a card at null/none after the deferred pass also fails` — covers the terminal state
-- [ ] `should stop the whole crawl on not-configured` — covers the deployment-fault stop, and that it
+- [x] `should settle a card at null/none after the deferred pass also fails` — covers the terminal state
+- [x] `should stop the whole crawl on not-configured` — covers the deployment-fault stop, and that it
       does not burn the rest of the deck on guaranteed 500s
-- [ ] `should not retry an invalid-request` — covers the non-transient client error
-- [ ] `should emit no further callbacks after stop()` — covers teardown, guaranteeing nothing lands in
+- [x] `should not retry an invalid-request` — covers the non-transient client error
+- [x] `should emit no further callbacks after stop()` — covers teardown, guaranteeing nothing lands in
       a dead reducer
-- [ ] `should abort the in-flight request on stop()` — covers cancellation rather than mere ignoring
-- [ ] `should continue the crawl when a result callback throws` — covers consumer-bug resilience
+- [x] `should abort the in-flight request on stop()` — covers cancellation rather than mere ignoring
+- [x] `should continue the crawl when a result callback throws` — covers consumer-bug resilience
 
 ### `src/game/persistence.test.ts`
 
-- [ ] `should round-trip a full session` — covers the format end to end
-- [ ] `should preserve resolved years and confidences through a round trip` — covers the reason
+- [x] `should round-trip a full session` — covers the format end to end
+- [x] `should preserve resolved years and confidences through a round trip` — covers the reason
       persistence exists at all; losing them would silently re-spend the global budget on every reload
-- [ ] `should return null and clear the key on a version mismatch` — covers the `v1` invalidation lever
-- [ ] `should return null on unparseable JSON rather than throwing` — covers a corrupt save
-- [ ] `should return null when the deck is missing or empty` — covers shape validation
-- [ ] `should return null when currentIndex is out of range` — covers the validation most likely to
+- [x] `should return null and clear the key on a version mismatch` — covers the `v1` invalidation lever
+- [x] `should return null on unparseable JSON rather than throwing` — covers a corrupt save
+- [x] `should return null when the deck is missing or empty` — covers shape validation
+- [x] `should return null when currentIndex is out of range` — covers the validation most likely to
       prevent a crash on resume
-- [ ] `should swallow and log a write failure` — covers quota and private-mode restrictions
-- [ ] `should remove the key on clearSession` — covers teardown at `END`
+- [x] `should swallow and log a write failure` — covers quota and private-mode restrictions
+- [x] `should remove the key on clearSession` — covers teardown at `END`
 
 `src/game/use-game-session.ts` is left to manual verification, exactly as `api/year.ts` and
 `api/playlist.ts` were: it is effect wiring over four already-tested modules, and testing it would
@@ -441,14 +441,14 @@ in the reducer or the resolver instead** — that rule is what keeps the unteste
       where reality differed, in the style of [plan.phase-2-year.md](./plan.phase-2-year.md)
 - [ ] `AGENTS.md` — phase status to "Phase 3 complete, Phase 4 next", and add this plan to the
       documentation index table
-- [ ] Inline comment in `src/game/resolver.ts` — the measured numbers (1.3–3.6 s cold, 0 ms cached,
+- [x] Inline comment in `src/game/resolver.ts` — the measured numbers (1.3–3.6 s cold, 0 ms cached,
       budget **global across all users**) and therefore why the loop is sequential and why a 429 is not
       an error. Without this the loop is a prime candidate for "optimisation" into a `Promise.all`
-- [ ] Inline comment in `src/game/reducer.ts` above the card-1 gate — that it waits for the lookup to
+- [x] Inline comment in `src/game/reducer.ts` above the card-1 gate — that it waits for the lookup to
       **complete**, not to produce a year, and that a `null` year is a completed lookup
-- [ ] Inline comment in `src/game/shuffle.ts` — that the shuffle must run before resolution, citing
+- [x] Inline comment in `src/game/shuffle.ts` — that the shuffle must run before resolution, citing
       [plan.md](./plan.md) §3's reasoning about resolving in play order
-- [ ] Inline comment in `src/game/persistence.ts` — the `v1` key segment as an invalidation lever, and
+- [x] Inline comment in `src/game/persistence.ts` — the `v1` key segment as an invalidation lever, and
       the honest note that the saved deck is readable in devtools
 
 ---
@@ -541,3 +541,63 @@ in the reducer or the resolver instead** — that rule is what keeps the unteste
   optional seed on `START`
 - **Pagination past the 100-track embed cap**, and any manual-paste fallback. Deferred past v1 by the
   Phase 0 track-source decision
+
+---
+
+## Execution Notes
+
+Written 2026-08-04, after building every module and its tests. The seven code steps landed as
+planned; what follows is where reality needed a decision the plan did not spell out, plus what is
+still outstanding.
+
+### Deviations and additions
+
+1. **`not-configured` is recognized only from the response BODY, never from the 500 status alone**
+   (`src/game/year-client.ts`). The plan's test list says "map each error status onto its typed
+   code", which reads as 500 -> `not-configured`. But `api/year.ts` returns 500 for two different
+   things: the designed `not-configured`, and its catch-all `internal-error`. Those want opposite
+   handling — `not-configured` stops the whole crawl, an unexplained 500 should be retried and
+   deferred. Guessing from the status would let one unexpected 500 blank a whole deck, so a bodyless
+   or unrecognized 500 degrades to `upstream-unavailable`. Covered by
+   `should treat a 500 that does not say not-configured as transient`.
+2. **Duplicated card ids are handled explicitly**, which the plan did not mention. A playlist may
+   legitimately hold the same track twice. The resolver looks a given id up **once**, and
+   `YEAR_RESOLVED` therefore updates **every** card carrying that id rather than the first match —
+   an index or first-match write would leave the second copy pending for the whole game. Two tests
+   cover it (`should update every copy of a duplicated card id`, `should look a duplicated card id
+   up only once`).
+3. **The hook keeps a `sessionId` counter** (`src/game/use-game-session.ts`). The resolver effect
+   cannot depend on `state.deck` (a new array on every resolved year, so the crawl would restart
+   ~100 times a game) and cannot key on the seed alone (`START` with an explicitly supplied seed —
+   Phase 8's shareable URL — would not change it, leaving the old crawl running against a deck whose
+   resolved years had just been discarded). A counter bumped by `start()` is the minimum that
+   re-keys the effect exactly once per session.
+4. **`hashSeed()` ends with an avalanche step, and is exported.** Plain FNV-1a maps "game-1" and
+   "game-2" to hashes differing in one low bit, and mulberry32's first output then barely moves — so
+   two consecutive games would deal near-identical opening cards. Two tests exist purely for this
+   (`should produce a different order for two seeds differing in one character`, `should spread cards
+   across the deck rather than rotating it`).
+5. **A permanently rate-limited deployment crawls forever, by design.** There is no cap on
+   consecutive 429s for one card: the plan is explicit that a 429 neither settles nor skips a card,
+   and every wait is floored at 500 ms, so the loop is paced rather than spinning. `stop()` is the
+   only thing that ends it.
+6. **The retry numbers the plan left as "a small number of times":** three attempts per pass,
+   transient back-off 500 -> 1000 -> 2000 ms, and `retryAfterMs` clamped into [500, 10000] ms with
+   up to 250 ms of jitter. All asserted in `resolver.test.ts`.
+7. **`resolvedCount` counts completed lookups, resolved or not** — a `null` year counts, because it
+   is a finished answer. `cardsRemaining` counts the cards _after_ the current one.
+
+### Verification status
+
+`pnpm typecheck && pnpm lint && pnpm test && pnpm build` all pass. The suite is 216 tests, 82 of them
+new under `src/game/`.
+
+**Still outstanding, because it needs a preview deployment rather than a local run:**
+
+- The whole **"Verify progressive loading against a real playlist"** step — including the **wall
+  clock for a 50-track cold deck** owed from Phase 2, the strict-versus-relaxed ratio on an ordinary
+  playlist, how often a real session hits a 429, and the React 19 StrictMode single-resolver check.
+  `vercel dev` cannot answer any of them (~4 s per request of dev-server overhead, and the gate paces
+  nothing there — 2026-08-04 finding), so they wait for a preview deploy with Upstash configured.
+- The **documentation updates** and the **Phase 3 checkboxes in `plan.md`** (including closing §6's
+  follow-on question about `confidence: 'none'` cards), which are deliberately a separate pass.
