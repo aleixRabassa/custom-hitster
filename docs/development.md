@@ -211,13 +211,15 @@ pnpm test          # once
 pnpm test:watch    # watch mode
 ```
 
-Current suite: **408 tests across 32 files**, all passing, and **all of them offline** — no test touches the network. That is deliberate: a test that really called MusicBrainz would be rate-limited to 1 req/s, would drift as the database improves, and would fail for reasons unrelated to the code.
+Current suite: **456 tests across 34 files**, and **all of them offline** — no test touches the network. That is deliberate: a test that really called MusicBrainz would be rate-limited to 1 req/s, would drift as the database improves, and would fail for reasons unrelated to the code. All of them must pass before a commit (§6).
 
 The suite runs green **with no environment variables set at all**, which is the new-contributor path. If you have to configure something to make tests pass, that is a bug.
 
 The centre of gravity is `shared/year.test.ts`'s accuracy suite: it runs the scorer over captured candidates for fourteen Phase 0 known-tricky tracks and asserts each one's **known-correct** year, not whatever the code currently produces. Phase 0 measured a naive lookup at ~6% accurate; that suite is the evidence the pipeline beats it and the thing that catches a regression in scoring. Fixture provenance is documented in the headers of `shared/__fixtures__/year-candidates.ts` and `api/_lib/__fixtures__/musicbrainz-payloads.ts`.
 
-Tests are discovered at `{src,shared,api}/**/*.{test,spec}.{ts,tsx}`. The **default environment is `node`**, and a test that needs a DOM opts in per file with a `/** @vitest-environment jsdom */` docblock — fourteen files do (the card components, the screens, the audio hook, and the container). Keeping `node` as the default is what makes a DOM API accidentally added to `shared/` fail here rather than at deploy time. Full detail, including why there is no `setupFiles` and why every DOM file needs its own `afterEach(cleanup)`, is in [`toolchain.md`](./toolchain.md) §5.
+Tests are discovered at `{src,shared,api}/**/*.{test,spec}.{ts,tsx}`. The **default environment is `node`**, and a test that needs a DOM opts in per file with a `/** @vitest-environment jsdom */` docblock — fifteen files do (the card components, the screens, the audio hook, and the container). Keeping `node` as the default is what makes a DOM API accidentally added to `shared/` fail here rather than at deploy time. Full detail, including why there is no `setupFiles`, why every DOM file needs its own `afterEach(cleanup)`, and why that tag must never appear in prose, is in [`toolchain.md`](./toolchain.md) §5.
+
+**`src/index.css.test.ts` is a `node` test over the stylesheet's TEXT, and it is labelled a canary rather than a behaviour test.** jsdom evaluates no media queries, so there is no environment here in which `prefers-reduced-motion: reduce` can be made true and observed; the choice was between a text-level assertion that the block exists and names its three `data-motion` hooks, and no coverage at all for the reduced-motion work. The component-side halves are in `Card.test.tsx`, `PreparingScreen.test.tsx` and `QrCode.test.tsx`. What none of them can tell you is whether any of it works — that is §5's Phase 7 pass below.
 
 **`src/App.test.tsx` is the integration seam of the whole app**, and the one place worth understanding before changing it. It drives the real reducer, the real resolver and the real screens from a stubbed storage and two independently stubbed fetches: the **playlist** client gets an injected `fetchImpl` prop, while the **year** resolver goes to a stubbed global `fetch`. The split is what makes the card-1 gate controllable — hang the year stub and the session stays on the preparing screen; answer it and the game screen appears. Stubbing out the resolver entirely would mean never reaching the game screen at all.
 
@@ -303,6 +305,101 @@ The end-to-end checks worth running by hand, each pinning a decision:
 
 **Do not take timings through `vercel dev`** — the ~4 s per-invocation overhead swamps them, and the fresh process per request means the gate and cache never persist (§4).
 
+### Phase 7 look-and-access verification — nothing here is closed, and no local check can close it
+
+Phase 7's first half landed the `@theme` tokens, the fluid card, `prefers-reduced-motion`, focus
+states and the ARIA/contrast fixes. **Every behavioural claim it makes is unverified**, because the
+whole class of behaviour is outside what this repo's tests can reach: jsdom evaluates no media
+queries and has no `window.matchMedia` at all, computes no layout, and has no accessibility-tree
+consumer. What is automated is both ends of each contract — a component renders a hook, the
+stylesheet names it — and the middle is these four passes.
+
+Use `npx vercel dev` for anything that needs a real deck (§4).
+
+**Reduced motion.** Set the preference at the **OS** level as well as via devtools emulation
+(Chrome: Rendering panel → _Emulate CSS prefers-reduced-motion_) — they exercise the same media query
+but only the OS path proves the app sees the real thing.
+
+| Check                                                                               | Status  |
+| ----------------------------------------------------------------------------------- | ------- |
+| The flip is instant: the face changes without travelling                            | Pending |
+| The preparing spinner is **gone**, not frozen — a still spinner reads as a hung app | Pending |
+| "Dealing your deck…" and the first-card line are both still there without it        | Pending |
+| The QR placeholder is a static grey box, same size, no pulse                        | Pending |
+| A committed card **fades** instead of flying 600px                                  | Pending |
+| **The drag still works** — direct manipulation is not an animation                  | Pending |
+
+The last row is the regression `MotionConfig reducedMotion="user"` could plausibly introduce, and it
+is the one worth checking first: if the drag is dead under the preference, the game is unplayable by
+touch for exactly the users who asked for less motion.
+
+**Three widths.** 320px, a tablet, and a wide desktop, across every screen.
+
+| Check                                                                             | Status  |
+| --------------------------------------------------------------------------------- | ------- |
+| At 320px the card **and** its control bar both fit, with the HUD still on screen  | Pending |
+| The peeking backs stay aligned with the card at all three widths                  | Pending |
+| `BACK_OFFSET_PX` (10px) still reads as depth on the smallest card                 | Pending |
+| The HUD and the notice banner line up with the card's width when wide             | Pending |
+| A long user-created playlist name truncates without pushing the count off the row | Pending |
+| The landing screen's five suggestions are usable at 320px                         | Pending |
+| A phone in **landscape**: the card fits the short viewport                        | Pending |
+
+The landscape row is what the `62dvh` term in `--card-height` exists for; without it a landscape
+phone gets a 448px card in a 375px viewport ([`architecture.md`](./architecture.md) §3).
+
+**Keyboard only.** No mouse, no touch — Tab, Space and →.
+
+| Check                                                                                                     | Status  |
+| --------------------------------------------------------------------------------------------------------- | ------- |
+| Every one of the thirteen interactive elements shows a visible ring on Tab                                | Pending |
+| The ring is legible on the page, on a card face, on a control, and on the emerald button                  | Pending |
+| A **mouse click** leaves no ring behind — that is what `focus-visible` buys                               | Pending |
+| Tab order through the landing screen is sensible, and Enter submits                                       | Pending |
+| Space flips and → advances through several cards                                                          | Pending |
+| **Space on a focused button does not also flip the card** — Phase 5 guards it, Phase 7 restyled around it | Pending |
+| Exit is reachable and works                                                                               | Pending |
+
+**Screen reader.** VoiceOver, NVDA or Narrator over one flip. This is the pass that matters most,
+because Phase 7 added the app's only live region and the whole point of it is audible.
+
+| Check                                                                              | Status  |
+| ---------------------------------------------------------------------------------- | ------- |
+| Flipping a card **announces** the year, title and artist                           | Pending |
+| An **unflipped** card announces nothing about its track                            | Pending |
+| The announcement is polite — it does not interrupt mid-sentence                    | Pending |
+| The landing input's accessible name is "Playlist link", matching its visible label | Pending |
+| A submission error is announced, **and** reachable again by focusing the field     | Pending |
+| The HUD's card count is announced as it changes                                    | Pending |
+
+A live region that mounts already-populated is the known soft spot: screen readers differ on whether
+they announce content present at insertion versus content changed afterwards. If the flip turns out
+silent in practice, that is the mechanism to look at — not the role.
+
+#### The before/after screenshot comparison
+
+Step 12 of [`plan.phase-7-look.md`](./plans/plan.phase-7-look.md) is **owed**. The plan's success
+condition was that tokenising changed nothing visible, so the comparison is the check on that claim.
+The pre-Phase-7 tree is commit `89f40f4`.
+
+**At a desktop width and height the card resolves to exactly 288 × 448 — its pre-Phase-7 size — so the
+card, the QR and every layout should be pixel-identical there.** That makes desktop the clean place to
+ask "did tokenising change anything it should not have", and the three-width pass above the place to
+check the geometry.
+
+Seven changes **are** expected to be visible. Anything else is an accident:
+
+| Change                                           | Where                                          | Why it is sanctioned         |
+| ------------------------------------------------ | ---------------------------------------------- | ---------------------------- |
+| Muted text lighter (`#737373` → `#8f8f8f`)       | HUD, five other lines, the input placeholder   | Contrast — 4.18:1 and 2.30:1 |
+| Primary button labels near-black, not white      | Start, Play again                              | Contrast — 3.67:1            |
+| Disabled controls less dim (40%/50% → 60%)       | Play/Pause, Restart, input, Start, suggestions | Contrast — 3.46:1            |
+| A visible focus ring on Tab                      | all thirteen interactive elements              | There was none               |
+| HUD and notice narrower on a wide screen         | game and preparing screens                     | They never lined up          |
+| Round controls and Dismiss larger                | `CardControls`, `NoticeBanner`                 | 44px minimum                 |
+| The card shrinks below ~723px of viewport height | game screen                                    | The geometry clamp           |
+
+Measured ratios for all of it are in [`agent_findings.md`](./agent_findings.md).
 ---
 
 ## 6. Before you commit
@@ -338,7 +435,7 @@ If a function returns `FUNCTION_INVOCATION_FAILED`, the Vercel **runtime** log (
 
 ## 8. Known limitations
 
-Carried forward from the Phase 0 research; measurements and reasoning in [`plans/plan.md`](./plans/plan.md) §5.
+Mostly carried forward from the Phase 0 research; measurements and reasoning in [`plans/plan.md`](./plans/plan.md) §5. The last three are execution gaps rather than research findings — things this repo cannot check about itself.
 
 - **Playlists are capped at 100 tracks, and the app cannot tell when it happened.** The Spotify embed endpoint returns at most 100 tracks and its payload contains **no pagination signal whatsoever** — no total, no offset, no `hasMore` — so a response of exactly 100 is indistinguishable from a playlist that genuinely holds 100. There is no way to page past track 100: the anonymous bearer token in the embed payload was tested against the Web API and returns `429 QUOTA_EXCEEDED` immediately, because its client ID is shared by every embed viewer on the internet. Phase 6 will show a non-blocking warning at exactly 100 tracks; a manual track-paste fallback is deferred past v1.
 - **The embed endpoint is unofficial and may change or break without notice.** Reading it is outside Spotify's Developer Terms; this is an accepted risk for a personal project. All scraping is to be confined to a single adapter module so a breakage is contained, and the QR code is always rendered regardless of whether audio or metadata extraction works — so the deck degrades rather than dies.
@@ -347,4 +444,6 @@ Carried forward from the Phase 0 research; measurements and reasoning in [`plans
 - **In-app audio covers ~99.5% of tracks, not all of them.** Measured across 398/400 tracks in Phase 0. For a track with no preview URL, Play/Pause and Restart are disabled; the QR code and Exit still work.
 - **The app cannot be played under `pnpm dev` — only under `npx vercel dev` or a deployment.** Vite serves `api/playlist.ts` as transpiled source with status 200, so the playlist client reports `unexpected-payload` and the landing screen shows an error that reads like an app bug. This is not fixable without a dev-server plugin that runs functions, which `vercel dev` already is.
 - **Progressive loading has never been verified against a real deployment.** Step 15 of the Phase 6 plan, carried over from Phase 3, is still owed — including the 50-track cold-deck wall clock (unmeasured since Phase 2) and the StrictMode request count. Nothing local models it: the shared cache and the 1 req/s gate are both backed by the Upstash variables, so without them the gate paces nothing and the numbers mean nothing. Checklist in §5.
-- **Touch gestures have never been verified on a real device, and the thresholds are unvalidated guesses.** Decided 2026-08-05: the Phase 5 real-device pass was scoped and then waived. `plan.md` names touch as the place this breaks, and jsdom cannot substitute — Motion's drag reads geometry it does not compute. What _is_ covered is every threshold decision, exhaustively, in `src/game/gestures.test.ts` (node), plus the keyboard path in jsdom; what is not is whether those numbers feel right under a thumb, whether pull-to-refresh is genuinely suppressed, and whether iOS needs `select-none` on the card. The five constants in `src/game/gestures.ts` are the retuning surface. Full checklist in §5.
+- **None of Phase 7's reduced-motion, responsive, keyboard or screen-reader behaviour has been verified, and no test in this repo can verify it.** The token layer, the fluid card, the `prefers-reduced-motion` block, the focus states and the ARIA fixes all landed with both ends of each contract asserted — a component renders a `data-motion` hook or a `focus-visible:focus-ring` class, and `src/index.css.test.ts` asserts the stylesheet names it — and **nothing in between**. jsdom evaluates no media queries, has no `window.matchMedia` at all, computes no layout, and has no accessibility-tree consumer, so a class-name assertion is the ceiling of what is automatable. The four passes are scoped in §5 and every row is Pending. **The screen-reader pass is the one to prioritise**: Phase 7 added the app's only live region, on the card's reveal, and the entire point of it is that a flip becomes audible — a player using a screen reader had no way to learn the year before it, and no local check confirms they do now. A live region that mounts already-populated is the known soft spot, since readers differ on announcing content present at insertion.
+- **The before/after screenshot comparison for Phase 7 was never run.** Step 12 of [`plan.phase-7-look.md`](./plans/plan.phase-7-look.md). The plan's success condition was that naming the existing values changed nothing visible except four measured contrast corrections, so the comparison is the check on that claim and it is outstanding. §5 lists the seven changes that _are_ expected to be visible, which makes it a checklist rather than a hunt.
+- **Touch gestures have never been verified on a real device, and the thresholds are unvalidated guesses. Phase 7 made this worse rather than better.** `SWIPE_COMMIT_DISTANCE_PX` (96px) was chosen as a third of a fixed 288px card; the card is now fluid and 288px is only its ceiling, so at the floor the same 96px is **52%** of the card's width and a commit takes a visibly longer drag on a small screen. It is deliberately not retuned — a second number chosen by eye is not an improvement on the first, and the velocity half of the commit rule (500px/s, card-size-independent) still catches the flick most phone gestures actually are. The comment in `src/game/gestures.ts` records the arithmetic so whoever runs the device pass knows which end of the range to test at. Decided 2026-08-05: the Phase 5 real-device pass was scoped and then waived. `plan.md` names touch as the place this breaks, and jsdom cannot substitute — Motion's drag reads geometry it does not compute. What _is_ covered is every threshold decision, exhaustively, in `src/game/gestures.test.ts` (node), plus the keyboard path in jsdom; what is not is whether those numbers feel right under a thumb, whether pull-to-refresh is genuinely suppressed, and whether iOS needs `select-none` on the card. The five constants in `src/game/gestures.ts` are the retuning surface. Full checklist in §5.

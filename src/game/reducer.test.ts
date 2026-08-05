@@ -168,6 +168,202 @@ describe('gameReducer transitions', () => {
     expect(next.deck.filter((c) => c.id === 'dup').every((c) => c.year === 1991)).toBe(true);
   });
 
+  it('should drop a card whose lookup found no year', () => {
+    // ===================================================================
+    //  THE 2026-08-05 REVERSAL, asserted at its source.
+    //
+    //  `plan.md`'s `confidence: 'none'` follow-on had resolved the other
+    //  way -- the card stayed and the revealed side offered a "check this
+    //  one yourself" prompt. A Hitster card is placed on a timeline BY its
+    //  year, so a card without one has nothing to play; the QR working is
+    //  not enough to make it a card.
+    // ===================================================================
+    const state = playing();
+    const targetId = state.deck[5]?.id ?? '';
+
+    const next = gameReducer(state, {
+      type: 'YEAR_RESOLVED',
+      cardId: targetId,
+      year: null,
+      confidence: 'none',
+    });
+
+    expect(next.deck.some((c) => c.id === targetId)).toBe(false);
+    expect(next.deck).toHaveLength(state.deck.length - 1);
+    // And no other card moved: the array closed up around the one that left.
+    expect(next.deck.map((c) => c.id)).toEqual(
+      state.deck.filter((c) => c.id !== targetId).map((c) => c.id),
+    );
+  });
+
+  it('should keep a low-confidence card in the deck', () => {
+    // The reversal tests `year === null`, NEVER the confidence. A `low` year is a real year --
+    // MusicBrainz found it with the release-group filters dropped -- and it is playable, flagged
+    // unconfirmed on the revealed side. Dropping these would empty a third of the deck for a
+    // caveat rather than for a missing answer.
+    const state = playing();
+    const targetId = state.deck[4]?.id ?? '';
+
+    const next = gameReducer(state, {
+      type: 'YEAR_RESOLVED',
+      cardId: targetId,
+      year: 1969,
+      confidence: 'low',
+    });
+
+    expect(next.deck.find((c) => c.id === targetId)).toMatchObject({
+      year: 1969,
+      yearConfidence: 'low',
+    });
+    expect(next.deck).toHaveLength(state.deck.length);
+  });
+
+  it('should drop every copy of a duplicated yearless card id', () => {
+    // The mirror of "should update every copy": the resolver looks a duplicated id up once, so
+    // dropping only the first copy would leave a yearless card in the deck for the rest of the
+    // game -- the exact thing the reversal removes.
+    const state = playing([card('dup'), card('dup'), card('other')], 'dup-seed');
+
+    const next = gameReducer(state, {
+      type: 'YEAR_RESOLVED',
+      cardId: 'dup',
+      year: null,
+      confidence: 'none',
+    });
+
+    expect(next.deck.some((c) => c.id === 'dup')).toBe(false);
+  });
+
+  it('should move the current index back when a dropped card sits behind the player', () => {
+    // The player must stay on the same CARD, not on the same index. Without the shift, dropping a
+    // card from behind them silently skips the one they were about to see.
+    let state = playing();
+    state = gameReducer(state, { type: 'NEXT' });
+    state = gameReducer(state, { type: 'NEXT' });
+
+    const droppedId = state.deck[0]?.id ?? '';
+    const currentId = state.deck[state.currentIndex]?.id;
+    expect(state.currentIndex).toBe(2);
+
+    const next = gameReducer(state, {
+      type: 'YEAR_RESOLVED',
+      cardId: droppedId,
+      year: null,
+      confidence: 'none',
+    });
+
+    expect(next.currentIndex).toBe(1);
+    expect(currentCard(next)?.id).toBe(currentId);
+  });
+
+  it('should leave the current index alone when a dropped card is still ahead', () => {
+    // The common case by far: the crawl runs ahead of the player, so almost every drop happens to
+    // a card nobody has reached.
+    let state = playing();
+    state = gameReducer(state, { type: 'NEXT' });
+
+    const currentId = currentCard(state)?.id;
+
+    const next = gameReducer(state, {
+      type: 'YEAR_RESOLVED',
+      cardId: state.deck[7]?.id ?? '',
+      year: null,
+      confidence: 'none',
+    });
+
+    expect(next.currentIndex).toBe(1);
+    expect(currentCard(next)?.id).toBe(currentId);
+  });
+
+  it('should slide the next card in and reset the flip when the CURRENT card is dropped', () => {
+    // ===================================================================
+    //  THE LEAK IN THIS BRANCH IS `isFlipped`, NOT THE CARD SWAP.
+    //
+    //  A player who outruns the crawl sits on an unresolved card, so its
+    //  lookup completing under them is normal rather than exotic. The
+    //  index does not move -- the array closed up, so it already points at
+    //  the card that followed -- but the flip flag belongs to the card
+    //  that just left. Carried over, the incoming card would mount already
+    //  revealed and hand the player its year for free.
+    // ===================================================================
+    let state = playing();
+    state = gameReducer(state, { type: 'NEXT' });
+    state = gameReducer(state, { type: 'FLIP' });
+
+    const droppedId = currentCard(state)?.id ?? '';
+    const followingId = state.deck[2]?.id;
+    expect(state.isFlipped).toBe(true);
+
+    const next = gameReducer(state, {
+      type: 'YEAR_RESOLVED',
+      cardId: droppedId,
+      year: null,
+      confidence: 'none',
+    });
+
+    expect(next.currentIndex).toBe(1);
+    expect(currentCard(next)?.id).toBe(followingId);
+    expect(next.isFlipped).toBe(false);
+  });
+
+  it('should end the session when the dropped current card was the last one', () => {
+    // Clamping the index instead would send the player BACKWARDS onto a card they have already
+    // played, which nothing else in this one-directional deck can do. `NEXT` past the last card
+    // ends the session; so does losing the last card.
+    let state = playing([card('a'), card('b')], 'two');
+    state = gameReducer(state, { type: 'NEXT' });
+
+    const lastId = currentCard(state)?.id ?? '';
+
+    const next = gameReducer(state, {
+      type: 'YEAR_RESOLVED',
+      cardId: lastId,
+      year: null,
+      confidence: 'none',
+    });
+
+    expect(next.status).toBe('ended');
+    expect(next.deck.some((c) => c.id === lastId)).toBe(false);
+  });
+
+  it('should end the session when the last remaining card is dropped', () => {
+    // A whole deck of tracks MusicBrainz knows nothing about. Rare, not impossible -- and there is
+    // nothing to play, so `ended` is the only honest destination. Left in `preparing` it would be a
+    // loading screen waiting on a lookup that can never arrive.
+    const state = preparing([card('only')], 'one');
+    const preparedId = state.deck[0]?.id ?? '';
+
+    const next = gameReducer(state, {
+      type: 'YEAR_RESOLVED',
+      cardId: preparedId,
+      year: null,
+      confidence: 'none',
+    });
+
+    expect(next.deck).toHaveLength(0);
+    expect(next.status).toBe('ended');
+    expect(next.currentIndex).toBe(0);
+  });
+
+  it('should not drop anything on YEAR_LOOKUPS_UNAVAILABLE', () => {
+    // ===================================================================
+    //  THE EXEMPTION THAT KEEPS A MISCONFIGURED DEPLOYMENT PLAYABLE.
+    //
+    //  No `MUSICBRAINZ_USER_AGENT` on the server fails identically for
+    //  every card. If that arrived as a hundred `year: null` results the
+    //  reversal above would delete the entire deck; it arrives as ONE
+    //  action instead, and this asserts that action still keeps every card.
+    //  The deck is yearless rather than gone -- which is what the Phase 6
+    //  notice says out loud.
+    // ===================================================================
+    const state = playing();
+
+    const next = gameReducer(state, { type: 'YEAR_LOOKUPS_UNAVAILABLE' });
+
+    expect(next.deck).toHaveLength(state.deck.length);
+    expect(next.yearLookupsUnavailable).toBe(true);
+  });
+
   it('should ignore a YEAR_RESOLVED for an unknown card id', () => {
     // A stale callback from a session that a second START replaced.
     const state = playing();
@@ -274,6 +470,67 @@ describe('gameReducer transitions', () => {
       yearLookupsUnavailable: false,
     });
   });
+
+  it('should drop yearless cards from a resumed session and move the index with them', () => {
+    // ===================================================================
+    //  A SAVE WRITTEN BEFORE THE 2026-08-05 REVERSAL IS THE ONE WAY A
+    //  YEARLESS CARD CAN STILL GET INTO A DECK -- AND IT WOULD BE
+    //  PERMANENT.
+    //
+    //  `resolver.ts` marks every already-filled card settled, so it is
+    //  never looked up again and never dispatched again: the card would sit
+    //  in the deck showing "year unknown" for the whole of that game, which
+    //  is exactly what the reversal removes.
+    //
+    //  Filtering rather than bumping `SESSION_VERSION` keeps the resolved
+    //  years, which is the entire point of persisting the deck -- a version
+    //  bump would discard a part-crawled deck and re-spend a globally
+    //  shared MusicBrainz budget on lookups already paid for.
+    //
+    //  The index moves with the deck because `loadSession()` validated it
+    //  against the SAVED deck: after a filter it can be off the end, and it
+    //  must not end up pointing at a different card than the player left on.
+    // ===================================================================
+    const session: PersistedSession = {
+      version: 1,
+      playlist: PLAYLIST,
+      seed: 'persisted-seed',
+      deck: [
+        card('a', { year: 1975, yearConfidence: 'high' }),
+        card('gone', { year: null, yearConfidence: 'none' }),
+        card('b', { year: 1969, yearConfidence: 'low' }),
+        card('c'),
+      ],
+      currentIndex: 2,
+      isFlipped: false,
+      status: 'playing',
+    };
+
+    const state = gameReducer(initialGameState, { type: 'RESUME', session });
+
+    expect(state.deck.map((c) => c.id)).toEqual(['a', 'b', 'c']);
+    // Still card `b`, which is where the player was -- index 2 became index 1.
+    expect(state.currentIndex).toBe(1);
+    expect(currentCard(state)?.id).toBe('b');
+  });
+
+  it('should end a resumed session whose every card was yearless', () => {
+    const session: PersistedSession = {
+      version: 1,
+      playlist: PLAYLIST,
+      seed: 'persisted-seed',
+      deck: [card('x', { year: null, yearConfidence: 'none' })],
+      currentIndex: 0,
+      isFlipped: false,
+      status: 'playing',
+    };
+
+    const state = gameReducer(initialGameState, { type: 'RESUME', session });
+
+    expect(state.deck).toHaveLength(0);
+    expect(state.status).toBe('ended');
+    expect(state.currentIndex).toBe(0);
+  });
 });
 
 // ===========================================================================
@@ -289,21 +546,79 @@ describe('gameReducer card-1 gate', () => {
     expect(preparing().status).toBe('preparing');
   });
 
-  it('should enter playing when card 1 resolves, even with a null year', () => {
-    // The refinement of `plan.md`'s "as soon as card 1 has a year" (decision 4): the gate waits
-    // for the lookup to COMPLETE. A null year is a completed lookup, and its card is playable --
-    // gating on "has a year" would hang forever on a legitimately yearless track.
+  it('should keep gating when card 1 is dropped for having no year', () => {
+    // ===================================================================
+    //  THE GATE HAD TO BE REPHRASED FOR THE 2026-08-05 REVERSAL, AND THIS
+    //  IS WHY.
+    //
+    //  It used to open on "the resolved card WAS card 1", because a null
+    //  year was a completed lookup and its card was playable. Now card 1
+    //  resolving to `null` LEAVES the deck -- so that condition would open
+    //  the gate onto a brand new first card whose lookup has not even been
+    //  dispatched, and the player would land on the pending `····` slot
+    //  instead of a card that is ready.
+    //
+    //  Expressed as a property of the deck instead: the gate opens when the
+    //  first card HAS a year.
+    // ===================================================================
     const state = preparing();
+    const droppedId = firstCardId(state);
 
     const next = gameReducer(state, {
+      type: 'YEAR_RESOLVED',
+      cardId: droppedId,
+      year: null,
+      confidence: 'none',
+    });
+
+    expect(next.status).toBe('preparing');
+    expect(next.deck.some((c) => c.id === droppedId)).toBe(false);
+    expect(next.deck).toHaveLength(CARDS.length - 1);
+  });
+
+  it('should open the gate once the replacement first card resolves', () => {
+    // The other half: the wait after a dropped card 1 is one more lookup, not an indefinite one.
+    let state = preparing();
+
+    state = gameReducer(state, {
       type: 'YEAR_RESOLVED',
       cardId: firstCardId(state),
       year: null,
       confidence: 'none',
     });
 
+    state = gameReducer(state, {
+      type: 'YEAR_RESOLVED',
+      cardId: firstCardId(state),
+      year: 1975,
+      confidence: 'high',
+    });
+
+    expect(state.status).toBe('playing');
+  });
+
+  it('should open the gate on any resolution once the first card already has a year', () => {
+    // The self-healing half of the rephrased gate. A first card that resolved OUT OF ORDER -- via a
+    // priority jump, or filled in already by a re-dealt deck -- used to be able to leave the
+    // session on the loading screen forever, because the only action that could open the gate was
+    // one naming card 1 and it had already been and gone.
+    const state = preparing();
+    const first = state.deck[0];
+    if (!first) throw new Error('deck is empty');
+
+    const withResolvedFirst: GameState = {
+      ...state,
+      deck: [{ ...first, year: 1975, yearConfidence: 'high' }, ...state.deck.slice(1)],
+    };
+
+    const next = gameReducer(withResolvedFirst, {
+      type: 'YEAR_RESOLVED',
+      cardId: withResolvedFirst.deck[3]?.id ?? '',
+      year: 1984,
+      confidence: 'high',
+    });
+
     expect(next.status).toBe('playing');
-    expect(next.deck[0]?.year).toBeNull();
   });
 
   it('should skip preparing entirely when card 1 is already resolved', () => {
@@ -326,12 +641,36 @@ describe('gameReducer card-1 gate', () => {
     expect(preparing(resolved).status).toBe('playing');
   });
 
-  it('should skip preparing when card 1 resolved to a null year', () => {
-    // `null` is a completed lookup too, so a deck whose first card MusicBrainz knows nothing about
-    // must not gate either. Same reasoning as "even with a null year" above, on the START side.
+  it('should end rather than deal a deck of nothing but yearless cards', () => {
+    // The START side of the reversal. This deck used to be dealt and played, yearless; now every
+    // card is filtered out at the door, and a session with no cards has to be `ended` -- left
+    // `preparing` it would be a loading screen waiting on a lookup that can never be dispatched,
+    // and left `playing` it would be a game screen with no card to render.
     const resolved = CARDS.map((c) => ({ ...c, year: null, yearConfidence: 'none' as const }));
 
-    expect(preparing(resolved).status).toBe('playing');
+    const state = preparing(resolved);
+
+    expect(state.deck).toHaveLength(0);
+    expect(state.status).toBe('ended');
+  });
+
+  it('should filter yearless cards out of a re-dealt deck without losing the rest', () => {
+    // The realistic version of the case above, and the reason START filters at all: a deck handed
+    // back to START by Restart, or dealt from a save written before the reversal, can hold a few
+    // yearless cards among resolved ones. The resolver marks every already-filled card settled, so
+    // nothing would ever dispatch for them again and they would sit in the deck all game.
+    const mixed = [
+      card('keep-1', { year: 1975, yearConfidence: 'high' }),
+      card('drop-1', { year: null, yearConfidence: 'none' }),
+      card('keep-2', { year: 1969, yearConfidence: 'low' }),
+      card('drop-2', { year: null, yearConfidence: 'none' }),
+    ];
+
+    const state = preparing(mixed, 'mixed-seed');
+
+    expect(state.deck.map((c) => c.id).sort()).toEqual(['keep-1', 'keep-2']);
+    // Card 1 of the filtered deck is resolved, so there is nothing to gate on.
+    expect(state.status).toBe('playing');
   });
 
   it('should still gate when only a later card is already resolved', () => {
@@ -419,19 +758,22 @@ describe('gameReducer card-1 gate', () => {
     expect(isCurrentYearPending(state)).toBe(true);
   });
 
-  it('should not report pending for a card resolved to a null year', () => {
-    // "Not looked up yet" (`undefined`) versus "looked up, nothing found" (`null`). Collapsing
-    // the two would spin a spinner forever on a `confidence: 'none'` card.
-    const state = preparing();
+  it('should not report pending for a card holding a null year', () => {
+    // "Not looked up yet" (`undefined`) versus "looked up, nothing found" (`null`). Collapsing the
+    // two would spin the pending slot forever on a card that has its final answer.
+    //
+    // Built as a state LITERAL rather than by dispatching a null result, because since the
+    // 2026-08-05 reversal a dispatch cannot produce this deck -- the card is dropped instead. The
+    // selector's contract is unchanged and still worth pinning: `CardRevealSide` keeps its third
+    // state, and this is the shape it renders for.
+    const base = playing();
+    const state: GameState = {
+      ...base,
+      deck: [card('yearless', { year: null, yearConfidence: 'none' })],
+      currentIndex: 0,
+    };
 
-    const next = gameReducer(state, {
-      type: 'YEAR_RESOLVED',
-      cardId: firstCardId(state),
-      year: null,
-      confidence: 'none',
-    });
-
-    expect(isCurrentYearPending(next)).toBe(false);
+    expect(isCurrentYearPending(state)).toBe(false);
   });
 });
 
@@ -454,21 +796,40 @@ describe('gameReducer selectors', () => {
     expect(cardsRemaining(state)).toBe(0);
   });
 
-  it('should count completed lookups, resolved or not', () => {
-    // Count only, deliberately: Phase 6's `preparing` progress line may show a number but must
-    // never name a track or a year, which would spoil the deck it is loading.
+  it('should count completed lookups', () => {
+    // Count only, deliberately: it may show a number but must never name a track or a year.
+    //
+    // No caller renders it since the preparing screen's "N of M years found" line was removed on
+    // 2026-08-05, and it stays exported with its tests because a progress readout is an obvious
+    // thing for a later phase to want back -- from here rather than reinvented in a component.
     let state = playing();
     expect(resolvedCount(state)).toBe(1);
 
     state = gameReducer(state, {
       type: 'YEAR_RESOLVED',
       cardId: state.deck[7]?.id ?? '',
+      year: 1984,
+      confidence: 'high',
+    });
+
+    expect(resolvedCount(state)).toBe(2);
+  });
+
+  it('should not count a lookup that found no year, because its card is gone', () => {
+    // The selector still treats a `null` year as a completed lookup -- that is its contract, and a
+    // deck holding one would count it. But since the 2026-08-05 reversal a null result REMOVES the
+    // card, so the count does not move and the deck shrinks by one instead.
+    const state = playing();
+
+    const next = gameReducer(state, {
+      type: 'YEAR_RESOLVED',
+      cardId: state.deck[7]?.id ?? '',
       year: null,
       confidence: 'none',
     });
 
-    // A null year is a COMPLETED lookup and counts.
-    expect(resolvedCount(state)).toBe(2);
+    expect(resolvedCount(next)).toBe(1);
+    expect(next.deck).toHaveLength(state.deck.length - 1);
   });
 
   it('should be safe on an empty deck', () => {

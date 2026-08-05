@@ -86,11 +86,55 @@ function playlistFetch(status: number, body: unknown): PlaylistFetch {
 /**
  * Stub the global `fetch`, which is what the year RESOLVER uses.
  *
- * `year: null, confidence: 'none'` is a COMPLETED lookup, and completing card 1's lookup is what
- * opens the card-1 gate -- a `null` year is a finished answer, not a pending one. So this is the
- * minimum response that gets a session to `playing` without inventing any years.
+ * ===========================================================================
+ *  IT HAS TO ANSWER WITH A REAL YEAR, AND IT USED TO ANSWER WITH `null`.
+ *
+ *  `year: null, confidence: 'none'` was the minimum response that opened the
+ *  card-1 gate without inventing any years -- a null year being a completed
+ *  lookup rather than a pending one.
+ *
+ *  Since the 2026-08-05 reversal a null result REMOVES its card from the deck, so
+ *  this stub answered every lookup by deleting the card that asked: the deck
+ *  emptied, the session went straight to `ended`, and eight tests that only
+ *  wanted to reach the game screen found the end screen instead. The stub now
+ *  resolves every card to one year, which is the shape of a normal deck.
+ *
+ *  The invented year is safe here BECAUSE of what these tests assert: the leak
+ *  checks below are about titles and artists on pre-reveal surfaces, and the year
+ *  never appears until a card is deliberately flipped. A test that needs the
+ *  yearless path has `stubDroppingYearApi` instead.
+ * ===========================================================================
  */
 function stubYearApi(): void {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        json: () =>
+          Promise.resolve({
+            year: 1975,
+            confidence: 'high',
+            source: 'release-group',
+            cached: true,
+            cleanedTitle: 'x',
+            stripped: { remaster: false, live: false, feature: false, version: false },
+          }),
+      }),
+    ),
+  );
+}
+
+/**
+ * The yearless path: every lookup completes having found nothing, so every card is dropped.
+ *
+ * The container's side of the reversal, and it is a real user-visible path rather than a synthetic
+ * one -- a third of an ordinary playlist resolves to `none`, and a deck of obscure tracks can
+ * resolve to nothing at all.
+ */
+function stubDroppingYearApi(): void {
   vi.stubGlobal(
     'fetch',
     vi.fn(() =>
@@ -295,10 +339,33 @@ describe('App', () => {
       expect(screen.queryByTestId('hud')).not.toBeNull();
     });
 
+    // Two presses, because Exit now asks first: `ExitConfirmDialog` stands between the button and
+    // the container, and the container hears nothing until the player confirms.
     fireEvent.click(screen.getByRole('button', { name: 'Exit game' }));
+    fireEvent.click(screen.getByRole('button', { name: 'End game' }));
 
     expect(await screen.findByLabelText('Playlist link')).not.toBeNull();
     expect(screen.queryByText(/deck finished/i)).toBeNull();
+  });
+
+  it('should stay in the game when the exit is cancelled', async () => {
+    // The container's side of the confirmation: cancelling must leave the session exactly where it
+    // was, with the save intact. `END` clears the save, so a cancel that reached the reducer would
+    // be invisible on screen but would have destroyed the resume.
+    stubYearApi();
+    const { storage } = renderApp(playlistFetch(200, playlistResult()));
+
+    startPlaylist();
+    await waitFor(() => {
+      expect(screen.queryByTestId('hud')).not.toBeNull();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Exit game' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Keep playing' }));
+
+    expect(screen.queryByTestId('hud')).not.toBeNull();
+    expect(screen.queryByLabelText('Playlist link')).toBeNull();
+    expect(storage.map.has(SESSION_STORAGE_KEY)).toBe(true);
   });
 
   it('should reset the end reason when a new game starts', async () => {
@@ -313,6 +380,7 @@ describe('App', () => {
       expect(screen.queryByTestId('hud')).not.toBeNull();
     });
     fireEvent.click(screen.getByRole('button', { name: 'Exit game' }));
+    fireEvent.click(screen.getByRole('button', { name: 'End game' }));
     await screen.findByLabelText('Playlist link');
 
     // Game 2: play it out. The end screen must appear.

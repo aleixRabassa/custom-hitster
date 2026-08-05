@@ -2,11 +2,13 @@
 
 Custom Hitster is a **client-heavy single-page app with a thin serverless backend**. The game itself — shuffle, flip, swipe, audio, progress — runs entirely in the browser. The backend exists only to do the three things a browser cannot: reach a CORS-blocked endpoint, set a custom `User-Agent`, and hold a cache shared across all users.
 
-> **Implementation status: Phases 1–6 complete — the app is playable end to end.** All three functions (`/api/hello`, `/api/playlist`, `/api/year`), the year cache, the client-side game layer (`src/game/`), the card UI, the gestures, and the game flow screens (landing, preparing, HUD, notices, end screen) plus the real `src/App.tsx` container all exist today. What does not: Phase 7's polish — responsive breakpoints, `@theme` tokens, a11y beyond accessible names, error/offline states, the Lighthouse pass, and lazy-loading the QR and audio code. Sections below are marked **[built]** or **[planned]** throughout; planned shapes come from [`plans/plan.md`](./plans/plan.md) §3 and are recorded here because they determine where new code belongs, not because they exist.
+> **Implementation status: Phases 1–6 complete, and Phase 7's first half with them — the app is playable end to end.** All three functions (`/api/hello`, `/api/playlist`, `/api/year`), the year cache, the client-side game layer (`src/game/`), the card UI, the gestures, and the game flow screens (landing, preparing, HUD, notices, end screen) plus the real `src/App.tsx` container all exist today. So does the **token layer**: `@theme` tokens, fluid card geometry, `prefers-reduced-motion`, focus states and the ARIA/contrast fixes ([`plans/plan.phase-7-look.md`](./plans/plan.phase-7-look.md)). What does not: Phase 7's second half — error/offline states, an error boundary, the Lighthouse pass, lazy-loading the QR and audio code, and the README ([`plans/plan.phase-7-robustness.md`](./plans/plan.phase-7-robustness.md)). Sections below are marked **[built]** or **[planned]** throughout; planned shapes come from [`plans/plan.md`](./plans/plan.md) §3 and are recorded here because they determine where new code belongs, not because they exist.
 >
 > **One thing is owed rather than planned:** progressive loading has never been verified against a real deployment (step 15 of [`plans/plan.phase-4-6-screens.md`](./plans/plan.phase-4-6-screens.md)). See [`development.md`](./development.md) §8.
 >
-> **One caveat carried forward from Phase 5:** the gesture thresholds have never been verified on a real touch device — see [§3 The gestures](#the-gestures-srcgamegesturests--srchooksusecardgesturests--built) and `docs/development.md` §8 Known limitations.
+> **One caveat carried forward from Phase 5, and Phase 7 sharpened it:** the gesture thresholds have never been verified on a real touch device — and now that the card is fluid, `SWIPE_COMMIT_DISTANCE_PX` is a third of its width at the ceiling and over half at the floor. See [§3 The gestures](#the-gestures-srcgamegesturests--srchooksusecardgesturests--built) and `docs/development.md` §8 Known limitations.
+>
+> **One caveat new in Phase 7:** none of the reduced-motion, responsive or screen-reader behaviour can be verified by any test in this repo — jsdom evaluates no media queries and has no `window.matchMedia` at all. What is automated is both ends of each contract; the middle is a manual pass. See §3 The token layer and `docs/development.md` §5.
 
 ---
 
@@ -14,7 +16,7 @@ Custom Hitster is a **client-heavy single-page app with a thin serverless backen
 
 | Component            | Technology                         | Location                        | Status                                                    |
 | -------------------- | ---------------------------------- | ------------------------------- | --------------------------------------------------------- |
-| Browser SPA          | Vite 8 + React 19 + Tailwind CSS 4 | `src/`                          | **[built]** game layer + card; no screens, no gestures    |
+| Browser SPA          | Vite 8 + React 19 + Tailwind CSS 4 | `src/`                          | **[built]** container, 4 screens, gestures, token layer   |
 | Client game layer    | Pure TS + one React hook           | `src/game/`                     | **[built]** reducer, shuffle, resolver, persistence       |
 | Card UI              | React 19 + Tailwind 3D transforms  | `src/components/`, `src/hooks/` | **[built]** flip card, QR, audio                          |
 | Serverless functions | Vercel Functions (Node 24 runtime) | `api/`                          | **[built]** `hello`, `playlist`, `year`                   |
@@ -313,6 +315,145 @@ Browser (SPA)                          Serverless (Vercel Functions)
 **Why progressive loading is structural, not polish:** a lookup costs two paced MusicBrainz requests, so a cold 100-track playlist takes **~3-5 minutes** — measured 1.3-3.6 s per track on 2026-08-04, against a warm cache 0 ms. Years resolve in the background, the game starts as soon as **card 1** is ready, and it only blocks if the player outruns the resolver. Two invariants fall out of that, both easy to violate without any test failing: **shuffle runs before resolution** (so the resolver walks the deck in play order and card 1 is genuinely the card the player sees first), and the resolver is a **sequential loop, not a fan-out** — a `Promise.all` over 100 cards turns the shared 1 req/s gate into ~99 429s. See [`plans/plan.md`](./plans/plan.md) §1 and §3.
 
 ---
+
+### The token layer and the motion strategy (`src/index.css`) — built
+
+Phase 7's first half gave the app a design surface. Before it, every colour, dimension and duration
+in `src/` was an inline Tailwind utility, and the card's size was a literal pair written out twice.
+
+```
+src/index.css           THE design surface. One `@theme static` block, two
+                        `@utility` composites, one prefers-reduced-motion block
+src/main.tsx            <MotionConfig reducedMotion="user"> — the JS half of
+                        the motion strategy
+src/index.css.test.ts   The reduced-motion canary. A `node` test over the
+                        stylesheet's TEXT
+```
+
+**A v3 reader looking for `tailwind.config.js` should read the `@theme` block instead.** There is no
+config file and one should not be added; the block is where colours, card geometry, the content
+column, the year type scale, motion durations and the interaction minimums are named. Components
+consume tokens and do not invent literals. Phase 8's card redesign is meant to be a change of values
+_there_, not a hunt across nine components.
+
+Five things about it are load-bearing:
+
+- **`@theme static`, not `@theme`.** `static` emits every variable whether or not a generated utility
+  references it. Several tokens (`--card-height`, `--card-width`, `--qr-display-size`, the flip
+  durations, the focus-ring and touch-target values) are consumed only through arbitrary-value
+  utilities like `h-(--card-height)`, through the two `@utility` composites, or from inside the
+  media query — and Tailwind counts none of those as a use, so a plain `@theme` would tree-shake them
+  away.
+- **Values are literal `oklch()`, not `var(--color-neutral-900)`.** The indirection looks tidier and
+  is a trap: Tailwind emits only the default theme variables some utility actually references, so a
+  token defined in terms of a palette shade resolves to nothing once the last direct use of that
+  shade disappears — which is what this phase did to most of them. Provenance lives in a comment
+  beside each value.
+- **Colours are named by role, never by hue** — `page`, `surface`, `surface-raised`, `border*`,
+  `fg*`, `accent*`, `on-accent`, `warning*`, `danger*`, `focus-ring`. Phase 8 changes hues without
+  renaming anything. `fg-` rather than `text-` for the foreground family only because
+  `--color-text-muted` would yield the utility `text-text-muted`.
+- **`focus-ring` and `touch-target` are `@utility` composites, not repeated utilities.** Thirteen
+  interactive elements need an outline and a 44px minimum; declaring them once means one place to
+  change in Phase 8 and one class name for a test to assert. Written as `@utility` rather than a
+  plain class so Tailwind's variants still compose — components write `focus-visible:focus-ring`.
+- **Two tokens cap a column, and which one a component takes is a real decision.**
+  `--container-content` (24rem) is a reading measure for the landing, end and preparing screens.
+  `--card-width` caps `Hud` and `NoticeBanner`, because those two sit directly above the card and are
+  supposed to line up with it — at `max-w-sm` against an 18rem card they never did.
+
+#### The card's geometry is one derived pair, and that fixed a latent bug
+
+`Card.tsx` and `CardStack.tsx` each carried `h-[28rem] w-72`, and the two literals were **required**
+to match: the stack's peeking backs are `absolute inset-0` on a wrapper sized by the second pair, so
+a card resized without its wrapper leaves the backs the old size and the deck stops lining up.
+Nothing enforced it.
+
+```css
+--card-height: clamp(18rem, min(62dvh, 124vw), 28rem);
+--card-width: calc(var(--card-height) * 9 / 14);
+```
+
+**Height is the primary term and width is derived from it**, which is the opposite of the obvious
+arrangement and matters twice. Height is what actually runs out — the card shares a `min-h-dvh`
+column with the HUD, the notice and the control bar — and deriving the width holds the 9:14 ratio the
+Phase 6 pair implied (288 × 448) at _every_ viewport, where clamping each axis independently would
+preserve it at the two ends and drift everywhere between.
+
+The `62dvh` term exists because a clamp on width alone puts a 448px card in a landscape phone's
+375px viewport; `dvh` rather than `vh` also survives a collapsing mobile address bar. The `124vw`
+term guards the narrow-but-tall case (124vw of height is 80vw of width once the ratio is applied) and
+sits **inside `min()`** rather than as a second clamp so the ratio still holds when it wins.
+
+It resolves to exactly 288 × 448 — the pre-Phase-7 values — on every desktop and on most phones. Only
+below roughly 723px of viewport height does the card shrink at all. `CardStack.test.tsx` asserts the
+two elements carry the same token string; `src/index.css.test.ts` asserts the derivation and the
+`dvh` term.
+
+**One consequence reaches outside presentation.** `SWIPE_COMMIT_DISTANCE_PX` (96px) was chosen as a
+third of a 288px card. 288px is now only the card's ceiling, so at the floor the same 96px is 52% of
+its width — a commit takes a longer drag on a small screen. It is deliberately **not** retuned; see
+§3's gesture subsection and [`development.md`](./development.md) §8.
+
+#### Reduced motion is two declarations for four animation surfaces
+
+There are four animated surfaces and **no presentational component reads the preference**:
+
+| Surface                        | Handled by                                              |
+| ------------------------------ | ------------------------------------------------------- |
+| The card flip (CSS transition) | `src/index.css`, `[data-motion='flip']`                 |
+| The preparing spinner (CSS)    | `src/index.css`, `[data-motion='spinner']`              |
+| The QR placeholder pulse (CSS) | `src/index.css`, `[data-motion='qr-placeholder']`       |
+| Motion's `drag` and card exit  | `<MotionConfig reducedMotion="user">` in `src/main.tsx` |
+
+The alternative was `useReducedMotion()` in three components, and it was rejected for a specific
+reason rather than a stylistic one: it puts a preference read into three files and **silently misses
+whatever animation the next phase adds**, where the CSS block is the obvious place to add a fourth
+line.
+
+Three details that look like oversights and are not:
+
+- **The block is scoped to three selectors, not a blanket `* { transition: none }`.** A blanket rule
+  is indiscriminate and would kill transitions that carry meaning — the flip is exactly one. The flip
+  is therefore _collapsed_ (`--duration-flip-reduced`), not removed: the reveal still has to happen,
+  it just must not travel.
+- **The spinner is hidden, not stopped.** A stationary spinner is a dead grey circle that reads as a
+  hung app. It is already `aria-hidden`, and the screen's status lines carry everything it conveys.
+- **The hooks are `data-motion` attributes rather than class names**, because they are a contract
+  between the stylesheet and three components. An attribute says that out loud where a bare class
+  looks like a utility somebody forgot to delete.
+
+**Nothing in this repo can test that any of it works, and that is why the canary exists.** jsdom
+evaluates no media queries, and it has no `window.matchMedia` at all — so the preference can never
+read as "reduce" in a test, on either the CSS or the JS side. What _is_ pinned is both ends of each
+contract: `src/index.css.test.ts` asserts the block exists and names all three hooks, and each
+component asserts it renders its own. The middle is manual — [`development.md`](./development.md) §5.
+
+Motion tolerates the missing `matchMedia` without a stub (measured 2026-08-05, in
+[`agent_findings.md`](./agent_findings.md)), and `Card.test.tsx` carries the canary for that, because
+`MotionConfig` lives in `main.tsx` and nothing in this repo renders `main.tsx`.
+
+#### What the accessibility pass actually changed
+
+Four defects, all found by reading Phase 6's components rather than by a tool:
+
+- **The flip was silent to assistive technology.** `CardRevealSide` now carries a polite
+  `role="status"` region around the year, title and artist. **This is the only place in the app where
+  announcing track data is correct**, and it is safe precisely because that component is mounted only
+  while the card is flipped — see §3's leak rule. `CardHiddenSide.test.tsx` asserts the absence of any
+  live region on the hidden face.
+- **The landing input's `aria-label` overrode its own visible label**, so the accessible name did not
+  match the visible text — a WCAG 2.5.3 failure that breaks speech control. Removed; the wrapping
+  `<label>` already supplied a correct name.
+- **`aria-invalid` was set with no `aria-describedby`**, so the _reason_ for an error was announced
+  once and then unreachable on focus.
+- **No interactive element had a focus style**, so all thirteen fell back to the browser default over
+  a near-black page.
+
+Contrast was computed rather than eyeballed, and four pairs failed 1.4.3 — including `text-white` on
+the primary action at 3.67:1, which the plan had not listed. All four are fixed by token value, so no
+call site carries a corrected literal. The full table is in
+[`agent_findings.md`](./agent_findings.md).
 
 ## 4. External dependencies
 

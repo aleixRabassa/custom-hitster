@@ -83,7 +83,10 @@ export default function App({ storage, fetchImpl }: AppProps = {}) {
     currentCard,
     isCurrentYearPending,
     cardsRemaining,
-    resolvedCount,
+    // `resolvedCount` is deliberately NOT taken from the hook any more: the preparing screen's
+    // "N of M years found" line was removed, and it was this container's only consumer. The
+    // selector stays exported beside the reducer with its own tests -- a progress readout is an
+    // obvious thing for a later phase to want back, and it would want it from there.
     start,
     flip,
     next,
@@ -222,13 +225,7 @@ export default function App({ storage, fetchImpl }: AppProps = {}) {
   }
 
   if (state.status === 'preparing') {
-    return (
-      <PreparingScreen
-        resolvedCount={resolvedCount}
-        totalCount={state.deck.length}
-        notice={noticeBanner}
-      />
-    );
+    return <PreparingScreen notice={noticeBanner} />;
   }
 
   // `playing`. `currentCard` is guarded because `noUncheckedIndexedAccess` makes the selector

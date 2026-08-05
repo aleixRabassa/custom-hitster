@@ -132,17 +132,99 @@ describe('GameScreen', () => {
     expect(audio.getAttribute('src')).toBe(lowConfidenceCard.previewUrl);
   });
 
-  it('should stop audio when exit is invoked', () => {
+  it('should stop audio when exit is confirmed', () => {
+    // The stop is on the CONFIRM, not on the press that opens the dialog. Order still matters for
+    // the same reason it always did: `onExit` unmounts this screen, and a pending play() on a
+    // disappearing element is how a stray sound outlives its card.
     const onExit = vi.fn();
     render(renderScreen({ onExit }));
 
     screen.getByRole('button', { name: 'Play' }).click();
     calls = [];
 
-    screen.getByRole('button', { name: 'Exit game' }).click();
+    // `fireEvent`, not `.click()`, for anything that opens or answers the dialog: opening it is a
+    // React state change, and only `fireEvent` wraps the dispatch in `act()` so the re-render has
+    // flushed by the next line. The audio presses above stay on `.click()` -- they run through a
+    // ref to the media element and change no React state.
+    fireEvent.click(screen.getByRole('button', { name: 'Exit game' }));
+    fireEvent.click(screen.getByRole('button', { name: 'End game' }));
 
     expect(calls).toContain(`pause:${highConfidenceCard.previewUrl}`);
     expect(onExit).toHaveBeenCalledTimes(1);
+  });
+
+  it('should not end the game on the exit press itself', () => {
+    // ===================================================================
+    //  EXIT IS IRREVERSIBLE, AND THE BUTTON IS TWO POSITIONS FROM PLAY.
+    //
+    //  `END` clears the saved session, so the shuffle, the position in the
+    //  deck and every year resolved so far go with it, and nothing in the
+    //  app can bring them back -- the deck is one-directional and "Play
+    //  again" reshuffles rather than restores. This asserts the press only
+    //  ASKS.
+    //
+    //  The audio assertion is the second half and it is deliberate: the
+    //  preview keeps playing while the question is on screen, because the
+    //  player may well say no and stopping it would be a change they did
+    //  not ask for.
+    // ===================================================================
+    const onExit = vi.fn();
+    render(renderScreen({ onExit }));
+
+    screen.getByRole('button', { name: 'Play' }).click();
+    calls = [];
+
+    fireEvent.click(screen.getByRole('button', { name: 'Exit game' }));
+
+    expect(onExit).not.toHaveBeenCalled();
+    expect(calls).toEqual([]);
+    expect(screen.queryByRole('dialog')).not.toBeNull();
+  });
+
+  it('should return to the game when the exit is cancelled', () => {
+    const onExit = vi.fn();
+    render(renderScreen({ onExit }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Exit game' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Keep playing' }));
+
+    expect(onExit).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    // And the game is still operable rather than left in a half-exited state.
+    expect(screen.queryByRole('button', { name: 'Play' })).not.toBeNull();
+  });
+
+  it('should ignore the game keys while the exit dialog is open', () => {
+    // ===================================================================
+    //  GUARD 4, AND IT IS THE ONE THE OTHER THREE DO NOT COVER.
+    //
+    //  The key handler is at the WINDOW, so it fires while a modal is up.
+    //  Guard 3 catches Space -- focus is on a dialog button -- but nothing
+    //  catches →, and → deals the next card. That would mean a player
+    //  answering "end the game?" and losing a card to the same keystroke,
+    //  behind a backdrop where they cannot see it happen.
+    //
+    //  Fixed as the effect's own condition rather than as a fourth check
+    //  inside the handler: while the dialog is open this screen has no
+    //  keyboard interface at all, and Escape belongs to the dialog.
+    // ===================================================================
+    const onFlip = vi.fn();
+    const onNext = vi.fn();
+    render(renderScreen({ onFlip, onNext }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Exit game' }));
+
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    fireEvent.keyDown(window, { key: ' ' });
+
+    expect(onNext).not.toHaveBeenCalled();
+    expect(onFlip).not.toHaveBeenCalled();
+
+    // And they work again once the dialog is gone -- the guard is a suspension, not a teardown.
+    fireEvent.click(screen.getByRole('button', { name: 'Keep playing' }));
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+
+    expect(onNext).toHaveBeenCalledTimes(1);
   });
 
   it('should leave the audio element sourceless for a card with no preview', () => {

@@ -1,8 +1,12 @@
 /**
  * @vitest-environment jsdom
  *
- * Two things matter on this screen: the count is a count, and nothing else about the deck appears.
- * The second is the one findings #6 names explicitly as a surface people forget.
+ * One thing matters on this screen: nothing about the deck appears on it. It is the surface
+ * findings #6 names explicitly as the one people forget.
+ *
+ * The count assertions that used to lead this file are gone with the "N of M years found" line
+ * itself -- it read as a progress bar that had to fill, when the wait is a single lookup. What
+ * replaces them is the negative: no count, and no number at all.
  */
 
 import { cleanup, render, screen } from '@testing-library/react';
@@ -14,25 +18,22 @@ import { fixtureDeck } from './__fixtures__/cards';
 describe('PreparingScreen', () => {
   afterEach(cleanup);
 
-  it('should render a count-only progress line', () => {
-    render(<PreparingScreen resolvedCount={3} totalCount={42} />);
+  it('should render no progress count', () => {
+    // The removed line, asserted as absent rather than merely deleted: a resolved/total readout is
+    // the obvious thing to add back to a loading screen, and the reason it went is not visible from
+    // the component -- "0 of 42" reads as a bar that has to fill, while the gate is ONE lookup.
+    render(<PreparingScreen />);
 
-    expect(screen.getByRole('status').textContent).toContain('3 of 42');
-  });
-
-  it('should render the count at zero rather than omitting the line', () => {
-    // Rendered even at 0, so the line does not appear a moment later and shift the layout under a
-    // player who is already looking at it.
-    render(<PreparingScreen resolvedCount={0} totalCount={42} />);
-
-    expect(screen.getByRole('status').textContent).toContain('0 of 42');
+    const status = screen.getByRole('status').textContent ?? '';
+    expect(status).not.toMatch(/years found/i);
+    // No count in any phrasing. The screen has no numbers on it at all now.
+    expect(status).not.toMatch(/\d/);
   });
 
   it('should say the game starts before the deck is fully resolved', () => {
-    // The card-1 gate waits for ONE lookup, not the whole deck. Without this line the count reads
-    // as a progress bar that has to reach the total, which makes a one-second wait feel stalled at
-    // step 3 of 42.
-    render(<PreparingScreen resolvedCount={3} totalCount={42} />);
+    // The card-1 gate waits for ONE lookup, not the whole deck -- and with the count gone this is
+    // the only line that says so, which makes it the whole of the screen's honesty about the wait.
+    render(<PreparingScreen />);
 
     expect(screen.getByRole('status').textContent).toMatch(/first card/i);
   });
@@ -41,13 +42,7 @@ describe('PreparingScreen', () => {
     // Notices appear HERE as well as on the game screen: `preparing` can be shorter than the time
     // it takes to read a sentence, and the container owns the dismissal so it survives the
     // transition (decision 9).
-    render(
-      <PreparingScreen
-        resolvedCount={0}
-        totalCount={42}
-        notice={<p data-testid="test-notice">a notice</p>}
-      />,
-    );
+    render(<PreparingScreen notice={<p data-testid="test-notice">a notice</p>} />);
 
     expect(screen.queryByTestId('test-notice')).not.toBeNull();
   });
@@ -71,7 +66,7 @@ describe('PreparingScreen', () => {
     //  HIDDEN and not merely stopped, per decision 7: a stationary spinner
     //  is a dead grey circle that reads as a hung app.
     // ===================================================================
-    const { container } = render(<PreparingScreen resolvedCount={3} totalCount={42} />);
+    const { container } = render(<PreparingScreen />);
 
     const spinner = container.querySelector('[data-motion="spinner"]');
     expect(spinner).not.toBeNull();
@@ -82,18 +77,21 @@ describe('PreparingScreen', () => {
     expect(spinner?.className).toContain('animate-spin');
   });
 
-  it('should still render the count and the status line under reduced motion', () => {
+  it('should still render both status lines under reduced motion', () => {
     // The information-preservation claim behind decision 7, tested by doing to the DOM what
     // `display: none` does to the picture: remove the spinner, then assert the screen still says
-    // everything it said before. If the count or the status line ever moved inside the spinner --
-    // or the spinner became the wrapper -- hiding it would take the progress report with it and
-    // the screen would go blank on exactly the players who asked for less motion.
-    const { container } = render(<PreparingScreen resolvedCount={3} totalCount={42} />);
+    // everything it said before. If either line ever moved inside the spinner -- or the spinner
+    // became the wrapper -- hiding it would take the whole progress report with it and the screen
+    // would go blank on exactly the players who asked for less motion.
+    //
+    // Decision 7 originally rested partly on the resolved/total count carrying the spinner's
+    // meaning. With the count gone the claim rests on "Dealing your deck…", which is the sentence
+    // that says work is in progress -- so the surviving two lines are what this now pins.
+    const { container } = render(<PreparingScreen />);
 
     container.querySelector('[data-motion="spinner"]')?.remove();
 
     const status = screen.getByRole('status').textContent ?? '';
-    expect(status).toContain('3 of 42');
     expect(status).toMatch(/dealing your deck/i);
     expect(status).toMatch(/first card/i);
   });
@@ -112,7 +110,7 @@ describe('PreparingScreen', () => {
     //  rule cheap to keep. The assertion exists so that adding one to be
     //  helpful fails a test.
     // ===================================================================
-    const { container } = render(<PreparingScreen resolvedCount={7} totalCount={42} />);
+    const { container } = render(<PreparingScreen />);
     const text = container.textContent ?? '';
 
     for (const card of fixtureDeck) {
@@ -121,8 +119,8 @@ describe('PreparingScreen', () => {
       if (typeof card.year === 'number') expect(text).not.toContain(String(card.year));
     }
 
-    // No year-shaped number anywhere. The counts are small integers, so a four-digit number here
-    // could only be a year.
+    // No year-shaped number anywhere -- and since the count went there is no number on this screen
+    // at all, so any digits appearing here would be new and would have come from a card.
     expect(text).not.toMatch(/\b(19|20)\d{2}\b/);
   });
 });

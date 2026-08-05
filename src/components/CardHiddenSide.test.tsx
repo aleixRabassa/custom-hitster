@@ -60,6 +60,29 @@ describe('CardHiddenSide', () => {
     expect(screen.queryAllByRole('button')).toEqual([]);
   });
 
+  it('should give the scan instruction a colour that exists', async () => {
+    // ===================================================================
+    //  THE TYPO THIS CATCHES WAS INVISIBLE TO EVERY OTHER CHECK.
+    //
+    //  The line read `text-text-muted`. There is no `--color-text-muted`
+    //  token -- the app's is `--color-fg-muted` -- so Tailwind emitted NO
+    //  rule, and with no colour set anywhere up the chain (`bg-surface`
+    //  face, no `text-*` on `GameScreen`'s main) the only text on the card's
+    //  hidden face rendered in the UA's near-black default on a near-black
+    //  card. Typecheck, lint, the build and every other test here passed:
+    //  an unknown Tailwind colour utility is a silent no-op.
+    //
+    //  So this asserts the one property that distinguishes a real token from
+    //  a plausible-looking string: it has to be a `text-fg*` utility, which
+    //  is the only family that resolves to a foreground colour in this app.
+    // ===================================================================
+    render(<CardHiddenSide card={highConfidenceCard} />);
+    await screen.findByRole('img');
+
+    const note = screen.getByText(/scan to play/i);
+    expect(note.className).toMatch(/(?:^|\s)text-fg(?:-|\s|$)/);
+  });
+
   it('should not put a live region on the hidden side', async () => {
     // ===================================================================
     //  THE NEGATIVE HALF OF THE PHASE 7 REVEAL ANNOUNCEMENT.

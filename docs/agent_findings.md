@@ -1381,3 +1381,72 @@ and was measured to work, but CSS bundle size belongs to `plan.phase-7-robustnes
 and the Lighthouse pass), and this repo's house style values those comments highly enough that mangling
 them to dodge a scanner would be the wrong trade. **Recorded so plan 2 starts with the number rather than
 the investigation** — and so nobody reads the Phase 7 CSS growth as being entirely tokens.
+
+---
+
+## 2026-08-05 — Vitest's per-file environment tag is matched in PROSE, so a comment saying "not a jsdom test" makes it one
+
+Found while documenting the Phase 7 test layout. `src/index.css.test.ts` was written as a `node` test —
+it reads a stylesheet as text and needs no DOM — and its header said so explicitly:
+
+> A `node` test, with no `@vitest-environment jsdom` docblock.
+
+**That sentence made it a jsdom test.** Measured: `typeof window` was `object` inside it, and the
+`environment` timing was 3.08 s. Vitest locates the per-file environment by scanning the file's leading
+comment for the tag and does not care whether what it finds is a directive or a description of one.
+
+**A rewrite that merely _quoted_ the old wording did not fix it either** — the explanation of the bug
+reintroduced the bug, because the literal token was still in the comment. The token has to be **absent**;
+refer to the tag descriptively instead. After that, `typeof window` is `undefined` and `environment` is
+`0ms`.
+
+**Why this matters beyond three wasted seconds.** The `node` default is deliberate and load-bearing: it
+is what makes a DOM API accidentally added to `shared/` — which is compiled into Vercel Functions — fail
+a test run instead of breaking at deploy time (`toolchain.md` §5). A comment is enough to defeat that,
+silently, in a repo whose house style is very large header blocks.
+
+Two practical consequences:
+
+- **`grep -rl` for the tag over-reports the jsdom file count.** It matched 16 files when 15 had a real
+  docblock.
+- **The honest way to check one file is the `environment` timing** in `--reporter=verbose`: `0ms` for
+  node, seconds for jsdom. Or assert it — `expect(window).toBeUndefined()` in a node file is a one-line
+  canary if it ever matters.
+
+---
+
+## 2026-08-05 — An unknown Tailwind colour utility emits nothing, and all four checks pass either way
+
+Shipped during Phase 7 and caught by eye afterwards, not by tooling. `CardHiddenSide.tsx` read:
+
+```tsx
+<p className="text-xs text-text-muted">Scan to play the full song</p>
+```
+
+The token had been renamed from `--color-text-muted` to `--color-fg-muted` partway through the work (so
+the utility would read `text-fg-muted`), and the rename was applied to `src/index.css` by script while
+this one call site kept the old name.
+
+**Tailwind emitted no rule for `text-text-muted`.** Not a warning, not a build error — an unrecognised
+utility is simply skipped. With no colour set anywhere up the chain (a `bg-surface` face, no `text-*` on
+`GameScreen`'s `<main>`), the only text on the card's hidden face fell back to the UA's near-black
+default **on a near-black card**. Effectively invisible.
+
+**Every local check was green**: `pnpm typecheck`, `pnpm lint`, `pnpm test` and `pnpm build`. There is
+nothing in this toolchain that can catch it — a class name is a string as far as TypeScript and ESLint
+are concerned, and no test asserted a colour on that element.
+
+**Mitigations, in order of usefulness:**
+
+1. **Grep the built CSS after adding or renaming a token.** `grep -o '\.text-fg-muted{[^}]*}' dist/assets/*.css`
+   — an absent rule is the whole signal. This is also how `@theme static` was verified to emit the
+   un-namespaced tokens.
+2. **Assert the class family in the component's test.** `CardHiddenSide.test.tsx` now asserts the note
+   carries a `text-fg*` utility, which is the one property distinguishing a real token from a
+   plausible-looking string. Weak, and the only automatable guard.
+3. **Rename tokens and call sites in one pass**, never a script over the stylesheet plus manual edits to
+   components. The failure here was exactly that split.
+
+The same hazard applies to every custom-token utility family in this repo — `bg-surface*`, `border-*`,
+`text-fg*`, `max-w-content`, `text-year*` — and to the two `@utility` composites, though those at least
+tend to be visibly missing rather than invisibly wrong.

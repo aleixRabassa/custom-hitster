@@ -119,6 +119,22 @@
   --color-danger: oklch(70.4% 0.191 22.216); /* was red-400 — the landing error (6.84:1, passes) */
 
   /*
+   * The two tokens the destructive path needs beyond the error colour above, and
+   * they mirror the accent pair exactly: a hover shade, and a label colour dark
+   * enough to sit ON the danger fill.
+   *
+   * `--color-danger` alone was enough while red only ever appeared as TEXT (the
+   * landing error). The exit control and its confirmation are the first places
+   * red carries an action -- a red glyph on `--color-surface-raised` (5.7:1) and
+   * a filled "End game" button -- and a filled button needs a label. Dark on
+   * light red rather than white on red for the same reason `--color-on-accent`
+   * exists: white on this fill measures 2.6:1, a straight 1.4.3 failure, while
+   * this pairing is 5.8:1 at rest and 6.9:1 on hover.
+   */
+  --color-danger-hover: oklch(80.8% 0.114 19.571); /* red-300 */
+  --color-on-danger: oklch(14.5% 0 none); /* the page colour, as `--color-on-accent` is */
+
+  /*
    * The focus ring, and it is one colour for the whole app on purpose: a ring
    * that changed with its surface is four things to keep legible instead of
    * one. Picked against the LIGHTEST surface it has to clear -- 13.86:1 on
@@ -171,16 +187,25 @@
   --card-width: calc(var(--card-height) * 9 / 14);
 
   /*
-   * The QR code's DISPLAYED edge length, fluid with the card. 11/18 of the
-   * card's width is exactly 176px at the card's 288px ceiling, which was the
-   * Phase 6 value.
+   * The QR code's DISPLAYED edge length, fluid with the card.
+   *
+   * 14/18 of the card's width -- 224px at the card's 288px ceiling. It was 11/18
+   * (176px, the Phase 6 value) until the developer asked for a bigger code on
+   * 2026-08-05: the QR is the only thing on the hidden face and the only way to
+   * hear the full song, so it is the one element on that face worth filling it.
+   *
+   * 14/18 is the practical ceiling rather than a taste: `CardHiddenSide` is
+   * `p-6`, which is 24px a side, so the widest a square can be inside a 288px
+   * card is 240px -- 15/18. Leaving one eighteenth of slack keeps the code off
+   * the padding edge at every viewport, and the same ratio applied to the 18rem
+   * floor is a 224 * 18/28 = 144px code, still comfortably scannable.
    *
    * The GENERATED bitmap's size is a different number and must stay one
    * (decision 4): `toDataURL` is asynchronous, so a generation size that tracked
    * the viewport would re-encode the code on every resize frame and flash the
    * placeholder while it did. `QrCode.tsx` takes the two separately.
    */
-  --qr-display-size: calc(var(--card-width) * 11 / 18);
+  --qr-display-size: calc(var(--card-width) * 14 / 18);
 
   /* --- Content column ---------------------------------------------------- */
 
@@ -245,6 +270,19 @@
    * swiping. The notice's Dismiss ✕ was `px-1`, the smallest target in the app.
    */
   --size-touch-target: 2.75rem;
+
+  /*
+   * The control-bar icons' edge length, and the reason it is a token is that the
+   * four icons MUST agree.
+   *
+   * They were text characters -- ■ ▶ ❙❙ ↺ -- and their apparent size, weight and
+   * baseline came from whichever font the OS resolved each codepoint in. ▶ came
+   * out noticeably larger and heavier than ↺, and on a machine with an emoji font
+   * ahead in the fallback chain it came out coloured. They are inline SVG now, so
+   * a single length is what keeps them uniform; nothing about a glyph could be
+   * made uniform from CSS.
+   */
+  --size-control-icon: 1.25rem;
 
   --focus-ring-width: 2px;
   --focus-ring-offset: 2px;

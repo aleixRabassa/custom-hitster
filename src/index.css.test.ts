@@ -24,8 +24,27 @@
  *  devtools emulation: `docs/development.md` §5.
  * ===========================================================================
  *
- * A `node` test, with no `@vitest-environment jsdom` docblock. It inspects a string and needs no
- * DOM, and `node` is this repo's default environment (`toolchain.md` §5).
+ * A `node` test: it inspects a string and needs no DOM, and `node` is this repo's default
+ * environment (`toolchain.md` §5). There is deliberately no per-file environment docblock.
+ *
+ * ===========================================================================
+ *  AND NOTHING IN THIS HEADER MAY SPELL THAT DOCBLOCK TAG OUT, WHICH IS WHY
+ *  NOTHING DOES.
+ *
+ *  Vitest locates the per-file environment by scanning the file's leading
+ *  comment for the tag. It does not care whether what it finds is a directive or
+ *  a sentence about one. This header originally explained that the file carries
+ *  no such tag -- and wrote the tag out in order to say so, which silently MADE
+ *  it a jsdom file. Measured 2026-08-05: `typeof window` was `object` in here,
+ *  and the rewrite that merely QUOTED the old wording did not fix it either.
+ *
+ *  Beyond a few wasted seconds of jsdom boot it was harmless here. It is not
+ *  harmless in general: the `node` default is what makes a DOM API accidentally
+ *  added to `shared/` fail a test run instead of breaking at deploy time
+ *  (`toolchain.md` §5), and a comment is enough to defeat it. Refer to the tag
+ *  descriptively, never literally -- here, in a doc comment, or in a commented-out
+ *  example.
+ * ===========================================================================
  */
 
 import { readFileSync } from 'node:fs';

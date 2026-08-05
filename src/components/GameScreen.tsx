@@ -22,13 +22,22 @@
  *
  * The card-change rule is also what covers a SWIPE, which is why `useCardGestures` does not
  * stop audio itself: one owner of the stop rule, not two.
+ *
+ * ## Exit goes through a confirmation, and this file owns whether it is showing
+ *
+ * `CardControls`' Exit button now REQUESTS an exit; `ExitConfirmDialog` asks; only a confirmed
+ * press calls `onExit`. The open flag is the one piece of state this screen holds that is not about
+ * audio, and it belongs here rather than in the container for the same reason the flip's stop rule
+ * does: it is a property of this screen being on screen. It also gates the key handler below, which
+ * is the non-obvious half -- see guard 4.
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import { CardControls } from './CardControls';
 import { CardStack } from './CardStack';
+import { ExitConfirmDialog } from './ExitConfirmDialog';
 import { Hud } from './Hud';
 import { useCardAudio } from '../hooks/useCardAudio';
 import type { Card as CardData } from '../../shared/types';
@@ -107,6 +116,16 @@ export function GameScreen({
   const { audioRef, stop } = audio;
 
   /**
+   * Whether the exit confirmation is showing. SCREEN state, and it stays here.
+   *
+   * Not session state and not the container's: the reducer has no `CONFIRM_EXIT` action and should
+   * not gain one -- nothing about the game changes while the question is on screen. The container
+   * hears about it only if the player answers yes, at which point it gets the same `onExit()` call
+   * it always got.
+   */
+  const [isExitConfirmOpen, setIsExitConfirmOpen] = useState(false);
+
+  /**
    * Stop on flip.
    *
    * Keyed on the transition INTO flipped rather than on `isFlipped` being true, so a re-render
@@ -160,10 +179,16 @@ export function GameScreen({
    *     button is activated, so one press would BOTH toggle audio and
    *     flip the card -- revealing the answer as a side effect of
    *     pressing play.
+   *  4. THE EXIT DIALOG. Not a guard inside the handler but the effect's
+   *     own condition, below: while the confirmation is open the card is
+   *     behind a backdrop, and a → that dealt the next card under it would
+   *     mean answering a modal and losing a card in the same keystroke.
+   *     Guard 3 covers Space (focus is on a dialog button) but nothing
+   *     covers → , and Escape belongs to the dialog alone.
    * ===================================================================
    */
   useEffect(() => {
-    if (!isPlayable) return;
+    if (!isPlayable || isExitConfirmOpen) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
       // Guard 1. Held keys.
@@ -193,19 +218,41 @@ export function GameScreen({
 
       // ArrowLeft is intentionally unhandled. There is no previous card -- the deck is
       // one-directional by design -- so the safe response to a player pressing it is nothing
-      // at all. A "no going back" hint is a Phase 7 call.
+      // at all.
+      //
+      // A "no going back" hint was pencilled in as a Phase 7 call and NEITHER Phase 7 plan
+      // took it up: plan 1 is tokens, layout and a11y, plan 2 is error and offline states.
+      // So it is unowned rather than pending, and it stays unowned until somebody decides a
+      // silent ArrowLeft is actually a problem.
     };
 
     window.addEventListener('keydown', handleKeyDown);
 
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isPlayable, onFlip, onNext]);
+  }, [isPlayable, isExitConfirmOpen, onFlip, onNext]);
 
-  const handleExit = () => {
-    // Stop BEFORE handing control away: `onExit` unmounts this screen in plan 3, and a
-    // pending play() on a disappearing element is how a stray sound outlives its card.
+  /**
+   * The Exit button ASKS. It no longer ends the game.
+   *
+   * Exit is irreversible -- `END` clears the saved session, so the shuffle, the position in the
+   * deck and every resolved year go with it, and nothing in the app can bring them back. The
+   * button is a 44px round target two positions from Play, on the surface a thumb swipes. Audio is
+   * deliberately left running: the player may well say no, and stopping the preview for a question
+   * they cancel is a change they did not ask for.
+   */
+  const handleExitRequest = () => {
+    setIsExitConfirmOpen(true);
+  };
+
+  const handleExitConfirmed = () => {
+    // Stop BEFORE handing control away: `onExit` unmounts this screen, and a pending play() on a
+    // disappearing element is how a stray sound outlives its card.
     stop();
     onExit();
+  };
+
+  const handleExitCancelled = () => {
+    setIsExitConfirmOpen(false);
   };
 
   return (
@@ -244,7 +291,16 @@ export function GameScreen({
         handler and flipped the card -- so pressing Play revealed the answer. `CardControls`
         documents it in full.
       */}
-      <CardControls audio={audio} onExit={handleExit} />
+      <CardControls audio={audio} onExit={handleExitRequest} />
+
+      {/*
+        Last in the DOM, so it is last in the tab order and paints over everything above it without
+        needing a stacking context of its own. Mounted only while open: an always-present dialog
+        hidden with CSS is one `display` rule away from being reachable by Tab while invisible.
+      */}
+      {isExitConfirmOpen ? (
+        <ExitConfirmDialog onConfirm={handleExitConfirmed} onCancel={handleExitCancelled} />
+      ) : null}
     </main>
   );
 }

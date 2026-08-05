@@ -301,11 +301,11 @@ this phase, because nothing could deal a pre-resolved deck.
 [plan.phase-4-6-screens.md](./plan.phase-4-6-screens.md), carried over from Phase 3), including the
 50-track cold-deck wall clock and the StrictMode request count. See [development.md](../development.md) §5.
 
-### Phase 7 — Polish
+### Phase 7 — Polish (first half complete)
 
 - [ ] Empty/error/offline states; friendly message for private playlists
-- [ ] Responsive: phone, tablet, desktop
-- [ ] Basic a11y: focus states, ARIA on controls, respect `prefers-reduced-motion`
+- [x] Responsive: phone, tablet, desktop
+- [x] Basic a11y: focus states, ARIA on controls, respect `prefers-reduced-motion`
 - [ ] Lighthouse pass; lazy-load QR/audio code
 - [ ] **"Added by" attribution on the revealed side** — show who added that track to the
       playlist, alongside title/artist/year, once the card is flipped. **Blocked on data
@@ -319,6 +319,72 @@ this phase, because nothing could deal a pre-resolved deck.
       treat this as needing a new auth path and re-open §2. Do not build a UI for this
       against an assumed field that Phase 0 never found.
 - [ ] README: setup, env vars, deploy, known limitations
+
+**The two ticked boxes are the first half, shipped 2026-08-05** —
+[plan.phase-7-look.md](./plan.phase-7-look.md). The remaining four are the second half,
+[plan.phase-7-robustness.md](./plan.phase-7-robustness.md), except "Added by", which is blocked on a
+re-spike and belongs to neither.
+
+**The app now has a design surface.** `src/index.css` grew from 24 lines to one `@theme static` block
+naming every colour, dimension, duration and interaction minimum in the app, plus two `@utility`
+composites and one `prefers-reduced-motion` block. Phase 8's card redesign is meant to be a change of
+values there, not a hunt across nine components. Shape and reasoning in
+[architecture.md](../architecture.md) §3.
+
+**Responsive was done with one fluid clamp, not breakpoints,** and that removed a latent bug rather
+than only adding a feature. The card's size was `h-[28rem] w-72` written out in **both** `Card.tsx`
+and `CardStack.tsx`, and the two literals were required to agree — the peeking backs are
+`absolute inset-0` on a wrapper sized by the second pair, so a card resized without its wrapper leaves
+the backs behind and nothing enforced it. It is now one derived pair: `--card-height` clamps and
+`--card-width` is computed from it, so the 9:14 ratio holds at every viewport instead of only at the
+two ends. Breakpoint variants would have turned two literals into six.
+
+It resolves to exactly 288 × 448 — the Phase 6 values — on every desktop and most phones; only below
+~723px of viewport height does the card shrink. A `dvh` term was needed for landscape, which was an
+open question: a clamp on width alone puts a 448px card in a 375px viewport.
+
+**A11y closed four concrete defects, all found by reading Phase 6's components:**
+
+- **The flip was silent to assistive technology.** A player pressed Space, the reveal mounted, and
+  nothing was announced — the payoff of the entire game was available to an eye and to nothing else.
+  The reveal now carries a polite live region. This is **the only place in the app where announcing
+  track data is correct**, and it is safe only because that component is mounted solely while the card
+  is flipped; `CardHiddenSide.test.tsx` asserts the absence of any live region on the hidden face.
+- **The landing input's `aria-label` overrode its own visible label**, so the accessible name did not
+  match the visible text — a WCAG 2.5.3 failure that breaks speech control outright. Removed. Ten test
+  queries had been asserting the wrong name.
+- **`aria-invalid` was set with no `aria-describedby`**, so an error's reason was announced once and
+  then unreachable on focus.
+- **No interactive element had a focus style** — all thirteen fell back to the browser default over a
+  near-black page. One `focus-ring` utility, applied with `focus-visible` so a mouse click leaves
+  nothing behind.
+
+**Contrast was computed, not eyeballed, and four pairs failed WCAG 1.4.3.** The placeholder at
+**2.30:1** was the worst; the muted text used on six lines was **4.18:1**; disabled controls were
+**3.46:1**. The fourth was not on the plan's list and is the most consequential: **`text-white` on the
+primary action measured 3.67:1**, on Start and Play again. All four are fixed by token value rather
+than at a call site. Full table in [agent_findings.md](../agent_findings.md), which is also where the
+`aria-label` trap, the silent-flip finding and three toolchain gotchas are recorded.
+
+**Reduced motion is two declarations for four animation surfaces**, and no presentational component
+reads the preference: one scoped `@media` block for the three CSS animations, and
+`<MotionConfig reducedMotion="user">` for Motion's drag and the card's exit. The alternative —
+`useReducedMotion()` in three components — was rejected because it silently misses whatever animation
+the next phase adds.
+
+**Still owed, and none of it closable locally:** every behavioural claim above. jsdom evaluates no
+media queries, has no `window.matchMedia` at all, computes no layout and has no accessibility-tree
+consumer, so what is automated is both ends of each contract and nothing in between. Four manual
+passes — reduced motion with the OS preference set, three widths, keyboard-only, and a screen reader
+over one flip — plus the before/after screenshot comparison, are scoped row by row in
+[development.md](../development.md) §5 and listed as gaps in its §8. **The screen-reader pass is the
+one to prioritise:** it is the only check on the live region that is the phase's most valuable single
+change.
+
+**One thing got worse and was deliberately left so.** `SWIPE_COMMIT_DISTANCE_PX` was chosen as a third
+of a fixed 288px card. The card is now fluid, so at its floor the same 96px is 52% of its width. Not
+retuned: all five gesture thresholds are documented guesses that have never met a thumb, and a second
+guess is not an improvement on the first. The arithmetic is recorded in `src/game/gestures.ts`.
 
 ### Phase 8 — Nice-to-haves (explicitly out of v1)
 

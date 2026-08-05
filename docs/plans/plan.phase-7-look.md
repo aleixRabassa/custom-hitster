@@ -30,39 +30,39 @@ Nothing outstanding. Phases 3–6 are complete and this plan touches only presen
 
 ### Produces for downstream plans
 
-| Output                                                                       | Consumed by                                                                                                                    |
-| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| The `@theme` block in `src/index.css`                                        | `plan.phase-8` card visual design — it redesigns by changing token values, not by hunting utilities across nine components      |
-| Focus, contrast and ARIA fixes across every screen                           | `plan.phase-7-robustness.md` step "Lighthouse pass" — the Accessibility score is measured **after** this plan, not before       |
-| A card sized from a token rather than from two hardcoded utility pairs        | `plan.phase-8` and any future layout work                                                                                       |
+| Output                                                                 | Consumed by                                                                                                                |
+| ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| The `@theme` block in `src/index.css`                                  | `plan.phase-8` card visual design — it redesigns by changing token values, not by hunting utilities across nine components |
+| Focus, contrast and ARIA fixes across every screen                     | `plan.phase-7-robustness.md` step "Lighthouse pass" — the Accessibility score is measured **after** this plan, not before  |
+| A card sized from a token rather than from two hardcoded utility pairs | `plan.phase-8` and any future layout work                                                                                  |
 
 ---
 
 ## Scope & Affected Areas
 
-| Area                                    | Type     | Notes                                                                                                        |
-| --------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------ |
-| `src/index.css`                         | Modified | The `@theme` block, and the global `prefers-reduced-motion` block. Grows from 24 lines to the app's one design surface |
-| `src/main.tsx`                          | Modified | Wraps `<App />` in Motion's `MotionConfig` with reduced motion following the user preference                  |
-| `src/components/Card.tsx`               | Modified | Card dimensions from tokens; flip duration from a token                                                       |
-| `src/components/CardStack.tsx`          | Modified | The same dimension tokens — this is the duplication being removed                                             |
-| `src/components/CardHiddenSide.tsx`     | Modified | QR display size decoupled from QR generation size (see decision 4)                                           |
-| `src/components/QrCode.tsx`             | Modified | Accepts a display size independent of the generated bitmap size                                              |
-| `src/components/CardRevealSide.tsx`     | Modified | The reveal becomes an announced region; year type scale from tokens                                           |
-| `src/components/CardControls.tsx`       | Modified | Touch-target minimum, focus-visible ring, disabled-state contrast                                            |
-| `src/components/LandingScreen.tsx`      | Modified | Label/`aria-label` conflict, `aria-describedby` on the error, focus rings, fluid content column               |
-| `src/components/PreparingScreen.tsx`    | Modified | Spinner respects reduced motion by being absent, not by being still                                          |
-| `src/components/EndScreen.tsx`          | Modified | Focus rings, fluid content column                                                                            |
-| `src/components/Hud.tsx`                | Modified | Fluid content column, matched to the card's width                                                            |
-| `src/components/NoticeBanner.tsx`       | Modified | Dismiss-button focus ring and touch target                                                                   |
-| `src/components/*.test.tsx`             | Modified | Assertions that currently name `w-72` or a literal size; new a11y assertions                                 |
-| `src/index.css.test.ts`                 | New      | The reduced-motion canary (decision 6) — a `node` test, no DOM                                               |
-| `docs/architecture.md`                  | Modified | §3 gains the token layer and the reduced-motion strategy                                                     |
-| `docs/toolchain.md`                     | Modified | §Tailwind — `@theme` exists now, and the "no `tailwind.config.js`" note needs the token block beside it       |
-| `docs/development.md`                   | Modified | §5 gains the manual checks this plan cannot close locally                                                    |
-| `docs/agent_findings.md`                | Modified | The contrast measurements and the jsdom/`matchMedia` finding                                                 |
-| `docs/plans/plan.md`                    | Modified | §5 Phase 7 checkboxes for responsive and a11y                                                                |
-| `AGENTS.md`                             | Modified | The "`@theme` tokens are Phase 7" rule becomes a statement of where tokens live                               |
+| Area                                 | Type     | Notes                                                                                                                  |
+| ------------------------------------ | -------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `src/index.css`                      | Modified | The `@theme` block, and the global `prefers-reduced-motion` block. Grows from 24 lines to the app's one design surface |
+| `src/main.tsx`                       | Modified | Wraps `<App />` in Motion's `MotionConfig` with reduced motion following the user preference                           |
+| `src/components/Card.tsx`            | Modified | Card dimensions from tokens; flip duration from a token                                                                |
+| `src/components/CardStack.tsx`       | Modified | The same dimension tokens — this is the duplication being removed                                                      |
+| `src/components/CardHiddenSide.tsx`  | Modified | QR display size decoupled from QR generation size (see decision 4)                                                     |
+| `src/components/QrCode.tsx`          | Modified | Accepts a display size independent of the generated bitmap size                                                        |
+| `src/components/CardRevealSide.tsx`  | Modified | The reveal becomes an announced region; year type scale from tokens                                                    |
+| `src/components/CardControls.tsx`    | Modified | Touch-target minimum, focus-visible ring, disabled-state contrast                                                      |
+| `src/components/LandingScreen.tsx`   | Modified | Label/`aria-label` conflict, `aria-describedby` on the error, focus rings, fluid content column                        |
+| `src/components/PreparingScreen.tsx` | Modified | Spinner respects reduced motion by being absent, not by being still                                                    |
+| `src/components/EndScreen.tsx`       | Modified | Focus rings, fluid content column                                                                                      |
+| `src/components/Hud.tsx`             | Modified | Fluid content column, matched to the card's width                                                                      |
+| `src/components/NoticeBanner.tsx`    | Modified | Dismiss-button focus ring and touch target                                                                             |
+| `src/components/*.test.tsx`          | Modified | Assertions that currently name `w-72` or a literal size; new a11y assertions                                           |
+| `src/index.css.test.ts`              | New      | The reduced-motion canary (decision 6) — a `node` test, no DOM                                                         |
+| `docs/architecture.md`               | Modified | §3 gains the token layer and the reduced-motion strategy                                                               |
+| `docs/toolchain.md`                  | Modified | §Tailwind — `@theme` exists now, and the "no `tailwind.config.js`" note needs the token block beside it                |
+| `docs/development.md`                | Modified | §5 gains the manual checks this plan cannot close locally                                                              |
+| `docs/agent_findings.md`             | Modified | The contrast measurements and the jsdom/`matchMedia` finding                                                           |
+| `docs/plans/plan.md`                 | Modified | §5 Phase 7 checkboxes for responsive and a11y                                                                          |
+| `AGENTS.md`                          | Modified | The "`@theme` tokens are Phase 7" rule becomes a statement of where tokens live                                        |
 
 ---
 
@@ -80,78 +80,89 @@ For motion: one `@media (prefers-reduced-motion: reduce)` block in `src/index.cs
 
 - [x] **1. Inventory the values before naming any of them.** Grep `src/components/` and `src/index.css` for every colour utility (`neutral-*`, `emerald-*`, `amber-*`, `red-*`), every arbitrary dimension (`h-[28rem]`, `w-72`, `max-w-sm`, `max-w-xs`, `size-8`), every duration (`duration-500`) and the two JS-side pixel constants (`DEFAULT_QR_SIZE` in `CardHiddenSide.tsx`, `EXIT_DISTANCE_PX` in `Card.tsx`, `BACK_OFFSET_PX` and `BACK_SCALE_STEP` in `CardStack.tsx`). Write the list into the plan's own notes as the checklist for step 2, so "extract existing values only" can be verified as complete rather than assumed. → **[Execution note 1](#1-the-inventory-step-1)**
   - [x] Note which values appear more than once — those are the ones a token actually protects. The card dimensions are the known case; check whether `max-w-sm` on five screens is genuinely one concept or two. → **Two concepts.** See [Execution note 2](#2-max-w-sm-is-two-concepts-not-one-step-1).
-- [ ] **2. Add the `@theme` block to `src/index.css`.** Name only values that already exist, and change no rendered value in this step. Tokens to define, grouped:
-  - [ ] **Card geometry** — the card's width and height. Sized with `clamp()`: a floor that fits a 320px-wide phone with the control bar and HUD still on screen, a fluid middle in viewport units, and a ceiling near today's `18rem × 28rem` so a desktop card does not become a billboard. The aspect ratio the current pair implies (`288 × 448`, roughly 9:14) is the thing to preserve while both ends move.
-  - [ ] **Content column** — one token replacing `max-w-sm` across `LandingScreen`, `EndScreen`, `Hud`, `NoticeBanner` and `PreparingScreen`, so the HUD and the notice line up with the card at every viewport instead of at one.
-  - [ ] **Surface and text colours** — the neutral ramp actually in use (`950` page, `900`/`800` card faces and controls, `100`/`400`/`500` text), plus the three accents (`emerald` for the primary action, `amber` for notices and unconfirmed years, `red` for errors). Named by role, not by hue, because Phase 8 will change the hue and must not have to rename anything.
-  - [ ] **Motion durations** — the flip's 500ms and the card exit's 250ms, so the reduced-motion block in step 4 and Phase 8 have one place to reach for.
-  - [ ] **Interaction minimums** — a touch-target minimum and a focus-ring width, both consumed in step 6.
-- [ ] **3. Switch the card to the geometry tokens, removing the duplication.** Replace the `h-[28rem] w-72` pair in `Card.tsx` (the `motion.div`) and the identical pair in `CardStack.tsx` (the `relative isolate` wrapper) with the token-backed utilities. This is the step that fixes a latent bug: the two literals are required to match and nothing enforces it.
-  - [ ] Verify the backs still align by eye at three widths — the backs are `absolute inset-0` on the stack wrapper, so they follow the wrapper automatically once the wrapper is fluid.
-  - [ ] Re-check `BACK_OFFSET_PX` (10px) and `BACK_SCALE_STEP` (0.04) against the smallest card: a fixed 10px offset is a larger proportion of a 240px-tall card than of a 448px one. Decide whether either becomes relative; record the decision either way, because `CardStack`'s header block documents these as chosen by eye.
-- [ ] **4. Add the global reduced-motion block to `src/index.css`.** One `@media (prefers-reduced-motion: reduce)` block, scoped to the three surfaces rather than a blanket `* { transition: none }`, because a blanket rule is indiscriminate and would also disable state changes that carry meaning.
-  - [ ] The **flip**: collapse its transition duration so the face changes instantly. The flip is a state toggle, not decoration — the reveal must still happen, just not travel.
-  - [ ] The **spinner** in `PreparingScreen`: do not merely stop it. A stationary spinner is a dead grey circle that reads as broken. Hide it — it is already `aria-hidden="true"`, and the screen's "Dealing your deck…" line plus the resolved/total count carry all of the information, so nothing is lost. Update that component's header comment, which currently states outright that reduced motion is Phase 7's job and not handled there.
-  - [ ] The **QR placeholder pulse** in `QrCode.tsx`: drop the pulse, keep the same-size grey box. The box exists to hold layout, and it keeps doing that.
-- [ ] **5. Wrap the app in `MotionConfig` with `reducedMotion="user"`** in `src/main.tsx`, inside `StrictMode` and around `<App />`. This covers what CSS cannot: Motion's `drag` and the directional `exit` in `Card.tsx`. With the preference set, Motion animates opacity instead of transforms, so a committed card fades rather than flying 600px — and the **drag itself keeps working**, because direct manipulation is not an animation.
-  - [ ] Confirm jsdom's `window.matchMedia` satisfies Motion. jsdom does implement it; whether Motion's listener registration is happy with jsdom's implementation is the thing to check, not assume. If a stub turns out to be needed, it goes in the individual jsdom test files that render `main.tsx`'s tree — **not** in a global `setupFiles`, which `toolchain.md` §5 records as deliberately absent.
-  - [ ] Record the outcome in `agent_findings.md` either way. "It worked without a stub" is exactly the kind of thing the next session would otherwise re-derive.
-- [ ] **6. Focus states across every interactive element.** There are eleven: the URL input, the Start button, five suggested-playlist buttons, Exit, Play/Pause, Restart, and the notice's Dismiss. None has an explicit focus style today, so all eleven fall back to the browser default over a `neutral-950` background.
-  - [ ] Use `focus-visible`, not `focus`, so a mouse click does not leave a ring behind. The suggested-playlist buttons are the case that makes this visible.
-  - [ ] The ring must be legible against both `neutral-950` (the page) and `neutral-900`/`neutral-800` (the card faces and control buttons) — a single ring colour has to clear all three, so pick against the lightest.
-  - [ ] Apply the touch-target minimum token to the three round `CardControls` buttons and to the Dismiss button. `px-4 py-2` around a single glyph is roughly 40px tall and narrower than that wide; Dismiss is `px-1` around an `✕` and is the smallest target in the app, on the surface a player is most likely to hit while swiping.
-- [ ] **7. Fix the two ARIA defects on the landing screen.**
-  - [ ] The input carries both a visible label (the `Playlist link` span inside the wrapping `<label>`) **and** `aria-label="Spotify playlist link"`. The `aria-label` wins, so the accessible name does not match the visible text — which breaks speech control ("click Playlist link" matches nothing) and is a WCAG 2.5.3 failure. Remove the `aria-label`; the wrapping label already provides the name.
-  - [ ] `aria-invalid` is set on the input when there is an error, but the `<p role="alert">` carrying the message is not associated with it. Give the message an id and point `aria-describedby` at it while it exists, so the reason is available on focus and not only at the moment it is announced.
-- [ ] **8. Make the reveal announce itself.** Today a keyboard or screen-reader player presses Space, `CardRevealSide` mounts, and nothing announces it — the flip is silent to assistive technology, so the payoff of the entire game is invisible to it. Give the reveal's content a polite live region so mounting announces the title, artist and year.
-  - [ ] Polite, not assertive: the reveal is expected and requested, not an interruption.
-  - [ ] This is the one place in the app where announcing track data is **correct**, and the reasoning must be written into the component's header beside the existing leak block, or the next reader will file it as the leak bug it superficially resembles. The face is mounted only while flipped (`Card.tsx`), so the live region cannot exist on an unflipped card.
-  - [ ] Do **not** add a live region to `CardHiddenSide`, to `CardStack`'s backs, or to the HUD beyond the `role="status"` already on the count.
-- [ ] **9. Audit and fix text contrast, with measured ratios.** Compute each pair rather than eyeballing it, and record the numbers in `agent_findings.md` so a Phase 8 palette change has a baseline to beat.
-  - [ ] `placeholder:text-neutral-600` on `bg-neutral-900` in the URL input — the known failure, well under 4.5:1. Placeholder text is content.
-  - [ ] `text-neutral-500` on `bg-neutral-950`, used for the HUD, the "Same tracks, new order" line, the "No preview available" note and the preparing screen's explanatory line. Borderline at normal size and used at `text-xs` in three of those four places, where the large-text allowance does not apply.
-  - [ ] `disabled:opacity-40` on Play/Pause and Restart — a disabled control still has to be readable, and 40% of `neutral-100` on `neutral-800` is the app's dimmest text.
-  - [ ] `text-amber-200` on the notice banner's `bg-amber-950/40`, and `text-amber-300` for the unconfirmed-year and "check this one yourself" markers on `bg-neutral-800`.
-  - [ ] Fix by moving the token, not by patching the utility at one call site — that is what step 2 made possible.
-- [ ] **10. Make every screen's content column fluid**, replacing `max-w-sm`/`max-w-xs` with the step-2 content token. Check the three cases where a fixed column is currently visible as a defect: the HUD and notice banner not matching the card's width on a wide screen, the landing screen's suggested-playlist list at 320px, and `Hud`'s `truncate` on a long user-created playlist name.
-- [ ] **11. Update the component tests that name the values that just moved**, then add the new assertions. Any test asserting `w-72`, `h-[28rem]` or a literal `176` will fail; that is the token change working, not a regression.
-- [ ] **12. Verify the visual diff is a non-diff.** Before and after screenshots of all five screens at one width, compared by eye. Steps 2 and 3 were scoped as "extract existing values only"; any visible change is either an accident or a decision that belongs in Phase 8, and both need to be caught here.
-- [ ] **13. Run the four checks** — `pnpm typecheck && pnpm lint && pnpm test && pnpm build` — and confirm the CSS bundle's growth is proportionate. A `@theme` block adds custom properties to the output; `15.23 kB` (4.00 kB gzip) is the pre-change baseline measured 2026-08-05.
+- [x] **2. Add the `@theme` block to `src/index.css`.** Name only values that already exist, and change no rendered value in this step. Tokens to define, grouped: → **[Execution note 3](#3-the-token-set-and-two-tailwind-mechanisms-step-2)**
+  - [x] **Card geometry** — the card's width and height. Sized with `clamp()`: a floor that fits a 320px-wide phone with the control bar and HUD still on screen, a fluid middle in viewport units, and a ceiling near today's `18rem × 28rem` so a desktop card does not become a billboard. The aspect ratio the current pair implies (`288 × 448`, roughly 9:14) is the thing to preserve while both ends move. → **Height is the primary term and width is derived from it**, which is what makes the ratio exact at every viewport rather than only at the two ends. See [Execution note 4](#4-the-card-clamp-and-open-question-4-step-3).
+  - [x] **Content column** — one token replacing `max-w-sm` across `LandingScreen`, `EndScreen`, `Hud`, `NoticeBanner` and `PreparingScreen`, so the HUD and the notice line up with the card at every viewport instead of at one. → **Two tokens, not one**: `--container-content` for the three screens, `--card-width` for `Hud` and `NoticeBanner`. Note 2 explains why one token could not do both.
+  - [x] **Surface and text colours** — the neutral ramp actually in use (`950` page, `900`/`800` card faces and controls, `100`/`400`/`500` text), plus the three accents (`emerald` for the primary action, `amber` for notices and unconfirmed years, `red` for errors). Named by role, not by hue, because Phase 8 will change the hue and must not have to rename anything.
+  - [x] **Motion durations** — the flip's 500ms and the card exit's 250ms, so the reduced-motion block in step 4 and Phase 8 have one place to reach for. → The exit duration is named in CSS but **applied in JS**: Motion takes seconds and cannot read a custom property, so `Card.tsx` carries the constant and points back at the token. Both files say so.
+  - [x] **Interaction minimums** — a touch-target minimum and a focus-ring width, both consumed in step 6. → Consumed through two `@utility` composites rather than four repeated utilities per element. Note 3.
+- [x] **3. Switch the card to the geometry tokens, removing the duplication.** Replace the `h-[28rem] w-72` pair in `Card.tsx` (the `motion.div`) and the identical pair in `CardStack.tsx` (the `relative isolate` wrapper) with the token-backed utilities. This is the step that fixes a latent bug: the two literals are required to match and nothing enforces it.
+  - [ ] Verify the backs still align by eye at three widths — the backs are `absolute inset-0` on the stack wrapper, so they follow the wrapper automatically once the wrapper is fluid. → **BY EYE, SO NOT DONE HERE.** Rolled into the three-width manual pass; see [Execution note 7](#7-what-is-not-done-and-cannot-be-steps-3-and-12). The structural half — that both elements carry the same token string — is asserted by `CardStack.test.tsx`.
+  - [x] Re-check `BACK_OFFSET_PX` (10px) and `BACK_SCALE_STEP` (0.04) against the smallest card: a fixed 10px offset is a larger proportion of a 240px-tall card than of a 448px one. Decide whether either becomes relative; record the decision either way, because `CardStack`'s header block documents these as chosen by eye. → **Both stay absolute.** [Execution note 5](#5-open-question-2-the-back-offsets-stay-absolute-step-3).
+- [x] **4. Add the global reduced-motion block to `src/index.css`.** One `@media (prefers-reduced-motion: reduce)` block, scoped to the three surfaces rather than a blanket `* { transition: none }`, because a blanket rule is indiscriminate and would also disable state changes that carry meaning. → Keyed on three `data-motion` attributes; `src/index.css.test.ts` asserts the block names all three, and each component asserts it renders its own hook.
+  - [x] The **flip**: collapse its transition duration so the face changes instantly. The flip is a state toggle, not decoration — the reveal must still happen, just not travel.
+  - [x] The **spinner** in `PreparingScreen`: do not merely stop it. A stationary spinner is a dead grey circle that reads as broken. Hide it — it is already `aria-hidden="true"`, and the screen's "Dealing your deck…" line plus the resolved/total count carry all of the information, so nothing is lost. Update that component's header comment, which currently states outright that reduced motion is Phase 7's job and not handled there. → Header rewritten; a test removes the spinner from the DOM and asserts the count and both status lines survive.
+  - [x] The **QR placeholder pulse** in `QrCode.tsx`: drop the pulse, keep the same-size grey box. The box exists to hold layout, and it keeps doing that.
+- [x] **5. Wrap the app in `MotionConfig` with `reducedMotion="user"`** in `src/main.tsx`, inside `StrictMode` and around `<App />`. This covers what CSS cannot: Motion's `drag` and the directional `exit` in `Card.tsx`. With the preference set, Motion animates opacity instead of transforms, so a committed card fades rather than flying 600px — and the **drag itself keeps working**, because direct manipulation is not an animation.
+  - [x] Confirm jsdom's `window.matchMedia` satisfies Motion. jsdom does implement it; whether Motion's listener registration is happy with jsdom's implementation is the thing to check, not assume. If a stub turns out to be needed, it goes in the individual jsdom test files that render `main.tsx`'s tree — **not** in a global `setupFiles`, which `toolchain.md` §5 records as deliberately absent. → **The premise was wrong and the conclusion is still "no stub".** jsdom 30 has no `window.matchMedia` at all; Motion 12.43 tolerates its absence. [Execution note 6](#6-open-question-1-jsdom-has-no-matchmedia-and-motion-does-not-care-step-5).
+  - [x] Record the outcome in `agent_findings.md` either way. "It worked without a stub" is exactly the kind of thing the next session would otherwise re-derive. → Added, dated 2026-08-05.
+- [x] **6. Focus states across every interactive element.** There are eleven: the URL input, the Start button, five suggested-playlist buttons, Exit, Play/Pause, Restart, and the notice's Dismiss. None has an explicit focus style today, so all eleven fall back to the browser default over a `neutral-950` background. → **Thirteen, not eleven.** The plan's count omits the end screen's Play again and New playlist; both got the ring, and `EndScreen.test.tsx` asserts it.
+  - [x] Use `focus-visible`, not `focus`, so a mouse click does not leave a ring behind. The suggested-playlist buttons are the case that makes this visible.
+  - [x] The ring must be legible against both `neutral-950` (the page) and `neutral-900`/`neutral-800` (the card faces and control buttons) — a single ring colour has to clear all three, so pick against the lightest. → `oklch(97% 0 none)`: 18.15 / 16.42 / 13.86:1. Ratios and the rejected emerald alternative are in `agent_findings.md`.
+  - [x] Apply the touch-target minimum token to the three round `CardControls` buttons and to the Dismiss button. `px-4 py-2` around a single glyph is roughly 40px tall and narrower than that wide; Dismiss is `px-1` around an `✕` and is the smallest target in the app, on the surface a player is most likely to hit while swiping. → Also applied to Start, Play again, New playlist and the five suggestions, since the token exists and they were the same shape.
+- [x] **7. Fix the two ARIA defects on the landing screen.**
+  - [x] The input carries both a visible label (the `Playlist link` span inside the wrapping `<label>`) **and** `aria-label="Spotify playlist link"`. The `aria-label` wins, so the accessible name does not match the visible text — which breaks speech control ("click Playlist link" matches nothing) and is a WCAG 2.5.3 failure. Remove the `aria-label`; the wrapping label already provides the name. → Removed. **Ten test queries across two files were asserting the wrong name** and all ten failed, exactly as decision 8 anticipated.
+  - [x] `aria-invalid` is set on the input when there is an error, but the `<p role="alert">` carrying the message is not associated with it. Give the message an id and point `aria-describedby` at it while it exists, so the reason is available on focus and not only at the moment it is announced. → Present only while the error is, so the reference is never dangling; both halves asserted.
+- [x] **8. Make the reveal announce itself.** Today a keyboard or screen-reader player presses Space, `CardRevealSide` mounts, and nothing announces it — the flip is silent to assistive technology, so the payoff of the entire game is invisible to it. Give the reveal's content a polite live region so mounting announces the title, artist and year.
+  - [x] Polite, not assertive: the reveal is expected and requested, not an interruption. → `role="status"`, which carries `aria-live="polite"` implicitly.
+  - [x] This is the one place in the app where announcing track data is **correct**, and the reasoning must be written into the component's header beside the existing leak block, or the next reader will file it as the leak bug it superficially resembles. The face is mounted only while flipped (`Card.tsx`), so the live region cannot exist on an unflipped card.
+  - [x] Do **not** add a live region to `CardHiddenSide`, to `CardStack`'s backs, or to the HUD beyond the `role="status"` already on the count. → `CardHiddenSide.test.tsx` asserts no `role="status"`, no `role="alert"` and no `aria-live` anywhere on that face.
+- [x] **9. Audit and fix text contrast, with measured ratios.** Compute each pair rather than eyeballing it, and record the numbers in `agent_findings.md` so a Phase 8 palette change has a baseline to beat. → Full table added to `agent_findings.md`. **The audit found a fifth failure the plan did not list** — see [Execution note 8](#8-a-contrast-failure-the-plan-did-not-list-step-9).
+  - [x] `placeholder:text-neutral-600` on `bg-neutral-900` in the URL input — the known failure, well under 4.5:1. Placeholder text is content. → **2.30:1**, the worst in the app. Now `--color-fg-muted` at 5.54:1.
+  - [x] `text-neutral-500` on `bg-neutral-950`, used for the HUD, the "Same tracks, new order" line, the "No preview available" note and the preparing screen's explanatory line. Borderline at normal size and used at `text-xs` in three of those four places, where the large-text allowance does not apply. → **4.18:1, a fail.** Same token, 6.12:1 on the page.
+  - [x] `disabled:opacity-40` on Play/Pause and Restart — a disabled control still has to be readable, and 40% of `neutral-100` on `neutral-800` is the app's dimmest text. → **3.46:1.** `--opacity-disabled: 0.6` gives 5.94:1, and now covers the landing screen's `disabled:opacity-50` surfaces too.
+  - [x] `text-amber-200` on the notice banner's `bg-amber-950/40`, and `text-amber-300` for the unconfirmed-year and "check this one yourself" markers on `bg-neutral-800`. → **Both pass** — 14.71:1 and 10.45:1. Tokenised, values unchanged.
+  - [x] Fix by moving the token, not by patching the utility at one call site — that is what step 2 made possible. → Every fix is a token value; no call site carries a corrected literal.
+- [x] **10. Make every screen's content column fluid**, replacing `max-w-sm`/`max-w-xs` with the step-2 content token. Check the three cases where a fixed column is currently visible as a defect: the HUD and notice banner not matching the card's width on a wide screen, the landing screen's suggested-playlist list at 320px, and `Hud`'s `truncate` on a long user-created playlist name. → HUD and notice now take `--card-width`, asserted in both test files; `Hud.test.tsx` also pins `truncate` + `shrink-0` against a 72-character playlist name, which matters more now that the HUD is narrower than it was. The 320px case is in the manual pass.
+- [x] **11. Update the component tests that name the values that just moved**, then add the new assertions. Any test asserting `w-72`, `h-[28rem]` or a literal `176` will fail; that is the token change working, not a regression. → In the event **no test named a dimension at all** — the only failures were the ten `getByLabelText` queries from step 7. 438 tests pass, up from 413.
+- [ ] **12. Verify the visual diff is a non-diff.** Before and after screenshots of all five screens at one width, compared by eye. Steps 2 and 3 were scoped as "extract existing values only"; any visible change is either an accident or a decision that belongs in Phase 8, and both need to be caught here. → **NOT DONE — needs a browser and a pair of eyes.** [Execution note 7](#7-what-is-not-done-and-cannot-be-steps-3-and-12) lists every change that IS expected to be visible, so the comparison is a checklist rather than a hunt.
+- [x] **13. Run the four checks** — `pnpm typecheck && pnpm lint && pnpm test && pnpm build` — and confirm the CSS bundle's growth is proportionate. A `@theme` block adds custom properties to the output; `15.23 kB` (4.00 kB gzip) is the pre-change baseline measured 2026-08-05. → All four pass. **The stated baseline was stale**: the tree measured `16.90 kB` (4.24 kB gzip) before this plan, not 15.23. After: `21.52 kB` (5.13 kB gzip). [Execution note 9](#9-the-css-bundle-step-13) accounts for the +4.62 kB.
 
 ---
 
 ## Unit Tests
 
-All new DOM tests need the `/** @vitest-environment jsdom */` docblock as the first thing in the file and their own `afterEach(cleanup)` — Testing Library does not auto-clean in this repo (`toolchain.md` §5).
+All new DOM tests need the `/** @vitest-environment jsdom */` docblock as the first thing in the file and their own `afterEach(cleanup)` — Testing Library does not auto-clean in this repo (`toolchain.md` §5). Every new test below landed in a file that already had both.
 
-- [ ] `should render the card at the token-backed size rather than a literal` — covers step 3 in `src/components/Card.test.tsx`. Asserts the token utility is present; a card sized by a hardcoded pair is the regression.
-- [ ] `should size the stack wrapper from the same token as the card` — covers the duplication removal in `src/components/CardStack.test.tsx`. The point of the test is that the two cannot drift; assert the same class string in both.
-- [ ] `should keep the back offsets proportional at the smallest card size` — covers step 3's sub-decision in `CardStack.test.tsx`, only if step 3 makes the offsets relative. Skip if the decision is to leave them fixed, and say so in the plan's notes.
-- [ ] `should expose the input's accessible name as its visible label` — covers step 7 in `src/components/LandingScreen.test.tsx`. Query by the visible label text; the current `aria-label` makes that query fail, which is the defect.
-- [ ] `should associate the error message with the input via aria-describedby` — covers step 7 in `LandingScreen.test.tsx`. Assert both that the id link exists while an error shows and that it is absent when there is none.
-- [ ] `should announce the reveal politely when the card is flipped` — covers step 8 in `src/components/CardRevealSide.test.tsx`. Assert the live region wraps the title, artist and year.
-- [ ] `should not put a live region on the hidden side` — covers step 8's negative half in `src/components/CardHiddenSide.test.tsx`. Joins the existing leak assertions: a live region on an unflipped card would announce a card the player is meant to guess.
-- [ ] `should give every interactive element a focus-visible style` — covers step 6, one test each in `LandingScreen.test.tsx`, `CardControls.test.tsx`, `NoticeBanner.test.tsx` and `EndScreen.test.tsx`. Asserting a class name is a weak test; it is the only automatable guard, and it catches the common regression of a new button added without one.
-- [ ] `should meet the touch-target minimum on the three card controls and Dismiss` — covers step 6 in `CardControls.test.tsx` and `NoticeBanner.test.tsx`. Class-name level, same caveat.
-- [ ] `should hide the spinner rather than freeze it under reduced motion` — covers step 4 in `src/components/PreparingScreen.test.tsx`, only if the mechanism ends up being a class the component renders. If it is pure CSS, this belongs in the canary below instead, because jsdom does not evaluate media queries — say which in the notes rather than writing a test that asserts nothing.
-- [ ] `should still render the count and the status line under reduced motion` — covers step 4's information-preservation claim in `PreparingScreen.test.tsx`. The spinner going away must not take the progress report with it.
-- [ ] `should declare a prefers-reduced-motion block covering the flip, the spinner and the placeholder` — covers step 4 in a new `src/index.css.test.ts`, a **`node`** test that reads the stylesheet as text. This is a canary, not a behaviour test, and the file header must say so: jsdom cannot evaluate a media query, so the only thing assertable in this repo is that the block exists and names the three surfaces. It is here because the alternative is that reduced motion is covered by nothing at all.
-- [ ] `should render the QR at the display size while generating at the fixed bitmap size` — covers decision 4 in `src/components/QrCode.test.tsx`. Assert the generation call receives the bitmap size and the rendered element carries the display size, since conflating the two is what would make the code regenerate on every resize.
-- [ ] Update `src/App.test.tsx` if `MotionConfig` changes what the container renders. It drives the whole flow and is the first place a `matchMedia` problem from step 5 will surface.
+**438 tests pass, up from 413.** Nineteen new tests; the other six of the increase are the extra cases noted inline.
+
+- [x] `should render the card at the token-backed size rather than a literal` — covers step 3 in `src/components/Card.test.tsx`. Asserts the token utility is present; a card sized by a hardcoded pair is the regression. → Also asserts the absence of any `h-[…]` or `w-<number>`, so a literal added _alongside_ the token fails too. Joined by `should take the flip duration from the token and expose the reduced-motion hook`.
+- [x] `should size the stack wrapper from the same token as the card` — covers the duplication removal in `src/components/CardStack.test.tsx`. The point of the test is that the two cannot drift; assert the same class string in both. → Asserts equality of the extracted `h-`/`w-` classes on the two elements **and** their literal value, so retokenising one and not the other fails.
+- [ ] ~~`should keep the back offsets proportional at the smallest card size`~~ — covers step 3's sub-decision in `CardStack.test.tsx`, only if step 3 makes the offsets relative. Skip if the decision is to leave them fixed, and say so in the plan's notes. → **SKIPPED, as the plan provides for.** Both offsets stay absolute; [Execution note 5](#5-open-question-2-the-back-offsets-stay-absolute-step-3) is the record.
+- [x] `should expose the input's accessible name as its visible label` — covers step 7 in `src/components/LandingScreen.test.tsx`. Query by the visible label text; the current `aria-label` makes that query fail, which is the defect. → Queries by visible text **and** asserts `aria-label` is absent, because a future `aria-label` that happened to read "Playlist link" would satisfy the query while still being the redundant attribute that caused this.
+- [x] `should associate the error message with the input via aria-describedby` — covers step 7 in `LandingScreen.test.tsx`. Assert both that the id link exists while an error shows and that it is absent when there is none.
+- [x] `should announce the reveal politely when the card is flipped` — covers step 8 in `src/components/CardRevealSide.test.tsx`. Assert the live region wraps the title, artist and year. → Plus `should announce the year-unknown and pending states too`: the region wraps the year _slot_, so the two states that show no number are announced as well. A region that only existed on a resolved year would leave a screen-reader player in silence on roughly a third of an ordinary deck.
+- [x] `should not put a live region on the hidden side` — covers step 8's negative half in `src/components/CardHiddenSide.test.tsx`. Joins the existing leak assertions: a live region on an unflipped card would announce a card the player is meant to guess. → Asserts no `role="status"`, no `role="alert"` and no `aria-live`.
+- [x] `should give every interactive element a focus-visible style` — covers step 6, one test each in `LandingScreen.test.tsx`, `CardControls.test.tsx`, `NoticeBanner.test.tsx` and `EndScreen.test.tsx`. Asserting a class name is a weak test; it is the only automatable guard, and it catches the common regression of a new button added without one. → Each also asserts the element **count**, so a control added without a ring fails rather than being skipped by the loop. The weakness is written into the tests themselves, at length, in `LandingScreen.test.tsx`.
+- [x] `should meet the touch-target minimum on the three card controls and Dismiss` — covers step 6 in `CardControls.test.tsx` and `NoticeBanner.test.tsx`. Class-name level, same caveat.
+- [x] `should hide the spinner rather than freeze it under reduced motion` — covers step 4 in `src/components/PreparingScreen.test.tsx`, only if the mechanism ends up being a class the component renders. If it is pure CSS, this belongs in the canary below instead, because jsdom does not evaluate media queries — say which in the notes rather than writing a test that asserts nothing. → **Both, and the split is written into both files.** The mechanism is pure CSS, so the _rule_ is the canary's. What the component owns is the `data-motion="spinner"` hook the stylesheet selects on, and that is what this test asserts — renaming it in one file and not the other is the regression, and it would otherwise be caught by nothing.
+- [x] `should still render the count and the status line under reduced motion` — covers step 4's information-preservation claim in `PreparingScreen.test.tsx`. The spinner going away must not take the progress report with it. → Does to the DOM what `display: none` does to the picture: removes the spinner node, then asserts the count and both status lines are still there.
+- [x] `should declare a prefers-reduced-motion block covering the flip, the spinner and the placeholder` — covers step 4 in a new `src/index.css.test.ts`, a **`node`** test that reads the stylesheet as text. This is a canary, not a behaviour test, and the file header must say so: jsdom cannot evaluate a media query, so the only thing assertable in this repo is that the block exists and names the three surfaces. It is here because the alternative is that reduced motion is covered by nothing at all. → Header says so at length. Two further tests in the same file: `should not disable transitions indiscriminately` pins the scoped-selector decision against a future blanket `*` rule, and `should define the card geometry as one derived pair rather than two independent clamps` pins the derivation and the `dvh` term. **Getting the stylesheet's text was itself a trap** — see [Execution note 10](#10-reading-the-stylesheet-as-text-is-harder-than-it-looks).
+- [x] `should render the QR at the display size while generating at the fixed bitmap size` — covers decision 4 in `src/components/QrCode.test.tsx`. Assert the generation call receives the bitmap size and the rendered element carries the display size, since conflating the two is what would make the code regenerate on every resize. → Plus `should fall back to the bitmap size when no display size is given`, pinning the pre-Phase-7 behaviour every other caller relies on, and `should expose the reduced-motion hook on the placeholder`.
+- [x] Update `src/App.test.tsx` if `MotionConfig` changes what the container renders. It drives the whole flow and is the first place a `matchMedia` problem from step 5 will surface. → **It is not, and that is worth knowing.** `MotionConfig` lives in `src/main.tsx`, which nothing in this repo renders — `App.test.tsx` renders `<App />` directly, so it never sees the provider. Its only change was the six label queries from step 7. The `matchMedia` canary therefore had to be written explicitly, and it is in `Card.test.tsx`: `should render inside a reducedMotion MotionConfig despite jsdom having no matchMedia`.
 
 ---
 
 ## Documentation Updates
 
-- [ ] `docs/architecture.md` §3 — a subsection for the token layer: what `@theme` holds, that components consume tokens rather than literals, and that Phase 8 redesigns by changing token values. Plus the reduced-motion strategy and why it is split across CSS and `MotionConfig`.
-- [ ] `docs/toolchain.md` — the Tailwind section says v4 is CSS-first with no `tailwind.config.js`; add that the design surface is the `@theme` block in `src/index.css` and that this is where a v3 reader would expect a config file.
-- [ ] `docs/development.md` §5 — a manual-verification table for what this plan cannot close locally: the reduced-motion pass with the OS preference set (and via the devtools emulation), the three-width responsive pass, a keyboard-only pass through a whole deck, and a screen-reader pass over the flip. Mark each Pending, in the same shape as the existing card and gesture tables.
-- [ ] `docs/development.md` §8 — a known limitation if the screen-reader pass is not performed. The repo already carries two honest gaps of this shape; a third is better than an implied claim.
-- [ ] `docs/agent_findings.md` — dated entries for: the measured contrast ratios from step 9, the `aria-label`-overriding-the-visible-label defect (a general React/a11y trap, not a one-off), the silent-flip finding from step 8, and whether jsdom needed a `matchMedia` stub for `MotionConfig`. Tell the developer these were added.
-- [ ] `docs/plans/plan.md` §5 — tick the responsive and a11y checkboxes, and add a completion note in the style of Phases 3–6, including anything deferred.
-- [ ] `AGENTS.md` — the Conventions bullet reading "`@theme` tokens are Phase 7" becomes a statement of where tokens live and the rule that a new component consumes them rather than inventing literals. Update the current-phase line.
-- [ ] Component header comments that name Phase 7 by name and must not be left stale: `src/index.css` (the "deliberately deferred to Phase 7" note), `PreparingScreen.tsx` (the spinner block), `Card.tsx` (the "`@theme` tokens, which are Phase 7's job" note), `QrCode.tsx` (the lazy-load note — that one is plan 2's, so leave it), `CardStack.tsx` (the QR cost note).
+- [x] `docs/architecture.md` §3 — a subsection for the token layer: what `@theme` holds, that components consume tokens rather than literals, and that Phase 8 redesigns by changing token values. Plus the reduced-motion strategy and why it is split across CSS and `MotionConfig`.
+      → **Done** — a new §3 subsection, _The token layer and the motion strategy_, with three sub-parts: the five load-bearing properties of the block, the card geometry as one derived pair (including the table of what it resolves to at each viewport), the four-surfaces/two-declarations motion table, and what the a11y pass actually changed. Also corrected the file's status banner, which named `@theme` tokens as not-done, and the Components table row that still read "no screens, no gestures" from Phase 4.
+- [x] `docs/toolchain.md` — the Tailwind section says v4 is CSS-first with no `tailwind.config.js`; add that the design surface is the `@theme` block in `src/index.css` and that this is where a v3 reader would expect a config file.
+      → **Done**, plus a new _Tailwind v4 — four behaviours that bite_ subsection: `@theme static` vs `@theme`, the silent unknown-utility no-op, `@utility` composing with variants, and the prose-harvesting measurement. The §5 DOM-environment subsection also gained the docblock-tag-in-prose warning found while writing these docs.
+- [x] `docs/development.md` §5 — a manual-verification table for what this plan cannot close locally: the reduced-motion pass with the OS preference set (and via the devtools emulation), the three-width responsive pass, a keyboard-only pass through a whole deck, and a screen-reader pass over the flip. Mark each Pending, in the same shape as the existing card and gesture tables.
+      → **Done** — four tables, 26 rows, every one Pending, in the same shape as the existing card and gesture tables. Plus a _before/after screenshot comparison_ subsection carrying the seven expected-visible changes from execution note 7, so step 12 is a checklist rather than a hunt. The suite counts and the jsdom file count in that section were stale and are corrected.
+- [x] `docs/development.md` §8 — a known limitation if the screen-reader pass is not performed. The repo already carries two honest gaps of this shape; a third is better than an implied claim.
+      → **Done — three new gaps, not one.** The screen-reader/reduced-motion/responsive/keyboard passes as one entry (with the screen reader called out as the priority, since the reveal's live region is the phase's most valuable change and nothing local confirms it announces), the unrun screenshot comparison as a second, and the swipe threshold's new 52%-at-the-floor arithmetic folded into the existing gesture entry.
+- [x] `docs/agent_findings.md` — dated entries for: the measured contrast ratios from step 9, the `aria-label`-overriding-the-visible-label defect (a general React/a11y trap, not a one-off), the silent-flip finding from step 8, and whether jsdom needed a `matchMedia` stub for `MotionConfig`. Tell the developer these were added.
+      → **Done, and the developer was told.** All four, dated 2026-08-05, plus **four the plan did not anticipate**: reading a sibling file inside a Vite project (two idiomatic approaches fail, one silently), Tailwind v4 harvesting utility names out of prose (1.72 kB of this repo's CSS comes from its own markdown), Vitest's environment tag being matched in prose, and the silent unknown-colour-utility no-op. The last two were found while writing the documentation, not while writing the code.
+- [x] `docs/plans/plan.md` §5 — tick the responsive and a11y checkboxes, and add a completion note in the style of Phases 3–6, including anything deferred.
+      → **Done.** Two of six boxes ticked, the heading now reads _Phase 7 — Polish (first half complete)_, and the completion note covers the design surface, the clamp-over-breakpoints decision and the duplication it removed, the four a11y defects, the contrast measurements, the motion split, what is still owed, and the one thing that got worse and was left so.
+- [x] `AGENTS.md` — the Conventions bullet reading "`@theme` tokens are Phase 7" becomes a statement of where tokens live and the rule that a new component consumes them rather than inventing literals. Update the current-phase line.
+      → **Done.** The one bullet became three (where tokens live and the consume-don't-invent rule; the silent unknown-utility hazard; `@theme static`). The current-phase line now reads "7, first half complete" and names plan 2 as next. **Two additions the checklist did not ask for:** a Manual-verification bullet for Phase 7 beside the Phase 4/5/6 ones, and a Key Rule stating that `CardRevealSide`'s live region is the one correct place to announce track data — without it the next reader files the phase's best change as the leak it resembles.
+- [x] Component header comments that name Phase 7 by name and must not be left stale: `src/index.css` (the "deliberately deferred to Phase 7" note), `PreparingScreen.tsx` (the spinner block), `Card.tsx` (the "`@theme` tokens, which are Phase 7's job" note), `QrCode.tsx` (the lazy-load note — that one is plan 2's, so leave it), `CardStack.tsx` (the QR cost note).
+      → **Done** — these are code comments rather than documentation, so they went in with the steps that changed the code around them. `QrCode.tsx`'s lazy-load note and `CardStack.tsx`'s QR cost note are both left exactly as they were, because both point at plan 2 and are still accurate. **One the checklist did not list:** `GameScreen.tsx` said a "no going back" hint for an unhandled ArrowLeft "is a Phase 7 call" — and neither Phase 7 plan took it up, so the comment now says it is unowned rather than pending. Every other `Phase 7` mention left in `src/` is either historical ("until Phase 7") or correctly forward-looking to plan 2.
 
+**One defect was found while writing this documentation and fixed:** `src/index.css.test.ts` claimed in its header to be a `node` test "with no `@vitest-environment jsdom` docblock" — and **that sentence made it a jsdom test**, because Vitest scans the leading comment for the tag without caring whether it finds a directive or a description of one. Measured: `typeof window` was `object`, `environment` 3.08 s. A first rewrite that merely _quoted_ the old wording did not fix it; the token has to be absent. Now genuinely node (`environment 0ms`). Recorded in `agent_findings.md` and in `toolchain.md` §5, because the `node` default is what makes a DOM API accidentally added to `shared/` fail rather than break at deploy time — and a comment is enough to defeat it.
 ---
 
 ## Testing Strategy
@@ -169,26 +180,30 @@ All new DOM tests need the `/** @vitest-environment jsdom */` docblock as the fi
 
 ## Assumptions & Decisions
 
-| #   | Assumption / Decision                                                                                                                                                                                                                                                                                                                                                                                                                     | Rationale                                                                                                                                                                                                                                                                                                                                     |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | **Tokens name existing values only. No visual redesign.** Considered: (a) extract only; (b) extract plus a light restyle for contrast and typography; (c) skip `@theme`. **Chose (a)**, developer-confirmed 2026-08-05.                                                                                                                                                                                                                     | Phase 8 owns "card visual design", and a restyle here would overlap it while making the token extraction unreviewable — a diff that changes both structure and appearance cannot be checked for accidental change. Contrast fixes (step 9) are the one exception, and they are corrections rather than design.                                  |
-| 2   | **Fluid `clamp()` tokens, not breakpoint variants.** Considered: (a) one fluid token pair; (b) `sm:`/`lg:` variants; (c) container queries. **Chose (a)**, developer-confirmed 2026-08-05.                                                                                                                                                                                                                                                 | The card's size is written twice and the two must agree; breakpoints would multiply that from two literals to six. Container queries would need a constraining wrapper invented for no other reason. A clamp also covers the sizes between the breakpoints anyone would have picked.                                                            |
-| 3   | **Reduced motion via one global CSS block plus `MotionConfig`, not `useReducedMotion()` per component.** Considered: (a) CSS + `MotionConfig`; (b) the hook in three components; (c) CSS only. **Chose (a)**, developer-confirmed 2026-08-05.                                                                                                                                                                                               | Four animation surfaces, two declarations, and no presentational component gains a media query. (b) puts a preference read into three components and silently misses the next animation added. (c) leaves the largest motion in the app — the 600px card exit — fully animated.                                                                 |
-| 4   | **The QR's generated bitmap size stays fixed while its displayed size becomes fluid.** `QrCode` currently takes one `size` used as both.                                                                                                                                                                                                                                                                                                   | `toDataURL` is asynchronous, so a size that tracks the viewport would regenerate the code on every resize frame — needing a debounce, extra state, and a placeholder flash mid-resize. Generating once at a size adequate for the largest card and letting CSS scale it down costs nothing: downscaling a QR does not harm scannability, and error correction is already `M`. This keeps the existing generation-counter logic untouched. |
-| 5   | **The reveal gets a live region; nothing else does.** The card face, the backs and the hidden side stay silent.                                                                                                                                                                                                                                                                                                                            | Announcing track data is correct exactly once — after a flip the player asked for. The reveal side is mounted only while flipped, so the region cannot exist on a card that is still a mystery. Anywhere else it would be the leak the whole app is built to avoid.                                                                             |
-| 6   | **A `node` test asserts the reduced-motion CSS block exists, as a canary.**                                                                                                                                                                                                                                                                                                                                                               | jsdom does not evaluate media queries, so there is no behavioural test available. The choice is between a text-level canary and no coverage at all. It is labelled as a canary in its own header so nobody mistakes it for proof the styles work.                                                                                               |
-| 7   | **The spinner is hidden under reduced motion, not stopped.**                                                                                                                                                                                                                                                                                                                                                                              | A stationary spinner reads as a hung app. It is already `aria-hidden`, and the screen's status line and resolved/total count carry every piece of information it conveys, so removing it loses nothing.                                                                                                                                        |
-| 8   | **Fixing the `aria-label` on the landing input changes an accessible name that a test may assert.** Treated as a defect fix, not a breaking change.                                                                                                                                                                                                                                                                                        | An accessible name that does not match the visible label fails WCAG 2.5.3 and breaks speech control. The wrapping `<label>` already supplies a correct name, so the attribute is redundant as well as harmful.                                                                                                                                 |
-| 9   | **No `select-none` on the card unless the iOS check happens.** Left as `development.md` §5 records it.                                                                                                                                                                                                                                                                                                                                     | It is listed there as an open question pending a real-device pass that was waived. Adding it blind would close a question nobody measured; it costs one utility to add later if a device shows text selection or a long-press menu on the card.                                                                                                 |
+| #   | Assumption / Decision                                                                                                                                                                                                                         | Rationale                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **Tokens name existing values only. No visual redesign.** Considered: (a) extract only; (b) extract plus a light restyle for contrast and typography; (c) skip `@theme`. **Chose (a)**, developer-confirmed 2026-08-05.                       | Phase 8 owns "card visual design", and a restyle here would overlap it while making the token extraction unreviewable — a diff that changes both structure and appearance cannot be checked for accidental change. Contrast fixes (step 9) are the one exception, and they are corrections rather than design.                                                                                                                            |
+| 2   | **Fluid `clamp()` tokens, not breakpoint variants.** Considered: (a) one fluid token pair; (b) `sm:`/`lg:` variants; (c) container queries. **Chose (a)**, developer-confirmed 2026-08-05.                                                    | The card's size is written twice and the two must agree; breakpoints would multiply that from two literals to six. Container queries would need a constraining wrapper invented for no other reason. A clamp also covers the sizes between the breakpoints anyone would have picked.                                                                                                                                                      |
+| 3   | **Reduced motion via one global CSS block plus `MotionConfig`, not `useReducedMotion()` per component.** Considered: (a) CSS + `MotionConfig`; (b) the hook in three components; (c) CSS only. **Chose (a)**, developer-confirmed 2026-08-05. | Four animation surfaces, two declarations, and no presentational component gains a media query. (b) puts a preference read into three components and silently misses the next animation added. (c) leaves the largest motion in the app — the 600px card exit — fully animated.                                                                                                                                                           |
+| 4   | **The QR's generated bitmap size stays fixed while its displayed size becomes fluid.** `QrCode` currently takes one `size` used as both.                                                                                                      | `toDataURL` is asynchronous, so a size that tracks the viewport would regenerate the code on every resize frame — needing a debounce, extra state, and a placeholder flash mid-resize. Generating once at a size adequate for the largest card and letting CSS scale it down costs nothing: downscaling a QR does not harm scannability, and error correction is already `M`. This keeps the existing generation-counter logic untouched. |
+| 5   | **The reveal gets a live region; nothing else does.** The card face, the backs and the hidden side stay silent.                                                                                                                               | Announcing track data is correct exactly once — after a flip the player asked for. The reveal side is mounted only while flipped, so the region cannot exist on a card that is still a mystery. Anywhere else it would be the leak the whole app is built to avoid.                                                                                                                                                                       |
+| 6   | **A `node` test asserts the reduced-motion CSS block exists, as a canary.**                                                                                                                                                                   | jsdom does not evaluate media queries, so there is no behavioural test available. The choice is between a text-level canary and no coverage at all. It is labelled as a canary in its own header so nobody mistakes it for proof the styles work.                                                                                                                                                                                         |
+| 7   | **The spinner is hidden under reduced motion, not stopped.**                                                                                                                                                                                  | A stationary spinner reads as a hung app. It is already `aria-hidden`, and the screen's status line and resolved/total count carry every piece of information it conveys, so removing it loses nothing.                                                                                                                                                                                                                                   |
+| 8   | **Fixing the `aria-label` on the landing input changes an accessible name that a test may assert.** Treated as a defect fix, not a breaking change.                                                                                           | An accessible name that does not match the visible label fails WCAG 2.5.3 and breaks speech control. The wrapping `<label>` already supplies a correct name, so the attribute is redundant as well as harmful.                                                                                                                                                                                                                            |
+| 9   | **No `select-none` on the card unless the iOS check happens.** Left as `development.md` §5 records it.                                                                                                                                        | It is listed there as an open question pending a real-device pass that was waived. Adding it blind would close a question nobody measured; it costs one utility to add later if a device shows text selection or a long-press menu on the card.                                                                                                                                                                                           |
 
 ---
 
 ## Open Questions
 
-- [ ] **Does `MotionConfig` need a `matchMedia` stub under jsdom?** Resolved in step 5 by running the suite, not by reading. It determines whether up to fourteen jsdom files need a change, so it is the first thing to find out and the reason step 5 sits before the test work.
-- [ ] **Do `BACK_OFFSET_PX` and `BACK_SCALE_STEP` become relative once the card is fluid?** A fixed 10px offset is a much larger proportion of a small card. `CardStack`'s header documents both as chosen by eye, and neither has ever been seen on a phone — the same gap `development.md` §5 records for the gesture thresholds.
+- [x] **Does `MotionConfig` need a `matchMedia` stub under jsdom?** Resolved in step 5 by running the suite, not by reading. It determines whether up to fourteen jsdom files need a change, so it is the first thing to find out and the reason step 5 sits before the test work.
+      → **No, and the question's premise was wrong.** jsdom 30 has no `window.matchMedia` at all — it is `undefined`, not a partial implementation — and Motion 12.43 tolerates its absence. No file needed a change. [Execution note 6](#6-open-question-1-jsdom-has-no-matchmedia-and-motion-does-not-care-step-5), and `agent_findings.md` 2026-08-05.
+- [x] **Do `BACK_OFFSET_PX` and `BACK_SCALE_STEP` become relative once the card is fluid?** A fixed 10px offset is a much larger proportion of a small card. `CardStack`'s header documents both as chosen by eye, and neither has ever been seen on a phone — the same gap `development.md` §5 records for the gesture thresholds.
+      → **Neither. Both stay absolute**, for two different reasons. [Execution note 5](#5-open-question-2-the-back-offsets-stay-absolute-step-3).
 - [ ] **Is `VISIBLE_BACKS = 2` or 3 right?** Carried over from Phase 5's waived device pass and unanswerable locally. Out of scope to change; noted because it lives in the file this plan edits, and `CardStack.test.tsx` asserts "up to two backs", so changing it means changing two test expectations.
-- [ ] **Does the card's aspect ratio survive a short, wide viewport** — a phone in landscape? A clamp on width alone can produce a card taller than the viewport. Decide during step 3 whether the height clamp also needs a `dvh` term, and record which.
+      → **Still open, still out of scope, and unchanged.** Left at 2. Noted here only so the next reader knows it was seen and not forgotten.
+- [x] **Does the card's aspect ratio survive a short, wide viewport** — a phone in landscape? A clamp on width alone can produce a card taller than the viewport. Decide during step 3 whether the height clamp also needs a `dvh` term, and record which.
+      → **It needs a `dvh` term, and the plan's framing had the axes the wrong way round.** Height is the primary clamp and width is derived from it, so the ratio holds everywhere; without the `dvh` term a landscape phone would get a 448px card in a 375px viewport. A third term guards the narrow-but-tall case. [Execution note 4](#4-the-card-clamp-and-open-question-4-step-3).
 
 ---
 
@@ -215,57 +230,57 @@ sites, not files.
 
 **Surfaces and borders**
 
-| Value                    | Uses | Where                                                                       |
-| ------------------------ | ---: | --------------------------------------------------------------------------- |
-| `bg-neutral-950`         |    4 | `LandingScreen`, `PreparingScreen`, `EndScreen`, `GameScreen` — the page     |
-| `bg-neutral-900`         |    4 | card hidden face, card back, the URL input, the suggestion buttons          |
-| `bg-neutral-800`         |    3 | card reveal face, the three control buttons, the QR placeholder             |
-| `hover:bg-neutral-700`   |    3 | the three control buttons                                                   |
-| `border-neutral-800`     |    2 | card back, suggestion button                                                |
-| `border-neutral-700`     |    3 | the URL input, the New-playlist button, the spinner ring                     |
-| `hover:border-neutral-700` | 1  | suggestion button                                                           |
-| `hover:border-neutral-600` | 1  | New-playlist button                                                         |
+| Value                      | Uses | Where                                                                    |
+| -------------------------- | ---: | ------------------------------------------------------------------------ |
+| `bg-neutral-950`           |    4 | `LandingScreen`, `PreparingScreen`, `EndScreen`, `GameScreen` — the page |
+| `bg-neutral-900`           |    4 | card hidden face, card back, the URL input, the suggestion buttons       |
+| `bg-neutral-800`           |    3 | card reveal face, the three control buttons, the QR placeholder          |
+| `hover:bg-neutral-700`     |    3 | the three control buttons                                                |
+| `border-neutral-800`       |    2 | card back, suggestion button                                             |
+| `border-neutral-700`       |    3 | the URL input, the New-playlist button, the spinner ring                 |
+| `hover:border-neutral-700` |    1 | suggestion button                                                        |
+| `hover:border-neutral-600` |    1 | New-playlist button                                                      |
 
 **Text**
 
-| Value               | Uses | Where                                                                                                            |
-| ------------------- | ---: | ---------------------------------------------------------------------------------------------------------------- |
-| `text-neutral-100`  |    4 | three screens' page text, the control glyphs                                                                     |
-| `text-neutral-50`   |    1 | the resolved year                                                                                                |
-| `text-neutral-300`  |    1 | "Year unknown"                                                                                                   |
-| `text-neutral-200`  |    1 | the New-playlist label                                                                                           |
-| `text-neutral-400`  |    6 | landing blurb ×2, the artist, "Still looking up the year…", the preparing count, the end-screen subtitle          |
-| `text-neutral-500`  |    6 | "Scan to play the full song", "No preview available", the HUD, "Same tracks, new order", a suggestion blurb, the preparing explanation |
-| `text-neutral-600`  |    2 | the `····` pending dots, `placeholder:` in the URL input                                                          |
-| `text-white`        |    2 | Start, Play again                                                                                                |
+| Value              | Uses | Where                                                                                                                                  |
+| ------------------ | ---: | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `text-neutral-100` |    4 | three screens' page text, the control glyphs                                                                                           |
+| `text-neutral-50`  |    1 | the resolved year                                                                                                                      |
+| `text-neutral-300` |    1 | "Year unknown"                                                                                                                         |
+| `text-neutral-200` |    1 | the New-playlist label                                                                                                                 |
+| `text-neutral-400` |    6 | landing blurb ×2, the artist, "Still looking up the year…", the preparing count, the end-screen subtitle                               |
+| `text-neutral-500` |    6 | "Scan to play the full song", "No preview available", the HUD, "Same tracks, new order", a suggestion blurb, the preparing explanation |
+| `text-neutral-600` |    2 | the `····` pending dots, `placeholder:` in the URL input                                                                               |
+| `text-white`       |    2 | Start, Play again                                                                                                                      |
 
 **Accents**
 
-| Value                                       | Uses | Where                                    |
-| ------------------------------------------- | ---: | ---------------------------------------- |
-| `bg-emerald-600` + `hover:bg-emerald-500`   |    2 | Start, Play again                        |
-| `border-t-emerald-500`                      |    1 | the spinner's leading arc                |
-| `text-amber-300`                            |    2 | "Unconfirmed year", "Check this one yourself" |
-| `text-amber-200` / `bg-amber-950/40` / `border-amber-900/60` / `text-amber-400` | 1 each | the notice banner |
-| `text-red-400`                              |    1 | the landing error message                |
+| Value                                                                           |   Uses | Where                                         |
+| ------------------------------------------------------------------------------- | -----: | --------------------------------------------- |
+| `bg-emerald-600` + `hover:bg-emerald-500`                                       |      2 | Start, Play again                             |
+| `border-t-emerald-500`                                                          |      1 | the spinner's leading arc                     |
+| `text-amber-300`                                                                |      2 | "Unconfirmed year", "Check this one yourself" |
+| `text-amber-200` / `bg-amber-950/40` / `border-amber-900/60` / `text-amber-400` | 1 each | the notice banner                             |
+| `text-red-400`                                                                  |      1 | the landing error message                     |
 
 **Dimensions, durations and JS constants**
 
-| Value                     | Uses | Where                                                            |
-| ------------------------- | ---: | ---------------------------------------------------------------- |
-| `h-[28rem] w-72`          |    2 | `Card.tsx` and `CardStack.tsx` — **the duplication step 3 removes** |
-| `max-w-sm` (24rem)        |    6 | `LandingScreen` ×3, `EndScreen`, `Hud`, `NoticeBanner`            |
-| `max-w-xs` (20rem)        |    1 | the preparing explanation                                        |
-| `size-8`                  |    1 | the spinner                                                      |
-| `duration-500`            |    1 | the flip                                                         |
-| `disabled:opacity-40`     |    2 | Play/Pause, Restart                                              |
-| `disabled:opacity-50`     |    3 | the URL input, Start, the suggestion buttons                     |
-| `DEFAULT_QR_SIZE = 176`   |    1 | `CardHiddenSide`                                                 |
-| `EXIT_DISTANCE_PX = 600`  |    1 | `Card`                                                           |
-| exit `duration: 0.25`     |    1 | `Card`                                                           |
-| `BACK_OFFSET_PX = 10`     |    1 | `CardStack`                                                      |
-| `BACK_SCALE_STEP = 0.04`  |    1 | `CardStack`                                                      |
-| `VISIBLE_BACKS = 2`       |    1 | `CardStack` — out of scope, open question 3                      |
+| Value                    | Uses | Where                                                               |
+| ------------------------ | ---: | ------------------------------------------------------------------- |
+| `h-[28rem] w-72`         |    2 | `Card.tsx` and `CardStack.tsx` — **the duplication step 3 removes** |
+| `max-w-sm` (24rem)       |    6 | `LandingScreen` ×3, `EndScreen`, `Hud`, `NoticeBanner`              |
+| `max-w-xs` (20rem)       |    1 | the preparing explanation                                           |
+| `size-8`                 |    1 | the spinner                                                         |
+| `duration-500`           |    1 | the flip                                                            |
+| `disabled:opacity-40`    |    2 | Play/Pause, Restart                                                 |
+| `disabled:opacity-50`    |    3 | the URL input, Start, the suggestion buttons                        |
+| `DEFAULT_QR_SIZE = 176`  |    1 | `CardHiddenSide`                                                    |
+| `EXIT_DISTANCE_PX = 600` |    1 | `Card`                                                              |
+| exit `duration: 0.25`    |    1 | `Card`                                                              |
+| `BACK_OFFSET_PX = 10`    |    1 | `CardStack`                                                         |
+| `BACK_SCALE_STEP = 0.04` |    1 | `CardStack`                                                         |
+| `VISIBLE_BACKS = 2`      |    1 | `CardStack` — out of scope, open question 3                         |
 
 The values a token genuinely protects are the ones above 1: the card pair, `max-w-sm`, the four
 neutral surface shades, `text-neutral-400`/`500`, the emerald pair, and `text-amber-300`.
@@ -285,3 +300,230 @@ right. It is not — the same utility is doing two different jobs:
 So there are two tokens: `--container-content` (24rem ceiling, today's value, for group 1) and the
 card-width token reused for group 2. Group 2 is the one visible change outside the contrast fixes,
 and step 10 asks for it explicitly.
+
+### 3. The token set, and two Tailwind mechanisms (step 2)
+
+**Values are literal `oklch()`, not `var(--color-neutral-900)`.** The tidier-looking version is a real
+hazard: Tailwind emits only the default theme variables that some generated utility references, so a token
+defined in terms of `--color-neutral-900` would resolve to nothing the moment the last direct use of that
+shade disappeared — which is exactly what this plan did to most of them. The shade each value came from is
+in a comment beside it, which is where that information belongs anyway.
+
+**`@theme static`, not `@theme`.** `static` emits every variable regardless of whether a utility
+references it. The un-namespaced tokens (`--card-height`, `--card-width`, `--qr-display-size`,
+`--duration-flip*`, `--size-touch-target`, `--focus-ring-*`, `--opacity-disabled`) are consumed through
+arbitrary-value utilities like `h-(--card-height)`, by the two `@utility` composites, and by the
+`prefers-reduced-motion` block — and Tailwind counts none of those as a use. Verified against the built
+CSS rather than assumed.
+
+**Two `@utility` composites replace repeated utilities at thirteen call sites.**
+
+```css
+@utility focus-ring {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+@utility touch-target {
+  min-height: var(--size-touch-target);
+  min-width: var(--size-touch-target);
+}
+```
+
+Written as `@utility` rather than as a plain class so Tailwind's variants compose — components write
+`focus-visible:focus-ring`, and `focus-visible` is doing real work there. Confirmed in the output:
+`.focus-visible\:focus-ring:focus-visible { … }`. This is also what makes the tests possible at all: one
+class name to assert per element instead of four.
+
+**Naming.** Colours are `--color-<role>`: `page`, `surface`, `surface-raised`, `surface-raised-hover`,
+`border`, `border-strong`, `border-hover`, `fg`, `fg-strong`, `fg-heading`, `fg-secondary`, `fg-muted`,
+`fg-decorative`, `accent`, `accent-hover`, `accent-bright`, `on-accent`, `warning`, `warning-text`,
+`warning-glyph`, `warning-surface`, `warning-border`, `danger`, `focus-ring`. Not a hue anywhere, so Phase
+8 changes values without renaming anything.
+
+`fg-` rather than `text-` for the foreground family purely because `--color-text-muted` yields the utility
+`text-text-muted`. `text-fg-muted` reads better and `bg-fg` is not something anyone would write.
+
+**Three pairs of tokens share a value and stay separate**: `border`/`surface-raised`,
+`border-strong`/`surface-raised-hover`, and `accent-hover`/`accent-bright`. Each pair is two decisions —
+Phase 8 can lighten a border without lightening the face under it, or brighten the spinner's arc without
+touching a hover state.
+
+### 4. The card clamp, and open question 4 (step 3)
+
+```css
+--card-height: clamp(18rem, min(62dvh, 124vw), 28rem);
+--card-width: calc(var(--card-height) * 9 / 14);
+```
+
+**Height is the primary term and width is derived**, which is the opposite of what step 2's wording
+implies ("the card's width and height … sized with `clamp()`"). Two reasons:
+
+1. **Height is what runs out.** The card shares a `min-h-dvh` column with the HUD, the notice banner and
+   the control bar. Width has 24px of padding either side and nothing else competing for it.
+2. **The 9:14 ratio then holds at every viewport.** Clamping each axis independently would preserve
+   `288 × 448` at the ceiling and the floor and drift everywhere between them, which is the subtler
+   version of the exact bug this step exists to remove. `src/index.css.test.ts` pins the derivation.
+
+**Open question 4 — yes, the height clamp needs a `dvh` term.** Without one a phone in landscape gets a
+448px card in a 375px viewport. `dvh` rather than `vh` also survives a mobile browser's collapsing address
+bar, which `vh` does not.
+
+**The `124vw` term is a third guard the plan did not ask for.** A very narrow but tall viewport (280 × 900,
+say) would otherwise resolve height to the 28rem ceiling and width to 288px inside 232px of available
+space. 124vw of height is 80vw of width once the ratio is applied, so the card can never exceed 80% of the
+viewport's width. It sits **inside `min()`** rather than as a second clamp specifically so the ratio still
+holds when it is the winning term.
+
+**What this resolves to in practice** — and the reason the change is close to invisible:
+
+| Viewport              | Card      | vs. Phase 6 (`288 × 448`) |
+| --------------------- | --------- | ------------------------- |
+| Desktop, any width    | 288 × 448 | identical                 |
+| 412 × 915 (Pixel)     | 288 × 448 | identical                 |
+| 390 × 844 (iPhone)    | 288 × 448 | identical                 |
+| 375 × 667 (SE)        | 266 × 413 | 8% smaller — and it FITS  |
+| 320 × 568             | 226 × 352 | 21% smaller — and it fits |
+| 667 × 375 (landscape) | 149 × 232 | small, but on screen      |
+
+Only below roughly 723px of viewport height does the card shrink at all. On a 375 × 667 phone the Phase 6
+card needed 448px of the 619px available for the card _alone_, before the HUD, the control bar and three
+24px gaps — it fitted by about 20px. That is the case this fixes.
+
+### 5. Open question 2: the back offsets stay absolute (step 3)
+
+**`BACK_OFFSET_PX` (10px) stays absolute.** The offset's job is to be _perceptible_, and 10px is close to
+the minimum that reads as "there is another card behind this one" at all. Making it proportional would give
+about 6px on the smallest card — faintest exactly where the stack is already tightest, which is the wrong
+direction. Recorded in the constant's own doc comment, as the step asked.
+
+**`BACK_SCALE_STEP` (0.04) needed no decision.** `scale()` is proportional by construction, so 4% of a
+smaller card is already a smaller absolute inset. Also written into the file, because "did anyone check
+this one?" is the obvious next question.
+
+Both remain what `CardStack`'s header always said they were: numbers chosen by eye that have never been
+seen on a phone. The planned test for this sub-decision is **skipped**, which the plan's test list
+explicitly provides for.
+
+### 6. Open question 1: jsdom has no `matchMedia`, and Motion does not care (step 5)
+
+Measured, not read. The plan's premise — "jsdom does implement it" — is false for jsdom 30:
+`window.matchMedia` is `undefined`, and `window === globalThis` there so neither has it. Motion 12.43
+nevertheless renders `<MotionConfig reducedMotion="user">` around a dragging `motion.div` inside an
+`AnimatePresence` without throwing; it guards the lookup and resolves the preference as "not set".
+
+**So no stub is needed, in any file.** The full account is in `agent_findings.md` (2026-08-05).
+
+Two consequences worth carrying:
+
+- **`App.test.tsx` was never going to surface this.** `MotionConfig` is in `src/main.tsx` and nothing in
+  this repo renders `main.tsx`. The canary had to be written deliberately, and it lives in
+  `Card.test.tsx`.
+- **No jsdom test in this repo can observe reduced-motion behaviour**, because the preference can never
+  read as "reduce". That is the same wall the CSS side hits, and together they are the whole justification
+  for decision 6's text canary.
+
+### 7. What is NOT done, and cannot be (steps 3 and 12)
+
+**Step 12 — the before/after screenshot comparison — is not done.** It needs a browser and a pair of eyes,
+and so does the "verify the backs still align by eye at three widths" item under step 3. Neither is
+something a local check reaches.
+
+To make that comparison a checklist rather than a hunt, here is **everything expected to look different**.
+Anything visible and _not_ on this list is an accident and should be treated as one.
+
+| Change                                              | Where                                          | Why it is sanctioned             |
+| --------------------------------------------------- | ---------------------------------------------- | -------------------------------- |
+| Muted text is lighter (`#737373` → `#8f8f8f`)       | HUD, 5 other lines, the input placeholder      | Contrast fix — 4.18:1 and 2.30:1 |
+| Primary button labels are near-black, not white     | Start, Play again                              | Contrast fix — 3.67:1            |
+| Disabled controls are less dim (40%/50% → 60%)      | Play/Pause, Restart, input, Start, suggestions | Contrast fix — 3.46:1            |
+| A visible focus ring on Tab                         | all 13 interactive elements                    | Step 6 — there was none          |
+| HUD and notice banner are narrower on a wide screen | game and preparing screens                     | Step 10 — they never lined up    |
+| Round controls and Dismiss are larger               | `CardControls`, `NoticeBanner`                 | Step 6 — 44px minimum            |
+| The card shrinks below ~723px of viewport height    | game screen                                    | Step 3 — see note 4's table      |
+
+**At a desktop width and height the card, the QR and every layout are pixel-identical to Phase 6**, so the
+screenshot comparison is cleanest there and the geometry work is best checked at the three widths instead.
+
+The other manual gaps this plan owes — the reduced-motion pass with the OS preference set, the three-width
+responsive pass, a keyboard-only pass, and a screen-reader pass over one flip — are listed in the plan's
+Testing Strategy and belong in `docs/development.md` §5, which is on the Documentation Updates checklist
+and deliberately left for a separate pass.
+
+### 8. A contrast failure the plan did not list (step 9)
+
+Step 9 named four pairs. Computing all of them turned up a fifth: **`text-white` on `bg-emerald-600`, the
+label of the app's primary action, at 3.67:1.** At 16px `font-medium` the large-text allowance does not
+apply, so it is a straight WCAG 1.4.3 failure — on Start and on Play again, the two most-pressed buttons
+in the app.
+
+It is fixed, by darkening the label to `--color-on-accent` (5.40:1 at rest, 8.03:1 on hover) and leaving
+both background colours untouched. That is the smallest edit available: `emerald-700` with a white label
+also passes at 5.37:1, but would force the _hover_ state darker than the resting one to keep passing,
+which is backwards.
+
+**Flagged prominently because it is the most conspicuous visual change in a plan whose success condition is
+that nothing looks different.** Decision 1 makes contrast corrections the one sanctioned exception and this
+is squarely one, but a white-to-black button label is not a subtle correction, and the alternative was
+carrying a known 1.4.3 failure into plan 2's Lighthouse pass on the app's primary action. Reverting it is a
+one-token edit if the developer would rather Phase 8 owned it.
+
+### 9. The CSS bundle (step 13)
+
+**The plan's stated baseline was stale.** It gives `15.23 kB` (4.00 kB gzip) as the pre-change measurement;
+the tree actually built at **`16.90 kB` (4.24 kB gzip)** before any of this work. After: **`21.52 kB`
+(5.13 kB gzip)** — `+4.62 kB`, `+0.89 kB` gzipped.
+
+Where it went:
+
+- **~1.6 kB** the `@theme static` block itself — 24 colour tokens, the geometry pair, the type scale, the
+  durations and the interaction minimums, all emitted as custom properties. This is the cost of the plan
+  and it is unavoidable.
+- **~1 kB** the new utilities the tokens generate: `bg-page`, `text-fg-*`, `max-w-content`, `text-year*`,
+  `focus-ring`, `touch-target`, the arbitrary-value forms, and their `hover:`/`focus-visible:`/`disabled:`
+  variants.
+- **~0.5 kB** the `prefers-reduced-motion` block and the two `@utility` definitions.
+- **the remainder** dead utilities Tailwind harvested from the _new comments_ — the Phase 7 headers that
+  name the old values they replaced (`h-[28rem] w-72`, `max-w-sm`, `disabled:opacity-40`, `text-white`)
+  each keep a rule alive, along with the default theme variables it references.
+
+That last item is a property of this repo rather than of this plan, and it is larger than it looks:
+**1.72 kB of the Phase 6 baseline — about 10% — was generated from prose in `AGENTS.md` and `docs/`,
+before this plan touched anything.** Measured with `@source not "../**/*.md"`, which reclaims it in one
+line. **Not applied**: CSS bundle size belongs to `plan.phase-7-robustness.md`, and mangling this repo's
+comments to dodge a scanner would be the wrong trade. Recorded in `agent_findings.md` with the number so
+plan 2 starts from it.
+
+Judged proportionate: the app's entire design system is now named in one block, and the un-harvested
+portion of the growth is roughly 3 kB for that.
+
+### 10. Reading the stylesheet as text is harder than it looks
+
+The reduced-motion canary needs `src/index.css` as a string. Both idiomatic ways of getting it are wrong,
+and the tidier one is wrong _silently_ — `import css from './index.css?raw'` returns an **empty string**,
+because Vitest's `test.css` defaults to false and stubs every CSS module. Most of the canary's assertions
+would have passed vacuously against `''`; only the `not.toBeNull()` pair failed, which is the sole reason
+it was caught rather than committed as a green test checking nothing.
+
+`readFileSync(new URL('./index.css', import.meta.url))` throws `TypeError: The URL must be of scheme file`,
+because Vite has a dedicated transform for the `new URL(<string literal>, import.meta.url)` pattern and
+rewrites it into an asset reference. A **bare** `import.meta.url` is untouched, so taking it apart with
+`node:path` works. Both traps are written into the test file's header and into `agent_findings.md`.
+
+### 11. Things changed outside the plan's list, and one thing not changed
+
+- **`src/game/gestures.ts` header, rewritten.** `SWIPE_COMMIT_DISTANCE_PX`'s doc comment said the threshold
+  is 96px because "the card is 288px wide (`w-72`) … Phase 7's responsive work changes the viewport, not
+  the intent". Phase 7 changed the **card**, so that reasoning is now stale in a load-bearing way: 96px is
+  a third of the card's width at the ceiling and **52% of it at the floor**, so a commit takes a visibly
+  longer drag on a small screen. The constant is **not retuned** — retuning it would be guessing twice
+  instead of once, and `development.md` §8 already records that all five thresholds need a thumb rather
+  than a number. The comment now says exactly that, so whoever runs the device pass knows.
+- **`src/components/GameScreen.tsx`** was not in the Scope table but carried `bg-neutral-950`; it now takes
+  `bg-page` like the other three screens.
+- **`text-neutral-200` on New playlist became `text-fg`** (`neutral-100`). A 92.2% → 97% lightness step,
+  imperceptible, and one fewer literal.
+- **`--size-spinner` was added** so `size-8` is named too; step 1 listed it and step 2's groups did not
+  mention it.
+- **`QrCode.tsx`'s lazy-load note is untouched.** It names Phase 7, and correctly — lazy-loading `qrcode`
+  is `plan.phase-7-robustness.md`'s item, so the note is not stale. The Documentation Updates checklist
+  says to leave it and it is left.

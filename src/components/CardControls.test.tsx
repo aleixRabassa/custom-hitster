@@ -114,12 +114,84 @@ describe('CardControls', () => {
   });
 
   it('should invoke the exit callback on exit', () => {
+    // Still exactly one call, and still on the press: what changed is what the CALLER does with
+    // it -- `GameScreen` opens a confirmation instead of ending the game. From here it is a
+    // press being reported, which is why the prop name did not change either.
     const onExit = vi.fn();
     render(<CardControls audio={stubAudio()} onExit={onExit} />);
 
     screen.getByRole('button', { name: 'Exit game' }).click();
 
     expect(onExit).toHaveBeenCalledTimes(1);
+  });
+
+  it('should draw every control as one uniformly sized icon', () => {
+    // ===================================================================
+    //  WHAT THIS PINS IS THAT THE FOUR ICONS CANNOT DRIFT APART.
+    //
+    //  They were text characters -- ■ ▶ ❙❙ ↺ -- and a codepoint's rendered
+    //  size, weight and baseline belong to whichever font the OS resolves
+    //  it in. ▶ came out heavier and larger than ↺, and on a machine whose
+    //  fallback chain reaches an emoji font first it came out coloured.
+    //  Nothing in CSS could equalise them, because there was nothing
+    //  common to size.
+    //
+    //  jsdom renders none of this, so the assertion is at class-name level
+    //  with the usual caveat: it proves each button holds one SVG carrying
+    //  the shared size token, not that the result looks even. What it
+    //  catches is the regression that matters -- a fifth control, or a
+    //  replacement icon, sized by hand.
+    // ===================================================================
+    render(<CardControls audio={stubAudio()} onExit={vi.fn()} />);
+
+    const buttons = screen.getAllByRole('button');
+    expect(buttons).toHaveLength(3);
+
+    for (const button of buttons) {
+      // No text glyph left anywhere: a stray character beside an icon is how the old sizing
+      // problem would come back.
+      expect(button.textContent).toBe('');
+
+      const icons = button.querySelectorAll('svg');
+      expect(icons).toHaveLength(1);
+
+      const icon = icons[0];
+      expect(icon?.getAttribute('class')).toContain('size-(--size-control-icon)');
+      // Each button already carries a generic `aria-label`, so an icon that announced itself
+      // would either duplicate the label or contradict it.
+      expect(icon?.getAttribute('aria-hidden')).toBe('true');
+    }
+  });
+
+  it('should render the pause icon in place of the play icon while playing', () => {
+    // The toggle swaps the ICON as well as the label. Asserted through the path count because the
+    // two icons have no accessible difference by design -- both labels are generic.
+    const { rerender } = render(<CardControls audio={stubAudio()} onExit={vi.fn()} />);
+
+    // Play is one filled triangle.
+    expect(screen.getByRole('button', { name: 'Play' }).querySelectorAll('path')).toHaveLength(1);
+
+    rerender(<CardControls audio={stubAudio({ isPlaying: true })} onExit={vi.fn()} />);
+
+    // Pause is two bars.
+    expect(screen.getByRole('button', { name: 'Pause' }).querySelectorAll('rect')).toHaveLength(2);
+  });
+
+  it('should colour the exit control as the destructive one and leave the other two alone', () => {
+    // Exit is the only control here that ENDS something, and red is how it says so. The other two
+    // must NOT pick the colour up: three red buttons signals nothing.
+    //
+    // `--color-danger` measures 5.7:1 on `--color-surface-raised`, comfortably past the 3:1 WCAG
+    // 1.4.11 asks of a non-text indicator -- computed, not eyeballed, and not observable in jsdom.
+    render(<CardControls audio={stubAudio()} onExit={vi.fn()} />);
+
+    expect(screen.getByRole('button', { name: 'Exit game' }).className).toContain('text-danger');
+
+    for (const name of ['Play', 'Restart']) {
+      const button = screen.getByRole('button', { name });
+      expect(button.className).toContain('text-fg');
+      expect(button.className).not.toContain('text-danger');
+    }
   });
 
   it('should give every control a focus-visible style', () => {

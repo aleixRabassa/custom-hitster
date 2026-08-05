@@ -51,29 +51,43 @@ function memoryStorage(): StorageLike & { data: Map<string, string> } {
 }
 
 /**
- * A live session mid-game, holding all three states of `Card.year` at once: resolved, looked up
- * and yearless, and not looked up yet.
+ * A session state holding all three states of `Card.year` at once: resolved, looked up and
+ * yearless, and not looked up yet.
  *
- * Built through `RESUME` rather than `START` so the deck order is EXACT -- a shuffled deck would
- * make "which card ended up with the null year" depend on the seed.
+ * ===========================================================================
+ *  A STATE LITERAL, AND IT USED TO BE BUILT THROUGH `RESUME`.
+ *
+ *  It cannot be any more. Since the 2026-08-05 reversal a yearless card is
+ *  REMOVED from a live deck, and `RESUME` filters like every other entry point --
+ *  so a state built through the reducer can no longer hold the middle of the
+ *  three year states, and these tests would be asserting the format round-trips
+ *  something it never sees.
+ *
+ *  The format's job is unchanged, though, and it is the thing under test here:
+ *  `saveSession` / `loadSession` must round-trip whatever a deck holds, including
+ *  a `null` year. `Card.year` is the shape of a lookup RESULT, which is a
+ *  different question from what a PLAYABLE deck may contain -- and a save written
+ *  before the reversal is exactly the payload `RESUME` has to cope with. Keeping
+ *  the null card here is what keeps both halves honest.
+ *
+ *  Written out in deck order rather than shuffled, for the original reason: a
+ *  shuffle would make "which card ended up with the null year" depend on a seed.
+ * ===========================================================================
  */
 function session(): GameState {
-  return gameReducer(initialGameState, {
-    type: 'RESUME',
-    session: {
-      version: SESSION_VERSION,
-      playlist: PLAYLIST,
-      seed: 'persistence-seed',
-      deck: [
-        card('a', { year: 1975, yearConfidence: 'high', previewUrl: 'https://p.scdn.co/mp3/a' }),
-        card('b', { year: null, yearConfidence: 'none' }),
-        card('c'),
-      ],
-      currentIndex: 1,
-      isFlipped: true,
-      status: 'playing',
-    },
-  });
+  return {
+    status: 'playing',
+    playlist: PLAYLIST,
+    seed: 'persistence-seed',
+    deck: [
+      card('a', { year: 1975, yearConfidence: 'high', previewUrl: 'https://p.scdn.co/mp3/a' }),
+      card('b', { year: null, yearConfidence: 'none' }),
+      card('c'),
+    ],
+    currentIndex: 1,
+    isFlipped: true,
+    yearLookupsUnavailable: false,
+  };
 }
 
 /** Write an arbitrary payload straight into storage, bypassing `saveSession`'s shaping. */
@@ -115,9 +129,16 @@ describe('saveSession / loadSession', () => {
       status: state.status,
     });
     // And it re-enters through `RESUME` cleanly -- the actual point of the format.
+    //
+    // MINUS the yearless card, and that difference is the reversal working end to end: the format
+    // carries every year state, and `RESUME` is where a card with no year stops being playable.
+    // The index moves with it, so the player lands on the card they were on rather than on
+    // whatever index 1 happens to be afterwards.
     const resumed = gameReducer(initialGameState, { type: 'RESUME', session: loaded! });
-    expect(resumed.deck).toEqual(state.deck);
+    expect(resumed.deck).toEqual(state.deck.filter((c) => c.year !== null));
     expect(resumed.status).toBe('playing');
+    // The player was on `b`, which has gone; index 1 is now `c`, the card that followed it.
+    expect(resumed.deck[resumed.currentIndex]?.id).toBe('c');
   });
 
   it('should preserve resolved years and confidences through a round trip', () => {

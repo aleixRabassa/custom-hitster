@@ -4,6 +4,7 @@
 
 import { cleanup, render, screen } from '@testing-library/react';
 import { MotionConfig } from 'motion/react';
+import { createRef } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Card } from './Card';
@@ -34,6 +35,48 @@ describe('Card', () => {
   });
 
   afterEach(cleanup);
+
+  it('should attach a forwarded ref to its outer element', () => {
+    // ===================================================================
+    //  THE HALF OF THE EXIT ANIMATION THAT IS TESTABLE, AND IT IS THE
+    //  HALF THAT SILENTLY WENT MISSING.
+    //
+    //  `CardStack` runs `AnimatePresence mode="popLayout"` so a committed
+    //  card is taken out of layout flow while it flies off. Motion does
+    //  that by CLONING this component with a ref, measuring the element,
+    //  and injecting a `position: absolute` rule for it -- and every step
+    //  is guarded by `ref.current`. With no ref prop the clone's ref
+    //  landed on nothing, so the pop never happened, the incoming card was
+    //  laid out a full card-height below the outgoing one, and it appeared
+    //  to rise from below the screen when the exit finished. No error, no
+    //  warning: `popLayout` was configured and inert.
+    //
+    //  It must be the OUTER element specifically. That is the one in flow,
+    //  the one Motion measures, and the one that carries the drag; a ref
+    //  pointed at the inner flip wrapper would satisfy Motion's null check
+    //  and then absolutise the wrong box.
+    //
+    //  What happens NEXT -- that the popped card really leaves the flow --
+    //  is not reachable here: jsdom computes no layout, so Motion's own
+    //  measurement bails on a `getComputedStyle().height` of `auto`
+    //  whatever this component does. That end is manual, in a browser.
+    // ===================================================================
+    const ref = createRef<HTMLDivElement>();
+
+    const { container } = render(
+      <Card
+        card={highConfidenceCard}
+        isFlipped={false}
+        isYearPending={false}
+        onFlip={vi.fn()}
+        ref={ref}
+      />,
+    );
+
+    const outer = container.querySelector('[data-testid="card-inner"]')?.parentElement;
+    expect(ref.current).not.toBeNull();
+    expect(ref.current).toBe(outer);
+  });
 
   it('should not mount the revealed side while unflipped', () => {
     // ===================================================================

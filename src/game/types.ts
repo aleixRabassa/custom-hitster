@@ -46,6 +46,24 @@ export interface GameState {
    * The SHUFFLED deck. Years are filled in place as the resolver reports them, which is why
    * `Card.year` is three-state: `undefined` = not looked up, `null` = looked up and nothing
    * found, a number = resolved.
+   *
+   * ===========================================================================
+   *  ONLY TWO OF THOSE THREE STATES EVER APPEAR HERE (reversal, 2026-08-05).
+   *
+   *  A card whose lookup finds no year is REMOVED from the deck instead of being
+   *  stored with `year: null` -- there is nothing to place on a timeline, so
+   *  there is nothing to play. `gameReducer`'s `YEAR_RESOLVED` branch carries the
+   *  decision and its consequences; `RESUME` filters the same way, so a save
+   *  written before the reversal cannot smuggle one back in.
+   *
+   *  So every card in a live deck has `year: undefined` (still crawling) or a
+   *  number. The deck also SHRINKS over a session, by roughly a third on a real
+   *  playlist -- anything deriving a total from `deck.length` should expect it to
+   *  fall as well as to be reached.
+   *
+   *  `null` remains in `Card.year`'s type because that is the shape of the lookup
+   *  RESULT, which is a different thing from the shape of a playable deck.
+   * ===========================================================================
    */
   deck: Card[];
   /** Index into `deck`. Clamped to the last card when the deck ends -- never out of bounds. */

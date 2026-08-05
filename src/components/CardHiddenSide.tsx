@@ -52,13 +52,19 @@ export interface CardHiddenSideProps {
 /**
  * The bitmap the QR is encoded at, in pixels.
  *
- * Sized for the LARGEST the code is ever displayed at, which is 176px — `--qr-display-size` is
- * 11/18 of the card's width and the card's width tops out at 288px. Fixed, and it stays fixed
+ * Sized for the LARGEST the code is ever displayed at, which is 224px — `--qr-display-size` is
+ * 14/18 of the card's width and the card's width tops out at 288px. Fixed, and it stays fixed
  * (Phase 7 decision 4): the displayed size became fluid, the generated one must not follow it,
  * because `toDataURL` is asynchronous and a viewport-derived size would re-encode on every frame
  * of a resize. Downscaling a finished code in CSS is free.
+ *
+ * **This number has to move with `--qr-display-size`, and it is the direction that matters.**
+ * It was 176 while the code displayed at 11/18; the code is now 14/18, so a 176px bitmap would be
+ * scaled UP by 27% and a QR is exactly the kind of image that must not be — upscaling blurs the
+ * module edges a camera is looking for. Encoding above the displayed size is harmless (the browser
+ * downsamples), encoding below it is not.
  */
-const QR_BITMAP_SIZE = 176;
+const QR_BITMAP_SIZE = 224;
 
 /**
  * The CSS length the code is DRAWN at, tracking the card. Defined in `src/index.css`.
@@ -78,8 +84,27 @@ export function CardHiddenSide({ card, qrSize = QR_BITMAP_SIZE }: CardHiddenSide
         Generic on purpose, and it is the only text this face may carry: it says how the card is
         used, never anything about the track. Kept short because the face has to stay readable
         on a phone.
+
+        ===========================================================================
+         `text-fg`, AND THE CLASS IT REPLACED WAS NOT A DIM COLOUR -- IT WAS NO
+         COLOUR AT ALL.
+
+         This line read `text-text-muted`, and there is no `--color-text-muted`
+         token: the app's is `--color-fg-muted`, so the utility Tailwind was asked
+         for did not exist and no rule was emitted. Nothing in the chain above sets
+         a colour either -- the hidden face is `bg-surface` with no `text-*`, and
+         `GameScreen`'s `<main>` sets none -- so the line fell back to the UA
+         default of near-black on a near-black card. That is why it looked like a
+         contrast bug rather than a typo, and why it is worth spelling out: an
+         unknown Tailwind colour utility fails SILENTLY, at build time, with no
+         error anywhere.
+
+         Full `--color-fg` rather than the muted token now that it renders at all:
+         this is the one instruction on the card, at 12px, read across a table in
+         whatever light the room has.
+        ===========================================================================
       */}
-      <p className="text-xs text-text-muted">Scan to play the full song</p>
+      <p className="text-xs text-fg">Scan to play the full song</p>
     </div>
   );
 }

@@ -61,6 +61,7 @@
  */
 
 import { motion } from 'motion/react';
+import type { Ref } from 'react';
 
 import { CardHiddenSide } from './CardHiddenSide';
 import { CardRevealSide } from './CardRevealSide';
@@ -110,6 +111,44 @@ export interface CardProps {
    * inside an `AnimatePresence` (see `CardStack`); harmless elsewhere.
    */
   exitDirection?: CommitDirection;
+  /**
+   * A ref to the card's OUTER element, and it is not a convenience -- the deck's exit animation
+   * is broken without it.
+   *
+   * ===========================================================================
+   *  `AnimatePresence mode="popLayout"` REACHES THE OUTGOING CARD THROUGH THIS
+   *  REF, AND IT FAILS SILENTLY WHEN THERE IS NONE.
+   *
+   *  `CardStack` uses `popLayout` so a committed card is taken OUT OF LAYOUT FLOW
+   *  while it flies off, leaving the next card the flow slot it is vacating.
+   *  Motion implements that by cloning its child with a ref of its own
+   *  (`PopChild`), measuring the element in `getSnapshotBeforeUpdate`, and
+   *  injecting a `position: absolute` rule for it in a `useInsertionEffect`.
+   *
+   *  Every one of those steps is guarded by `ref.current`. This component was a
+   *  plain function component that accepted no ref, so the clone's ref landed on
+   *  nothing, `ref.current` stayed null, and the effect returned early: the card
+   *  was NEVER popped. Both cards then sat in normal flow -- the outgoing one at
+   *  the top of the stack, the incoming one a full card-height BELOW it, off the
+   *  bottom of the deck and usually off the screen -- until the exit finished and
+   *  the incoming card snapped up into place. That is the "the next card rises
+   *  from below the screen" bug, and there was no error anywhere: `popLayout` was
+   *  configured, documented, and doing nothing.
+   *
+   *  Accepting the ref also restores the PAINT order the animation needs. Once
+   *  popped, the outgoing card is a positioned element and so paints in a later
+   *  layer than the in-flow card beneath it -- which is what makes the next card
+   *  appear BEHIND the one sliding away rather than over it. Explicit z-indexes
+   *  are not needed and would be the wrong fix.
+   *
+   *  React 19 passes `ref` to function components as an ordinary prop, so no
+   *  `forwardRef` is involved. `Card.test.tsx` pins that the ref reaches the
+   *  outer element; that it then makes `popLayout` work is browser behaviour no
+   *  test in this repo can reach, because jsdom computes no layout and Motion's
+   *  measurement bails on a `getComputedStyle().height` of `auto`.
+   * ===========================================================================
+   */
+  ref?: Ref<HTMLDivElement>;
 }
 
 export function Card({
@@ -118,6 +157,7 @@ export function Card({
   isYearPending,
   gestureProps,
   exitDirection = 'left',
+  ref,
 }: CardProps) {
   return (
     /*
@@ -128,6 +168,8 @@ export function Card({
       swipe from triggering pull-to-refresh.
     */
     <motion.div
+      // The OUTER element, which is the one `popLayout` has to be able to measure and absolutise.
+      ref={ref}
       className="perspective-distant h-(--card-height) w-(--card-width) touch-none"
       {...gestureProps}
       exit={{

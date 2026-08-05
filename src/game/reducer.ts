@@ -36,7 +36,36 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       // Shuffled HERE, synchronously, before anything can look at the deck -- see the block
       // comment in `shuffle.ts` for why the alternative ordering wastes the first lookup.
       const seed = action.seed ?? generateSeed();
-      const deck = shuffleDeck(action.cards, seed);
+
+      /*
+        Yearless cards are filtered at ALL THREE entry points -- here, `YEAR_RESOLVED` and
+        `RESUME` -- so "no card in a live deck holds `year: null`" is an invariant rather than a
+        tendency (see `GameState.deck`).
+
+        This one is the belt to the other two's braces: `action.cards` comes either from
+        `/api/playlist`, where no card has a year yet, or from `state.deck` on a Restart, which
+        the other two branches have already cleaned. It costs one pass over a hundred cards once
+        per game and removes the question entirely.
+      */
+      const deck = shuffleDeck(
+        action.cards.filter((card) => card.year !== null),
+        seed,
+      );
+
+      // Nothing left to deal. Reachable two ways -- an empty `cards` argument, and a deck whose
+      // every card was already known to be yearless -- and `preparing` would be a loading screen
+      // waiting on a lookup that can never be dispatched.
+      if (deck.length === 0) {
+        return {
+          status: 'ended',
+          playlist: action.playlist,
+          seed,
+          deck,
+          currentIndex: 0,
+          isFlipped: false,
+          yearLookupsUnavailable: false,
+        };
+      }
 
       // =======================================================================
       //  THE CARD-1 GATE IS SKIPPED WHEN CARD 1 IS ALREADY RESOLVED.
@@ -79,44 +108,137 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       // useful to go.
       if (state.status !== 'preparing' && state.status !== 'playing') return state;
 
+      // =======================================================================
+      //  A LOOKUP THAT FINDS NO YEAR REMOVES ITS CARD FROM THE DECK.
+      //
+      //  DECISION REVERSAL, 2026-08-05, by the developer. `plan.md`'s
+      //  `confidence: 'none'` follow-on had resolved the opposite way -- the card
+      //  stayed and the revealed side rendered a "check this one yourself"
+      //  prompt -- and this is the deliberate reversal of it, not a
+      //  reinterpretation. A Hitster card is placed on a timeline BY its year;
+      //  without one there is nothing to play, and the QR working is not enough
+      //  to make it a card.
+      //
+      //  LOW CONFIDENCE IS UNAFFECTED. `low` still carries a real year and stays
+      //  in the deck, flagged unconfirmed on the revealed side. The test is
+      //  `year === null`, never the confidence.
+      //
+      //  Two consequences worth knowing before touching this branch:
+      //
+      //  1. THE DECK IS EXPECTED TO SHRINK, AND SUBSTANTIALLY. Phase 3 measured
+      //     `none` on roughly a THIRD of a real 42-card playlist, so a deck of 42
+      //     will settle around 28 as the crawl catches up. That is the decision
+      //     working, not a bug -- but it is why the HUD's "cards left" now falls
+      //     as well as rising.
+      //  2. `null` DOES NOT ALWAYS MEAN "MUSICBRAINZ HAS NO YEAR". The resolver
+      //     also settles at `null` on a 400 and on transient failures that
+      //     survive its deferred pass, and `YEAR_RESOLVED` carries no reason. So
+      //     a network blip drops cards. That is the honest trade: an unplayable
+      //     card is unplayable whatever the cause, and the alternative -- a
+      //     `reason` on the action so the reducer could keep "failed" cards --
+      //     would put a yearless card back on the table, which is the thing this
+      //     decision removes. The one blanket failure is already exempt:
+      //     `not-configured` dispatches `YEAR_LOOKUPS_UNAVAILABLE` instead of a
+      //     hundred nulls, so a deployment with no `MUSICBRAINZ_USER_AGENT`
+      //     yields a yearless deck rather than an empty one.
+      // =======================================================================
+      const isYearless = action.year === null;
+
       // BY ID, never by index (decision 13). The resolver's priority jump makes its ordering
       // and the deck's ordering diverge routinely; an index write would corrupt the deck the
       // first time it did, by stamping one card's year onto another.
       //
       // EVERY card with that id, not just the first: a playlist may legitimately contain the
       // same track twice, and the resolver looks a given id up once. Updating one copy would
-      // leave the other showing a pending year for the rest of the game.
+      // leave the other showing a pending year for the rest of the game -- and, now, dropping
+      // one copy would leave the other in the deck with no year at all.
       let matched = false;
-      const deck = state.deck.map((card) => {
-        if (card.id !== action.cardId) return card;
+      /** Dropped cards sitting BEFORE the current one: the amount `currentIndex` moves back by. */
+      let droppedBeforeCurrent = 0;
+      /** Whether the card the player is looking at right now is one of the dropped ones. */
+      let droppedCurrent = false;
+
+      const deck: Card[] = [];
+      state.deck.forEach((card, index) => {
+        if (card.id !== action.cardId) {
+          deck.push(card);
+          return;
+        }
+
         matched = true;
+
+        if (isYearless) {
+          if (index < state.currentIndex) droppedBeforeCurrent += 1;
+          else if (index === state.currentIndex) droppedCurrent = true;
+
+          return;
+        }
+
         // Every other card keeps its identity, so a Phase 4 memoized card component
         // re-renders only for the one that actually changed.
-        return { ...card, year: action.year, yearConfidence: action.confidence };
+        deck.push({ ...card, year: action.year, yearConfidence: action.confidence });
       });
 
       // A result for a card that is not in this deck -- a callback from a session that was
       // replaced by a second `START`. Dropping it is the correct answer.
       if (!matched) return state;
 
+      // Every card in the deck turned out to be yearless. Only reachable when MusicBrainz
+      // answers for every track and knows none of them, so it is rare rather than impossible --
+      // and `ended` is the only honest destination, since there is nothing left to play.
+      if (deck.length === 0) {
+        return { ...state, deck, currentIndex: 0, isFlipped: false, status: 'ended' };
+      }
+
+      /*
+        The player's position, after the shrink. Cards dropped from BEHIND the player move it
+        back; cards dropped from ahead of it do not touch it at all.
+
+        When the CURRENT card is the one dropped, the unchanged index already points at the card
+        that followed it -- the array closed up around it -- so the next card slides into place
+        under the player. `isFlipped` must be reset with it: the flag belongs to the card that
+        just left, and carrying it over would hand the new card's year straight to the player.
+        That is a leak, not a cosmetic glitch.
+      */
+      const shifted = state.currentIndex - droppedBeforeCurrent;
+      const isFlipped = droppedCurrent ? false : state.isFlipped;
+
+      // The current card was dropped and nothing followed it: the deck is exhausted, exactly as
+      // `NEXT` past the last card is. Clamping instead would send the player BACKWARDS onto a
+      // card they have already played, which the one-directional deck has no other way to do.
+      if (droppedCurrent && shifted > deck.length - 1) {
+        return { ...state, deck, currentIndex: deck.length - 1, isFlipped: false, status: 'ended' };
+      }
+
+      const currentIndex = Math.min(Math.max(shifted, 0), deck.length - 1);
+
       // =======================================================================
       //  THE CARD-1 GATE.
       //
-      //  It waits for card 1's lookup to **COMPLETE**, not to produce a year --
-      //  a refinement of `plan.md` §5's "as soon as card 1 has a year"
-      //  (decision 4). A `null` year IS a completed lookup, and its card is
-      //  playable: the QR code always works, so a card MusicBrainz knows nothing
-      //  about is still a card. Gating on "has a year" would hang the loading
-      //  screen forever on a legitimately yearless track.
+      //  It waits for card 1's lookup to **COMPLETE**, and it is now expressed as
+      //  a property of the deck -- "the first card has a year" -- rather than as
+      //  "the resolved card was the first one". The two were equivalent until
+      //  yearless cards started being dropped; they are not any more. When card 1
+      //  resolves to `null` it LEAVES, and the gate has to keep waiting for
+      //  whichever card takes its place, whose lookup has not happened yet.
+      //
+      //  Written against the NEXT deck for that reason. Reading `state.deck[0]`
+      //  would ask about a card that is no longer in the game.
+      //
+      //  It also self-heals: any `YEAR_RESOLVED` opens the gate once the first
+      //  card has a year, so a first card resolved out of order -- by a priority
+      //  jump, or arriving already filled in a re-dealt deck -- cannot leave the
+      //  session stuck on the loading screen. `START` has its own version of that
+      //  guard for the same reason (see above).
       //
       //  Note it is card INDEX 0, not `state.currentIndex`: the gate is about the
       //  first card of the shuffled deck specifically, which is the one the
       //  resolver looks up first and the one the player is about to see.
       // =======================================================================
-      const opensGate = state.status === 'preparing' && state.deck[0]?.id === action.cardId;
+      const opensGate = state.status === 'preparing' && deck[0]?.year !== undefined;
       const status = opensGate ? 'playing' : state.status;
 
-      return { ...state, deck, status };
+      return { ...state, deck, currentIndex, isFlipped, status };
     }
 
     case 'YEAR_LOOKUPS_UNAVAILABLE': {
@@ -166,12 +288,45 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       // in a `useEffect` somewhere.
       const { session } = action;
 
+      /*
+        ===========================================================================
+         YEARLESS CARDS ARE DROPPED HERE TOO, SO THE INVARIANT IS ABSOLUTE.
+
+         Since the reversal above, no card in a live deck ever holds `year: null` --
+         one is removed in the same dispatch that would have recorded it. A SAVE
+         WRITTEN BEFORE THE REVERSAL is the one way such a card can still get in,
+         and it would be permanent: the resolver marks every already-filled card
+         settled, so it is never looked up again and never dispatched again. The
+         card would sit in the deck showing "year unknown" for the rest of that
+         game.
+
+         Filtering rather than bumping `SESSION_VERSION` keeps the resolved years,
+         which is the whole point of persisting the deck -- a version bump would
+         discard a part-crawled deck and re-spend a globally shared budget on
+         lookups already paid for.
+
+         The index has to move with the deck for the same reason it does in
+         `YEAR_RESOLVED`: `loadSession()` validated it against the SAVED deck, so
+         after a filter it can be off the end, and it must not be left pointing at
+         a different card than the player left off on.
+        ===========================================================================
+      */
+      const deck = session.deck.filter((card) => card.year !== null);
+      const droppedBefore = session.deck
+        .slice(0, session.currentIndex)
+        .filter((card) => card.year === null).length;
+      const currentIndex =
+        deck.length === 0
+          ? 0
+          : Math.min(Math.max(session.currentIndex - droppedBefore, 0), deck.length - 1);
+
       return {
-        status: session.status,
+        // A saved deck of nothing but yearless cards leaves nothing to resume.
+        status: deck.length === 0 ? 'ended' : session.status,
         playlist: session.playlist,
         seed: session.seed,
-        deck: session.deck,
-        currentIndex: session.currentIndex,
+        deck,
+        currentIndex,
         isFlipped: session.isFlipped,
         // Re-derived by the next crawl rather than restored: it describes the server's
         // configuration, not the session (see `PersistedSession`).

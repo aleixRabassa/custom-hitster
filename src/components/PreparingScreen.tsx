@@ -9,8 +9,11 @@
  *  likely to be forgotten -- "Looking up Bohemian Rhapsody…" is the natural,
  *  helpful thing to write, and it spoils the first card before the game starts.
  *
- *  A NUMBER is safe: "3 of 42 years found" says nothing about which tracks or
- *  which years. That is the whole vocabulary available here.
+ *  A NUMBER would be safe -- "3 of 42 years found" says nothing about which
+ *  tracks or which years -- and this screen showed exactly that until it was
+ *  REMOVED as a product call: the count read as a progress bar that had to reach
+ *  the total, when the wait is one lookup. Nothing replaced it, because the only
+ *  other vocabulary available here is a smaller number.
  * ===========================================================================
  *
  * ## What this screen is actually waiting for, and what it is not
@@ -30,10 +33,6 @@
 import type { ReactNode } from 'react';
 
 export interface PreparingScreenProps {
-  /** How many cards have a completed lookup, from `resolvedCount`. Resolved or not-found alike. */
-  resolvedCount: number;
-  /** The deck's size, from `state.deck.length`. */
-  totalCount: number;
   /**
    * The notice banner, or null.
    *
@@ -44,7 +43,7 @@ export interface PreparingScreenProps {
   notice?: ReactNode;
 }
 
-export function PreparingScreen({ resolvedCount, totalCount, notice }: PreparingScreenProps) {
+export function PreparingScreen({ notice }: PreparingScreenProps) {
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-page p-6 text-fg">
       {notice}
@@ -58,8 +57,10 @@ export function PreparingScreen({ resolvedCount, totalCount, notice }: Preparing
           A plain CSS spin, and under `prefers-reduced-motion: reduce` it is HIDDEN rather than
           stopped (decision 7). A stationary spinner is a dead grey circle that reads as a hung
           app, and this element is already `aria-hidden` -- so removing it costs nothing, because
-          the status line and the resolved/total count below carry every piece of information it
-          conveys. The rule itself is in `src/index.css`, keyed on `data-motion="spinner"`; no
+          the two lines below carry every piece of information it conveys. The claim survived the
+          removal of the resolved/total count, which decision 7 originally leaned on: "Dealing your
+          deck…" is itself the statement that work is in progress. The rule itself is in
+          `src/index.css`, keyed on `data-motion="spinner"`; no
           component in this app reads the preference (decision 3), which is what stops the next
           animation added from being silently unhandled.
         */}
@@ -72,17 +73,13 @@ export function PreparingScreen({ resolvedCount, totalCount, notice }: Preparing
         <p className="text-lg font-medium">Dealing your deck…</p>
 
         {/*
-          Count-only, and the number is the ONLY thing this screen knows how to say about the deck.
-          Rendered even at 0 so the line does not appear and shift the layout a moment later.
-        */}
-        <p className="text-sm text-fg-secondary">
-          {resolvedCount} of {totalCount} years found
-        </p>
+          Sets the expectation honestly: the wait is one lookup, not the whole deck.
 
-        {/*
-          Sets the expectation honestly: the wait is one lookup, not the whole deck. Without this
-          the count above reads as a progress bar that has to reach the total, which would make a
-          one-second wait feel like a stalled forty-two-step one.
+          It used to sit under an "N of M years found" line and exists BECAUSE of it -- without the
+          sentence, a count that starts at 0 of 42 reads as a progress bar that has to fill, which
+          makes a one-second wait feel like a stalled forty-two-step one. The count is gone now and
+          the sentence stays: it is the only thing on the screen that says the game is about to
+          start rather than that a long job is running.
         */}
         <p className="max-w-narrow text-xs text-fg-muted">
           The game starts as soon as the first card is ready — the rest fill in while you play.

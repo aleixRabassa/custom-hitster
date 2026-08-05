@@ -140,7 +140,27 @@ export function CardStack({
       {/*
         `initial={false}` so the first card of a session does not animate IN from nowhere --
         it is already there when the screen mounts. `popLayout` takes the outgoing card out of
-        layout flow, so the incoming card does not get pushed sideways while it leaves.
+        layout flow, so the incoming card keeps the slot the outgoing one is vacating instead of
+        being laid out after it.
+
+        ===========================================================================
+         `popLayout` ONLY WORKS BECAUSE `Card` ACCEPTS A REF, AND IT FAILED SILENTLY
+         FOR AS LONG AS IT DID NOT.
+
+         Motion pops the outgoing child by cloning it with a ref of its own,
+         measuring that element, and injecting a `position: absolute` rule for it.
+         `Card` accepted no ref, so the clone's ref landed on nothing and every one
+         of those steps bailed on a null `ref.current`. The mode was configured and
+         documented and did nothing: both cards sat in normal flow, which put the
+         INCOMING card a full card-height below the outgoing one -- off the bottom
+         of the deck, generally off the screen -- for the length of the exit, and
+         then snapped it up into place. It read as the next card rising from below.
+
+         So `Card`'s `ref` prop is load-bearing for this element, and its own
+         header carries the long version. Nothing in this repo can test the
+         consequence: jsdom computes no layout, so Motion's measurement bails there
+         no matter what, and the check is manual (a swipe, in a browser).
+        ===========================================================================
       */}
       <AnimatePresence initial={false} mode="popLayout">
         <Card
