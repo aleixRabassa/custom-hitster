@@ -48,6 +48,10 @@ function renderScreen(props: {
       onNext={props.onNext ?? vi.fn()}
       onExit={props.onExit ?? vi.fn()}
       isPlayable={props.isPlayable ?? true}
+      // HUD props, arbitrary here: every assertion in this file is about the audio element or the
+      // key handler, and the HUD is covered on its own in `Hud.test.tsx`.
+      cardsRemaining={0}
+      playlistName="Test Playlist"
     />
   );
 

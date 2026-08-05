@@ -5,18 +5,23 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 // extensionless specifier fails at RUNTIME under `"type": "module"`, after a build that
 // logs nothing. Both were learned from real deploys; see AGENTS.md and
 // docs/agent_findings.md (2026-08-04) before "tidying" either.
+import { resolveShortLink } from './_lib/short-link.js';
 import { fetchPlaylistFromEmbed } from './_lib/spotify-embed.js';
-import { parsePlaylistUrl } from '../shared/spotify-url.js';
+import { isSpotifyShortLink, parsePlaylistUrl } from '../shared/spotify-url.js';
 import type { PlaylistErrorCode, PlaylistErrorResult, PlaylistResult } from '../shared/types.js';
 
 /**
  * `GET /api/playlist?url=…`
  *
  * Turns a pasted Spotify playlist link into a normalized deck. Deliberately thin: it
- * validates the request, delegates to `parsePlaylistUrl()` and the embed adapter, and
- * translates their typed error union into HTTP. It contains no parsing and no
- * extraction, which is why it has no unit tests of its own -- if logic accumulates here,
- * it belongs in `shared/` or the adapter instead.
+ * validates the request, resolves a short link if it was given one, delegates to
+ * `parsePlaylistUrl()` and the embed adapter, and translates their typed error union into
+ * HTTP. It contains no parsing and no extraction, which is why it has no unit tests of its
+ * own -- if logic accumulates here, it belongs in `shared/` or an adapter instead.
+ *
+ * Accepted URL forms are whatever `parsePlaylistUrl()` accepts, plus `spotify.link` short
+ * URLs, which `api/_lib/short-link.ts` resolves first. Short-link failures map onto EXISTING
+ * error codes, so this handler's status table needed no new entries.
  *
  * A GET with a query parameter rather than a POST with a body: cacheable at Vercel's
  * edge, reproducible with `curl`, and readable in the network tab. No payload is large
@@ -87,7 +92,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    const parsed = parsePlaylistUrl(url);
+    // A `spotify.link` URL carries no playlist id -- only a redirect does -- so it has to be
+    // resolved before anything can be parsed out of it. This is the shape the mobile share
+    // sheet produces, which makes it the commonest way a phone user obtains a link at all.
+    //
+    // The resolved URL then goes through the SAME `parsePlaylistUrl()` path, unchanged: a short
+    // link to an album comes back as `unsupported-entity` with no extra branch here, which is
+    // why `resolveShortLink()` returns a URL rather than an id (decision 5).
+    let target = url;
+    if (isSpotifyShortLink(url)) {
+      const resolved = await resolveShortLink(url, fetch);
+      if (!resolved.ok) {
+        sendError(res, resolved.code);
+        return;
+      }
+
+      target = resolved.url;
+    }
+
+    const parsed = parsePlaylistUrl(target);
     if (!parsed.ok) {
       sendError(res, parsed.code);
       return;

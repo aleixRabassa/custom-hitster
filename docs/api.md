@@ -48,9 +48,36 @@ http://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M/           ← http, tra
 open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M                   ← no scheme
 spotify:playlist:37i9dQZF1DXcBWIGoYBM5M                            ← desktop-client URI
 37i9dQZF1DXcBWIGoYBM5M                                             ← bare ID
+https://open.spotify.com/user/spotify/playlist/37i9dQZF1DXcBWIGoYBM5M          ← legacy path
+https://open.spotify.com/intl-es/user/spotify/playlist/37i9dQZF1DXcBWIGoYBM5M  ← both prefixes
 ```
 
 Surrounding whitespace is trimmed. Host matching is **anchored**, so look-alikes (`open.spotify.com.evil.example`, `notopen.spotify.com`, `open.spotify.com@evil.example`) are rejected rather than fetched.
+
+The **legacy `/user/{user}/playlist/{id}` path** was added 2026-08-05. It had been rejected as `unsupported-entity` — the parser saw `user` in the entity position — which the 2026-08-04 findings called the clearest real bug that spike found: the URL carries a perfectly good 22-character ID. The `{user}` segment is skipped wholesale, so its contents do not matter. A bare `/user/{user}` profile link still reports `unsupported-entity`, which is what the length guard in `parsePlaylistUrl()` is for.
+
+**Short links are resolved server-side.** A `spotify.link` URL carries no playlist ID at all — only a redirect does — so it cannot be parsed, by this endpoint or by the landing form:
+
+```
+https://spotify.link/aBcDeF12345        ← the phone share sheet's output
+https://link.tospotify.com/aBcDeF12345  ← the legacy short host
+```
+
+`isSpotifyShortLink()` in `shared/spotify-url.ts` recognises one; `api/_lib/short-link.ts` then follows the redirects and hands the resolved URL back through `parsePlaylistUrl()` unchanged. This matters more than it looks: `spotify.link` is what a phone's Spotify share sheet produces, so it is the commonest way a player obtains a link at all.
+
+The resolver is deliberately paranoid, because this is the **first place in the repo where user input decides an outbound request target** and a Vercel Function has unrestricted network access:
+
+| Guard                                   | Why                                                                                                                                                                       |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `redirect: 'manual'`                    | The allow-list is consulted on **every hop**. With automatic following, `fetch` walks the chain itself and no intermediate host is checked                                |
+| Host allow-list, matched **exactly**    | `spotify.link`, `link.tospotify.com`, `open.spotify.com`, `www.open.spotify.com`, `spotify.com`, `www.spotify.com`. An allow-list is the only direction that fails closed |
+| http(s) only                            | `javascript:`, `file:` and `data:` targets are refused                                                                                                                    |
+| Hop limit of 3                          | Also the loop guard — a chain can be infinite without ever repeating a URL, so a bound beats a visited-set                                                                |
+| A descriptive `User-Agent` on every hop | Same one the embed adapter sends; a shortener may behave differently for an unidentified client                                                                           |
+
+**Short-link failures add no new error codes** (a deliberate decision): a dead host, a refused hop, a hop-limit hit and a missing `Location` are all `upstream-unavailable`, and a short link that resolves to an album or a track falls through `parsePlaylistUrl()` as `unsupported-entity` naturally. So the table below is unchanged, and the client's message map needed no new entry.
+
+Measured 2026-08-05: a real `spotify.link` chain is a **single 307** straight to `open.spotify.com`, and **`link.tospotify.com` no longer resolves** (ENOTFOUND). The dead host is still matched by the predicate on purpose — a legacy link genuinely _is_ a Spotify playlist link, so "Spotify could not be reached" is a more honest answer than "that does not look like a Spotify link".
 
 **Response** — `200 application/json`, with `Cache-Control: public, s-maxage=300, stale-while-revalidate=600`:
 

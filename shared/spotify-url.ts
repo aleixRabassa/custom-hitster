@@ -62,6 +62,36 @@ const SPOTIFY_WEB_URL_PATTERN = /^(?:https?:\/\/)?(?:www\.)?open\.spotify\.com(\
 const SPOTIFY_URI_PATTERN = /^spotify:([A-Za-z]+):(\S+)$/;
 
 /**
+ * The short-link hosts, anchored exactly as `SPOTIFY_WEB_URL_PATTERN` is and for the same
+ * reason -- a look-alike domain must not pass, and `spotify.link@evil.example` is the trick
+ * a substring test waves through.
+ *
+ * A path segment is REQUIRED. `https://spotify.link` on its own carries no code, so there is
+ * nothing for the server to resolve and it is better reported as `invalid-url` immediately
+ * than sent on a round trip that can only fail.
+ *
+ * `link.tospotify.com` is Spotify's older branch-style short domain. Measured 2026-08-05: it
+ * **no longer resolves at all** (ENOTFOUND), so `spotify.link` is the only host the share
+ * sheet emits today. It is matched anyway, deliberately: a legacy link is genuinely a Spotify
+ * playlist link, so `upstream-unavailable` ("Spotify could not be reached") is a more honest
+ * answer than "that does not look like a Spotify link", and the cost is one alternation here
+ * plus one entry in the resolver's allow-list.
+ */
+const SPOTIFY_SHORT_URL_PATTERN =
+  /^(?:https?:\/\/)?(?:www\.)?(?:spotify\.link|link\.tospotify\.com)\/[^/?#\s]+(?:[/?#]\S*)?$/i;
+
+/**
+ * The legacy path's first segment: `open.spotify.com/user/{user}/playlist/{id}`.
+ *
+ * Spotify emitted this form for years and still serves it, and links of that vintage are
+ * sitting in chat logs and bookmarks. Before 2026-08-05 it was rejected as
+ * `unsupported-entity` -- the parser saw `user` in the entity position and stopped -- which
+ * the 2026-08-04 findings called the clearest real bug that spike found. The `{user}` segment
+ * carries no meaning for us: the playlist ID that follows is the whole address.
+ */
+const LEGACY_USER_SEGMENT = 'user';
+
+/**
  * Locale-prefixed paths -- `open.spotify.com/intl-es/playlist/{id}`. Spotify really
  * serves these, and a link copied from a localised client carries the prefix, so a
  * parser that only knows the unprefixed form fails for anyone not using English. Easy
@@ -112,6 +142,32 @@ export function spotifyTrackUrl(id: string): string {
 }
 
 /**
+ * Is this a Spotify short link -- the shape the mobile share sheet produces?
+ *
+ * A separate predicate rather than a third `ParsePlaylistUrlResult` variant (decision 4). The
+ * return type of `parsePlaylistUrl()` is consumed by `api/playlist.ts`'s exhaustive code-to-status
+ * mapping and by every existing test; a new variant would ripple through both to express
+ * something a caller can simply ask about.
+ *
+ * The two callers want opposite things from the answer, which is the point:
+ *
+ * - **The landing screen** treats a short link as SUBMITTABLE. It contains no playlist ID --
+ *   only a redirect does -- so client-side validation cannot possibly parse it, and showing
+ *   "that does not look like a Spotify link" for the commonest way a phone user obtains a link
+ *   would be the app's most visible bug.
+ * - **`api/playlist.ts`** resolves it first (`api/_lib/short-link.ts`) and feeds the resolved
+ *   URL back through `parsePlaylistUrl()` unchanged.
+ *
+ * Never throws, and takes `unknown`-safe input for the same reason `parsePlaylistUrl()` does:
+ * it is called on a text input's value.
+ */
+export function isSpotifyShortLink(input: string): boolean {
+  if (typeof input !== 'string') return false;
+
+  return SPOTIFY_SHORT_URL_PATTERN.test(input.trim());
+}
+
+/**
  * Turn any of the accepted forms into a bare playlist ID.
  *
  * Accepted:
@@ -119,8 +175,14 @@ export function spotifyTrackUrl(id: string): string {
  *   `?utm_source=`, ...), a trailing slash, a `#fragment`, `http`, `www.`, and
  *   surrounding whitespace
  * - `open.spotify.com/intl-es/playlist/{id}` and other locale prefixes
+ * - `open.spotify.com/user/{user}/playlist/{id}` -- the legacy path, and the two prefixes
+ *   combined (`/intl-es/user/{user}/playlist/{id}`)
  * - `spotify:playlist:{id}`
  * - a bare 22-character ID (what Phase 6's suggested-playlist buttons pass)
+ *
+ * NOT accepted, and it cannot be: a `spotify.link` short URL. It carries no playlist ID at all,
+ * so only a redirect can resolve it. `isSpotifyShortLink()` is how a caller recognises one, and
+ * `api/_lib/short-link.ts` is what turns it into a URL this function can then parse.
  *
  * Never throws, for any input: Phase 6 calls this on every keystroke.
  */
@@ -148,6 +210,17 @@ export function parsePlaylistUrl(input: string): ParsePlaylistUrlResult {
 
   // Drop a leading locale prefix if present, leaving the same [entity, id] shape.
   if (segments.length > 0 && LOCALE_SEGMENT_PATTERN.test(segments[0] ?? '')) segments.shift();
+
+  // Then drop a legacy `user/{user}` prefix, leaving that same [entity, id] shape again. Done
+  // AFTER the locale strip, not before, because the two combine: a localised client copying an
+  // old link produces `/intl-es/user/{user}/playlist/{id}`.
+  //
+  // The length guard is what keeps `open.spotify.com/user/{user}` -- a profile link, and a real
+  // thing to paste by mistake -- reporting `unsupported-entity` instead of being stripped down
+  // to nothing. Three segments is the minimum that can carry an entity after the prefix.
+  if (segments.length >= 3 && (segments[0] ?? '').toLowerCase() === LEGACY_USER_SEGMENT) {
+    segments.splice(0, 2);
+  }
 
   return fromEntity(segments[0], segments[1]);
 }

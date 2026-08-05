@@ -7,7 +7,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Card } from './Card';
 import { highConfidenceCard } from './__fixtures__/cards';
-import type { CardAudioControls } from '../hooks/useCardAudio';
 
 const { toDataURLMock } = vi.hoisted(() => ({
   toDataURLMock: vi.fn<(text: string, options?: unknown) => Promise<string>>(),
@@ -15,27 +14,13 @@ const { toDataURLMock } = vi.hoisted(() => ({
 
 vi.mock('qrcode', () => ({ toDataURL: toDataURLMock }));
 
-function stubAudio(): CardAudioControls {
-  return {
-    canPlay: true,
-    isPlaying: false,
-    play: vi.fn(),
-    pause: vi.fn(),
-    restart: vi.fn(),
-    stop: vi.fn(),
-  };
-}
-
+/**
+ * No `audio` and no `onExit`: the three controls left the card for `CardControls`, because a
+ * pointer-up on a button inside a tappable card bubbles into the gesture handler and flips it.
+ */
 function renderCard(isFlipped: boolean) {
   return render(
-    <Card
-      card={highConfidenceCard}
-      isFlipped={isFlipped}
-      isYearPending={false}
-      audio={stubAudio()}
-      onFlip={vi.fn()}
-      onExit={vi.fn()}
-    />,
+    <Card card={highConfidenceCard} isFlipped={isFlipped} isYearPending={false} onFlip={vi.fn()} />,
   );
 }
 
@@ -81,13 +66,17 @@ describe('Card', () => {
     expect(screen.queryByText(String(highConfidenceCard.year))).not.toBeNull();
   });
 
-  it('should keep the hidden side mounted while flipped', () => {
-    // Both faces must exist for the 3D transform to have anything to rotate. Unmounting the
-    // hidden face on flip would also destroy the audio controls mid-playback.
+  it('should keep the hidden side mounted while flipped', async () => {
+    // Both faces must exist for the 3D transform to have anything to rotate.
+    //
+    // Asserted through the QR rather than through the controls, because the controls are no
+    // longer on this face -- they moved to `CardControls` when the card became tappable, since
+    // a pointer-up on a button inside the card was being read as a tap and flipping it.
     renderCard(true);
 
-    expect(screen.queryByRole('button', { name: 'Exit game' })).not.toBeNull();
-    expect(screen.queryByRole('button', { name: 'Play' })).not.toBeNull();
+    const image = await screen.findByRole('img');
+    expect(image.getAttribute('src')).toContain(highConfidenceCard.id);
+    expect(screen.getByTestId('card-hidden-face').textContent).not.toBe('');
   });
 
   it('should apply the flipped transform only when flipped', () => {

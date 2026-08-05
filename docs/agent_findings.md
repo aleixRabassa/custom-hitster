@@ -750,3 +750,345 @@ path, and handing it a working URL would delete that check. Both the harness and
 **The general lesson: a fixture value good enough for a stubbed unit test can be actively misleading
 in a browser.** Anything a manual check exercises for real — a media URL, an image source, a link —
 needs a working value in the harness even when the test-side fixture is rightly fake.
+
+## 2026-08-05 — `PanInfo` is not importable from `motion@12`, and the workaround is better than the import
+
+Phase 5's gesture hook needs the type of the `info` argument Motion passes `onDragEnd`. That type is
+`PanInfo`, and **there is no supported way to import it.**
+
+The chain: `motion@12.43`'s `./react` subpath is `import * as fm from 'framer-motion'; export * from
+'framer-motion'`. `framer-motion`'s own `index.d.ts` re-exports a long list of types from
+`motion-dom` — and `PanInfo` is **not** on it. `PanInfo` is declared in and exported from
+`motion-dom`, which is a **transitive** dependency: it is in `node_modules/.pnpm`, not in
+`package.json`, and pnpm's strict linking is right to make importing it awkward.
+
+Grepping `framer-motion/dist/index.d.ts` for `PanInfo` returns **nothing** — the only hit is inside a
+`Reorder` component signature. The declaration is in
+`node_modules/.pnpm/motion-dom@12.43.0/node_modules/motion-dom/dist/index.d.ts:17`.
+
+**The fix, and why it is not a workaround so much as an improvement:** `src/hooks/useCardGestures.ts`
+declares what it actually reads as local interfaces — `DragEndInfo` (`offset` and `velocity`, each
+`{x, y}`) and `GesturePointer` (`clientX`, `clientY`, `timeStamp`). Both are structural
+**supertypes** of what Motion passes, requiring strictly fewer fields, so under normal parameter
+contravariance a handler typed against them is soundly assignable to Motion's own handler type. The
+compiler checks exactly that where the props are spread onto `motion.div` in `Card.tsx`, so a Motion
+upgrade that changed the shape would fail `pnpm typecheck` rather than fail silently.
+
+Two side benefits worth keeping: the hook's public signature carries **no Motion types at all**, and
+the handlers are callable from a plain-object test without constructing a Motion event.
+
+**Do not "fix" this by adding `motion-dom` to `package.json`.** That pins a second version of
+Motion's internals against the one `motion` resolves for itself, and the failure mode is a type-only
+mismatch that appears after an unrelated upgrade.
+
+## 2026-08-05 — Motion's drag cannot be exercised under jsdom, which is why gesture decisions are pure functions
+
+**This is the constraint that shaped all of Phase 5, and it is worth stating plainly because the
+resulting file layout looks like ceremony otherwise.**
+
+Motion's drag handling reads element geometry — `getBoundingClientRect`, layout boxes, transform
+matrices — and jsdom computes none of it: every box is 0×0. Dispatching a `pointerdown` →
+`pointermove` → `pointerup` sequence at a `motion.div` under jsdom therefore does **not** exercise
+the drag path. A test written that way passes while asserting nothing about the gesture; it asserts
+that the test double works.
+
+So the thresholds were pulled out of the React seam entirely. `src/game/gestures.ts` holds
+`shouldCommitSwipe`, `swipeDirection` and `isTap` — pure functions over numbers, no React, no DOM, no
+Motion — covered by 15 node-environment tests on **both sides of every boundary**.
+`src/hooks/useCardGestures.ts` is left thin enough that reading it is sufficient review: it collects
+coordinates into refs, asks, and dispatches.
+
+This is the same split Phase 3 used for the resolver, and it is now the house style. The general
+principle: **when a library owns a code path your test environment cannot reach, the decisions must
+not live inside that path.** The alternative here was five magic numbers with no coverage at all.
+
+Two consequences recorded so they are not rediscovered:
+
+- **Pointer state is in refs, not state.** A drag emits a pointer event per frame; `useState` there
+  would re-render the card on each one and fight Motion for the same transform it is animating.
+  `exitDirection` is the one piece of state, because it is read during render.
+- **`src/game/gestures.test.ts` has no `@vitest-environment` docblock, deliberately.** It is a node
+  test. Anyone looking for "the swipe tests" in a component file will not find them.
+
+## 2026-08-05 — A lost `pointerup` would have half-broken tap-to-flip, and it was not on the plan's risk list
+
+Found while writing `useCardGestures`, not by a failing test — no test in this repo could have caught
+it, and neither could a desktop mouse.
+
+The plan specified: mark a recognised drag in a ref on `onDragStart`, and clear it after the
+pointer-up decision. That is correct until the pointer is released **outside** the card — which is
+the _normal_ case for a committed swipe, because the card has moved out from under the finger by
+then. React's `onPointerUp` is attached to the card, so when the release lands on a different element
+that handler never fires. `didDragRef` stays `true`, and the **next** genuine tap is rejected as "a
+drag was recognised".
+
+The symptom would have been **tap-to-flip working every other time** — attributed to a bad threshold,
+or to the device, long before anyone suspected a stale ref.
+
+The fix is to make `pointerdown` reset the entire gesture (start coordinates, drag flag, commit
+latch) rather than only record the start, plus an `onPointerCancel` that clears it. Resetting at the
+_beginning_ of a gesture is robust to any end event going missing; clearing only at the end assumes
+the end always arrives. The plan's literal instruction is kept as well — both happen — since
+resetting on down is a strict superset.
+
+**Generalisable: any per-gesture flag cleared on the terminating event needs a reset on the
+initiating one too.** Pointer capture, `pointercancel`, a release outside the element, and a
+scroll-stolen gesture all mean the terminating event is not guaranteed.
+
+## 2026-08-05 — Space on a focused button both activates it and flips the card
+
+Cheap to fix, invisible until someone plays with a keyboard after clicking Play, and the reason
+Phase 5's key handler has a guard that looks redundant.
+
+Phase 5 puts a window-level `keydown` handler in `GameScreen` (the card is not a control and nobody's
+hands are on it, so a focus-dependent handler would be dead most of the time). Space flips the card.
+But **Space is also how a focused `<button>` is activated** — so after a player clicks Play with a
+mouse, focus stays on that button, and one press of Space toggles the audio _and_ flips the card.
+
+Pressing play reveals the answer. Which is the entire game.
+
+The guard is `if (active instanceof HTMLButtonElement) return;` on the Space branch only —
+`ArrowRight` does nothing to a focused button, so there is no double-action there, and disabling the
+advance after the player has touched a control would be its own small hostility. Asserted by
+`should ignore Space while focus is on a button` and by `should still advance on ArrowRight while
+focus is on a button`, the pair being what pins the guard's scope.
+
+**Focus is deliberately NOT moved off the control after a click**, which the plan floated as
+belt-and-braces. Silently relocating a keyboard user's focus is a worse bug than the one it papers
+over, and the guard already closes it.
+
+The general shape, worth remembering for any app with a global key handler: **a global shortcut on a
+key that also has a native activation meaning (Space, Enter) will double-fire against whatever is
+focused.** Text inputs are the obvious case and get remembered; buttons are the one that gets missed.
+
+## 2026-08-05 — Absolutely positioned siblings paint over an in-flow sibling, which broke the card stack
+
+Small, purely visual, and cost more time than it should have because nothing errored.
+
+`CardStack` renders 2 backs plus the current card. The backs are `absolute inset-0` so they stack
+behind; the current card is `Card`, in normal flow, sized to match. Result: **the backs painted over
+the card**, hiding the QR and the controls entirely.
+
+The cause is CSS paint order, not a Tailwind or Motion issue: within a stacking context, positioned
+elements (`z-index: auto`, `position: absolute`) paint in a **later layer** than non-positioned
+in-flow content, regardless of DOM order. Putting the card last in the markup does not help.
+
+The fix is `isolate` (`isolation: isolate`) on the container plus `-z-10` on the backs. `isolate`
+matters: without a stacking context the negative z-index escapes upward and the backs disappear
+behind the screen's own background instead. The alternative — giving the card a positive z-index —
+was rejected because `Card`'s `className` belongs to `Card`, and the stack should not need to reach
+into it to be layered correctly.
+
+## 2026-08-05 — Phase 5's real-device touch verification was scoped and then waived
+
+Process note, recorded because the absence is otherwise indistinguishable from an oversight.
+
+`plan.md` §5 lists "verified on real iOS Safari + Android Chrome (touch is where this breaks)" as a
+Phase 5 deliverable, and `plan.phase-4-6-gestures.md` step 6 spells out the checklist. **The
+developer decided on 2026-08-05 that it will not be performed.** Phase 5 shipped without it.
+
+What this means concretely, for whoever hits it next:
+
+- The five threshold constants in `src/game/gestures.ts` — 96px commit distance, 500px·s⁻¹ flick,
+  10px·x / 16px·y tap radius, 400ms tap duration — **have never met a thumb.** They are documented
+  reasoning, not measurements.
+- Three open questions in the plan stay open and are marked as such: the threshold values themselves,
+  whether iOS needs `select-none` and long-press suppression (`select-none` was deliberately **not**
+  added pre-emptively), and whether 2 backs or 3 looks right.
+- Unverified mitigations: `touch-none` on the draggable surface and `overscroll-behavior: none` on
+  `html, body` are both believed necessary and neither is confirmed to be sufficient.
+
+The checklist is preserved in `docs/development.md` §5 rather than deleted, alongside the
+`pnpm dev --host` procedure for reaching the dev server from a phone, and the gap is listed in that
+file's §8 Known limitations. The plan's checkbox is left **unticked**, because it was not done.
+
+**The reason this is worth an entry: the failure mode of a waived manual check is that the next
+session reads green local checks as full coverage.** `pnpm typecheck && pnpm lint && pnpm test &&
+pnpm build` all pass, and 310 tests pass, and none of that touches a drag.
+
+---
+
+## 2026-08-05 — A button inside a tappable card flips it: the pointer twin of the Space-on-a-button bug
+
+**The bug, found by the developer playing the app rather than by any test.** Pressing Play, Pause,
+Restart or Exit on the card's hidden face **also flipped the card**, revealing the answer as a side
+effect of starting the audio.
+
+The mechanism, which is worth understanding because it generalises:
+
+- Phase 5 bound `gestureProps.onPointerUp` to the card's **outer** element (`Card.tsx`'s
+  `motion.div`), which is correct — the drag has to live there, away from the flip transform.
+- A pointer-up on a button _inside_ that element **bubbles into the same handler**.
+- `isTap()` then sees precisely what a genuine tap looks like: a few pixels of movement over a couple
+  of hundred milliseconds, with no drag recognised. So it returns true and `onFlip()` fires.
+
+**This is the pointer twin of a bug Phase 5 already guarded against for the keyboard** — Space while
+focus is on a button both activating the button and flipping the card. That guard was written,
+documented, and tested. The pointer version was missed because **the two halves shipped in different
+phases**: the buttons were harmless on the card in Phase 4, and Phase 5 made the card tappable without
+revisiting what was already inside it. A guard written for one input modality is not a guard for the
+other.
+
+**The fix is structural, at the developer's instruction: the controls moved out of the card** to
+`src/components/CardControls.tsx`, rendered by `GameScreen` beside the stack. The alternative — a
+`closest('button')` check inside `useCardGestures` — would have worked and was rejected: moving them
+out means **there is no interactive element inside the draggable surface at all**, so the class of bug
+is gone rather than guarded. Two tests assert the absence (`CardHiddenSide.test.tsx`'s "should render
+no interactive element at all" and `CardStack.test.tsx`'s button check), because re-adding a button to
+the card face is exactly the kind of well-meaning change that would reintroduce it.
+
+Consequences worth knowing:
+
+- `Card`, `CardStack` and `CardHiddenSide` no longer take `audio` or `onExit` — the prop chain got
+  shorter, and `GameScreen` (which already owned the `<audio>` element) now renders the controls itself.
+- The card's hidden face is the QR code and one line of generic text. That is arguably the honest
+  shape: the QR is the only part of a hidden card a player is meant to touch, and they touch it with a
+  phone camera.
+- **The plan said Exit lives on the card** (`plan.md` §5 and `plan.phase-4-6-screens.md` step 12 both
+  say so, and the HUD's own test asserts the HUD has no Exit). That is now wrong about _where_, and
+  still right about _how many_: there is exactly one Exit control, it is just beside the card rather
+  than on it.
+- The control bar is visible on both sides of the flip, where the hidden-face version was unreachable
+  once flipped. Phase 4's stop-on-flip rule is unchanged; a player who deliberately presses Play after
+  the reveal now gets audio, which is a reasonable thing to want.
+
+---
+
+## 2026-08-05 — `START` had to skip the card-1 gate for an already-resolved deck, or Restart hung forever
+
+**A latent bug in Phase 3's reducer, unreachable until Phase 6 built Restart, and it hung the app.**
+
+`gameReducer`'s `START` unconditionally set `status: 'preparing'`, and the card-1 gate opens only on a
+`YEAR_RESOLVED` action naming `deck[0].id`. Meanwhile `resolver.ts` correctly refuses to look up a card
+that already has a year — it goes straight into `settled` — which is exactly right, because
+re-resolving would re-spend a globally shared MusicBrainz budget on work already done.
+
+Put those together for a deck that arrives **pre-resolved** and nothing ever dispatches
+`YEAR_RESOLVED`, so nothing ever opens the gate, so **the loading screen stays up forever.**
+
+**Phase 6's Restart hits this every single time.** It re-deals `state.deck` (deliberately — that is
+what makes Restart work after a resumed session and cost zero lookups), and a session can only have
+_left_ `preparing` in the first place because card 1 resolved. So every restart deals a deck whose
+card 1 has a year.
+
+The fix is one condition in `START`: `deck[0]?.year === undefined ? 'preparing' : 'playing'`. It is
+also the semantically correct model rather than a patch — the gate's own comment says it waits for card
+1's lookup to **complete**, and `year !== undefined` _is_ a completed lookup. That is what the three
+states of `Card.year` mean (`undefined` = not looked up, `null` = looked up and nothing found).
+
+Three things worth carrying forward:
+
+- **It was caught by an integration test, and could not have been caught by a unit test.** The bug
+  lives in the interaction between the reducer (waits for an action), the resolver (declines to send
+  one) and the container (deals a pre-resolved deck). Each component is individually correct.
+  `src/App.test.tsx`'s "should restart from the current deck" is what found it.
+- **`plan.phase-4-6-screens.md` listed any reducer change as Out of Scope**, and this was changed
+  anyway. The out-of-scope clause exists to stop a _presentation_ concern reopening a finished phase
+  (that is what the container's end-reason flag is for). This was not one: the reducer is the only place
+  that can decide the gate, and the alternative would have been a fake `YEAR_RESOLVED` dispatched from
+  the wiring layer to trick it.
+- **`RESUME` was checked and does not need the same fix.** A save can only carry
+  `status: 'preparing'` if it was written while card 1 was unresolved — the moment card 1 resolves, the
+  same action flips the status to `playing`, and the save records that. On resume the resolver looks
+  card 1 up again and the gate opens normally.
+
+---
+
+## 2026-08-05 — `pnpm dev` cannot exercise the playlist client, and now fails with a player-visible message
+
+`docs/architecture.md` §5 has long recorded that Vite serves `api/` files as transpiled source with a
+**200** status. Phase 6 gave that a **client-visible shape** for the first time, which is the finding.
+
+Under `pnpm dev`, pressing Start on the landing screen fetches `/api/playlist` and receives the
+transpiled source of `api/playlist.ts` — status 200, `text/javascript`. `response.json()` rejects,
+`playlist-client.ts` catches it, and the outcome is `unexpected-payload`. So the app shows:
+
+> Spotify returned something we could not read. This is a problem on our side, not with your link.
+
+Which is **true and completely misleading about the cause.** The client is behaving exactly as
+designed; the wrong dev server is running. `playlist-client.ts` handles this explicitly and says so in
+a comment, and `playlist-client.test.ts` covers it ("should report unexpected-payload for a 200 whose
+body is not JSON") — because the alternative was a raw `SyntaxError` surfacing from inside a promise
+chain, which is strictly worse.
+
+**Use `npx vercel dev` to play the game.** Recorded in `AGENTS.md`, `docs/development.md` §4 and §8,
+and `docs/architecture.md` §5, because the symptom looks like an app bug rather than a setup problem
+and the error copy actively points the reader at the wrong layer.
+
+---
+
+## 2026-08-05 — Following a redirect from a user-supplied URL is the repo's first SSRF surface
+
+`api/_lib/short-link.ts` resolves `spotify.link` URLs, and it is **the first place in this repository
+where user input decides an outbound request target.** That deserves stating plainly, because the
+feature reads as trivial ("follow the redirect") and the security shape is not.
+
+A Vercel Function has unrestricted outbound network access. "Follow the redirects on a URL the player
+pasted" is, stated plainly, server-side request forgery: without a check, a crafted chain points the
+function at a cloud metadata endpoint, an internal address, or any third-party host, and the response
+returns through our own trusted origin.
+
+Four guards, and the first is the one that makes the rest possible:
+
+1. **`redirect: 'manual'`.** With automatic following, `fetch` walks the whole chain internally and the
+   allow-list **never sees a single intermediate host**. This is not a preference; it is what makes the
+   allow-list enforceable at all. `short-link.test.ts` asserts the `init` directly, because there is no
+   other observable difference.
+2. **An allow-list, matched on the exact host** — never a suffix or substring test. Enumerating what is
+   safe is the only direction that fails closed. `URL.hostname` is what is compared, which also
+   disposes of the userinfo trick (`https://spotify.link@evil.example/x` has hostname `evil.example`).
+3. **http(s) only**, so `javascript:`, `file:` and `data:` targets are refused.
+4. **A hop limit of 3**, which doubles as the loop guard — a chain can be infinite without ever
+   repeating a URL, so a bound is strictly stronger than a visited-set.
+
+The SSRF test scripts each forbidden target as **reachable**, so that a resolver which followed it
+would _succeed_. A passing test therefore cannot be an accident of the double rejecting the request,
+and it asserts two things: that the call was refused, **and that it was never made**.
+
+Measured the same day, both through live requests:
+
+- A real `spotify.link` chain is a **single 307** to `https://open.spotify.com/`. Not the multi-hop
+  chain the plan anticipated.
+- **`link.tospotify.com` no longer resolves** (ENOTFOUND). It is matched by the predicate and the
+  allow-list anyway, deliberately: a legacy link genuinely _is_ a Spotify playlist link, so
+  `upstream-unavailable` ("Spotify could not be reached") is a more honest answer than "that does not
+  look like a Spotify link".
+
+Short-link failures map onto **existing** `PlaylistErrorCode` values and add none — a dead host, a
+refused hop, a hop-limit hit and a missing `Location` are all `upstream-unavailable`, and a short link
+resolving to an album falls through `parsePlaylistUrl()` as `unsupported-entity` naturally. That is why
+the resolver returns a **URL** rather than a playlist id, and why the client's message map needed no
+new entry.
+
+---
+
+## 2026-08-05 — Exit and deck-exhaustion are indistinguishable in `GameState`, and the fix is a destination, not a reason
+
+Recorded because the next person who wants to know _why_ a session ended will look here first.
+
+Both paths produce `status: 'ended'` — `reducer.ts` line 127 (deck ran out) and line 137 (`END` from
+Exit) — and **`currentIndex` cannot separate them either**, because `NEXT` past the last card leaves
+the index _on_ the last card rather than one past the end. An Exit on the final card is therefore
+byte-for-byte identical to finishing the deck.
+
+The resolution (`plan.phase-4-6-screens.md` decision 2): **a container-local flag in `App.tsx`, not an
+`endReason` field on `GameState`.** That keeps Phase 3's reducer, its types, its persistence format and
+its test suite untouched for what is purely a presentation question — a phase declared complete does
+not get reopened to decide which screen to show. It is ephemeral by design: `END` already clears the
+saved session, so after a refresh there is nothing to resume and the landing screen is correct
+whichever way the game ended.
+
+**What the plan did not anticipate, and the reason this entry is longer than the decision:** the flag
+was specified as `'exited' | 'finished' | null`, and a _reason_ turns out to be the wrong concept. The
+end screen's "New playlist" button also has to reach the landing screen, and **the reducer has no
+action that returns `ended` to `idle`** — deliberately, since there is nothing to un-end. So a reason
+of `finished` would have had to mean two different destinations depending on a second piece of state.
+
+It is therefore phrased as a **destination**: `type EndedView = 'end-screen' | 'landing'`. Exit and New
+playlist both set `landing`; only a deck that ran out gets `end-screen`. Three paths, one concept.
+
+A related trap in the same file, worth its own sentence: the guard for "has this fetch result already
+been dealt?" **cannot be `state.status === 'idle'`**, which is the obvious version. After an Exit the
+session sits at `ended` while the landing screen is on screen, so a playlist submitted from there would
+never be dealt at all. `App.tsx` compares the **result object's identity** through a ref instead, which
+is correct regardless of status and is also what makes the effect idempotent under StrictMode.

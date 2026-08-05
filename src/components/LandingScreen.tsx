@@ -1,0 +1,208 @@
+/**
+ * The landing screen: paste a playlist link, or pick one of five.
+ *
+ * ===========================================================================
+ *  THIS IS A PRE-START SURFACE, SO IT MUST LEAK NOTHING ABOUT ANY DECK.
+ *
+ *  The person pasting the link is a PLAYER -- there is no host role in this app
+ *  (plan.md §6). So the suggested playlists are labelled by genre and era, never
+ *  by what is in them, and nothing here ever renders a track title, an artist or
+ *  a year. That rule is why there is no "preview the deck" affordance and no
+ *  pre-Start year review: either would hand the player the answers to the whole
+ *  game before it started.
+ * ===========================================================================
+ *
+ * Presentational, like every other component in this directory: the URL goes out through
+ * `onSubmit` and the request state comes in as props. `App.tsx` owns `usePlaylist`.
+ *
+ * ## Validation happens twice, and that is not duplication
+ *
+ * `parsePlaylistUrl()` runs here to avoid a pointless round trip and to give an instant, specific
+ * error -- and it runs again on the server, because the server cannot trust a client. Both call
+ * the SAME function in `shared/`, which is the entire reason that function lives there.
+ *
+ * A `spotify.link` short URL is the exception: it carries no playlist id, so no client-side check
+ * can parse it. `isSpotifyShortLink()` recognises one and it is submitted for the server to
+ * resolve. Rejecting it here would break the commonest way a phone user obtains a link at all.
+ */
+
+import { useState } from 'react';
+
+import { playlistErrorMessage } from '../game/messages';
+import { isSpotifyShortLink, parsePlaylistUrl } from '../../shared/spotify-url';
+import type { PlaylistClientErrorCode } from '../game/playlist-client';
+
+/**
+ * The five ready-to-try playlists, so a first-time visitor does not need a playlist of their own
+ * to see the app work.
+ *
+ * ===========================================================================
+ *  RE-VERIFIED 2026-08-05. All five resolve to the intended playlist, checked
+ *  by `entity.uri` AND `entity.name` in the embed payload rather than by a 200
+ *  response -- editorial playlists get their contents refreshed by Spotify, so a
+ *  200 is not evidence that an id still means the same playlist (plan.md §5).
+ *
+ *  Track counts at that check: 50, 100, 50, 100, 100 -- matching Phase 0's own
+ *  measurements exactly, including Reggae Classics' two preview-less tracks.
+ *  Rock Classics, Reggae Classics and All Out 80s return exactly
+ *  MAX_EMBED_TRACKS, so all three raise the truncation notice by design.
+ *
+ *  Re-verify the same way before shipping any future change here.
+ * ===========================================================================
+ *
+ * The labels are genre/era names taken from Spotify's own playlist titles. None of them describes
+ * a track, which is what keeps this section leak-free.
+ */
+export const SUGGESTED_PLAYLISTS: readonly { id: string; label: string; blurb: string }[] = [
+  { id: '37i9dQZF1DXcBWIGoYBM5M', label: 'Today’s Top Hits', blurb: 'Current pop' },
+  { id: '37i9dQZF1DWXRqgorJj26U', label: 'Rock Classics', blurb: '60s–2020s rock' },
+  { id: '37i9dQZF1DX0XUsuxWHRQd', label: 'RapCaviar', blurb: 'Hip-hop' },
+  { id: '37i9dQZF1DXbSbnqxMTGx9', label: 'Reggae Classics', blurb: 'Reggae' },
+  { id: '37i9dQZF1DX4UtSsGT1Sbe', label: 'All Out 80s', blurb: '80s' },
+];
+
+export interface LandingScreenProps {
+  /**
+   * Fetch a deck for this URL. Receives the input's value RAW -- the server owns every question
+   * about what a link means, and a client that normalised a little is how the two drift apart.
+   */
+  onSubmit: (url: string) => void;
+  /** True while a request is in flight. Disables the controls. */
+  isLoading: boolean;
+  /** A code from the server or the client, or undefined when there is no error to show. */
+  errorCode?: PlaylistClientErrorCode;
+}
+
+export function LandingScreen({ onSubmit, isLoading, errorCode }: LandingScreenProps) {
+  const [value, setValue] = useState('');
+  /**
+   * A client-side parse failure, kept SEPARATE from `errorCode`.
+   *
+   * Two sources of error with one slot to render them in, and the local one has to win while it
+   * is set: a stale server error from a previous submission must not sit underneath a fresh "that
+   * is not a playlist link". Clearing it on every edit is what keeps the two from fighting.
+   */
+  const [localErrorCode, setLocalErrorCode] = useState<PlaylistClientErrorCode | undefined>(
+    undefined,
+  );
+
+  const shownErrorCode = localErrorCode ?? errorCode;
+
+  const submit = (candidate: string) => {
+    const trimmed = candidate.trim();
+
+    // A short link cannot be parsed here -- only a redirect can resolve it -- so it skips
+    // straight to the server. See the header block.
+    if (!isSpotifyShortLink(trimmed)) {
+      const parsed = parsePlaylistUrl(trimmed);
+      if (!parsed.ok) {
+        // NOT submitted: there is nothing for the server to add, and a round trip to be told the
+        // same thing is just latency in front of the same sentence.
+        setLocalErrorCode(parsed.code);
+        return;
+      }
+    }
+
+    setLocalErrorCode(undefined);
+    onSubmit(trimmed);
+  };
+
+  return (
+    <main className="flex min-h-dvh flex-col items-center justify-center gap-8 bg-neutral-950 p-6 text-neutral-100">
+      <div className="flex flex-col items-center gap-2 text-center">
+        <h1 className="text-3xl font-semibold">Custom Hitster</h1>
+        <p className="max-w-sm text-sm text-neutral-400">
+          Paste a public Spotify playlist link to deal a deck. Scan a card to hear the song, then
+          guess the year.
+        </p>
+      </div>
+
+      <form
+        className="flex w-full max-w-sm flex-col gap-3"
+        onSubmit={(event) => {
+          // The page must not navigate: this is a single-page app and a real form submission
+          // would reload it back to `idle`, throwing away the session that is being started.
+          event.preventDefault();
+          submit(value);
+        }}
+      >
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="text-neutral-400">Playlist link</span>
+          <input
+            type="text"
+            value={value}
+            onChange={(event) => {
+              setValue(event.target.value);
+              // Cleared on edit, not on submit: an error about the PREVIOUS value sitting beside
+              // a half-typed new one reads as an error about what is currently in the box.
+              setLocalErrorCode(undefined);
+            }}
+            placeholder="https://open.spotify.com/playlist/…"
+            aria-label="Spotify playlist link"
+            aria-invalid={shownErrorCode !== undefined}
+            /*
+              `autoComplete="off"` and `spellCheck={false}`: this is a URL, and a spell-check
+              underline plus an autofill dropdown over a pasted link is noise. `inputMode="url"`
+              gets the right phone keyboard, which matters because a phone is the primary device.
+            */
+            autoComplete="off"
+            spellCheck={false}
+            inputMode="url"
+            disabled={isLoading}
+            className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-neutral-100 placeholder:text-neutral-600 disabled:opacity-50"
+          />
+        </label>
+
+        {shownErrorCode === undefined ? null : (
+          /*
+            `role="alert"` so the message is announced rather than only drawn -- a player using a
+            screen reader otherwise gets no signal that a submission failed at all. The copy comes
+            from the client-side map; the server's own `message` field is deliberately not
+            rendered (see `messages.ts`).
+          */
+          <p role="alert" className="text-sm text-red-400">
+            {playlistErrorMessage(shownErrorCode)}
+          </p>
+        )}
+
+        <button
+          type="submit"
+          // Disabled while loading, which is what stops a double submission dealing two decks.
+          // `usePlaylist` aborts the first request anyway, so this is the visible half of a
+          // guarantee the hook already makes.
+          disabled={isLoading}
+          className="rounded-lg bg-emerald-600 px-4 py-2 font-medium text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isLoading ? 'Loading…' : 'Start'}
+        </button>
+      </form>
+
+      <section className="flex w-full max-w-sm flex-col gap-2">
+        <h2 className="text-sm text-neutral-400">Or try one of these</h2>
+
+        <ul className="flex flex-col gap-2">
+          {SUGGESTED_PLAYLISTS.map((playlist) => (
+            <li key={playlist.id}>
+              <button
+                type="button"
+                // Fills the input AND submits, so the suggestion behaves exactly as if the link
+                // had been pasted -- including leaving the URL visible, which is how a player
+                // learns what a valid link looks like.
+                onClick={() => {
+                  setValue(playlist.id);
+                  submit(playlist.id);
+                }}
+                disabled={isLoading}
+                className="flex w-full items-baseline justify-between gap-3 rounded-lg border border-neutral-800 bg-neutral-900 px-3 py-2 text-left hover:border-neutral-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <span className="text-sm">{playlist.label}</span>
+                {/* Genre/era only. Never a track, an artist or a year -- see the header block. */}
+                <span className="text-xs text-neutral-500">{playlist.blurb}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </section>
+    </main>
+  );
+}

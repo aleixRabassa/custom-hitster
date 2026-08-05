@@ -289,6 +289,17 @@ wait is therefore one lookup, not a queue drain.
         which could not measure it locally, and it belongs in `agent_findings.md` —
         **153.0 s for 42 cards, ~3.64 s/card, so ~3 min for 50. Recorded in `agent_findings.md`
         (2026-08-05).**
+  - [ ] **The real-deployment leg is still owed** (re-confirmed 2026-08-05 during Phase 6). Everything
+        above was measured in-process, which is the honest number for the _resolver_ and excludes
+        exactly the three things only a deployment has: **Upstash** backing the shared cache and the
+        1 req/s gate across invocations, Vercel's invocation overhead, and a real browser running
+        React 19 StrictMode. So three claims remain unverified end to end: that a **429 backs off
+        rather than failing a card** (the gate paces nothing without Upstash, so no 429 was ever
+        provoked), that the **50-track figure holds against real latency** rather than being
+        extrapolated from 42, and that **exactly one `/api/year` request per card** is sent under
+        StrictMode — `use-game-session.ts` has a double-crawl guard that nothing tests. It now lives as
+        **step 15 of [plan.phase-4-6-screens.md](./plan.phase-4-6-screens.md)**, where there is finally
+        a UI to drive it through, and as a Known Limitation in [development.md](../development.md) §8.
 
 - [x] **Run the full local verification pass** — `pnpm typecheck && pnpm lint && pnpm test && pnpm build`,
       all four green. There are no hooks and no CI; the checks are ours to run.

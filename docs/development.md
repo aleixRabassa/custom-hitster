@@ -97,6 +97,21 @@ curl -s "http://localhost:3000/api/playlist?url=37i9dQZF1DWXRqgorJj26U" | grep -
 
 # Wrong verb: 405 with an Allow header.
 curl -i -X POST "http://localhost:3000/api/playlist?url=37i9dQZF1DXcBWIGoYBM5M"
+
+# The LEGACY path. Rejected as unsupported-entity until 2026-08-05; must now be a 200.
+curl -s "http://localhost:3000/api/playlist?url=https://open.spotify.com/user/spotify/playlist/37i9dQZF1DXcBWIGoYBM5M" \
+  | grep -o '"name":"[^"]*"' | head -1
+
+# A SHORT LINK, which is the only one of these you cannot fake: it needs a real
+# code from a phone's Spotify share sheet, because the redirect is what carries
+# the playlist id. Share any playlist to yourself and paste the spotify.link URL.
+curl -s "http://localhost:3000/api/playlist?url=https://spotify.link/YOUR_CODE_HERE" \
+  | grep -o '"name":"[^"]*"' | head -1
+
+# And the SSRF guard, which you can fake: a non-Spotify host is refused before
+# any request is made, so this must be 502 upstream-unavailable and must NOT
+# reach example.com. (The unit tests cover this properly; this is the eyeball.)
+curl -i "http://localhost:3000/api/playlist?url=https://spotify.link.evil.example/abc"
 ```
 
 Also confirm the response carries **no** upstream HTML and **no** `accessToken` — the embed payload contains an anonymous Spotify bearer token that must never reach the client. An adapter test asserts this, but it is worth eyeballing once.
@@ -196,33 +211,97 @@ pnpm test          # once
 pnpm test:watch    # watch mode
 ```
 
-Current suite: **278 tests across 20 files**, all passing, and **all of them offline** — no test touches the network. That is deliberate: a test that really called MusicBrainz would be rate-limited to 1 req/s, would drift as the database improves, and would fail for reasons unrelated to the code.
+Current suite: **408 tests across 32 files**, all passing, and **all of them offline** — no test touches the network. That is deliberate: a test that really called MusicBrainz would be rate-limited to 1 req/s, would drift as the database improves, and would fail for reasons unrelated to the code.
 
 The suite runs green **with no environment variables set at all**, which is the new-contributor path. If you have to configure something to make tests pass, that is a bug.
 
 The centre of gravity is `shared/year.test.ts`'s accuracy suite: it runs the scorer over captured candidates for fourteen Phase 0 known-tricky tracks and asserts each one's **known-correct** year, not whatever the code currently produces. Phase 0 measured a naive lookup at ~6% accurate; that suite is the evidence the pipeline beats it and the thing that catches a regression in scoring. Fixture provenance is documented in the headers of `shared/__fixtures__/year-candidates.ts` and `api/_lib/__fixtures__/musicbrainz-payloads.ts`.
 
-Tests are discovered at `{src,shared,api}/**/*.{test,spec}.{ts,tsx}`. The **default environment is `node`**, and a test that needs a DOM opts in per file with a `/** @vitest-environment jsdom */` docblock — six files do (the card components and the audio hook). Keeping `node` as the default is what makes a DOM API accidentally added to `shared/` fail here rather than at deploy time. Full detail, including why there is no `setupFiles` and why every DOM file needs its own `afterEach(cleanup)`, is in [`toolchain.md`](./toolchain.md) §5.
+Tests are discovered at `{src,shared,api}/**/*.{test,spec}.{ts,tsx}`. The **default environment is `node`**, and a test that needs a DOM opts in per file with a `/** @vitest-environment jsdom */` docblock — fourteen files do (the card components, the screens, the audio hook, and the container). Keeping `node` as the default is what makes a DOM API accidentally added to `shared/` fail here rather than at deploy time. Full detail, including why there is no `setupFiles` and why every DOM file needs its own `afterEach(cleanup)`, is in [`toolchain.md`](./toolchain.md) §5.
+
+**`src/App.test.tsx` is the integration seam of the whole app**, and the one place worth understanding before changing it. It drives the real reducer, the real resolver and the real screens from a stubbed storage and two independently stubbed fetches: the **playlist** client gets an injected `fetchImpl` prop, while the **year** resolver goes to a stubbed global `fetch`. The split is what makes the card-1 gate controllable — hang the year stub and the session stays on the preparing screen; answer it and the game screen appears. Stubbing out the resolver entirely would mean never reaching the game screen at all.
+
+**`src/game/gestures.test.ts` is deliberately a `node` test, and it is where the swipe and tap thresholds are actually covered.** jsdom cannot exercise a drag at all — Motion's drag reads element geometry jsdom does not compute — so the decisions were pushed into pure functions that need no DOM. If you are looking for "the swipe tests", they are there, not in a component file. See [`architecture.md`](./architecture.md) §3.
 
 ### Manual card verification
 
-Six things about the card cannot be asserted from a test, and the last one cannot be checked on a desktop at all. `pnpm dev` opens straight into the Phase 4 harness (`src/App.tsx`), which walks the eight fixture cards — one per interesting shape — with Flip and Next buttons at the bottom of the screen.
+**The Phase 4/5 fixture harness is gone.** `src/App.tsx` is the real container as of Phase 6, so manual verification now happens against a real playlist — which means **`npx vercel dev`, not `pnpm dev`** (§4: Vite cannot run `/api/playlist`, so Start fails with the `unexpected-payload` message). `public/dev-preview.wav`, the generated arpeggio the harness substituted for the fixture cards' invented preview URLs, was deleted with it: a real deck carries real 30-second previews, so there is nothing left to stand in for.
 
-**Audio in the harness plays `public/dev-preview.wav`, not the fixture URLs.** The fixture cards carry invented preview URLs, which is right for the unit tests and useless in a browser: nothing loads, `play()` rejects, `useCardAudio` catches it as designed, and the controls look broken while behaving correctly. The harness therefore substitutes a generated 15-second arpeggio — audibly positional, so Restart is distinguishable from Play. `noPreviewCard` keeps its missing preview, because it is the only card that proves the disabled path. See [`agent_findings.md`](./agent_findings.md) (2026-08-05).
+The fixture deck still exists at `src/components/__fixtures__/cards.ts` and is still the thing every component test renders from — it is only the _browser_ harness that is gone. To eyeball one specific card shape, the fastest route is now a component test in watch mode, not a page.
 
-| Check                                                                                                                                | Status                          |
-| ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------- |
-| Flip and Next                                                                                                                        | **Verified 2026-08-05 — works** |
-| Play, pause, restart; audio stops on flip and on advance                                                                             | Pending — retry with the fix    |
-| **Devtools DOM search on an UNFLIPPED card** for the fixture title, artist and year — all three must be absent, not merely invisible | Pending                         |
-| **Scan the QR with a real phone** and confirm it opens the right track in Spotify                                                    | **Verified 2026-08-05 — works** |
-| A preview-less fixture card (card 5, "EARFQUAKE") disables Play/Pause and Restart while Exit and the QR stay live                    | Pending                         |
-| The four year states render distinctly across cards 1–4 (plain / unconfirmed / "check this one yourself" / still looking up)         | Pending                         |
-| **On Android (or Chrome's media panel): start playback and confirm the notification and lock screen show no track title or artist**  | Pending — needs real hardware   |
+Six things about the card cannot be asserted from a test, and the last one cannot be checked on a desktop at all:
+
+| Check                                                                                                                                        | Status                          |
+| -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| Flip and Next                                                                                                                                | **Verified 2026-08-05 — works** |
+| Play, pause, restart; audio stops on flip and on advance                                                                                     | Pending — needs a real deck     |
+| **Devtools DOM search on an UNFLIPPED card** for the current track's title, artist and year — all three must be absent, not merely invisible | Pending                         |
+| **Scan the QR with a real phone** and confirm it opens the right track in Spotify                                                            | **Verified 2026-08-05 — works** |
+| A preview-less track disables Play/Pause and Restart while Exit and the QR stay live (rare — ~0.5% of tracks; Reggae Classics has two)       | Pending                         |
+| The four year states render distinctly (plain / unconfirmed / "check this one yourself" / still looking up)                                  | Pending                         |
+| **On Android (or Chrome's media panel): start playback and confirm the notification and lock screen show no track title or artist**          | Pending — needs real hardware   |
 
 The last row is the one that matters most and the only leak vector no automated test in this repo can reach: nothing on the page can retract metadata once the OS media session has it. The code side is settled — a test asserts the app never writes `navigator.mediaSession.metadata` — but whether a browser populates that panel from a bare MP3 on its own is a question only a device answers.
 
 **Do not measure timings through `vercel dev`** for any of this. Nothing in the card path needs a function, and the ~4 s per-invocation overhead makes every number meaningless (§4).
+
+### Gesture verification on a real device — scoped, then waived
+
+**Decided 2026-08-05: this pass will not be performed.** Phase 5 shipped without it. The checklist is kept here rather than deleted because it is the only way the gesture thresholds ever get validated, and because someone hitting bad touch behaviour later needs to know that this was a known gap rather than a tested-and-fine path.
+
+To reach the dev server from a phone on the same network:
+
+```bash
+pnpm dev --host          # prints a Network: http://192.168.x.x:5173 URL
+```
+
+Open that URL on the phone. A preview deploy (`vercel deploy`) works too and is the better option for iOS, which is stricter about non-HTTPS origins for some APIs. Nothing in the card path needs a serverless function, so `vercel dev` is not required.
+
+What was never checked:
+
+| Check                                                                                                    | Why it matters                                                                                                   |
+| -------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| iOS Safari: tap-to-flip fires reliably, and a tap is never read as a swipe                               | A tap misread as a swipe skips a card **irrecoverably** — there is no previous card                              |
+| iOS Safari + Android Chrome: a deliberate slow drag of ~⅓ the card's width commits                       | `SWIPE_COMMIT_DISTANCE_PX` is a guess at 96px                                                                    |
+| Both: a fast flick advances, and a drag released below threshold snaps back                              | The offset-**or**-velocity rule, and the dead band between the two thresholds                                    |
+| Both: a swipe is never misread as a tap                                                                  | That reveals the answer the player was mid-guess on                                                              |
+| Both: no rubber-band scroll or pull-to-refresh steals the gesture, especially near the top of the screen | `overscroll-behavior: none` + `touch-none` are the mitigations; neither is confirmed                             |
+| iOS Safari: no accidental text selection and no long-press context menu on the card                      | Open question — `select-none` was **not** added pre-emptively, pending this check                                |
+| iOS Safari: audio still starts from the **first** tap                                                    | iOS is strictest about the user-gesture requirement, and the gesture layer now sits between the tap and `play()` |
+| iOS Safari: the layout does not shift as the toolbar shows/hides                                         | The card is viewport-sized and `dvh` behaves differently there                                                   |
+| By eye: is 2 backs right, or 3?                                                                          | `VISIBLE_BACKS` in `CardStack.tsx`; `plan.md` says "2–3 cards peeking"                                           |
+
+If any of this turns out to be wrong in the field, **the five constants in `src/game/gestures.ts` are the first place to look** — they are named, documented, and designed to be retuned by someone who did not write them. Changing them requires no change to the hook or to Motion. Note that `CardStack.test.tsx` asserts "up to two backs", so raising `VISIBLE_BACKS` means updating two test expectations as well.
+
+### Playing a real game, and the progressive-loading verification
+
+**`npx vercel dev`, then paste a playlist link.** `pnpm dev` cannot do this at all: pressing Start returns the transpiled source of `api/playlist.ts` with a 200, which `playlist-client.ts` correctly reports as `unexpected-payload` — so the app shows _"Spotify returned something we could not read"_ and you may reasonably think the client is broken when it is doing its job.
+
+**Configure Upstash before playing a full deck**, for the reason in §4: without it nothing paces MusicBrainz across invocations, and a 50-card deck becomes ~100 unthrottled requests against a service that rate-limits to 1 req/s and blocks clients that ignore it.
+
+The end-to-end checks worth running by hand, each pinning a decision:
+
+| Check                                                                                            | Status  |
+| ------------------------------------------------------------------------------------------------ | ------- |
+| Each of the five suggested playlists loads and deals a deck                                      | Pending |
+| A `spotify.link` URL from a phone's share sheet loads the right playlist                         | Pending |
+| A legacy `/user/{user}/playlist/{id}` URL loads instead of erroring                              | Pending |
+| A private/deleted playlist and a track URL each produce their inline error copy                  | Pending |
+| The truncation notice appears for a 100-track playlist and **never blocks Start**                | Pending |
+| Exit returns to the landing screen; finishing the deck reaches the end screen                    | Pending |
+| **Restart re-deals with a fresh order and costs no lookups** — watch the network tab stay silent | Pending |
+| Reload mid-deck and confirm the session resumes on the same card                                 | Pending |
+
+**Step 15 of [`plan.phase-4-6-screens.md`](./plans/plan.phase-4-6-screens.md) is owed and needs a preview deployment**, not a dev server — it is Phase 3's progressive-loading verification, deferred until there was a UI to exercise it through. Deploy a preview **with Upstash configured** (the cache and the gate are backed by the same two variables) and confirm:
+
+- Start waits on **one** lookup on a cold deck, not the whole deck.
+- Cards 2..n fill during play, and flip / swipe / QR / audio / Exit never block on a pending year.
+- The priority jump: advance rapidly past the resolver and watch the current card get served next.
+- A 429 backs off rather than failing a card.
+- The **50-track cold-deck wall clock** — owed since Phase 2 and still unmeasured.
+- **Exactly one `/api/year` request per card under React 19 StrictMode**, by counting requests in the network tab rather than assuming. `use-game-session.ts` has a double-crawl guard that nothing tests.
+
+**Do not take timings through `vercel dev`** — the ~4 s per-invocation overhead swamps them, and the fresh process per request means the gate and cache never persist (§4).
 
 ---
 
@@ -266,3 +345,6 @@ Carried forward from the Phase 0 research; measurements and reasoning in [`plans
 - **Release years will sometimes be wrong.** MusicBrainz has no canonical "original studio recording" per song; famous tracks have hundreds of competing live, bootleg, and reissue entries. As built, the strict pass resolved **14 of 14** known-tricky tracks exactly (2026-08-04) against a ~6% naive baseline — but that is a curated set, not a random one, and a track the strict filters cannot place falls through to a relaxed pass that is measurably off by a year or so. Those come back as `confidence: 'low'`, and Phase 6 marks them unconfirmed on the card's revealed side. There is no pre-Start review of years — the player pastes the playlist, so that would spoil the deck.
 - **Year resolution is slow the first time, and the 1 req/s budget is shared by everyone.** A lookup costs two paced MusicBrainz requests, so a cold 100-track playlist takes several minutes. The cache means only genuinely new songs ever pay it — but the budget is global, so two people resolving cold playlists at once each get half the throughput. Acceptable for a personal project; the number to watch if the app is ever shared widely.
 - **In-app audio covers ~99.5% of tracks, not all of them.** Measured across 398/400 tracks in Phase 0. For a track with no preview URL, Play/Pause and Restart are disabled; the QR code and Exit still work.
+- **The app cannot be played under `pnpm dev` — only under `npx vercel dev` or a deployment.** Vite serves `api/playlist.ts` as transpiled source with status 200, so the playlist client reports `unexpected-payload` and the landing screen shows an error that reads like an app bug. This is not fixable without a dev-server plugin that runs functions, which `vercel dev` already is.
+- **Progressive loading has never been verified against a real deployment.** Step 15 of the Phase 6 plan, carried over from Phase 3, is still owed — including the 50-track cold-deck wall clock (unmeasured since Phase 2) and the StrictMode request count. Nothing local models it: the shared cache and the 1 req/s gate are both backed by the Upstash variables, so without them the gate paces nothing and the numbers mean nothing. Checklist in §5.
+- **Touch gestures have never been verified on a real device, and the thresholds are unvalidated guesses.** Decided 2026-08-05: the Phase 5 real-device pass was scoped and then waived. `plan.md` names touch as the place this breaks, and jsdom cannot substitute — Motion's drag reads geometry it does not compute. What _is_ covered is every threshold decision, exhaustively, in `src/game/gestures.test.ts` (node), plus the keyboard path in jsdom; what is not is whether those numbers feel right under a thumb, whether pull-to-refresh is genuinely suppressed, and whether iOS needs `select-none` on the card. The five constants in `src/game/gestures.ts` are the retuning surface. Full checklist in §5.

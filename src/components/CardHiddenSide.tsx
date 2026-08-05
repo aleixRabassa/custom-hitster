@@ -1,5 +1,5 @@
 /**
- * The hidden side of a card: the QR code, and the three controls.
+ * The hidden side of a card: the QR code, and nothing else.
  *
  * ===========================================================================
  *  THIS FACE MUST LEAK NOTHING. IT IS THE WHOLE GAME.
@@ -19,84 +19,45 @@
  *  enough to identify a track, and it is the kind of thing that gets added as
  *  a helpful progress bar.
  * ===========================================================================
+ *
+ * ## The three controls used to be here, and moving them out was a bug fix
+ *
+ * Exit, Play/Pause and Restart lived on this face through Phase 4. Phase 5 then made the card
+ * tap-to-flip with a pointer handler on the card's outer element, and a pointer-up on a button
+ * inside the card bubbles straight into it -- so pressing Play flipped the card and revealed
+ * the answer. They now live in `CardControls`, rendered by `GameScreen` beside the stack, which
+ * removes every interactive element from the draggable surface rather than guarding against
+ * one. See `CardControls`'s header for the full account.
+ *
+ * What is left is a face with exactly one thing on it, which is the honest shape: the QR code
+ * is the only part of a hidden card a player is meant to touch, and they touch it with a phone
+ * camera rather than a finger.
  */
 
 import { QrCode } from './QrCode';
 import { spotifyTrackUrl } from '../../shared/spotify-url';
-import type { CardAudioControls } from '../hooks/useCardAudio';
 import type { Card } from '../../shared/types';
 
 export interface CardHiddenSideProps {
   card: Card;
-  /** From `useCardAudio`, owned by `GameScreen`. The card never touches the element itself. */
-  audio: CardAudioControls;
-  /** Ends the session and returns to the landing screen. Wired by plan 3's container. */
-  onExit: () => void;
   /** QR edge length in CSS pixels. */
   qrSize?: number;
 }
 
 const DEFAULT_QR_SIZE = 176;
 
-export function CardHiddenSide({
-  card,
-  audio,
-  onExit,
-  qrSize = DEFAULT_QR_SIZE,
-}: CardHiddenSideProps) {
-  const { canPlay, isPlaying, play, pause, restart } = audio;
-
+export function CardHiddenSide({ card, qrSize = DEFAULT_QR_SIZE }: CardHiddenSideProps) {
   return (
     <div className="flex h-full w-full flex-col items-center justify-center gap-6 p-6">
       {/* Always rendered, for every card, whatever the state of audio. plan.md §2. */}
       <QrCode url={spotifyTrackUrl(card.id)} size={qrSize} />
 
-      <div className="flex items-center gap-3">
-        {/*
-          Exit is never disabled. A player must always be able to leave, including on a card
-          whose audio does not work -- which is precisely the card they are most likely to
-          want to leave on.
-        */}
-        <button
-          type="button"
-          onClick={onExit}
-          aria-label="Exit game"
-          className="rounded-full bg-neutral-800 px-4 py-2 text-neutral-100 hover:bg-neutral-700"
-        >
-          ■
-        </button>
-
-        {/*
-          One button that toggles, not two. `aria-label` swaps with the state so a screen
-          reader hears what the button will DO -- and both labels are generic.
-        */}
-        <button
-          type="button"
-          onClick={isPlaying ? pause : play}
-          disabled={!canPlay}
-          aria-label={isPlaying ? 'Pause' : 'Play'}
-          className="rounded-full bg-neutral-800 px-4 py-2 text-neutral-100 hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          {isPlaying ? '❙❙' : '▶'}
-        </button>
-
-        {/* Restart replays from 0:00. It is NOT next-card -- that is a swipe (plan 2). */}
-        <button
-          type="button"
-          onClick={restart}
-          disabled={!canPlay}
-          aria-label="Restart"
-          className="rounded-full bg-neutral-800 px-4 py-2 text-neutral-100 hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          ↺
-        </button>
-      </div>
-
-      {canPlay ? null : (
-        // Generic on purpose: it says the preview is missing, never which track it is missing
-        // for. The QR still works, so this is a note rather than an error.
-        <p className="text-xs text-neutral-500">No preview available — scan to play</p>
-      )}
+      {/*
+        Generic on purpose, and it is the only text this face may carry: it says how the card is
+        used, never anything about the track. Kept short because the face has to stay readable
+        on a phone.
+      */}
+      <p className="text-xs text-neutral-500">Scan to play the full song</p>
     </div>
   );
 }

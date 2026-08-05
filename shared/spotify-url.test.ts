@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parsePlaylistUrl, spotifyTrackUrl } from './spotify-url';
+import { isSpotifyShortLink, parsePlaylistUrl, spotifyTrackUrl } from './spotify-url';
 
 /**
  * A real playlist ID (Today's Top Hits), used everywhere below so that a failure is
@@ -110,6 +110,61 @@ describe('parsePlaylistUrl', () => {
     // The form Phase 6's suggested-playlist buttons pass.
     expect(parsePlaylistUrl(ID)).toEqual({ ok: true, id: ID });
     expect(parsePlaylistUrl(`  ${ID}  `)).toEqual({ ok: true, id: ID });
+  });
+
+  it('should accept a legacy /user/{user}/playlist/{id} URL', () => {
+    // The form Spotify emitted for years, and the one the 2026-08-04 findings called the
+    // clearest real bug that spike found: it carries a perfectly good playlist ID and was
+    // rejected as `unsupported-entity` because `user` sat in the entity position.
+    expect(parsePlaylistUrl(`https://open.spotify.com/user/spotify/playlist/${ID}`)).toEqual({
+      ok: true,
+      id: ID,
+    });
+    // A real-looking owner id rather than the editorial `spotify` one -- the segment is
+    // skipped wholesale, so its contents must not matter.
+    expect(parsePlaylistUrl(`https://open.spotify.com/user/1122334455/playlist/${ID}`)).toEqual({
+      ok: true,
+      id: ID,
+    });
+  });
+
+  it('should accept the legacy path with a locale prefix and query params', () => {
+    // Both prefixes at once, which is what a localised client copying an old link produces.
+    // The order the two strips happen in is exactly what this pins.
+    expect(
+      parsePlaylistUrl(`https://open.spotify.com/intl-es/user/spotify/playlist/${ID}?si=abc123`),
+    ).toEqual({ ok: true, id: ID });
+    expect(parsePlaylistUrl(`http://open.spotify.com/user/spotify/playlist/${ID}/`)).toEqual({
+      ok: true,
+      id: ID,
+    });
+  });
+
+  it('should still reject a legacy path whose id is not 22 base62 characters', () => {
+    // The strict ID check must survive the new path. 22 is arithmetic, not convention
+    // (`SPOTIFY_ID_PATTERN`'s own comment), so the legacy form gets no relaxation.
+    expect(parsePlaylistUrl('https://open.spotify.com/user/spotify/playlist/nope')).toEqual({
+      ok: false,
+      code: 'invalid-url',
+    });
+    expect(
+      parsePlaylistUrl('https://open.spotify.com/user/spotify/playlist/37i9dQZF1DXcBWIGoYBM5'),
+    ).toEqual({ ok: false, code: 'invalid-url' });
+  });
+
+  it('should still reject a bare /user/{user} profile URL as unsupported-entity', () => {
+    // The other side of the length guard. A profile link is a plausible paste and is NOT a
+    // playlist; stripping the prefix unconditionally would leave nothing and report the
+    // vaguer `invalid-url` instead.
+    expect(parsePlaylistUrl('https://open.spotify.com/user/spotify')).toEqual({
+      ok: false,
+      code: 'unsupported-entity',
+    });
+    // And a legacy path to something that is not a playlist stays an entity complaint.
+    expect(parsePlaylistUrl(`https://open.spotify.com/user/spotify/album/${ID}`)).toEqual({
+      ok: false,
+      code: 'unsupported-entity',
+    });
   });
 
   it('should reject an album, track, artist, and show URL as unsupported-entity', () => {
@@ -230,6 +285,63 @@ describe('parsePlaylistUrl', () => {
       expect(() => parsePlaylistUrl(input)).not.toThrow();
       const result = parsePlaylistUrl(input);
       expect(result.ok).toBe(false);
+    }
+  });
+});
+
+describe('isSpotifyShortLink', () => {
+  it('should recognise a spotify.link URL as a short link', () => {
+    // The shape the phone share sheet produces, which is how most players get a link at all.
+    expect(isSpotifyShortLink('https://spotify.link/aBcDeF12345')).toBe(true);
+    // The same permissiveness `parsePlaylistUrl` grants: optional scheme, optional `www.`,
+    // a trailing slash, a query string, and surrounding whitespace from a paste.
+    expect(isSpotifyShortLink('spotify.link/aBcDeF12345')).toBe(true);
+    expect(isSpotifyShortLink('http://www.spotify.link/aBcDeF12345/')).toBe(true);
+    expect(isSpotifyShortLink('  https://spotify.link/aBcDeF12345?si=xyz  ')).toBe(true);
+    // The legacy short host. Measured dead on 2026-08-05 (ENOTFOUND) and matched anyway --
+    // see the pattern's comment for why `upstream-unavailable` beats `invalid-url` there.
+    expect(isSpotifyShortLink('https://link.tospotify.com/aBcDeF12345')).toBe(true);
+  });
+
+  it('should not recognise an open.spotify.com URL as a short link', () => {
+    // The negative case that matters: a normal link must take the parse path, not the
+    // server-side redirect path, or every Start would cost an extra round trip.
+    expect(isSpotifyShortLink(`https://open.spotify.com/playlist/${ID}`)).toBe(false);
+    expect(isSpotifyShortLink(`spotify:playlist:${ID}`)).toBe(false);
+    expect(isSpotifyShortLink(ID)).toBe(false);
+  });
+
+  it('should reject a short-link host with no code to resolve', () => {
+    // Nothing for the server to follow, so this is better reported as an invalid link
+    // immediately than sent on a round trip that can only fail.
+    expect(isSpotifyShortLink('https://spotify.link')).toBe(false);
+    expect(isSpotifyShortLink('https://spotify.link/')).toBe(false);
+    expect(isSpotifyShortLink('https://spotify.link/?si=abc')).toBe(false);
+  });
+
+  it('should reject look-alike short-link hosts', () => {
+    // The same anchoring `SPOTIFY_WEB_URL_PATTERN` needs, and for the same reason: this
+    // predicate is what decides that a URL is worth handing to an outbound request.
+    expect(isSpotifyShortLink('https://spotify.link.evil.example/aBcDeF12345')).toBe(false);
+    expect(isSpotifyShortLink('https://notspotify.link/aBcDeF12345')).toBe(false);
+    expect(isSpotifyShortLink('https://evil.example/spotify.link/aBcDeF12345')).toBe(false);
+    expect(isSpotifyShortLink('https://spotify.link@evil.example/aBcDeF12345')).toBe(false);
+    expect(isSpotifyShortLink('https://link.tospotify.com.evil.example/aBcDeF12345')).toBe(false);
+  });
+
+  it('should never throw for arbitrary input', () => {
+    // Called from the same keystroke path `parsePlaylistUrl` is.
+    for (const input of [
+      '',
+      '   ',
+      'spotify.link',
+      '🎵',
+      undefined as unknown as string,
+      null as unknown as string,
+      123 as unknown as string,
+    ]) {
+      expect(() => isSpotifyShortLink(input)).not.toThrow();
+      expect(isSpotifyShortLink(input)).toBe(false);
     }
   });
 });

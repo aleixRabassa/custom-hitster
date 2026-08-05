@@ -306,6 +306,49 @@ describe('gameReducer card-1 gate', () => {
     expect(next.deck[0]?.year).toBeNull();
   });
 
+  it('should skip preparing entirely when card 1 is already resolved', () => {
+    // ===================================================================
+    //  THE RESTART CASE, and it was a hang before this branch existed.
+    //
+    //  Phase 6's Restart re-deals `state.deck`, and a session can only have
+    //  LEFT `preparing` because card 1 resolved -- so every restart arrives
+    //  with a resolved card 1. `resolver.ts` correctly refuses to look up a
+    //  card that already has a year (it goes straight into `settled`), which
+    //  means no `YEAR_RESOLVED` is ever dispatched and nothing else can open
+    //  the gate. The loading screen stayed up forever.
+    //
+    //  `year !== undefined` IS a completed lookup -- that is what the three
+    //  states of `Card.year` mean -- so there is nothing for the gate to wait
+    //  for. Found 2026-08-05 via `App.test.tsx`'s restart test.
+    // ===================================================================
+    const resolved = CARDS.map((c) => ({ ...c, year: 1975, yearConfidence: 'high' as const }));
+
+    expect(preparing(resolved).status).toBe('playing');
+  });
+
+  it('should skip preparing when card 1 resolved to a null year', () => {
+    // `null` is a completed lookup too, so a deck whose first card MusicBrainz knows nothing about
+    // must not gate either. Same reasoning as "even with a null year" above, on the START side.
+    const resolved = CARDS.map((c) => ({ ...c, year: null, yearConfidence: 'none' as const }));
+
+    expect(preparing(resolved).status).toBe('playing');
+  });
+
+  it('should still gate when only a later card is already resolved', () => {
+    // The gate is card 1 SPECIFICALLY. A partially resolved deck -- which is what a Restart after an
+    // early Exit produces -- must still wait if the card that landed first has no year.
+    //
+    // The seed is fixed, so which card the shuffle puts first is deterministic: assert on the
+    // dealt deck rather than on the input order, because the shuffle is what decides card 1.
+    const dealt = preparing();
+    const unresolvedFirstId = firstCardId(dealt);
+    const partiallyResolved = CARDS.map((c) =>
+      c.id === unresolvedFirstId ? c : { ...c, year: 1975, yearConfidence: 'high' as const },
+    );
+
+    expect(preparing(partiallyResolved).status).toBe('preparing');
+  });
+
   it('should stay preparing when a card other than card 1 resolves first', () => {
     // The gate is card 1 specifically, not "any year": the resolver's priority jump means
     // results can arrive out of deck order.

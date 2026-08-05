@@ -36,15 +36,37 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       // Shuffled HERE, synchronously, before anything can look at the deck -- see the block
       // comment in `shuffle.ts` for why the alternative ordering wastes the first lookup.
       const seed = action.seed ?? generateSeed();
+      const deck = shuffleDeck(action.cards, seed);
+
+      // =======================================================================
+      //  THE CARD-1 GATE IS SKIPPED WHEN CARD 1 IS ALREADY RESOLVED.
+      //
+      //  The gate waits for card 1's lookup to COMPLETE, and `year !== undefined`
+      //  IS a completed lookup -- that is exactly what the three states of
+      //  `Card.year` mean. So there is nothing to wait for and `preparing` would
+      //  be a screen shown until the heat death of the universe.
+      //
+      //  This is not hypothetical: Phase 6's RESTART re-deals `state.deck`, and a
+      //  session can only have left `preparing` in the first place BECAUSE card 1
+      //  resolved. So every restart arrives here with a resolved card 1. The
+      //  resolver correctly skips already-filled cards (`resolver.ts` adds them
+      //  straight to `settled`), which means no `YEAR_RESOLVED` is ever dispatched
+      //  and nothing else can open the gate. Restart hung on the loading screen,
+      //  every time, until this branch existed.
+      //
+      //  Found 2026-08-05 by `App.test.tsx`'s restart test. It was unreachable
+      //  before Phase 6 because nothing could deal a pre-resolved deck.
+      // =======================================================================
+      const status = deck[0]?.year === undefined ? 'preparing' : 'playing';
 
       // A wholesale replacement, deliberately: starting a new playlist mid-game must not
       // merge into the old deck, keep the old index, or leave a stale `yearLookupsUnavailable`
       // from a previous deployment state.
       return {
-        status: 'preparing',
+        status,
         playlist: action.playlist,
         seed,
-        deck: shuffleDeck(action.cards, seed),
+        deck,
         currentIndex: 0,
         isFlipped: false,
         yearLookupsUnavailable: false,

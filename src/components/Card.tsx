@@ -43,13 +43,20 @@
  * `rotate-y-180` writes its own, and the last writer wins -- so a mid-flip drag would snap
  * the rotation away, or the flip would cancel the drag offset. Separate elements compose
  * instead of competing.
+ *
+ * ## Nothing interactive may be rendered inside this element
+ *
+ * `gestureProps.onPointerUp` is bound to the outer element, and a pointer-up anywhere inside
+ * bubbles into it and is judged as a possible tap. A button in here therefore both activates
+ * itself and flips the card from one press -- which is exactly the bug that moved Exit,
+ * Play/Pause and Restart out to `CardControls`. Keep this subtree non-interactive: the QR image
+ * and text, and nothing that can be clicked.
  */
 
 import { motion } from 'motion/react';
 
 import { CardHiddenSide } from './CardHiddenSide';
 import { CardRevealSide } from './CardRevealSide';
-import type { CardAudioControls } from '../hooks/useCardAudio';
 import type { CardGestureProps } from '../hooks/useCardGestures';
 import type { CommitDirection } from '../game/gestures';
 import type { Card as CardData } from '../../shared/types';
@@ -62,17 +69,14 @@ export interface CardProps {
   isFlipped: boolean;
   /** True only for `year === undefined` — see `CardRevealSide`. */
   isYearPending: boolean;
-  audio: CardAudioControls;
   /**
    * Part of the contract, and deliberately NOT read in this file.
    *
    * Phase 5 routes the flip through `gestureProps.onPointerUp` instead, because deciding
    * whether a pointer sequence was a tap needs state this component has no business owning.
-   * The prop stays so that a caller cannot wire up a card without saying what a flip does --
-   * and so `App.tsx`'s harness buttons keep working.
+   * The prop stays so that a caller cannot wire up a card without saying what a flip does.
    */
   onFlip: () => void;
-  onExit: () => void;
   /**
    * From `useCardGestures`. Optional: `Card` renders and flips perfectly well without it,
    * which is what lets the Phase 4 card tests stay free of gesture setup.
@@ -91,8 +95,6 @@ export function Card({
   card,
   isFlipped,
   isYearPending,
-  audio,
-  onExit,
   gestureProps,
   exitDirection = 'left',
 }: CardProps) {
@@ -125,7 +127,7 @@ export function Card({
           data-testid="card-hidden-face"
           className="absolute inset-0 overflow-hidden rounded-2xl bg-neutral-900 backface-hidden"
         >
-          <CardHiddenSide card={card} audio={audio} onExit={onExit} />
+          <CardHiddenSide card={card} />
         </div>
 
         <div

@@ -228,16 +228,24 @@ Browser (SPA)                          Serverless (Vercel Functions)
 
 ### Phase 5 — Gestures
 
-- [ ] Swipe-to-next with velocity/offset threshold + snap-back below threshold
-- [ ] Tap-to-flip, reliably distinguished from drag
-- [ ] Stacked-deck visual (2–3 cards peeking) and exit animation
-- [ ] Keyboard controls (Space = flip, → = next) for laptop/tablet play
-- [ ] Verified on real iOS Safari + Android Chrome (touch is where this breaks)
+- [x] Swipe-to-next with velocity/offset threshold + snap-back below threshold
+- [x] Tap-to-flip, reliably distinguished from drag
+- [x] Stacked-deck visual (2–3 cards peeking) and exit animation — 2 backs, rendered as **empty divs** with no content, no QR and no id
+- [x] Keyboard controls (Space = flip, → = next) for laptop/tablet play
+- [ ] ~~Verified on real iOS Safari + Android Chrome (touch is where this breaks)~~ — **waived 2026-08-05, deliberately not performed.** Left unticked because it was not done, not because it is still queued
 
-### Phase 6 — Game Flow Screens
+> **Phase 5 built, with one deliberate gap.** Detail and execution notes in [plan.phase-4-6-gestures.md](./plan.phase-4-6-gestures.md).
+>
+> **The swipe itself is verified by neither tests nor a device.** jsdom cannot exercise a drag — Motion's drag handling reads element geometry jsdom does not compute, so a simulated pointer sequence asserts that the test double works rather than that the gesture does. The response was to push every decision a drag makes into pure functions in `src/game/gestures.ts`, which the node environment covers exhaustively on both sides of every boundary (15 tests), and to keep jsdom for the keyboard path and stack composition (11 + 6). What no local check reaches is whether the numbers feel right under a thumb — and the real-device pass that would have answered that was waived. This is recorded as a known limitation in [`../development.md`](../development.md) §8 rather than treated as pending work.
+>
+> **Final threshold values — unvalidated starting guesses, never tuned against a device.** Commit on offset ≥ **96px** (a third of the card's 288px width) **or** velocity ≥ **500px·s⁻¹**; a tap requires ≤ **10px** horizontal, ≤ **16px** vertical, ≤ **400ms**, and no drag recognised by Motion. The axes have separate bounds because a thumb tap is never perfectly still and vertical movement carries no swipe meaning here; the vertical tolerance is what `overscroll-behavior: none` pays for. All five are named and documented in `src/game/gestures.ts` and are the retuning surface if touch misbehaves.
+>
+> Two decisions worth carrying forward: **both left and right swipes advance** (there is no previous card, so a right swipe has nothing else to mean, and snapping it back would read as broken), and **the exit animation is directional** — the card leaves the way it was thrown. `AnimatePresence` keys are card id **plus** deck index, because a playlist may legitimately hold the same track twice and a bare-id key collides between adjacent copies.
 
-- [ ] Landing: URL input, validation, inline error states
-- [ ] **Suggested-playlists section** on the landing screen — a handful of ready-to-try public playlist links so a first-time visitor doesn't need their own playlist to see the app work. Clicking one fills/submits the URL input exactly as if pasted. Reuse the Phase 0 spike playlists — already verified against the embed adapter, with genre/era variety and known preview coverage:
+### Phase 6 — Game Flow Screens (complete)
+
+- [x] Landing: URL input, validation, inline error states
+- [x] **Suggested-playlists section** on the landing screen — a handful of ready-to-try public playlist links so a first-time visitor doesn't need their own playlist to see the app work. Clicking one fills/submits the URL input exactly as if pasted. Reuse the Phase 0 spike playlists — already verified against the embed adapter, with genre/era variety and known preview coverage:
   - Today's Top Hits — `37i9dQZF1DXcBWIGoYBM5M`
   - Rock Classics — `37i9dQZF1DWXRqgorJj26U`
   - RapCaviar — `37i9dQZF1DX0XUsuxWHRQd`
@@ -246,16 +254,52 @@ Browser (SPA)                          Serverless (Vercel Functions)
 
   Editorial playlists like these get their tracks refreshed by Spotify periodically, so re-verify the IDs still resolve to the intended playlist (check `entity.uri` in the embed JSON, not just a 200) before shipping.
 
-- [ ] **Non-blocking notices from `/api/playlist`**, both shown only when they apply and neither ever blocking Start:
+  **Re-verified 2026-08-05.** All five resolve to the intended playlist, checked by `entity.uri` **and**
+  `entity.name`, not by a 200. Track counts: 50 / 100 / 50 / 100 / 100 — matching Phase 0's own
+  measurements exactly, including Reggae Classics' two preview-less tracks. Three of the five return
+  exactly `MAX_EMBED_TRACKS`, so they raise the truncation notice by design. The ids and the
+  verification date live in `SUGGESTED_PLAYLISTS` in `src/components/LandingScreen.tsx`.
+
+- [x] **Non-blocking notices from `/api/playlist`**, both shown only when they apply and neither ever blocking Start:
   - the `truncated` warning ("this playlist may have more tracks than shown — only the first 100 could be loaded"), per the Phase 0 track-source decision
   - a `skippedCount` note ("n tracks could not be read and were left out") — **decided 2026-08-04: yes, this surfaces.** Normally `0`, so nothing renders in the common case. A deck missing one malformed track is still playable, so this is a note, not an error. Rationale in [plan.phase-2-playlist.md](./plan.phase-2-playlist.md) Open Questions
-- [ ] Loading state showing year-resolution progress
-- [ ] **Unconfirmed-year marking on the revealed side** (not a pre-Start review screen — that would spoil
+  - a third notice was added in build: **`yearLookupsUnavailable`**, the one derived from game state
+    rather than from the fetch. A deployment with no `MUSICBRAINZ_USER_AGENT` will never resolve a
+    year for any card, and the deck is still playable, so it is a notice rather than an error
+- [x] Loading state showing year-resolution progress — **count-only**, and the only status a loading
+      screen may render for. It also states that the game starts on card 1 rather than on the whole
+      deck, because the count otherwise reads as a progress bar that has to reach the total
+- [x] **Unconfirmed-year marking on the revealed side** (not a pre-Start review screen — that would spoil
       the deck; resolved in §6). A `low`-confidence year renders with an "unconfirmed" marker, and the
       correction affordance lives there, after the reveal. Any load-time wording is count-only — never
-      titles or years
-- [ ] In-game HUD: cards remaining (Exit lives on the card itself, per Phase 4 — no separate End Game button)
-- [ ] End screen: cards played, restart / new playlist
+      titles or years. **Shipped early, in Phase 4's four-state year slot**
+- [x] In-game HUD: cards remaining (no separate End Game button). **Exit no longer lives on the card**
+      — it moved to `CardControls` beside the stack, because a pointer-up on a button inside a tappable
+      card is read as a tap and flipped it. There is still exactly one Exit
+- [x] End screen: cards played, restart / new playlist
+
+**Two URL-form fixes landed here**, both from the 2026-08-04 findings, which flagged them "for Phase 6
+to decide" — and both carry a valid playlist id while failing before this phase:
+
+- **The legacy `open.spotify.com/user/{user}/playlist/{id}` path**, rejected as `unsupported-entity`
+  because `user` sat in the entity position. A pure `shared/` fix. The findings called it the clearest
+  real bug that spike found.
+- **`spotify.link` short URLs**, which carry no id at all — only a redirect does — so they needed a
+  server-side follow (`api/_lib/short-link.ts`) with a **host allow-list, `redirect: 'manual'` and a
+  hop limit**. This is the first place in the repo where user input decides an outbound request target,
+  which makes it an SSRF surface; the allow-list refusal is the most important test in that file.
+  Measured 2026-08-05: a real chain is a single 307, and the sibling host `link.tospotify.com` no longer
+  resolves at all.
+
+**A latent reducer bug surfaced and was fixed:** `START` now skips `preparing` when card 1 already has
+a year. Restart re-deals `state.deck`, and a session can only have left `preparing` because card 1
+resolved — so every restart arrives pre-resolved, the resolver correctly declines to look it up again,
+nothing dispatches `YEAR_RESOLVED`, and **the loading screen stayed up forever**. Unreachable before
+this phase, because nothing could deal a pre-resolved deck.
+
+**Still owed:** the real-deployment verification of progressive loading (step 15 of
+[plan.phase-4-6-screens.md](./plan.phase-4-6-screens.md), carried over from Phase 3), including the
+50-track cold-deck wall clock and the StrictMode request count. See [development.md](../development.md) §5.
 
 ### Phase 7 — Polish
 
@@ -307,6 +351,29 @@ Browser (SPA)                          Serverless (Vercel Functions)
       unplayable track: the QR always works, so the card still plays. Phase 3 verified it 15 times over
       on a real 42-card deck (a third of an ordinary playlist resolves to `none`), and Phase 4 builds
       the display as state 3 of the three-state year slot.
+- [x] **Should Restart keep the same seed (a rematch) or take a fresh one?** — **Resolved 2026-08-05 by
+      the developer: a fresh shuffle.** Restart re-deals `state.deck` with no seed argument, so `START`
+      generates a new one and the order genuinely changes; the end screen says "Same tracks, new order"
+      so nobody has to guess. It re-deals from the DECK rather than from a remembered fetch result,
+      which means it works after a resumed session too and costs **zero** year lookups — the resolved
+      years travel with the cards. A same-seed rematch stays one argument away if it is ever wanted.
+- [x] **Should the preparing screen show a resolved/total count, or only a status line?** — **Resolved
+      2026-08-05 by the developer: show the count.** It is leak-free (a number names no track) and it is
+      honest about progress on a cold deck. The screen also states that the game starts as soon as the
+      first card is ready, because without that the count reads as a progress bar that must reach the
+      total, and a one-second wait then feels stalled at "3 of 42".
+- [x] **What should the end screen report as "cards played" if the player exits early?** — **Resolved
+      2026-08-05: the case cannot arise.** The container routes an Exit to the landing screen, and only a
+      deck that ran out reaches the end screen, so "cards played" is always the whole deck. Confirmed
+      while building rather than designed around.
+- [x] **Does `link.tospotify.com` still appear alongside `spotify.link` in share-sheet output?** —
+      **Resolved 2026-08-05: no, the host no longer resolves at all** (ENOTFOUND, measured through a
+      live request). It is matched by the predicate and the allow-list anyway, deliberately: a legacy
+      link genuinely _is_ a Spotify playlist link, so `upstream-unavailable` ("Spotify could not be
+      reached") is a more honest answer for it than "that does not look like a Spotify link".
+- [ ] **Two tabs share one `localStorage` key and the last write wins**, silently clobbering the other
+      game. Accepted for v1 — Phase 3's call, re-confirmed in Phase 6. A `storage`-event guard is the
+      fix if it ever bites.
 
 ---
 

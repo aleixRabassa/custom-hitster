@@ -1,6 +1,6 @@
 /**
- * The card's host: one `<audio>` element for the whole session, the stacked deck, and the
- * keyboard controls.
+ * The card's host: one `<audio>` element for the whole session, the notice slot, the HUD, the
+ * stacked deck, the control bar, and the keyboard controls.
  *
  * It is the integration seam of Phases 4-5 and stays PRESENTATIONAL: every callback arrives as
  * a prop and nothing here calls `useGameSession()`. Plan 3 builds the container that does, and
@@ -25,8 +25,11 @@
  */
 
 import { useEffect, useRef } from 'react';
+import type { ReactNode } from 'react';
 
+import { CardControls } from './CardControls';
 import { CardStack } from './CardStack';
+import { Hud } from './Hud';
 import { useCardAudio } from '../hooks/useCardAudio';
 import type { Card as CardData } from '../../shared/types';
 
@@ -55,6 +58,19 @@ export interface GameScreenProps {
    * knowledge it is supposed not to have.
    */
   isPlayable: boolean;
+  /** Cards still to come after the current one, from `cardsRemaining`. Straight to the HUD. */
+  cardsRemaining: number;
+  /** The playlist's name, from `state.playlist`. Playlist-level only — never track data. */
+  playlistName: string;
+  /**
+   * The notice banner, or null.
+   *
+   * Passed in as a NODE rather than as three booleans, because dismissal is container state
+   * (decision 9): the banner has to survive a card change and disappear for good when dismissed,
+   * and neither is something this component should be tracking. It renders whatever it is given
+   * above the HUD and has no opinion about the contents.
+   */
+  notice?: ReactNode;
 }
 
 /**
@@ -82,6 +98,9 @@ export function GameScreen({
   onNext,
   onExit,
   isPlayable,
+  cardsRemaining,
+  playlistName,
+  notice,
 }: GameScreenProps) {
   const currentCard = deck[currentIndex];
   const audio = useCardAudio(currentCard?.previewUrl);
@@ -194,22 +213,38 @@ export function GameScreen({
       {/*
         THE session audio element. `preload="none"` so nothing is fetched until the player
         actually asks -- a 100-card deck must not pull 100 previews for cards nobody reaches.
-        No `controls` attribute: the card's own buttons are the interface, and the native
-        control bar would show a seek position the game has no reason to expose.
+        No `controls` attribute: `CardControls` is the interface, and the native control bar
+        would show a seek position the game has no reason to expose.
       */}
       <audio ref={audioRef} preload="none" data-testid="session-audio" />
+
+      {/*
+        Above the card rather than below it. A notice is read once and then ignored, so it belongs
+        out of the thumb's way -- the bottom of a phone screen is where the card and its controls
+        are, and a banner there would be dismissed by accident mid-swipe.
+      */}
+      {notice}
+
+      <Hud cardsRemaining={cardsRemaining} playlistName={playlistName} />
 
       <CardStack
         deck={deck}
         currentIndex={currentIndex}
         isFlipped={isFlipped}
         isYearPending={isYearPending}
-        audio={audio}
         onFlip={onFlip}
         onNext={onNext}
-        onExit={handleExit}
         isEnabled={isPlayable}
       />
+
+      {/*
+        OUTSIDE the stack, and that placement is a bug fix rather than a layout preference.
+        These three buttons were on the card's hidden face until the card became tappable in
+        Phase 5, at which point a pointer-up on any of them bubbled into the card's gesture
+        handler and flipped the card -- so pressing Play revealed the answer. `CardControls`
+        documents it in full.
+      */}
+      <CardControls audio={audio} onExit={handleExit} />
     </main>
   );
 }

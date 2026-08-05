@@ -31,7 +31,6 @@ import { AnimatePresence } from 'motion/react';
 
 import { Card } from './Card';
 import { useCardGestures } from '../hooks/useCardGestures';
-import type { CardAudioControls } from '../hooks/useCardAudio';
 import type { Card as CardData } from '../../shared/types';
 
 /**
@@ -56,10 +55,8 @@ export interface CardStackProps {
   currentIndex: number;
   isFlipped: boolean;
   isYearPending: boolean;
-  audio: CardAudioControls;
   onFlip: () => void;
   onNext: () => void;
-  onExit: () => void;
   /** Passed through to `useCardGestures` — see `UseCardGesturesOptions.isEnabled`. */
   isEnabled: boolean;
 }
@@ -69,10 +66,8 @@ export function CardStack({
   currentIndex,
   isFlipped,
   isYearPending,
-  audio,
   onFlip,
   onNext,
-  onExit,
   isEnabled,
 }: CardStackProps) {
   const { gestureProps, exitDirection } = useCardGestures({ onFlip, onNext, isEnabled });
@@ -133,9 +128,7 @@ export function CardStack({
           card={currentCard}
           isFlipped={isFlipped}
           isYearPending={isYearPending}
-          audio={audio}
           onFlip={onFlip}
-          onExit={onExit}
           gestureProps={gestureProps}
           exitDirection={exitDirection}
         />

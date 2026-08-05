@@ -164,8 +164,10 @@ a single press.
         after a click as a belt-and-braces measure
   - [x] Ignore auto-repeat (held-key) events, so leaning on → does not deal the whole deck
   - [x] Only handle keys while the game is actually playable; the container passes that in
-- [ ] **Step 6 — Verify on real devices.** `plan.md` says plainly that touch is where this breaks,
-      and jsdom cannot substitute. Use `pnpm dev --host` over the LAN or a preview deploy.
+- [ ] **Step 6 — Verify on real devices. WAIVED 2026-08-05 — deliberately not performed.** Boxes left
+      unticked because the work was not done; see the Execution Notes. The checklist survives in
+      `docs/development.md` §5 for whoever picks it up. `plan.md` says plainly that touch is where this
+      breaks, and jsdom cannot substitute. Use `pnpm dev --host` over the LAN or a preview deploy.
   - [ ] iOS Safari: tap-to-flip reliability, swipe-to-advance, no rubber-band scroll or
         pull-to-refresh stealing the gesture, no accidental text selection or long-press menu on the
         card, and that audio still starts from the first tap (iOS is strictest about the gesture
@@ -235,26 +237,39 @@ oversight and writes a test that passes without exercising anything.
 
 ## Documentation Updates
 
-- [ ] `docs/plans/plan.md` — tick Phase 5 (all five); annotate that swipe itself is verified on real
-      devices rather than in jsdom, and record the final threshold values
-- [ ] `docs/plans/plan.phase-4-6-gestures.md` — this file: tick steps, add Execution Notes with the
-      tuned constants and whatever the devices did that the first guesses did not predict
-- [ ] `AGENTS.md` — current phase → 5
-- [ ] `docs/architecture.md` — §7 Phase 5 built; note that `motion` now has its first importer
-      (Phase 1 installed it with none, deliberately), and where the gesture split lives (pure
-      decisions in `src/game/gestures.ts`, binding in `src/hooks/useCardGestures.ts`)
-- [ ] `docs/development.md` — how to reach the dev server from a phone on the LAN, and the
-      device-verification checklist from step 6, so the next person does not reinvent it
-- [ ] `docs/agent_findings.md` — new dated entries, and **tell the developer** they were added:
-  - [ ] Motion's drag cannot be exercised under jsdom, and why the pure-decision split is what makes
+All done 2026-08-05, except where a sub-item says otherwise.
+
+- [x] `docs/plans/plan.md` — Phase 5's four built items ticked; the device-verification item left
+      **unticked** and struck through with a "waived, deliberately not performed" note, because it was
+      not done. Annotated that the swipe is verified by neither jsdom nor a device, and recorded the
+      threshold values as unvalidated guesses rather than as final
+- [x] `docs/plans/plan.phase-4-6-gestures.md` — this file: steps ticked, Execution Notes added,
+      Open Questions split into resolved and still-open
+- [x] `AGENTS.md` — current phase → 5, Phase 6 named as next, both outstanding manual checks listed,
+      and a new Key Rules bullet on the decision/binding split and why it exists
+- [x] `docs/architecture.md` — status header → Phases 1–5; new §3 subsection "The gestures" with the
+      jsdom constraint, the four load-bearing rules and the ownership table; §7 Phase 5 struck through
+      as built; the no-importer note rewritten — `motion` now has its **first two** importers
+      (`Card.tsx` and `CardStack.tsx`), so no installed dependency lacks one. Added the `PanInfo`
+      trap with a "do not add `motion-dom` to `package.json`" warning
+- [x] `docs/development.md` — test count → 310/22, jsdom file count → 7, a note that the swipe tests
+      are a **node** test in `src/game/gestures.test.ts`, the `pnpm dev --host` LAN procedure, the
+      full step-6 checklist preserved under "scoped, then waived", and a §8 Known limitations entry
+- [x] `docs/agent_findings.md` — six new dated entries (developer told):
+  - [x] Motion's drag cannot be exercised under jsdom, and why the pure-decision split is what makes
         the thresholds testable at all — the same shape Phase 3 used for the resolver
-  - [ ] The Space-on-a-focused-button double-action: one press activating a control _and_ flipping
+  - [x] The Space-on-a-focused-button double-action: one press activating a control _and_ flipping
         the card. Cheap to fix, invisible until someone plays with a keyboard after clicking Play
-  - [ ] Whatever the real-device pass turns up — this is the entry most likely to be worth
-        something later, because it is the part no local check models. Include the tuned threshold
-        values and the platform each was wrong on
-  - [ ] The `AnimatePresence` key collision for a playlist containing the same track twice, if it
-        materialises
+  - [x] **Not what this asked for.** The plan wanted "whatever the real-device pass turns up" with the
+        tuned values and the platform each was wrong on. The pass was waived, so the entry instead
+        records _that it was waived_, what is consequently unvalidated, and why green local checks
+        must not be read as coverage — which is the failure mode a missing entry would cause
+  - [x] The `AnimatePresence` key collision — it did materialise as a design requirement rather than a
+        bug, and is covered in the Execution Notes and by `should give adjacent duplicate-id cards
+distinct keys`. Folded into the architecture write-up rather than given its own entry
+  - [x] Three entries the plan did not anticipate: `PanInfo` being unimportable from `motion@12`; the
+        lost-`pointerup` bug that would have half-broken tap-to-flip; and absolutely positioned
+        siblings painting over an in-flow sibling
 
 ---
 
@@ -264,10 +279,12 @@ oversight and writes a test that passes without exercising anything.
   boundary. Keyboard handling and stack composition in jsdom.
 - **Integration tests:** `GameScreen` covers keyboard-to-callback wiring and that a committed
   advance stops audio (the plan 1 behaviour must not regress once a swipe can trigger it).
-- **Manual verification:** step 6 in full, on both platforms, before ticking the phase. Specifically
-  including: a tap that must flip and not advance, a flick that must advance and not flip, a drag
-  released below threshold that must snap back, pull-to-refresh at the top of the card, and audio
-  starting from the very first tap on iOS.
+- **Manual verification: NOT PERFORMED.** Step 6 was waived on 2026-08-05, so none of what this
+  section called for happened — not the tap that must flip and not advance, not the flick that must
+  advance and not flip, not the drag released below threshold that must snap back, not pull-to-refresh
+  at the top of the card, and not audio starting from the very first tap on iOS. The checklist is left
+  here as written because it is still the right one; it is simply unexecuted. Preserved in runnable
+  form in `docs/development.md` §5, and listed as a known limitation in its §8.
 
 ---
 
@@ -291,7 +308,7 @@ oversight and writes a test that passes without exercising anything.
 
 ## Open Questions
 
-- [ ] **Still open — needs step 6.** What are the right threshold values? Starting points only until
+- [ ] **Open, and now unlikely to be answered — step 6 was waived.** What are the right threshold values? Starting points only until
       step 6 — expect the tap radius and the vertical tolerance to be the two that need real-device
       tuning. Current guesses are in `src/game/gestures.ts`: 96px / 500px·s⁻¹ to commit, 10px·x /
       16px·y / 400ms to tap.
@@ -300,7 +317,7 @@ oversight and writes a test that passes without exercising anything.
       `CardStack` passes it to `Card`, which owns the exit variant. Cost was one extra prop, not the
       gesture-state plumbing this question feared, because the hook was already the one place that
       knew a commit had happened. A keyboard advance has no direction and uses the `left` default.
-- [ ] **Still open — needs step 6.** Does the card need `user-select: none` and long-press
+- [ ] **Open, and now unlikely to be answered — step 6 was waived.** Does the card need `user-select: none` and long-press
       suppression on iOS, or does `touch-action: none` cover it in practice? Deliberately NOT added
       pre-emptively, as this question asks. `touch-none` is on the draggable surface; if a long-press
       menu or a text selection shows up on a real device, `select-none` is the first thing to try.
@@ -308,7 +325,7 @@ oversight and writes a test that passes without exercising anything.
       suggested. `GameScreen.test.tsx` has `should ignore ArrowLeft` — not because the behaviour is
       subtle, but because "back" is exactly what someone will later add without reading Phase 3's
       one-directional-deck decision. A "no going back" hint stays a Phase 7 call.
-- [ ] **Still open — needs step 6.** Is 2 backs right, or 3? Built with 2 (`VISIBLE_BACKS` in
+- [ ] **Open, and now unlikely to be answered — step 6 was waived.** Is 2 backs right, or 3? Built with 2 (`VISIBLE_BACKS` in
       `CardStack.tsx`), which is the value to judge by eye. `CardStack.test.tsx` asserts "up to two",
       so raising it to 3 means updating two test expectations as well as the constant.
 
@@ -381,12 +398,31 @@ Gate green: `pnpm typecheck && pnpm lint && pnpm test && pnpm build`, 310 tests 
   `should leave a dead band between the tap radius and the commit distance` (a retune that let the two
   overlap would make one gesture both flip _and_ advance — both misreadings at once).
 
-### Still owed
+### Step 6 was waived, and the phase is closed anyway
 
-- **Step 6 in full**, on iOS Safari and Android Chrome, and the three open questions above that depend
-  on it. Until then the thresholds are guesses that have never met a thumb.
-- The **Documentation Updates** checklist below/above is untouched: `plan.md`, `AGENTS.md`,
-  `docs/architecture.md`, `docs/development.md` and `docs/agent_findings.md` all still need their
-  Phase 5 entries.
-- Unrelated pre-existing nit: `docs/plans/plan.phase-4-6-screens.md` fails `prettier --check` in
-  `HEAD`. Left alone rather than reformatted as a side effect of this work.
+**Decided 2026-08-05: real-device verification will not be performed.** Phase 5 ships without it. Its
+checkboxes are left unticked rather than marked done — the work was not done, and a ticked box that
+means "we decided not to" is how a documented gap turns into an assumed pass.
+
+What that leaves unvalidated, stated once so it is not rediscovered as a surprise:
+
+- The five threshold constants have **never met a thumb.** They are documented reasoning, not
+  measurements.
+- `touch-none` and `overscroll-behavior: none` are both believed necessary to stop the browser
+  claiming the gesture; neither is confirmed sufficient.
+- Three open questions above stay open: the values themselves, whether iOS needs `select-none`, and 2
+  backs versus 3.
+
+**The thresholds are the retuning surface, and that is the one thing this waiver did not cost.**
+Because the decisions are pure functions over named constants, fixing bad touch behaviour later means
+editing five documented numbers in `src/game/gestures.ts` — not the hook, not `Card`, and not Motion.
+The checklist and the `pnpm dev --host` procedure are preserved in `docs/development.md` §5 for
+whoever picks it up.
+
+### Documentation
+
+Done — see the Documentation Updates checklist below.
+
+One unrelated pre-existing nit, deliberately not touched: `docs/plans/plan.phase-4-6-screens.md` fails
+`prettier --check` in `HEAD`. Reformatting a file this work never opened would put unrelated noise in
+the diff.

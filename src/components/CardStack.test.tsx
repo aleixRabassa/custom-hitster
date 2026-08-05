@@ -22,7 +22,6 @@ import {
   lowConfidenceCard,
   noYearCard,
 } from './__fixtures__/cards';
-import type { CardAudioControls } from '../hooks/useCardAudio';
 import type { Card } from '../../shared/types';
 
 const { toDataURLMock } = vi.hoisted(() => ({
@@ -31,17 +30,6 @@ const { toDataURLMock } = vi.hoisted(() => ({
 
 vi.mock('qrcode', () => ({ toDataURL: toDataURLMock }));
 
-function stubAudio(): CardAudioControls {
-  return {
-    canPlay: true,
-    isPlaying: false,
-    play: vi.fn(),
-    pause: vi.fn(),
-    restart: vi.fn(),
-    stop: vi.fn(),
-  };
-}
-
 function renderStack(deck: Card[], currentIndex: number) {
   return render(
     <CardStack
@@ -49,10 +37,8 @@ function renderStack(deck: Card[], currentIndex: number) {
       currentIndex={currentIndex}
       isFlipped={false}
       isYearPending={false}
-      audio={stubAudio()}
       onFlip={vi.fn()}
       onNext={vi.fn()}
-      onExit={vi.fn()}
       isEnabled
     />,
   );
@@ -81,10 +67,12 @@ describe('CardStack', () => {
     const image = await screen.findByRole('img');
     expect(image.getAttribute('src')).toContain(noYearCard.id);
 
-    // Exactly one card has a face: the backs are empty divs, so there is one QR and one set of
-    // controls, not three.
+    // Exactly one card has a face: the backs are empty divs, so there is one QR, not three.
     expect(screen.getAllByRole('img')).toHaveLength(1);
-    expect(screen.getAllByRole('button', { name: 'Play' })).toHaveLength(1);
+    // And no interactive element anywhere in the stack -- the controls live outside the
+    // draggable surface, because a pointer-up on a button inside it reads as a tap and flips
+    // the card. See `CardControls`.
+    expect(screen.queryAllByRole('button')).toEqual([]);
   });
 
   it('should render up to two backs behind the current card', () => {
@@ -95,14 +83,14 @@ describe('CardStack', () => {
     expect(container.querySelectorAll('[data-testid="card-back"]')).toHaveLength(2);
   });
 
-  it('should render no backs on the last card', () => {
+  it('should render no backs on the last card', async () => {
     // The tail of the deck. A phantom back for a card that does not exist would be a promise
     // of another card at the exact moment the game is about to end.
     const { container } = renderStack(fixtureDeck, fixtureDeck.length - 1);
 
     expect(container.querySelectorAll('[data-testid="card-back"]')).toHaveLength(0);
     // And the current card is still there -- "no backs" must not mean "nothing rendered".
-    expect(screen.getByRole('button', { name: 'Play' })).not.toBeNull();
+    expect(await screen.findByRole('img')).not.toBeNull();
   });
 
   it('should render exactly one back with one card left behind the current one', () => {
@@ -178,10 +166,8 @@ describe('CardStack', () => {
         currentIndex={1}
         isFlipped={false}
         isYearPending={false}
-        audio={stubAudio()}
         onFlip={vi.fn()}
         onNext={vi.fn()}
-        onExit={vi.fn()}
         isEnabled
       />,
     );

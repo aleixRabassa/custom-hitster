@@ -1,0 +1,140 @@
+/**
+ * @vitest-environment jsdom
+ *
+ * The control-bar tests. Most of these moved here verbatim from `CardHiddenSide.test.tsx` when
+ * the buttons moved out of the card -- a pointer-up on a button inside a tappable card bubbles
+ * into the gesture handler and flips it, so pressing Play used to reveal the answer.
+ *
+ * No `qrcode` mock is needed: this component renders no QR, which is itself part of the split.
+ */
+
+import { cleanup, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import { CardControls } from './CardControls';
+import { highConfidenceCard } from './__fixtures__/cards';
+import type { CardAudioControls } from '../hooks/useCardAudio';
+
+/** A stub `useCardAudio` return value. `canPlay` is the only interesting axis here. */
+function stubAudio(overrides: Partial<CardAudioControls> = {}): CardAudioControls {
+  return {
+    canPlay: true,
+    isPlaying: false,
+    play: vi.fn(),
+    pause: vi.fn(),
+    restart: vi.fn(),
+    stop: vi.fn(),
+    ...overrides,
+  };
+}
+
+describe('CardControls', () => {
+  afterEach(cleanup);
+
+  it('should disable play/pause and restart when the track has no preview', () => {
+    render(<CardControls audio={stubAudio({ canPlay: false })} onExit={vi.fn()} />);
+
+    expect((screen.getByRole('button', { name: 'Play' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Restart' }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+  });
+
+  it('should keep exit enabled when the track has no preview', () => {
+    // Exit is never affected by a missing preview -- and a card whose audio does not work is
+    // exactly the card a player wants to leave.
+    render(<CardControls audio={stubAudio({ canPlay: false })} onExit={vi.fn()} />);
+
+    expect((screen.getByRole('button', { name: 'Exit game' }) as HTMLButtonElement).disabled).toBe(
+      false,
+    );
+  });
+
+  it('should enable play/pause and restart when the track has a preview', () => {
+    render(<CardControls audio={stubAudio()} onExit={vi.fn()} />);
+
+    expect((screen.getByRole('button', { name: 'Play' }) as HTMLButtonElement).disabled).toBe(
+      false,
+    );
+    expect((screen.getByRole('button', { name: 'Restart' }) as HTMLButtonElement).disabled).toBe(
+      false,
+    );
+  });
+
+  it('should note a missing preview without naming the track', () => {
+    render(<CardControls audio={stubAudio({ canPlay: false })} onExit={vi.fn()} />);
+
+    expect(screen.queryByText(/no preview available/i)).not.toBeNull();
+  });
+
+  it('should not render the missing-preview note when a preview exists', () => {
+    render(<CardControls audio={stubAudio()} onExit={vi.fn()} />);
+
+    expect(screen.queryByText(/no preview available/i)).toBeNull();
+  });
+
+  it('should give the controls generic accessible names', () => {
+    // The names are asserted EXACTLY, not merely "does not contain the title": a generic
+    // name is the requirement, and an exhaustive list is what catches a well-meaning
+    // "Play preview of …" edit. This bar sits beside an UNFLIPPED card, so it is a leak
+    // surface exactly as the card's own face is.
+    render(<CardControls audio={stubAudio()} onExit={vi.fn()} />);
+
+    const names = screen
+      .getAllByRole('button')
+      .map((button) => button.getAttribute('aria-label') ?? button.textContent);
+
+    expect(names).toEqual(['Exit game', 'Play', 'Restart']);
+  });
+
+  it('should not leak the current track anywhere in the DOM', () => {
+    // The bar has no `card` prop at all, which is what makes this assertion cheap to keep
+    // true -- but it is asserted anyway, because "add a now-playing label" is a natural
+    // thing for someone to want here and it would spoil every unflipped card.
+    const card = highConfidenceCard;
+    const { container } = render(<CardControls audio={stubAudio()} onExit={vi.fn()} />);
+
+    for (const value of [card.title, card.artist, String(card.year), String(card.durationMs)]) {
+      expect(container.textContent ?? '').not.toContain(value);
+    }
+
+    for (const element of Array.from(container.querySelectorAll('*'))) {
+      for (const attribute of Array.from(element.attributes)) {
+        expect(attribute.value).not.toContain(card.title);
+        expect(attribute.value).not.toContain(card.artist);
+      }
+    }
+  });
+
+  it('should name the toggle Pause while playing', () => {
+    render(<CardControls audio={stubAudio({ isPlaying: true })} onExit={vi.fn()} />);
+
+    expect(screen.queryByRole('button', { name: 'Pause' })).not.toBeNull();
+    expect(screen.queryByRole('button', { name: 'Play' })).toBeNull();
+  });
+
+  it('should invoke the exit callback on exit', () => {
+    const onExit = vi.fn();
+    render(<CardControls audio={stubAudio()} onExit={onExit} />);
+
+    screen.getByRole('button', { name: 'Exit game' }).click();
+
+    expect(onExit).toHaveBeenCalledTimes(1);
+  });
+
+  it('should invoke play, pause, and restart on their controls', () => {
+    const audio = stubAudio();
+    const { rerender } = render(<CardControls audio={audio} onExit={vi.fn()} />);
+
+    screen.getByRole('button', { name: 'Play' }).click();
+    expect(audio.play).toHaveBeenCalledTimes(1);
+
+    screen.getByRole('button', { name: 'Restart' }).click();
+    expect(audio.restart).toHaveBeenCalledTimes(1);
+
+    const playing = stubAudio({ isPlaying: true });
+    rerender(<CardControls audio={playing} onExit={vi.fn()} />);
+    screen.getByRole('button', { name: 'Pause' }).click();
+    expect(playing.pause).toHaveBeenCalledTimes(1);
+  });
+});

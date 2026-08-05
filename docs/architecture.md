@@ -2,7 +2,11 @@
 
 Custom Hitster is a **client-heavy single-page app with a thin serverless backend**. The game itself — shuffle, flip, swipe, audio, progress — runs entirely in the browser. The backend exists only to do the three things a browser cannot: reach a CORS-blocked endpoint, set a custom `User-Agent`, and hold a cache shared across all users.
 
-> **Implementation status: Phases 1–4 complete.** All three functions (`/api/hello`, `/api/playlist`, `/api/year`), the year cache, the client-side game layer (`src/game/`), and the card UI (`src/components/`, `src/hooks/` — the 3D flip card, the QR code, the three controls, session-scoped audio) exist today. What does not: any gesture (Phase 5) and every screen around the card, including the landing page and the container that calls `useGameSession()` (Phase 6). `src/App.tsx` is a temporary harness over a fixture deck until then. Sections below are marked **[built]** or **[planned]** throughout; planned shapes come from [`plans/plan.md`](./plans/plan.md) §3 and are recorded here because they determine where new code belongs, not because they exist.
+> **Implementation status: Phases 1–6 complete — the app is playable end to end.** All three functions (`/api/hello`, `/api/playlist`, `/api/year`), the year cache, the client-side game layer (`src/game/`), the card UI, the gestures, and the game flow screens (landing, preparing, HUD, notices, end screen) plus the real `src/App.tsx` container all exist today. What does not: Phase 7's polish — responsive breakpoints, `@theme` tokens, a11y beyond accessible names, error/offline states, the Lighthouse pass, and lazy-loading the QR and audio code. Sections below are marked **[built]** or **[planned]** throughout; planned shapes come from [`plans/plan.md`](./plans/plan.md) §3 and are recorded here because they determine where new code belongs, not because they exist.
+>
+> **One thing is owed rather than planned:** progressive loading has never been verified against a real deployment (step 15 of [`plans/plan.phase-4-6-screens.md`](./plans/plan.phase-4-6-screens.md)). See [`development.md`](./development.md) §8.
+>
+> **One caveat carried forward from Phase 5:** the gesture thresholds have never been verified on a real touch device — see [§3 The gestures](#the-gestures-srcgamegesturests--srchooksusecardgesturests--built) and `docs/development.md` §8 Known limitations.
 
 ---
 
@@ -190,20 +194,31 @@ Phase 4's shape is **presentational components driven entirely by props, with th
 
 ```
 src/components/
-  GameScreen.tsx        The integration seam. Owns THE session <audio> element and the
-                        stop-on-flip / stop-on-card-change rules. Still presentational:
-                        it takes callbacks and does NOT call useGameSession()
-  Card.tsx              The 3D flip shell. Owns no state; both faces live here
-  CardHiddenSide.tsx    QR + [Exit] [Play/Pause] [Restart]. Leaks nothing — see below
+  GameScreen.tsx        The integration seam. Owns THE session <audio> element, the
+                        stop-on-flip / stop-on-card-change rules, and the window-level
+                        keyboard handler. Still presentational: it takes callbacks and
+                        does NOT call useGameSession(). Takes `deck` + `currentIndex`,
+                        matching GameState's own shape
+  CardStack.tsx         The current card over 2 EMPTY backs. Owns AnimatePresence and
+                        the keying; calls useCardGestures
+  Card.tsx              The 3D flip shell, and the draggable element. Owns no state;
+                        both faces live here. NOTHING INTERACTIVE may go inside it
+  CardHiddenSide.tsx    The QR code and one line of generic text. Leaks nothing
+  CardControls.tsx      [Exit] [Play/Pause] [Restart], BESIDE the card — see below
   CardRevealSide.tsx    Title, artist, and the four-state year slot
   QrCode.tsx            Wraps `qrcode`; async generation with a stale-result guard
   __fixtures__/cards.ts One card per interesting SHAPE. Every component test renders
                         from this, so the shapes are enumerated exactly once
 src/hooks/
   useCardAudio.ts       The audio machine: one element, src swapped per card
+  useCardGestures.ts    Binds gestures.ts's decisions to Motion's drag callbacks
 ```
 
-**One `<audio>` element per session, not per card.** It lives in `GameScreen` and its `src` swaps as the card changes. The rule it enforces — a track never bleeds into the next card and never doubles up on itself — is then structurally impossible to violate rather than a guard that has to be maintained. Phase 5 renders 2–3 stacked cards simultaneously, which is precisely the window where per-card elements would overlap and play together.
+**The three controls are outside the card, and that placement is a bug fix rather than a layout preference.** They were on the hidden face through Phase 4. Phase 5 then made the card tap-to-flip with `gestureProps.onPointerUp` bound to the card's **outer** element — and a pointer-up on a button inside the card bubbles into that handler, where `isTap()` sees exactly what a genuine tap looks like: a few pixels of movement over a couple of hundred milliseconds with no drag recognised. So **pressing Play both started the audio and revealed the answer.** This is the pointer twin of the Space-on-a-focused-button double-action Phase 5 already guarded against for the keyboard, and it was missed because the two halves shipped in different phases: the buttons were harmless until the card became tappable.
+
+It could have been patched with a `closest('button')` check inside the gesture hook. Moving the controls out is the structural fix instead: **there is no interactive element inside the draggable surface at all**, so the class of bug is gone rather than guarded. `CardHiddenSide.test.tsx` and `CardStack.test.tsx` both assert that nothing clickable is in there. The card's face is now the QR code and one line of generic text, which is also the honest shape — the QR is the only part of a hidden card a player is meant to touch, and they touch it with a phone camera.
+
+**One `<audio>` element per session, not per card.** It lives in `GameScreen` and its `src` swaps as the card changes. The rule it enforces — a track never bleeds into the next card and never doubles up on itself — is then structurally impossible to violate rather than a guard that has to be maintained. Phase 5's `CardStack` now renders 3 cards simultaneously, which is precisely the window where per-card elements would overlap and play together — and briefly 4 during an exit animation, since `AnimatePresence` keeps the outgoing card mounted while it leaves.
 
 **The revealed side is NOT MOUNTED while the card is unflipped, and this is an architectural rule rather than a component detail.** `backface-visibility: hidden` is a visual property: it stops a face being painted, and leaves every word of it in the document — where devtools, find-in-page, the accessibility tree and any screen reader still read it. An unflipped card whose reveal side is mounted hands the player the answer through four channels at once. Mounting on flip costs nothing visually (below 90° of rotation the back face is invisible anyway) and turns "the hidden side leaks nothing" into something a test can assert. **It is written down here because the obvious reason to undo it is animation smoothness, which makes it a plausible-looking refactor rather than an obvious regression.** If it is ever undone, that is a product decision about weakening the game's central rule.
 
@@ -213,21 +228,79 @@ Three corollaries, all of them things a leak audit that greps only for visible t
 - **`durationMs` is as much of a leak as the title.** "3:54" beside a QR code identifies a track, and a playback progress bar is exactly the sort of helpful addition that would introduce it.
 - **The OS media session is a leak surface the page cannot claw back.** Setting `navigator.mediaSession.metadata` publishes title and artist to the phone's lock screen and notification shade, where no amount of on-page hiding reaches. Nothing in the app touches it, a test asserts as much, and `useCardAudio.ts` says so in a comment — because it is an omission, and omissions get "fixed".
 
-### Planned — the rest of the loop
+### The gestures (`src/game/gestures.ts` + `src/hooks/useCardGestures.ts`) — built
+
+Phase 5 splits gestures the same way Phase 3 split the resolver: **a framework-free decision core with a thin React seam.** The reason is specific and worth stating, because the split looks like ceremony otherwise.
+
+**jsdom cannot exercise a drag.** Motion's drag handling reads element geometry — `getBoundingClientRect`, layout boxes, transform matrices — that jsdom does not compute. A simulated pointer sequence in a test therefore asserts that the test double works, not that the gesture does. So every threshold and every comparison lives in `src/game/gestures.ts` as pure functions over numbers, which the node environment tests exhaustively on both sides of every boundary; `useCardGestures` is left thin enough that reading it is sufficient review.
+
+| Lives in                       | What it owns                                                                                                 |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| `src/game/gestures.ts`         | `shouldCommitSwipe`, `swipeDirection`, `isTap`, and 5 named threshold constants. No React, no DOM, no Motion |
+| `src/hooks/useCardGestures.ts` | Refs for pointer state, Motion's drag props, the commit latch. Returns `gestureProps` + `exitDirection`      |
+| `src/components/CardStack.tsx` | Calls the hook (it is where `exitDirection` is consumed), owns `AnimatePresence` and the keys                |
+| `src/components/Card.tsx`      | Spreads `gestureProps` onto its outer `motion.div`; owns its own exit variant                                |
+
+Four things about this are load-bearing:
+
+- **A tap and a drag begin with the identical pointer event, and both misreadings are destructive.** A tap misread as a swipe skips a card _irrecoverably_ — the deck is one-directional and there is no previous card. A swipe misread as a tap reveals the answer the player was mid-guess on. This is why `isTap` requires four independent signals to agree, and why the tap radius and the commit distance are asserted not to overlap.
+- **The drag transform and the flip transform are on different elements, and must stay that way.** Both are CSS transforms on the same box if they share an element: Motion writes `translateX` from the drag while Tailwind's `rotate-y-180` writes its own, and the last writer wins. Drag on the outer element, rotation on the inner face wrapper.
+- **The stacked backs are empty divs — no content, no QR, no id, no `aria-label`.** Both a leak decision (a card behind the top one has no reason for its data to be in the document; the next card is supposed to be a mystery) and a cost decision (each QR is an async `toDataURL()`, and Phase 7 lazy-loads it precisely because it is not free). `CardStack.test.tsx` asserts against the "just reuse `Card` for the backs" refactor.
+- **`AnimatePresence` keys are card id _plus_ deck index.** A playlist may legitimately hold the same track twice — Phase 3's reducer handles duplicate ids explicitly for that reason — so two adjacent cards can share an id, and a bare-id key makes React reuse one element for both.
+
+**Keyboard controls are a window-level handler in `GameScreen`, not a handler on a focused card.** The card is not a control and nobody's hands are on it; a focus-dependent handler would be dead most of the time, and "the keyboard works only after you click the card first" is indistinguishable from broken. The cost is that the handler sees keystrokes meant for other things, hence four guards — auto-repeat, text-entry focus, `isPlayable`, and **Space while focus is on a button**, which would otherwise make one press both activate Play/Pause and flip the card.
+
+**The gesture thresholds have never met a thumb.** Real-device verification on iOS Safari and Android Chrome was scoped for Phase 5 and then **deliberately not performed** (decided 2026-08-05). The constants in `gestures.ts` are documented starting guesses, and they are the first thing to look at if touch input misbehaves in the field. See `docs/development.md` §8 Known limitations.
+
+### The game flow screens (`src/App.tsx` + the screens) — built
+
+Phase 6 closed the loop: there is now a real container, a real client, and four screens.
+
+```
+src/App.tsx             THE container. The only caller of useGameSession(). Switches
+                        on state.status; holds the ended-destination flag and the
+                        notice-dismissal state. No router
+src/components/
+  LandingScreen.tsx     URL input, inline validation, 5 suggested playlists
+  PreparingScreen.tsx   The card-1 gate. COUNT-ONLY
+  Hud.tsx               Cards remaining + playlist name. Counts only, no Exit
+  NoticeBanner.tsx      truncated / skippedCount / yearLookupsUnavailable
+  EndScreen.tsx         Cards played, Play again, New playlist
+src/game/
+  playlist-client.ts    /api/playlist client. Injected fetch, never throws
+  messages.ts           One error-code → copy map. The server's `message` is unused
+src/hooks/
+  usePlaylist.ts        Thin request state over the client; aborts in flight
+```
+
+**The playlist client mirrors `year-client.ts` exactly** — a plain async function with an injected `fetch`, an injected abort signal, and a discriminated result that never throws — with a thin `usePlaylist` hook over it. That is what lets every status branch be a unit test in the **node** environment with no jsdom and no network, which is the same trade `year-client.ts` made for its own sixteen. Anything that accumulates in the hook instead belongs in the client.
+
+Three things in the client are not obvious:
+
+- **502 is deliberately absent from its status-fallback table.** `upstream-unavailable` and `unexpected-payload` both map to 502 and mean opposite things — transient versus "the scrape broke". Only the body's `code` separates them, so a bodyless 502 degrades to a code whose copy promises nothing rather than guessing one of two opposite diagnoses.
+- **A 200 whose body is not JSON is `unexpected-payload`, and that is the `pnpm dev` case.** Vite serves `api/playlist.ts` as a transpiled module with status 200, so anyone running `pnpm dev` instead of `npx vercel dev` hits exactly this on their first Start.
+- **The deck is validated card by card**, unlike the year client's single result: `START` shuffles this array and every card in it reaches a render, so one malformed entry would surface as a blank card mid-game, a long way from its cause. An empty deck is rejected outright.
+
+**Four statuses, four screens, no router.** `GameState.status` already models exactly `idle` / `preparing` / `playing` / `ended`, one per screen. A router would add a dependency plus a second source of truth to keep in sync — and a browser Back mid-deck is a transition the reducer never modelled, so the two would disagree the first time anyone pressed it.
+
+**Exit and deck-exhaustion are indistinguishable in `GameState`, so the container carries the distinction.** Both produce `status: 'ended'` and `currentIndex` cannot separate them either — an Exit on the last card looks identical to finishing. A container-local flag resolves it rather than an `endReason` field on `GameState`, which keeps Phase 3's reducer, types, persistence format and tests untouched for what is purely a presentation question. It is phrased as a **destination** (`'end-screen' | 'landing'`) rather than as a reason, because "New playlist" from the end screen also has to reach the landing screen and the reducer has no action that returns `ended` to `idle` — deliberately, since there is nothing to un-end.
+
+**Every pre-reveal surface is count-only.** The landing screen, the preparing screen, the HUD and the notices all report numbers and never a title, artist or year. The preparing screen is the one most easily forgotten — "Looking up Bohemian Rhapsody…" is the natural, helpful thing to write, and it spoils the first card before the game starts. Each of those four components has a leak assertion in its own test file, and none of them takes a `Card` at all.
 
 ```
 Browser (SPA)                          Serverless (Vercel Functions)
 ┌──────────────────────┐               ┌─────────────────────────────────┐
 │ Paste URL → Start    │──────────────▶│ /api/playlist          [built]  │
-│                      │◀──────────────│                                 │
-│                      │  normalized   ├─────────────────────────────────┤
+│  · client-side parse │◀──────────────│  · resolves spotify.link first  │
+│  · playlist-client   │  normalized   ├─────────────────────────────────┤
 │ progressive fill     │──────────────▶│ /api/year  (one per track)      │
 │ (start on card 1)    │◀──────────────│                        [built]  │
 │  · back off on 429   │  year          │  · 1 req/s gate + cache        │
 ├──────────────────────┤               └─────────────────────────────────┘
 │ shuffle (seeded)     │  [built]                     ↓
 │ localStorage resume  │  [built]            Upstash Redis (year cache)
-│ flip / swipe / audio │  Phases 4-5
+│ flip / swipe / audio │  [built]
+│ 4 screens, no router │  [built]
 └──────────────────────┘
 ```
 
@@ -288,6 +361,8 @@ Vite treats any file under the project root as a transformable module, so `GET /
 2. `fetch('/api/…')` in dev fails at JSON parsing rather than 404-ing — easy to misread as a broken function.
 3. **`api/` source is readable over the dev server**, so secrets belong in environment variables, never in that source.
 
+Since Phase 6 this has a **player-visible shape**, not just a developer-visible one: the app is unplayable under `pnpm dev`, because pressing Start returns the transpiled source of `api/playlist.ts` with status 200. `playlist-client.ts` turns that into `unexpected-payload`, so what a developer actually sees is the inline message _"Spotify returned something we could not read. This is a problem on our side"_ — which is true, and is not the same sentence as "you are running the wrong dev server". **Use `npx vercel dev` to play the game.**
+
 Use `vercel dev` (port 3000) to exercise functions for real. See [`development.md`](./development.md) §4.
 
 ---
@@ -310,17 +385,19 @@ An SPA needs a catch-all rewrite so unmatched paths return `index.html` and clie
 
 Everything below is **not built**, except where a row says otherwise. The authoritative source for what belongs in which phase is [`plans/plan.md`](./plans/plan.md) §5 — **do not build ahead of the current phase.**
 
-| Phase | Adds                                                                                                                                                                                            |
-| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2     | ~~`parsePlaylistUrl()`, `/api/playlist`, `/api/year`, the `YearCache` interface, the 1 req/s gate, year-resolution logic~~ **[built] — phase complete**                                         |
-| 3     | ~~`GameState`, reducer, seeded Fisher–Yates shuffle, localStorage resume, progressive loading~~ **[built] — phase complete**, in `src/game/` (see §3). `Card` was never widened with game state |
-| 4     | ~~Card component with CSS 3D flip, QR rendering, `previewUrl` + `<audio>` playback~~ **[built] — phase complete** (see §3), plus the jsdom + Testing Library test environment                   |
-| 5     | Swipe-to-next, tap-to-flip, stacked-deck visuals, keyboard controls                                                                                                                             |
-| 6     | Landing page, suggested playlists, loading state, **reveal-side unconfirmed-year marking**, HUD, end screen                                                                                     |
-| 7     | Visual design, `@theme` design tokens, error/offline states, responsive, a11y, Lighthouse                                                                                                       |
-| 8     | Out of v1: shareable deck URL, PWA, PDF export, difficulty filters, multiplayer scoring                                                                                                         |
+| Phase | Adds                                                                                                                                                                                                                                                                                                           |
+| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2     | ~~`parsePlaylistUrl()`, `/api/playlist`, `/api/year`, the `YearCache` interface, the 1 req/s gate, year-resolution logic~~ **[built] — phase complete**                                                                                                                                                        |
+| 3     | ~~`GameState`, reducer, seeded Fisher–Yates shuffle, localStorage resume, progressive loading~~ **[built] — phase complete**, in `src/game/` (see §3). `Card` was never widened with game state                                                                                                                |
+| 4     | ~~Card component with CSS 3D flip, QR rendering, `previewUrl` + `<audio>` playback~~ **[built] — phase complete** (see §3), plus the jsdom + Testing Library test environment                                                                                                                                  |
+| 5     | ~~Swipe-to-next, tap-to-flip, stacked-deck visuals, keyboard controls~~ **[built] — phase complete** (see §3), with real-device touch verification deliberately not performed                                                                                                                                  |
+| 6     | ~~Landing page, suggested playlists, loading state, HUD, end screen, notices, the real `App.tsx` container~~ **[built] — phase complete** (see §3). The reveal-side unconfirmed-year marking shipped early, in Phase 4's year slot. Only the real-deployment verification of progressive loading is still owed |
+| 7     | Visual design, `@theme` design tokens, error/offline states, responsive, a11y, Lighthouse                                                                                                                                                                                                                      |
+| 8     | Out of v1: shareable deck URL, PWA, PDF export, difficulty filters, multiplayer scoring                                                                                                                                                                                                                        |
 
-One dependency is still installed with **no importers**, deliberately, so Phase 1 could lock one coherent dependency tree: `motion` (Phase 5 gestures). `qrcode` + `@types/qrcode` joined it in Phase 1 and finally acquired an importer in Phase 4 — `src/components/QrCode.tsx`, which imports it **by name** (`import { toDataURL }`), because `@types/qrcode` declares named exports only and this repo runs `verbatimModuleSyntax` without `esModuleInterop`.
+**Every installed dependency now has an importer.** Phase 1 deliberately installed `motion` and `qrcode` with none, so one coherent dependency tree could be locked up front. `qrcode` acquired its importer in Phase 4 — `src/components/QrCode.tsx`, which imports it **by name** (`import { toDataURL }`), because `@types/qrcode` declares named exports only and this repo runs `verbatimModuleSyntax` without `esModuleInterop`. `motion` acquired its first two in Phase 5: `Card.tsx` (`motion`) and `CardStack.tsx` (`AnimatePresence`), both from the `motion/react` subpath.
+
+One trap in `motion@12`, found the hard way: **`PanInfo` — the type of the `info` argument Motion hands `onDragEnd` — is not importable.** `motion` re-exports `framer-motion`, which does _not_ re-export `PanInfo`; it lives in `motion-dom`, a **transitive** dependency absent from `package.json`, which pnpm's strict linking is right to make awkward to reach. `useCardGestures.ts` therefore declares `DragEndInfo` and `GesturePointer` locally as structural **supertypes** of what Motion passes (strictly fewer required fields), which parameter contravariance makes soundly assignable — verified by the compiler at the `Card` call site. Side benefit: the hook's signature carries no Motion types at all. Do not "fix" this by adding `motion-dom` to `package.json`.
 
 ### Design decisions already locked by Phase 0
 
