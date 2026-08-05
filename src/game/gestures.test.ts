@@ -29,9 +29,7 @@ describe('shouldCommitSwipe', () => {
   it('should commit when the horizontal offset exceeds the distance threshold', () => {
     // The slow deliberate drag: the player pushed the card a long way, but had let go of any
     // speed by the time they released. Velocity is 0 here, so distance is doing all the work.
-    expect(
-      shouldCommitSwipe({ offsetX: SWIPE_COMMIT_DISTANCE_PX + 20, velocityX: 0 }),
-    ).toBe(true);
+    expect(shouldCommitSwipe({ offsetX: SWIPE_COMMIT_DISTANCE_PX + 20, velocityX: 0 })).toBe(true);
   });
 
   it('should commit when velocity exceeds the flick threshold even with a small offset', () => {
@@ -75,17 +73,13 @@ describe('shouldCommitSwipe', () => {
     // Pins the boundary. `>=` vs `>` is invisible in play and silently moves the threshold by
     // a pixel, so it is asserted rather than left to whoever next edits the comparison.
     expect(shouldCommitSwipe({ offsetX: SWIPE_COMMIT_DISTANCE_PX, velocityX: 0 })).toBe(true);
-    expect(shouldCommitSwipe({ offsetX: 0, velocityX: SWIPE_COMMIT_VELOCITY_PX_PER_S })).toBe(
-      true,
-    );
+    expect(shouldCommitSwipe({ offsetX: 0, velocityX: SWIPE_COMMIT_VELOCITY_PX_PER_S })).toBe(true);
 
     // The other side of both boundaries, so the pair together prove where the line is.
-    expect(shouldCommitSwipe({ offsetX: SWIPE_COMMIT_DISTANCE_PX - 1, velocityX: 0 })).toBe(
+    expect(shouldCommitSwipe({ offsetX: SWIPE_COMMIT_DISTANCE_PX - 1, velocityX: 0 })).toBe(false);
+    expect(shouldCommitSwipe({ offsetX: 0, velocityX: SWIPE_COMMIT_VELOCITY_PX_PER_S - 1 })).toBe(
       false,
     );
-    expect(
-      shouldCommitSwipe({ offsetX: 0, velocityX: SWIPE_COMMIT_VELOCITY_PX_PER_S - 1 }),
-    ).toBe(false);
   });
 });
 
@@ -137,9 +131,9 @@ describe('isTap', () => {
     ).toBe(false);
 
     // Exactly at the bound is still a tap.
-    expect(
-      isTap({ deltaX: 0, deltaY: 0, elapsedMs: TAP_MAX_DURATION_MS, didDrag: false }),
-    ).toBe(true);
+    expect(isTap({ deltaX: 0, deltaY: 0, elapsedMs: TAP_MAX_DURATION_MS, didDrag: false })).toBe(
+      true,
+    );
   });
 
   it('should tolerate small vertical movement in a tap', () => {

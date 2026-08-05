@@ -125,10 +125,7 @@ describe('CardStack', () => {
     //  COST: every QR is an async `toDataURL()` render. Reusing `Card`
     //  would triple that work per advance for two faces nobody can see.
     // ===================================================================
-    const { container } = renderStack(
-      [highConfidenceCard, lowConfidenceCard, noYearCard],
-      0,
-    );
+    const { container } = renderStack([highConfidenceCard, lowConfidenceCard, noYearCard], 0);
 
     const backs = [...container.querySelectorAll('[data-testid="card-back"]')];
     expect(backs).toHaveLength(2);

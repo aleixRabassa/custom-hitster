@@ -40,43 +40,43 @@ rather than a nice-to-have — which is exactly what `plan.md` already says abou
 
 ### Requires from plan.phase-4-6-card-ui
 
-| Output | Description |
-|---|---|
-| `src/components/Card.tsx` | The flip shell. Exposes `onFlip` without deciding what triggers it — this plan supplies the trigger |
-| `src/components/GameScreen.tsx` | Host for the card and the single `<audio>` element; gains the key handler and the stack here |
-| `src/hooks/useCardAudio.ts` | `stop()`, called when a swipe commits, so audio never crosses a card boundary |
-| `src/components/__fixtures__/cards.ts` | The shared fixture deck |
-| jsdom + Testing Library, selected per file via docblock | Keyboard and wiring tests |
-| `overscroll-behavior: none` in `src/index.css` | Already added in plan 1; vertical drag tolerance depends on it |
+| Output                                                  | Description                                                                                         |
+| ------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `src/components/Card.tsx`                               | The flip shell. Exposes `onFlip` without deciding what triggers it — this plan supplies the trigger |
+| `src/components/GameScreen.tsx`                         | Host for the card and the single `<audio>` element; gains the key handler and the stack here        |
+| `src/hooks/useCardAudio.ts`                             | `stop()`, called when a swipe commits, so audio never crosses a card boundary                       |
+| `src/components/__fixtures__/cards.ts`                  | The shared fixture deck                                                                             |
+| jsdom + Testing Library, selected per file via docblock | Keyboard and wiring tests                                                                           |
+| `overscroll-behavior: none` in `src/index.css`          | Already added in plan 1; vertical drag tolerance depends on it                                      |
 
 ### Produces for downstream plans
 
-| Output | Consumed by |
-|---|---|
-| `src/game/gestures.ts` — pure threshold decisions | plan 3 (nothing directly); the tests are the contract |
-| `src/hooks/useCardGestures.ts` | plan 3 — `GameScreen` keeps using it unchanged |
-| `src/components/CardStack.tsx` | plan 3 — rendered inside `GameScreen` beneath the HUD |
-| Keyboard handling in `GameScreen` | plan 3 — must keep working once the landing screen's text input exists, which is why the guard against typing-in-inputs is written here |
+| Output                                            | Consumed by                                                                                                                             |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/game/gestures.ts` — pure threshold decisions | plan 3 (nothing directly); the tests are the contract                                                                                   |
+| `src/hooks/useCardGestures.ts`                    | plan 3 — `GameScreen` keeps using it unchanged                                                                                          |
+| `src/components/CardStack.tsx`                    | plan 3 — rendered inside `GameScreen` beneath the HUD                                                                                   |
+| Keyboard handling in `GameScreen`                 | plan 3 — must keep working once the landing screen's text input exists, which is why the guard against typing-in-inputs is written here |
 
 ---
 
 ## Scope & Affected Areas
 
-| Area | Type | Notes |
-|------|------|-------|
-| `src/game/gestures.ts` | New | Pure decisions: does this drag commit, and was that pointer sequence a tap. No React, no DOM — node-testable. Lives beside the other pure game logic |
-| `src/game/gestures.test.ts` | New | Exhaustive threshold coverage |
-| `src/hooks/useCardGestures.ts` | New | Binds the pure decisions to Motion's drag callbacks and to pointer events |
-| `src/components/Card.tsx` | Modified | Becomes a Motion element with `drag="x"`; receives gesture props |
-| `src/components/CardStack.tsx` | New | The top card plus 2 static backs; owns the `AnimatePresence` exit animation |
-| `src/components/GameScreen.tsx` | Modified | Renders `CardStack` instead of a bare `Card`; adds the keyboard handler |
-| `src/index.css` | Modified | `touch-action: none` on the draggable surface if a utility class does not cover it; confirm the `overscroll-behavior` rule from plan 1 is in effect |
-| `src/components/CardStack.test.tsx`, `src/components/GameScreen.test.tsx` | New / Modified | See Unit Tests |
-| `docs/plans/plan.md` | Modified | Tick Phase 5; annotate the drag-testability limitation |
-| `AGENTS.md` | Modified | Current phase → 5 |
-| `docs/architecture.md` | Modified | §7 Phase 5 built; note that `motion` now has its first importer |
-| `docs/development.md` | Modified | Real-device verification procedure (LAN dev server or preview deploy) |
-| `docs/agent_findings.md` | Modified | New dated entries — see Documentation Updates |
+| Area                                                                      | Type           | Notes                                                                                                                                                |
+| ------------------------------------------------------------------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/game/gestures.ts`                                                    | New            | Pure decisions: does this drag commit, and was that pointer sequence a tap. No React, no DOM — node-testable. Lives beside the other pure game logic |
+| `src/game/gestures.test.ts`                                               | New            | Exhaustive threshold coverage                                                                                                                        |
+| `src/hooks/useCardGestures.ts`                                            | New            | Binds the pure decisions to Motion's drag callbacks and to pointer events                                                                            |
+| `src/components/Card.tsx`                                                 | Modified       | Becomes a Motion element with `drag="x"`; receives gesture props                                                                                     |
+| `src/components/CardStack.tsx`                                            | New            | The top card plus 2 static backs; owns the `AnimatePresence` exit animation                                                                          |
+| `src/components/GameScreen.tsx`                                           | Modified       | Renders `CardStack` instead of a bare `Card`; adds the keyboard handler                                                                              |
+| `src/index.css`                                                           | Modified       | `touch-action: none` on the draggable surface if a utility class does not cover it; confirm the `overscroll-behavior` rule from plan 1 is in effect  |
+| `src/components/CardStack.test.tsx`, `src/components/GameScreen.test.tsx` | New / Modified | See Unit Tests                                                                                                                                       |
+| `docs/plans/plan.md`                                                      | Modified       | Tick Phase 5; annotate the drag-testability limitation                                                                                               |
+| `AGENTS.md`                                                               | Modified       | Current phase → 5                                                                                                                                    |
+| `docs/architecture.md`                                                    | Modified       | §7 Phase 5 built; note that `motion` now has its first importer                                                                                      |
+| `docs/development.md`                                                     | Modified       | Real-device verification procedure (LAN dev server or preview deploy)                                                                                |
+| `docs/agent_findings.md`                                                  | Modified       | New dated entries — see Documentation Updates                                                                                                        |
 
 ---
 
@@ -248,7 +248,7 @@ oversight and writes a test that passes without exercising anything.
 - [ ] `docs/agent_findings.md` — new dated entries, and **tell the developer** they were added:
   - [ ] Motion's drag cannot be exercised under jsdom, and why the pure-decision split is what makes
         the thresholds testable at all — the same shape Phase 3 used for the resolver
-  - [ ] The Space-on-a-focused-button double-action: one press activating a control *and* flipping
+  - [ ] The Space-on-a-focused-button double-action: one press activating a control _and_ flipping
         the card. Cheap to fix, invisible until someone plays with a keyboard after clicking Play
   - [ ] Whatever the real-device pass turns up — this is the entry most likely to be worth
         something later, because it is the part no local check models. Include the tuned threshold
@@ -273,34 +273,44 @@ oversight and writes a test that passes without exercising anything.
 
 ## Assumptions & Decisions
 
-| # | Assumption / Decision | Rationale |
-|---|---|---|
-| 1 | Gesture *decisions* are pure functions in `src/game/gestures.ts`; Motion only supplies the mechanics | The only way the thresholds get tested, since jsdom cannot exercise a drag. Mirrors Phase 3's framework-free-core-plus-thin-seam split, which is the house style now |
-| 2 | Both left and right swipes advance | There is no previous card, so a right swipe has nothing to mean. Snapping it back would read as a broken gesture rather than a deliberate one |
-| 3 | Commit on offset **or** velocity | A slow deliberate drag and a fast flick are both clear intent; requiring both would reject the flick, which is the more common phone gesture |
-| 4 | The stacked backs render no content, no QR, and no audio | Leak: a card behind the top one has no reason to be in the DOM. Cost: QR generation is async work per card, and Phase 7 lazy-loads it precisely because it is not free |
-| 5 | `AnimatePresence` keys are card id **plus** deck index | A playlist may legitimately contain the same track twice; Phase 3's reducer already handles duplicate ids explicitly, and a bare-id key would collide between adjacent cards |
-| 6 | Keyboard handling is a window-level handler in `GameScreen`, not on a focusable card | The card is not a control and the player's hands are not on it. A focus-dependent handler would be dead most of the time |
-| 7 | Space is ignored when focus is on a button, an input, or a contenteditable element | Otherwise one Space both activates Play/Pause and flips the card, and plan 3's landing input would lose its spaces to the flip handler |
-| 8 | Auto-repeat key events are ignored | Leaning on → would otherwise deal the entire deck with no way back |
-| 9 | Drag itself is verified on real devices, not in tests, and that is stated in the plan | An honest gap beats a test that passes without exercising the code path. `plan.md` already treats real-device verification as a Phase 5 deliverable |
-| 10 | `prefers-reduced-motion` is left to Phase 7 | It is on Phase 7's a11y checklist. Motion has first-class support for it, so this is a deferral, not a debt |
-| 11 | Threshold constants are named, documented, and expected to change during step 6 | They are guesses until a thumb touches glass; naming them is what makes them tunable by someone who did not write them |
+| #   | Assumption / Decision                                                                                | Rationale                                                                                                                                                                    |
+| --- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Gesture _decisions_ are pure functions in `src/game/gestures.ts`; Motion only supplies the mechanics | The only way the thresholds get tested, since jsdom cannot exercise a drag. Mirrors Phase 3's framework-free-core-plus-thin-seam split, which is the house style now         |
+| 2   | Both left and right swipes advance                                                                   | There is no previous card, so a right swipe has nothing to mean. Snapping it back would read as a broken gesture rather than a deliberate one                                |
+| 3   | Commit on offset **or** velocity                                                                     | A slow deliberate drag and a fast flick are both clear intent; requiring both would reject the flick, which is the more common phone gesture                                 |
+| 4   | The stacked backs render no content, no QR, and no audio                                             | Leak: a card behind the top one has no reason to be in the DOM. Cost: QR generation is async work per card, and Phase 7 lazy-loads it precisely because it is not free       |
+| 5   | `AnimatePresence` keys are card id **plus** deck index                                               | A playlist may legitimately contain the same track twice; Phase 3's reducer already handles duplicate ids explicitly, and a bare-id key would collide between adjacent cards |
+| 6   | Keyboard handling is a window-level handler in `GameScreen`, not on a focusable card                 | The card is not a control and the player's hands are not on it. A focus-dependent handler would be dead most of the time                                                     |
+| 7   | Space is ignored when focus is on a button, an input, or a contenteditable element                   | Otherwise one Space both activates Play/Pause and flips the card, and plan 3's landing input would lose its spaces to the flip handler                                       |
+| 8   | Auto-repeat key events are ignored                                                                   | Leaning on → would otherwise deal the entire deck with no way back                                                                                                           |
+| 9   | Drag itself is verified on real devices, not in tests, and that is stated in the plan                | An honest gap beats a test that passes without exercising the code path. `plan.md` already treats real-device verification as a Phase 5 deliverable                          |
+| 10  | `prefers-reduced-motion` is left to Phase 7                                                          | It is on Phase 7's a11y checklist. Motion has first-class support for it, so this is a deferral, not a debt                                                                  |
+| 11  | Threshold constants are named, documented, and expected to change during step 6                      | They are guesses until a thumb touches glass; naming them is what makes them tunable by someone who did not write them                                                       |
 
 ---
 
 ## Open Questions
 
-- [ ] What are the right threshold values? Starting points only until step 6 — expect the tap radius
-      and the vertical tolerance to be the two that need real-device tuning.
-- [ ] Should a committed swipe animate out in the swipe's direction, or always the same way? Directional
-      is more natural but means the exit animation depends on gesture state that the stack does not
-      currently receive.
-- [ ] Does the card need `user-select: none` and long-press suppression on iOS, or does
-      `touch-action: none` cover it in practice? Answer in step 6 rather than pre-emptively.
-- [ ] Should ← do anything? It has no meaning today (no previous card), but a player will press it.
-      Ignoring it silently is the safe default; a brief "no going back" hint is a Phase 7 call.
-- [ ] Is 2 backs right, or 3? `plan.md` says "2–3 cards peeking". Pick by eye during step 6.
+- [ ] **Still open — needs step 6.** What are the right threshold values? Starting points only until
+      step 6 — expect the tap radius and the vertical tolerance to be the two that need real-device
+      tuning. Current guesses are in `src/game/gestures.ts`: 96px / 500px·s⁻¹ to commit, 10px·x /
+      16px·y / 400ms to tap.
+- [x] **Resolved 2026-08-05: directional.** A committed swipe animates out the way it was thrown.
+      `useCardGestures` records the direction at commit and returns it as `exitDirection`;
+      `CardStack` passes it to `Card`, which owns the exit variant. Cost was one extra prop, not the
+      gesture-state plumbing this question feared, because the hook was already the one place that
+      knew a commit had happened. A keyboard advance has no direction and uses the `left` default.
+- [ ] **Still open — needs step 6.** Does the card need `user-select: none` and long-press
+      suppression on iOS, or does `touch-action: none` cover it in practice? Deliberately NOT added
+      pre-emptively, as this question asks. `touch-none` is on the draggable surface; if a long-press
+      menu or a text selection shows up on a real device, `select-none` is the first thing to try.
+- [x] **Resolved 2026-08-05: ← does nothing, and it is asserted.** The safe default, as this question
+      suggested. `GameScreen.test.tsx` has `should ignore ArrowLeft` — not because the behaviour is
+      subtle, but because "back" is exactly what someone will later add without reading Phase 3's
+      one-directional-deck decision. A "no going back" hint stays a Phase 7 call.
+- [ ] **Still open — needs step 6.** Is 2 backs right, or 3? Built with 2 (`VISIBLE_BACKS` in
+      `CardStack.tsx`), which is the value to judge by eye. `CardStack.test.tsx` asserts "up to two",
+      so raising it to 3 means updating two test expectations as well as the constant.
 
 ---
 
@@ -315,3 +325,68 @@ oversight and writes a test that passes without exercising anything.
 - Playwright or any end-to-end automation. `plan.md` lists it as optional, and the gap it would close
   here is real-device touch behaviour, which a headless browser does not model either.
 - Card art direction and the neon-ring aesthetic — Phase 8.
+
+---
+
+## Execution Notes
+
+**2026-08-05 — steps 1–5 and 7 built. Step 6 (real-device verification) is NOT done and is owed.**
+Gate green: `pnpm typecheck && pnpm lint && pnpm test && pnpm build`, 310 tests (up from 278 —
+15 gesture-decision, 11 keyboard, 6 stack).
+
+### What the plan did not predict
+
+- **`PanInfo` is not importable.** The plan assumed the hook would type its `onDragEnd` against
+  Motion's `PanInfo`. It cannot: `motion@12.43` re-exports `framer-motion`, which does **not**
+  re-export `PanInfo` — it lives in `motion-dom`, a transitive dependency absent from
+  `package.json`. So `useCardGestures` declares `DragEndInfo` and `GesturePointer` locally as
+  structural **supertypes** of what Motion passes (fewer required fields). Parameter contravariance
+  makes the handlers soundly assignable, and the compiler verifies that at the `Card` call site.
+  Side benefit: the hook has no Motion types in its signature at all.
+- **`touch-action` needed no CSS rule.** Tailwind's `touch-none` utility covers it, so `src/index.css`
+  was not touched — the `overscroll-behavior` rule from plan 1 is still the only thing in it. Scope
+  table listed `src/index.css` as Modified; it is not.
+- **The backs needed a stacking context.** The backs are `absolute` and the current card is in normal
+  flow, and positioned elements paint _above_ non-positioned siblings — so the backs covered the card.
+  Fixed with `isolate` on the container plus `-z-10` on the backs, not with a z-index on the card
+  (whose `className` belongs to `Card`).
+- **A lost `pointerup` would have half-broken tap-to-flip.** Not in the plan's risk list. Releasing
+  the pointer _outside_ the card — the normal case for a big swipe, since the card moves out from
+  under the finger — means React's `onPointerUp` on that element never fires, so `didDragRef` stays
+  true and the _next_ genuine tap is rejected as "a drag was recognised". Symptom would have been
+  tap-to-flip working every other time. Fixed by resetting the whole gesture on `pointerdown` as well
+  as clearing on `pointerup`, plus an `onPointerCancel` reset.
+
+### Deviations from the plan as written
+
+- **`GameScreen`'s `card` prop became `deck` + `currentIndex`.** The stack has to see what is coming
+  to render backs and to key on deck index, so a single `card` prop could not survive. This matches
+  `GameState`'s own shape, so plan 3's container passes both straight through. `App.tsx` and
+  `GameScreen.test.tsx`'s helper were updated; the helper still takes one card and wraps it in a
+  one-card deck, which keeps every Phase 4 audio assertion about exactly one thing.
+- **`useCardGestures` is called by `CardStack`, not `GameScreen`.** The Dependency Contract implied
+  `GameScreen`. `CardStack` is where `exitDirection` is consumed (it is what `AnimatePresence`
+  animates), so calling the hook there avoids threading it back down. `GameScreen` keeps audio and
+  keyboard; it passes `isPlayable` through as `isEnabled`.
+- **A third pure function, `swipeDirection`.** The plan specified two. The directional exit animation
+  resolved above needs the direction decided somewhere, and it belongs with the other pure decisions
+  rather than in the hook.
+- **Focus is not moved off the control after a click.** Step 5 said "consider" it as belt-and-braces.
+  Not done: silently relocating a keyboard user's focus is a worse bug than the double-action it would
+  paper over, and the `active instanceof HTMLButtonElement` guard already closes that.
+- **Four tests beyond the plan's list**, each pinning something a refactor could silently break:
+  `should not prevent default on ArrowRight` (proves the `preventDefault` is scoped to Space),
+  `should still advance on ArrowRight while focus is on a button` (proves the button guard is
+  Space-only), `should render exactly one back with one card left` (the other end of the `slice`), and
+  `should leave a dead band between the tap radius and the commit distance` (a retune that let the two
+  overlap would make one gesture both flip _and_ advance — both misreadings at once).
+
+### Still owed
+
+- **Step 6 in full**, on iOS Safari and Android Chrome, and the three open questions above that depend
+  on it. Until then the thresholds are guesses that have never met a thumb.
+- The **Documentation Updates** checklist below/above is untouched: `plan.md`, `AGENTS.md`,
+  `docs/architecture.md`, `docs/development.md` and `docs/agent_findings.md` all still need their
+  Phase 5 entries.
+- Unrelated pre-existing nit: `docs/plans/plan.phase-4-6-screens.md` fails `prettier --check` in
+  `HEAD`. Left alone rather than reformatted as a side effect of this work.
