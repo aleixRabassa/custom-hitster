@@ -2,19 +2,20 @@
 
 Custom Hitster is a **client-heavy single-page app with a thin serverless backend**. The game itself — shuffle, flip, swipe, audio, progress — runs entirely in the browser. The backend exists only to do the three things a browser cannot: reach a CORS-blocked endpoint, set a custom `User-Agent`, and hold a cache shared across all users.
 
-> **Implementation status: Phases 1–3 complete.** The shell, all three functions (`/api/hello`, `/api/playlist`, `/api/year`), the year cache, and the client-side game layer (`src/game/` — reducer, seeded shuffle, `localStorage` resume, progressive loading) exist today. No UI beyond the placeholder shell does: the card, the screens and the gestures are Phases 4–6. Sections below are marked **[built]** or **[planned]** throughout; planned shapes come from [`plans/plan.md`](./plans/plan.md) §3 and are recorded here because they determine where new code belongs, not because they exist.
+> **Implementation status: Phases 1–4 complete.** All three functions (`/api/hello`, `/api/playlist`, `/api/year`), the year cache, the client-side game layer (`src/game/`), and the card UI (`src/components/`, `src/hooks/` — the 3D flip card, the QR code, the three controls, session-scoped audio) exist today. What does not: any gesture (Phase 5) and every screen around the card, including the landing page and the container that calls `useGameSession()` (Phase 6). `src/App.tsx` is a temporary harness over a fixture deck until then. Sections below are marked **[built]** or **[planned]** throughout; planned shapes come from [`plans/plan.md`](./plans/plan.md) §3 and are recorded here because they determine where new code belongs, not because they exist.
 
 ---
 
 ## 1. Components
 
-| Component            | Technology                         | Location    | Status                                                    |
-| -------------------- | ---------------------------------- | ----------- | --------------------------------------------------------- |
-| Browser SPA          | Vite 8 + React 19 + Tailwind CSS 4 | `src/`      | **[built]** shell + game layer; no card UI yet            |
-| Client game layer    | Pure TS + one React hook           | `src/game/` | **[built]** reducer, shuffle, resolver, persistence       |
-| Serverless functions | Vercel Functions (Node 24 runtime) | `api/`      | **[built]** `hello`, `playlist`, `year`                   |
-| Portable shared code | TypeScript, no platform APIs       | `shared/`   | **[built]** types, URL parsing, artist helper, year logic |
-| Year cache           | Upstash Redis (REST)               | —           | **[built]** behind `YearCache`; in-memory locally         |
+| Component            | Technology                         | Location                        | Status                                                    |
+| -------------------- | ---------------------------------- | ------------------------------- | --------------------------------------------------------- |
+| Browser SPA          | Vite 8 + React 19 + Tailwind CSS 4 | `src/`                          | **[built]** game layer + card; no screens, no gestures    |
+| Client game layer    | Pure TS + one React hook           | `src/game/`                     | **[built]** reducer, shuffle, resolver, persistence       |
+| Card UI              | React 19 + Tailwind 3D transforms  | `src/components/`, `src/hooks/` | **[built]** flip card, QR, audio                          |
+| Serverless functions | Vercel Functions (Node 24 runtime) | `api/`                          | **[built]** `hello`, `playlist`, `year`                   |
+| Portable shared code | TypeScript, no platform APIs       | `shared/`                       | **[built]** types, URL parsing, artist helper, year logic |
+| Year cache           | Upstash Redis (REST)               | —                               | **[built]** behind `YearCache`; in-memory locally         |
 
 There is **no database, no message broker, no background worker, and no container runtime** in this project, and none are planned. The only persistent stores are the Upstash Redis cache (built, server-side, optional) and `localStorage` (built, client-side — `src/game/persistence.ts`).
 
@@ -183,6 +184,35 @@ Three properties of that split are load-bearing:
 
 **The card-1 gate is an invariant of the app, not an implementation detail.** `START` waits for **one** year lookup to _complete_ — where a `null` year is a completed lookup — and never for the deck. Cards 2..n filling in during play is normal, not a loading state. This is the single most likely thing to be "simplified" into a wait-for-everything by someone who only ever tested a playlist whose years were all cached, because a warm deck resolves fast enough to hide the difference. Measured on a real 42-card cold deck (2026-08-05): the gate cleared in **6.06 s**, the full crawl took **153.0 s**. Those two numbers are the whole argument.
 
+### The card UI (`src/components/`, `src/hooks/`) — built
+
+Phase 4's shape is **presentational components driven entirely by props, with the stateful concerns extracted into hooks.** There is no context and no provider: a component receives plain data and callbacks and holds no session knowledge, which is why a test renders one with a fixture card and asserts on the DOM — no session, no network, no provider wrapper. It matches `src/game/`'s own posture, which shipped a hook and explicitly no context.
+
+```
+src/components/
+  GameScreen.tsx        The integration seam. Owns THE session <audio> element and the
+                        stop-on-flip / stop-on-card-change rules. Still presentational:
+                        it takes callbacks and does NOT call useGameSession()
+  Card.tsx              The 3D flip shell. Owns no state; both faces live here
+  CardHiddenSide.tsx    QR + [Exit] [Play/Pause] [Restart]. Leaks nothing — see below
+  CardRevealSide.tsx    Title, artist, and the four-state year slot
+  QrCode.tsx            Wraps `qrcode`; async generation with a stale-result guard
+  __fixtures__/cards.ts One card per interesting SHAPE. Every component test renders
+                        from this, so the shapes are enumerated exactly once
+src/hooks/
+  useCardAudio.ts       The audio machine: one element, src swapped per card
+```
+
+**One `<audio>` element per session, not per card.** It lives in `GameScreen` and its `src` swaps as the card changes. The rule it enforces — a track never bleeds into the next card and never doubles up on itself — is then structurally impossible to violate rather than a guard that has to be maintained. Phase 5 renders 2–3 stacked cards simultaneously, which is precisely the window where per-card elements would overlap and play together.
+
+**The revealed side is NOT MOUNTED while the card is unflipped, and this is an architectural rule rather than a component detail.** `backface-visibility: hidden` is a visual property: it stops a face being painted, and leaves every word of it in the document — where devtools, find-in-page, the accessibility tree and any screen reader still read it. An unflipped card whose reveal side is mounted hands the player the answer through four channels at once. Mounting on flip costs nothing visually (below 90° of rotation the back face is invisible anyway) and turns "the hidden side leaks nothing" into something a test can assert. **It is written down here because the obvious reason to undo it is animation smoothness, which makes it a plausible-looking refactor rather than an obvious regression.** If it is ever undone, that is a product decision about weakening the game's central rule.
+
+Three corollaries, all of them things a leak audit that greps only for visible text would miss:
+
+- **Attributes and accessible names are leak surfaces.** An `aria-label` of "Play Bohemian Rhapsody" leaks to a screen-reader user exactly as body text leaks to an eye, and an `alt` attribute is read aloud and shown when an image fails. Every control name on the hidden side is generic.
+- **`durationMs` is as much of a leak as the title.** "3:54" beside a QR code identifies a track, and a playback progress bar is exactly the sort of helpful addition that would introduce it.
+- **The OS media session is a leak surface the page cannot claw back.** Setting `navigator.mediaSession.metadata` publishes title and artist to the phone's lock screen and notification shade, where no amount of on-page hiding reaches. Nothing in the app touches it, a test asserts as much, and `useCardAudio.ts` says so in a comment — because it is an omission, and omissions get "fixed".
+
 ### Planned — the rest of the loop
 
 ```
@@ -284,13 +314,13 @@ Everything below is **not built**, except where a row says otherwise. The author
 | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 2     | ~~`parsePlaylistUrl()`, `/api/playlist`, `/api/year`, the `YearCache` interface, the 1 req/s gate, year-resolution logic~~ **[built] — phase complete**                                         |
 | 3     | ~~`GameState`, reducer, seeded Fisher–Yates shuffle, localStorage resume, progressive loading~~ **[built] — phase complete**, in `src/game/` (see §3). `Card` was never widened with game state |
-| 4     | Card component with CSS 3D flip, QR rendering, `previewUrl` + `<audio>` playback — **in progress**                                                                                              |
+| 4     | ~~Card component with CSS 3D flip, QR rendering, `previewUrl` + `<audio>` playback~~ **[built] — phase complete** (see §3), plus the jsdom + Testing Library test environment                   |
 | 5     | Swipe-to-next, tap-to-flip, stacked-deck visuals, keyboard controls                                                                                                                             |
 | 6     | Landing page, suggested playlists, loading state, **reveal-side unconfirmed-year marking**, HUD, end screen                                                                                     |
 | 7     | Visual design, `@theme` design tokens, error/offline states, responsive, a11y, Lighthouse                                                                                                       |
 | 8     | Out of v1: shareable deck URL, PWA, PDF export, difficulty filters, multiplayer scoring                                                                                                         |
 
-Two dependencies are already installed with **no importers yet**, deliberately, so Phase 1 locks one coherent dependency tree: `motion` (Phase 5 gestures) and `qrcode` + `@types/qrcode` (Phase 4 QR).
+One dependency is still installed with **no importers**, deliberately, so Phase 1 could lock one coherent dependency tree: `motion` (Phase 5 gestures). `qrcode` + `@types/qrcode` joined it in Phase 1 and finally acquired an importer in Phase 4 — `src/components/QrCode.tsx`, which imports it **by name** (`import { toDataURL }`), because `@types/qrcode` declares named exports only and this repo runs `verbatimModuleSyntax` without `esModuleInterop`.
 
 ### Design decisions already locked by Phase 0
 

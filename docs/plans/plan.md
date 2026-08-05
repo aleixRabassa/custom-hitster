@@ -211,12 +211,20 @@ Browser (SPA)                          Serverless (Vercel Functions)
 
 ### Phase 4 — Card UI
 
-- [ ] Card component with CSS 3D flip; hidden side must leak **nothing**
-- [ ] Hidden side: **QR code always rendered**, plus **[■ Exit] [▶ Play/Pause] [↺ Restart]** buttons — Play/Pause toggles in-app audio, Restart replays from 0:00 (not next card), Exit ends the game session and redirects to the landing page
-- [ ] Reveal side: title, artist, **year prominent** (Hitster's key value)
-- [ ] In-app audio wired to the Phase 0 winner; if unavailable for a track, disable Play/Pause and Restart but keep the QR and Exit fully functional
-- [ ] **Playback runs to its natural end — no auto-stop timer and no auto-advance** (decided 2026-08-04). It stops only when the player pauses, exits, or moves to the next card. Note the ceiling this runs into: `previewUrl` is a **30-second** MP3, so "the full song" is 30 seconds, not the whole track — there is no way to play more, since the app has no Spotify playback session (see §2). The QR is what gets the player to the full track.
-- [ ] Pause/stop audio on flip/next/restart, and stop it on Exit — never let a track bleed into the next card or double up on itself
+- [x] Card component with CSS 3D flip; hidden side must leak **nothing** — Tailwind v4's native 3D utilities, no custom CSS. **"Leak nothing" was strengthened during execution to mean the revealed side is not MOUNTED while unflipped**: `backface-visibility` hides a face visually but leaves its text in the DOM, readable via devtools, Ctrl+F and the accessibility tree. See [`architecture.md`](../architecture.md) §3
+- [x] Hidden side: **QR code always rendered**, plus **[■ Exit] [▶ Play/Pause] [↺ Restart]** buttons — Play/Pause toggles in-app audio, Restart replays from 0:00 (not next card), Exit ends the game session and redirects to the landing page. Every accessible name is generic ("Play" / "Pause" / "Restart" / "Exit game"), and `durationMs` joined title/artist/year on the forbidden list: "3:54" beside a QR identifies a track
+- [x] Reveal side: title, artist, **year prominent** (Hitster's key value). The artist string renders verbatim, never split (`shared/artists.ts`). **The year slot is four-state**, not three: `high`, `low` + unconfirmed marker, `none` + "check this one yourself", and a visually distinct pending state for a year the resolver has not reached yet
+- [x] In-app audio wired to the Phase 0 winner; if unavailable for a track, disable Play/Pause and Restart but keep the QR and Exit fully functional — `src/hooks/useCardAudio.ts`, one session-scoped `<audio>` element whose `src` swaps per card
+- [x] **Playback runs to its natural end — no auto-stop timer and no auto-advance** (decided 2026-08-04). It stops only when the player pauses, exits, or moves to the next card. Note the ceiling this runs into: `previewUrl` is a **30-second** MP3, so "the full song" is 30 seconds, not the whole track — there is no way to play more, since the app has no Spotify playback session (see §2). The QR is what gets the player to the full track.
+- [x] Pause/stop audio on flip/next/restart, and stop it on Exit — never let a track bleed into the next card or double up on itself. One element makes this structural rather than a rule to enforce
+
+> Detail, decisions, and execution notes: [plan.phase-4-6-card-ui.md](./plan.phase-4-6-card-ui.md).
+>
+> **Phase 4 is complete (2026-08-05), except for manual verification on real hardware.** It also added the repo's DOM test environment — jsdom plus Testing Library, opted into **per test file** with a `@vitest-environment jsdom` docblock so the default stays `node`. The suite went from 233 tests to 278.
+>
+> **Two deviations from the phase boundaries as written above.** First, the **unconfirmed-year marking listed under Phase 6 was built here**: it is the same element of the same component as this phase's "year prominent" item, and splitting one element's rendering across two plans would mean writing the year slot twice. Phase 6 keeps the _count-only load-time wording_, which is genuinely its own concern. Second, the card has **no flip trigger yet** — tap-versus-drag disambiguation is Phase 5, so `onFlip` is exposed and a temporary harness in `App.tsx` supplies the trigger until then.
+>
+> Still owed, and it needs a person with a phone: scanning a card's QR, a devtools DOM search on an unflipped card, and the **Android lock-screen check** — the one leak vector no test in this repo can reach.
 
 ### Phase 5 — Gestures
 

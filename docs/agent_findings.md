@@ -393,14 +393,14 @@ gate spacing dominates.
 
 **The wall clock Phase 2 could not measure:**
 
-| Measurement                                       | Result                                             |
-| ------------------------------------------------- | -------------------------------------------------- |
-| Full cold crawl, 42 cards                         | **153.0 s** (~3.64 s/card, so ~3 min for 50 cards) |
-| **Card-1 gate** (`START` → `playing`)             | **6.06 s** — one lookup, not one deck              |
-| Priority jump (player outran the crawl)           | **5.67 s**                                         |
-| `/api/playlist`                                   | 514 ms                                             |
-| Lookups issued for 42 cards                       | 43 (one retry)                                     |
-| Warm re-crawl over the resolved deck              | **0 lookups**                                      |
+| Measurement                             | Result                                             |
+| --------------------------------------- | -------------------------------------------------- |
+| Full cold crawl, 42 cards               | **153.0 s** (~3.64 s/card, so ~3 min for 50 cards) |
+| **Card-1 gate** (`START` → `playing`)   | **6.06 s** — one lookup, not one deck              |
+| Priority jump (player outran the crawl) | **5.67 s**                                         |
+| `/api/playlist`                         | 514 ms                                             |
+| Lookups issued for 42 cards             | 43 (one retry)                                     |
+| Warm re-crawl over the resolved deck    | **0 lookups**                                      |
 
 Per-card cold latency ranged **1.08–11.27 s**, wider than the 1.3–3.6 s Phase 2 measured on its
 curated set. Card 1 alone cost 6.0 s, so **the pre-Start wait is ~6 s in practice, not ~2 s** — worth
@@ -408,7 +408,7 @@ knowing before Phase 6 words the loading screen.
 
 **The progressive-loading invariants all hold, measured rather than assumed.** Card 1 became playable
 after one completed lookup with 1/42 cards resolved; flip worked immediately; jumping to the LAST card
-(index 41) made the resolver finish its in-flight card and then resolve *that* card next (11.7 s mark,
+(index 41) made the resolver finish its in-flight card and then resolve _that_ card next (11.7 s mark,
 deck 3/42 resolved) before resuming the ordered walk at index 2. Waiting in deck order would have cost
 ~145 s instead of 5.7 s.
 
@@ -458,7 +458,7 @@ reload through `useGameSession`, and the 429 rate under concurrency.
 ## 2026-08-05 — Two Vitest 4 gotchas that cost a whole 150 s harness run
 
 1. **`--reporter=basic` no longer exists in Vitest 4** and fails as `Failed to load custom Reporter
-   from basic` — a startup error, not a warning, so nothing runs.
+from basic` — a startup error, not a warning, so nothing runs.
 2. **Vitest 4's default reporter swallows test stdout on a PASSING test.** A 153 s live harness ran
    green and printed only the summary; every `console.log` was lost. For any harness whose OUTPUT is
    the point, write results to a file with `writeFileSync` instead of logging them.
@@ -479,10 +479,11 @@ re-queries MusicBrainz with the base title and runs strict-then-relaxed again ov
 
 **Why it is a fallback rather than part of `cleanTrackTitle()`.** Every family in `FAMILY_PATTERNS` is
 stripped on the first attempt because the literal suffix breaks the query outright ("Bohemian Rhapsody
+
 - Remastered 2011" returns zero results). A remix is different: it is often a real, separately-credited
-recording that MusicBrainz knows under its full title, so stripping it up front would throw away the
-exact match and ask about a *different* song. Try the title as given; only then ask about the
-underlying song.
+  recording that MusicBrainz knows under its full title, so stripping it up front would throw away the
+  exact match and ask about a _different_ song. Try the title as given; only then ask about the
+  underlying song.
 
 **Three deliberate choices, each with a test that pins it:**
 
@@ -512,13 +513,13 @@ worse.
 
 **Measured live against the same playlist (`5KFmETOxEWVEtpa1voRfDU`), all 5 remix cards:**
 
-| Card                     | Result                                       |
-| ------------------------ | -------------------------------------------- |
-| `Pininfarina - Remix`    | **2020 / low** via "Pininfarina" (recording) |
-| `4 KISSUS - Remix`       | **2024 / low** via "4 KISSUS" (release-group) |
-| `Tumba la Casa - Remix`  | **2015 / low** via "Tumba la Casa" (recording) |
-| `Ella No Es Tuya - Remix` | still `none` — MusicBrainz has neither form  |
-| `Además de Mí - Remix`   | still `none` — same                          |
+| Card                      | Result                                         |
+| ------------------------- | ---------------------------------------------- |
+| `Pininfarina - Remix`     | **2020 / low** via "Pininfarina" (recording)   |
+| `4 KISSUS - Remix`        | **2024 / low** via "4 KISSUS" (release-group)  |
+| `Tumba la Casa - Remix`   | **2015 / low** via "Tumba la Casa" (recording) |
+| `Ella No Es Tuya - Remix` | still `none` — MusicBrainz has neither form    |
+| `Además de Mí - Remix`    | still `none` — same                            |
 
 **3 of 5 recovered**, so this deck goes from 15 yearless cards to 12 (36% → 29%). The two remaining
 misses are genuine data gaps, not query problems. Spot-checking the three: "Tumba la Casa" is correctly
@@ -603,3 +604,118 @@ that a version segment only bumped when someone judges it necessary is a version
 
 Currently zero-cost in practice: with no Upstash configured (see the entry above) nothing is shared or
 durable anyway, so there are no production entries to invalidate yet.
+
+## 2026-08-05 — `backface-visibility` hides a card face visually and leaks every word of it
+
+The card's hidden side must leak nothing — it is the whole game — and the obvious CSS 3D flip does
+not deliver that on its own. `backface-visibility: hidden` is a **painting** property: it stops a
+face being drawn and leaves its text in the document, where **devtools, find-in-page (Ctrl+F), the
+accessibility tree and any screen reader all still read it**. A player looking at a face-down card
+can read the answer four different ways.
+
+So `src/components/Card.tsx` **does not mount `CardRevealSide` while `isFlipped` is false.** The
+reveal FACE exists throughout (a 3D flip needs both faces to rotate); it is empty. This costs nothing
+visually, because below 90° of rotation the back face is invisible anyway, and it converts "leaks
+nothing" from a claim into an assertion — `Card.test.tsx`'s `should not mount the revealed side while
+unflipped` is the most important test in the phase.
+
+**The wider rule, which is the reusable part: a leak audit must cover attributes and accessible
+names, not just visible text.** Three surfaces that a `grep` for the title would miss entirely:
+
+- **`aria-label` and `alt`.** "Play Bohemian Rhapsody" leaks to a screen-reader user exactly as body
+  text leaks to an eye, and `alt` is also shown when an image fails. Every control on the hidden side
+  has a generic name, and `CardHiddenSide.test.tsx` asserts the exact list rather than merely the
+  absence of the title — an exhaustive list is what catches a well-meaning "Play preview of …" edit.
+- **`durationMs`.** Added to the forbidden list during execution: "3:54" beside a QR code identifies
+  a track, and a playback progress bar is precisely the sort of helpful addition that introduces it.
+- **The OS media session.** `navigator.mediaSession.metadata` publishes title and artist to the
+  phone's lock screen and notification shade, which no amount of on-page hiding can retract. Nothing
+  in the app touches it, `useCardAudio.test.ts` asserts as much, and the file says so in a comment —
+  because it is an OMISSION, and omissions get "fixed" by whoever notices the media panel says
+  nothing useful.
+
+`Card.id` is not a leak and is encoded in the QR by design: 22 opaque base62 characters, and scanning
+is how a player reaches the full song.
+
+## 2026-08-05 — jsdom implements no media playback, and no canvas
+
+`HTMLMediaElement.play()` and `.pause()` exist in jsdom as stubs that log
+`Error: Not implemented: HTMLMediaElement.prototype.play` and do nothing. An unstubbed call therefore
+produces console noise plus a test that mysteriously never becomes "playing" — never a clean
+assertion failure, which is what makes it worth writing down.
+
+Audio tests stub both **on the prototype**, which is also what makes call ordering assertable:
+
+```ts
+vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(function (this: HTMLMediaElement) {
+  calls.push(`play:${this.getAttribute('src') ?? ''}`);
+  return Promise.resolve();
+});
+```
+
+Recording the `src` with each call is what lets `useCardAudio.test.ts` prove the ordering that
+matters: on a card change the element is paused **against the outgoing `src`** before the new one is
+set. Swapping first can leave a frame of the previous track audible.
+
+Two related jsdom gaps found the same day:
+
+- **`currentTime` is stored but never advances.** Fine for asserting seeks to 0; useless for anything
+  about elapsed time, so nothing asserts on that.
+- **There is no `<canvas>`.** The `qrcode` browser build draws through one, so `QrCode` tests mock
+  the module rather than exercising it — a real call fails for a reason unrelated to the component.
+  The mock encodes its input into the fake data URL, which makes "the image source encodes the given
+  URL" a literal assertion instead of a proxy for one.
+
+Also: `element.src = ''` is not how you clear a source. An empty string resolves against the document
+URL, so the element tries to load the **page itself** as media. Use `removeAttribute('src')`.
+
+## 2026-08-05 — How the DOM test environment is selected, and why `node` stayed the default
+
+Vitest 4.1.10 **does** honour a per-file `@vitest-environment jsdom` docblock (verified with a
+throwaway probe before any component was written; the fallback of a two-project `test.projects`
+config proved unnecessary). The docblock must be the first thing in the file.
+
+**`vite.config.ts` keeps `environment: 'node'` as the default, and globalising jsdom would be a real
+regression rather than a convenience.** The node default is half of what keeps `shared/` portable:
+that tree is compiled into Vercel Functions, so a `document` or `window` reference in it must fail a
+test run. Under a global jsdom it passes quietly and breaks at deploy time instead — the exact
+failure mode this repo works hardest to avoid, and the same class of problem as the missing `.js`
+extension.
+
+Two consequences that cost time on the first component test, both now in `toolchain.md` §5:
+
+1. **Testing Library does not clean up between tests here.** Its automatic `afterEach(cleanup)`
+   registers only when Vitest's `globals` are enabled; this repo imports `describe`/`it`/`expect`
+   from `vitest` explicitly, so nothing unmounts and every render accumulates in `document.body`.
+   The first symptom was "found multiple elements with the role img" in a file rendering one image —
+   it reads as a component bug. **Every DOM test file carries its own `afterEach(cleanup)`.** No
+   `setupFiles` was added; `@testing-library/jest-dom` was deliberately not installed either, so that
+   slot stays empty and `setup` is always `0ms`.
+2. **Control calls that set state must be wrapped in `act()`.** React 19 does not flush an update
+   made outside `act()` before the test's next line, so a value read immediately afterwards is the
+   previous render's — `isPlaying` reads `false` right after a successful `play()`.
+
+Cost: booting jsdom is several seconds of `environment` time per file, versus ~0 ms for a node file.
+The full suite still runs in well under a minute.
+
+## 2026-08-05 — Process note: Phase 3's code shipped a day ahead of its documentation
+
+Phase 3 landed complete and tested in `43e59cc`, with `plan.md`, `AGENTS.md` and `architecture.md`
+untouched. For a day, **three documents told a reader that Phase 3 was upcoming work while it was
+sitting in `src/game/`** — and `AGENTS.md` names `docs/` as the source of truth, so anyone (human or
+agent) starting from the docs would have set out to build what already existed.
+
+Two things made it worse than a stale sentence. `architecture.md` had no description of `src/game/`
+at all, so the tree's largest new subsystem was undocumented; and `plan.phase-3.md`'s own
+Documentation Updates checklist was unticked, which correctly recorded the gap but only for someone
+already reading that file.
+
+Closed on 2026-08-05 as step 0b of `plan.phase-4-6-card-ui.md`, deliberately **before** any Phase 4
+UI was built on top of those documents. Ticking the boxes meant doing the work first: the `src/game/`
+section in `architecture.md`, the reference-client note in `api.md`, and the resolver subsection in
+`development.md` all had to be written.
+
+**The lesson is about sequencing, not diligence.** The documentation pass was scheduled as a separate
+step at the end of the phase, which is exactly where a step gets dropped when the code is green and
+the phase feels finished. Phase 4 was executed with its doc updates as numbered steps in the same
+plan instead.

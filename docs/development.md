@@ -196,13 +196,30 @@ pnpm test          # once
 pnpm test:watch    # watch mode
 ```
 
-Current suite: **233 tests across 14 files**, all passing, and **all of them offline** — no test touches the network. That is deliberate: a test that really called MusicBrainz would be rate-limited to 1 req/s, would drift as the database improves, and would fail for reasons unrelated to the code.
+Current suite: **278 tests across 20 files**, all passing, and **all of them offline** — no test touches the network. That is deliberate: a test that really called MusicBrainz would be rate-limited to 1 req/s, would drift as the database improves, and would fail for reasons unrelated to the code.
 
 The suite runs green **with no environment variables set at all**, which is the new-contributor path. If you have to configure something to make tests pass, that is a bug.
 
 The centre of gravity is `shared/year.test.ts`'s accuracy suite: it runs the scorer over captured candidates for fourteen Phase 0 known-tricky tracks and asserts each one's **known-correct** year, not whatever the code currently produces. Phase 0 measured a naive lookup at ~6% accurate; that suite is the evidence the pipeline beats it and the thing that catches a regression in scoring. Fixture provenance is documented in the headers of `shared/__fixtures__/year-candidates.ts` and `api/_lib/__fixtures__/musicbrainz-payloads.ts`.
 
-Tests are discovered at `{src,shared,api}/**/*.{test,spec}.{ts,tsx}` in a **`node`** environment. There is no DOM environment yet: `jsdom` and Testing Library arrive with the first component test in Phase 4. Until then, keep tests to pure logic.
+Tests are discovered at `{src,shared,api}/**/*.{test,spec}.{ts,tsx}`. The **default environment is `node`**, and a test that needs a DOM opts in per file with a `/** @vitest-environment jsdom */` docblock — six files do (the card components and the audio hook). Keeping `node` as the default is what makes a DOM API accidentally added to `shared/` fail here rather than at deploy time. Full detail, including why there is no `setupFiles` and why every DOM file needs its own `afterEach(cleanup)`, is in [`toolchain.md`](./toolchain.md) §5.
+
+### Manual card verification
+
+Six things about the card cannot be asserted from a test, and the last one cannot be checked on a desktop at all. `pnpm dev` opens straight into the Phase 4 harness (`src/App.tsx`), which walks the eight fixture cards — one per interesting shape — with Flip and Next buttons at the bottom of the screen.
+
+| Check                                                                                                                                | Status                          |
+| ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------- |
+| Flip, play, pause, restart; audio stops on flip and on advance                                                                       | Pending                         |
+| **Devtools DOM search on an UNFLIPPED card** for the fixture title, artist and year — all three must be absent, not merely invisible | Pending                         |
+| **Scan the QR with a real phone** and confirm it opens the right track in Spotify                                                    | **Verified 2026-08-05 — works** |
+| A preview-less fixture card (card 5, "EARFQUAKE") disables Play/Pause and Restart while Exit and the QR stay live                    | Pending                         |
+| The four year states render distinctly across cards 1–4 (plain / unconfirmed / "check this one yourself" / still looking up)         | Pending                         |
+| **On Android (or Chrome's media panel): start playback and confirm the notification and lock screen show no track title or artist**  | Pending — needs real hardware   |
+
+The last row is the one that matters most and the only leak vector no automated test in this repo can reach: nothing on the page can retract metadata once the OS media session has it. The code side is settled — a test asserts the app never writes `navigator.mediaSession.metadata` — but whether a browser populates that panel from a bare MP3 on its own is a question only a device answers.
+
+**Do not measure timings through `vercel dev`** for any of this. Nothing in the card path needs a function, and the ~4 s per-invocation overhead makes every number meaningless (§4).
 
 ---
 

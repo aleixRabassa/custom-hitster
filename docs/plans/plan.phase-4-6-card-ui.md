@@ -352,41 +352,41 @@ rotation anyway) and turns "leaks nothing" into an assertion a test can make.
 
 ## Documentation Updates
 
-- [ ] `docs/plans/plan.md` — tick Phase 3 (all seven) and Phase 4 (all six); annotate that the
+- [x] `docs/plans/plan.md` — tick Phase 3 (all seven) and Phase 4 (all six); annotate that the
       revealed side's unconfirmed-year marking is implemented here rather than in Phase 6 (same
       component, same file — see decision 8), and that Phase 3's real-deployment verification moved
       to plan 3
-- [ ] `docs/plans/plan.phase-3.md` — tick the outstanding documentation steps; record where the
+- [x] `docs/plans/plan.phase-3.md` — tick the outstanding documentation steps; record where the
       deployment verification went
 - [x] `docs/plans/plan.phase-4-6-card-ui.md` — this file: tick steps as they land, and add an
       Execution Notes section for what differed — **done 2026-08-05**
-- [ ] `AGENTS.md` — current phase 4 (then 5, 6 as plans land); doc-index rows for the three new
+- [x] `AGENTS.md` — current phase 4 (then 5, 6 as plans land); doc-index rows for the three new
       plan files; the new `src/components/` and `src/hooks/` trees under the layout rules; and a new
       **Conventions** bullet: component tests opt into jsdom with a per-file
       `@vitest-environment jsdom` docblock, because the default environment stays `node`
-- [ ] `docs/architecture.md` — describe the `src/` subtree (`game/`, `components/`, `hooks/`); mark
+- [x] `docs/architecture.md` — describe the `src/` subtree (`game/`, `components/`, `hooks/`); mark
       Phase 3 and Phase 4 built in §7; and record the DOM-leak invariant (the revealed side is not
       mounted while unflipped) as an architectural rule rather than a component detail, since it is
       the kind of thing a later refactor would undo for animation smoothness
-- [ ] `docs/toolchain.md` — the three new devDependencies; that the Vitest default environment is
+- [x] `docs/toolchain.md` — the three new devDependencies; that the Vitest default environment is
       still `node` and how a test opts into jsdom; that `@testing-library/jest-dom` was deliberately
       not added, so no `setupFiles` entry exists; and that jsdom does not implement media playback,
       so audio tests stub the element's `play`/`pause`
-- [ ] `docs/development.md` — updated test counts and file counts; the DOM environment; and a
+- [x] `docs/development.md` — updated test counts and file counts; the DOM environment; and a
       manual card-verification checklist (flip, QR scan on a real phone, disabled controls on a
       preview-less card, devtools inspection of the hidden side, and the OS lock-screen check)
-- [ ] `docs/agent_findings.md` — new dated entries (2026-08-05), and **tell the developer** each was
+- [x] `docs/agent_findings.md` — new dated entries (2026-08-05), and **tell the developer** each was
       added, per `AGENTS.md`:
-  - [ ] `backface-visibility` hides a face visually but leaves its text in the DOM — devtools,
+  - [x] `backface-visibility` hides a face visually but leaves its text in the DOM — devtools,
         find-in-page and the accessibility tree all read it, so the revealed side is mounted only
         when flipped. Include the wider rule: every leak audit must cover attributes and accessible
         names, not just visible text
-  - [ ] jsdom does not implement `HTMLMediaElement.play`/`pause` — audio tests must stub them on the
+  - [x] jsdom does not implement `HTMLMediaElement.play`/`pause` — audio tests must stub them on the
         prototype, and an unstubbed call surfaces as a "Not implemented" console error rather than a
         clean failure
-  - [ ] How the DOM environment is selected per file, and why the node default was kept (it is what
+  - [x] How the DOM environment is selected per file, and why the node default was kept (it is what
         makes a DOM API in `shared/` fail)
-  - [ ] The Phase 3 bookkeeping gap itself: code landed in `43e59cc` with plan.md, AGENTS.md and
+  - [x] The Phase 3 bookkeeping gap itself: code landed in `43e59cc` with plan.md, AGENTS.md and
         architecture.md untouched, so three documents disagreed with the tree for a day. Worth
         recording as a process note
 
@@ -405,7 +405,11 @@ rotation anyway) and turns "leaks nothing" into an assertion a test can make.
     restart, and confirm audio stops on flip and on advance.
   - Open devtools on the unflipped card and search the DOM for the fixture title, artist and year —
     all three must be absent.
-  - Scan the QR with a real phone and confirm it opens the right track in Spotify.
+  - Scan the QR with a real phone and confirm it opens the right track in Spotify. — **Verified
+    2026-08-05: works.** So `spotifyTrackUrl()`, the `qrcode` settings (`margin: 1`, error
+    correction `M`, 176 px) and the `<img>` data-URL approach are all confirmed against real
+    hardware and a real Spotify client, which also settles the "is the async paint visibly late"
+    half of the QR open question for at least one device.
   - On an Android device (or Chrome's media panel), start playback and confirm the notification /
     lock-screen entry shows no track title or artist. This is the leak that only shows up on real
     hardware.
@@ -444,10 +448,13 @@ rotation anyway) and turns "leaks nothing" into an assertion a test can make.
       yes, honoured under Vitest 4.1.10.** A throwaway file asserting `document` was defined and
       rendering a component through Testing Library passed, and was deleted. `test.projects` was not
       needed and `vite.config.ts` keeps `environment: 'node'` as its only environment setting.
-- [ ] Which QR rendering form works out best — a data URL in an `<img>` (the plan's choice), an
+- [x] Which QR rendering form works out best — a data URL in an `<img>` (the plan's choice), an
       inline SVG string, or a canvas? The `<img>` avoids `dangerouslySetInnerHTML` and scales with
-      CSS; revisit only if the async paint is visibly late on a slow phone. **Still open — the
-      `<img>` is built and correct, and only a real slow phone can answer this.**
+      CSS; revisit only if the async paint is visibly late on a slow phone. — **Answered 2026-08-05:
+      the `<img>` stays.** A real phone scanned a rendered card and it opened the right track in
+      Spotify, so the data URL, the `margin: 1` quiet zone, error-correction level `M` and the
+      176 px size are all confirmed against real hardware. Nothing in the plan's revisit condition
+      was triggered; inline SVG and canvas stay unbuilt.
 - [ ] Does any target browser populate the OS media-session entry from a bare MP3 without the page
       setting `mediaSession.metadata`? The page title ("Custom Hitster") is safe either way, but
       confirm on a real Android device rather than assuming. **Still open — it is on the manual
@@ -527,7 +534,15 @@ not in the plan.
 20 files**, up from 233 across 14 — 45 new tests, 37 of them in the six new jsdom files. Everything
 is still offline and still runs green with no environment variables set.
 
-**Not yet done, and it needs a person:** the whole Manual Verification list under Testing Strategy —
-scanning the QR with a real phone, the devtools DOM search on an unflipped card, and above all the
-**Android lock-screen check**, which is the one leak vector no automated test in this repo can
-reach. The Documentation Updates checklist below is also outstanding.
+**Manual verification, one of six done.** The **QR scan on a real phone is verified (2026-08-05):** a
+rendered card scanned and opened the right track in Spotify, which confirms `spotifyTrackUrl()`, the
+`qrcode` settings and the `<img>` data-URL approach against real hardware in one go.
+
+Still needing a person: the flip/play/pause/restart pass, the **devtools DOM search on an unflipped
+card**, the preview-less card's disabled controls, the four year states across cards 1–4, and above
+all the **Android lock-screen check** — the one leak vector no automated test in this repo can
+reach, because nothing on the page can retract metadata once the OS media session has it. The
+checklist with its status lives in [`development.md`](../development.md) §5.
+
+The Documentation Updates checklist below was completed on 2026-08-05, including four new
+`agent_findings.md` entries.

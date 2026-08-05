@@ -107,7 +107,33 @@ Notable strictness flags in the root config, inherited by all three others: `str
 - **Vite 8** with `@vitejs/plugin-react` and `@tailwindcss/vite`. The `@/` alias is declared in `vite.config.ts` mirroring `tsconfig.json`, and is for `src/` only.
 - **Tailwind CSS v4, CSS-first.** There is **no `tailwind.config.js`** and one should not be added just to exist. The single `@import 'tailwindcss'` in `src/index.css` is the entry point — it replaces the v3 `@tailwind base/components/utilities` trio. Design tokens (`@theme`) are deferred to Phase 7.
 - **Vitest config lives in the `test` key of `vite.config.ts`**, not a separate `vitest.config.ts`. Split it out only if the app and test configs later need to diverge.
-- **Test environment is `node`**; include pattern is `{src,shared,api}/**/*.{test,spec}.{ts,tsx}`. **`jsdom` and Testing Library are intentionally absent** until the first component test in Phase 4, which is when a DOM environment should be added.
+- **The DEFAULT test environment is `node`**; include pattern is `{src,shared,api}/**/*.{test,spec}.{ts,tsx}`. See below for how a test opts into a DOM.
+
+### The DOM test environment — opt-in per file
+
+Phase 4 added three devDependencies, and nothing else: **`jsdom`** (30.0.1), **`@testing-library/react`** (16.3.2), and **`@testing-library/user-event`** (14.6.3). `user-event` has no importer yet — it is there for Phase 5's pointer sequences, which is the one thing raw `fireEvent` handles badly.
+
+A test that needs a DOM opts in with a docblock as the **first thing in the file**:
+
+```ts
+/**
+ * @vitest-environment jsdom
+ */
+```
+
+Verified honoured under Vitest 4.1.10 on 2026-08-05 with a throwaway probe (the fallback, a two-project `test.projects` config, proved unnecessary and was not added).
+
+**The `node` default is deliberate and should not be globalised to jsdom.** It is half of what keeps `shared/` portable: that tree is compiled into Vercel Functions, so a `document` or `window` reference in it must fail. Under a global jsdom it would pass quietly and only break at deploy time, which is the failure mode this repo works hardest to avoid.
+
+Three consequences worth knowing before writing a component test:
+
+- **`@testing-library/jest-dom` was deliberately not added**, so **no `setupFiles` entry exists** and the `setup` column in Vitest's output is always `0ms`. Its matchers are convenience; `queryBy*` results and plain element properties (`.disabled`, `.getAttribute(…)`) assert the same things. If you find yourself wanting `toBeInTheDocument()`, `expect(queryByText(…)).not.toBeNull()` is the house style.
+- **Testing Library does not clean up between tests here.** Its automatic `afterEach(cleanup)` registers only when Vitest's `globals` are enabled, and this repo imports `describe`/`it`/`expect` from `vitest` explicitly — so **every DOM test file needs its own `afterEach(cleanup)`**. Without it each render accumulates in `document.body` and the next test queries a DOM containing all its predecessors; the symptom ("found multiple elements with the role img") reads as a component bug.
+- **State-changing calls must be wrapped in `act()`.** React 19 does not flush an update made outside `act()` before the test's next line, so a value read straight afterwards is the previous render's.
+
+**jsdom implements no media playback.** `HTMLMediaElement.play()` and `.pause()` exist as stubs that log `Not implemented: HTMLMediaElement.prototype.play` and do nothing, so audio tests stub both on the **prototype** (`vi.spyOn(HTMLMediaElement.prototype, 'play')`). An unstubbed call is console noise plus a test that never becomes "playing" — not a clean failure. jsdom also has no `<canvas>`, which is why `qrcode` is mocked rather than exercised for real.
+
+**DOM tests are visibly slower**: booting jsdom costs several seconds of `environment` time per file, against ~0 ms for a node file. The whole suite still runs in well under a minute.
 
 ---
 
