@@ -208,9 +208,12 @@ Tests are discovered at `{src,shared,api}/**/*.{test,spec}.{ts,tsx}`. The **defa
 
 Six things about the card cannot be asserted from a test, and the last one cannot be checked on a desktop at all. `pnpm dev` opens straight into the Phase 4 harness (`src/App.tsx`), which walks the eight fixture cards — one per interesting shape — with Flip and Next buttons at the bottom of the screen.
 
+**Audio in the harness plays `public/dev-preview.wav`, not the fixture URLs.** The fixture cards carry invented preview URLs, which is right for the unit tests and useless in a browser: nothing loads, `play()` rejects, `useCardAudio` catches it as designed, and the controls look broken while behaving correctly. The harness therefore substitutes a generated 15-second arpeggio — audibly positional, so Restart is distinguishable from Play. `noPreviewCard` keeps its missing preview, because it is the only card that proves the disabled path. See [`agent_findings.md`](./agent_findings.md) (2026-08-05).
+
 | Check                                                                                                                                | Status                          |
 | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------- |
-| Flip, play, pause, restart; audio stops on flip and on advance                                                                       | Pending                         |
+| Flip and Next                                                                                                                        | **Verified 2026-08-05 — works** |
+| Play, pause, restart; audio stops on flip and on advance                                                                             | Pending — retry with the fix    |
 | **Devtools DOM search on an UNFLIPPED card** for the fixture title, artist and year — all three must be absent, not merely invisible | Pending                         |
 | **Scan the QR with a real phone** and confirm it opens the right track in Spotify                                                    | **Verified 2026-08-05 — works** |
 | A preview-less fixture card (card 5, "EARFQUAKE") disables Play/Pause and Restart while Exit and the QR stay live                    | Pending                         |

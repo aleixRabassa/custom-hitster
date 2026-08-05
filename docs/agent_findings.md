@@ -719,3 +719,34 @@ section in `architecture.md`, the reference-client note in `api.md`, and the res
 step at the end of the phase, which is exactly where a step gets dropped when the code is green and
 the phase feels finished. Phase 4 was executed with its doc updates as numbered steps in the same
 plan instead.
+
+## 2026-08-05 — The fixture deck's `previewUrl`s are fake, so audio looks broken in the dev harness
+
+Reported during Phase 4's manual verification: flip and next worked, **Play/Pause and Restart did
+nothing.** Not a bug in `useCardAudio` — the fixture cards in
+`src/components/__fixtures__/cards.ts` carry invented preview URLs like
+`https://p.scdn.co/mp3-preview/bohemian`. A real Spotify preview URL ends in a long hash; these
+resolve to nothing.
+
+**The failure is silent by design, which is what makes it confusing.** The buttons are ENABLED,
+because `canPlay` keys on the presence of a `previewUrl` and one is present. Clicking Play calls
+`element.play()`, the source fails to load, the returned promise rejects, and `useCardAudio` catches
+it — deliberately, because a blocked-autoplay rejection and an `AbortError` from a mid-playback `src`
+swap arrive by the same path and must not surface as unhandled rejections. `isPlaying` goes back to
+false and the button flips back to Play. Working exactly as specified, indistinguishable from broken.
+
+The fake URLs are **correct for the unit tests** and were not changed: those tests stub
+`HTMLMediaElement.play` on the prototype and assert on WHICH url the element was pointed at, so a
+short recognisable value reads better in a failure message, and a fixture that reached the network
+would not be a unit test.
+
+The fix is in the harness, not the fixtures: `src/App.tsx` maps the deck through a substitution that
+swaps every preview for **`public/dev-preview.wav`**, a generated 15-second ascending arpeggio (no
+licensing question, no network, and audibly positional so Restart is distinguishable from Play).
+`noPreviewCard` is deliberately left alone — it is the only card that proves the disabled-controls
+path, and handing it a working URL would delete that check. Both the harness and the asset are Phase
+4 scaffolding; `plan.phase-4-6-screens.md` removes them along with `App.tsx`.
+
+**The general lesson: a fixture value good enough for a stubbed unit test can be actively misleading
+in a browser.** Anything a manual check exercises for real — a media URL, an image source, a link —
+needs a working value in the harness even when the test-side fixture is rightly fake.

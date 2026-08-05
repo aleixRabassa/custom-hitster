@@ -110,60 +110,60 @@ a single press.
 
 ## Implementation Steps
 
-- [ ] **Step 1 — Build `src/game/gestures.ts`** with two pure functions and their tuning constants.
-  - [ ] A commit decision from a drag's horizontal offset and velocity: commit when the offset
+- [x] **Step 1 — Build `src/game/gestures.ts`** with two pure functions and their tuning constants.
+  - [x] A commit decision from a drag's horizontal offset and velocity: commit when the offset
         exceeds a distance threshold **or** the velocity exceeds a flick threshold, so both a slow
         deliberate drag and a fast flick advance. Below both, the caller snaps back
-  - [ ] A tap decision from delta x, delta y, elapsed time, and whether Motion recognised a drag:
+  - [x] A tap decision from delta x, delta y, elapsed time, and whether Motion recognised a drag:
         a tap requires movement under a small radius (both axes), a short duration, and no
         recognised drag. Vertical tolerance matters — a thumb tap on a phone is never perfectly
         still, which is why `overscroll-behavior: none` was set in plan 1
-  - [ ] Export the constants named and documented, with the reasoning for each number in a comment.
+  - [x] Export the constants named and documented, with the reasoning for each number in a comment.
         These are the values the real-device pass will tune, and an unnamed magic number is a value
         nobody dares change later
-  - [ ] Decide direction handling explicitly: **both** left and right advance (there is no previous
+  - [x] Decide direction handling explicitly: **both** left and right advance (there is no previous
         card, and a right-swipe that snapped back would read as a broken gesture). Record it
-- [ ] **Step 2 — Build `useCardGestures.ts`.** Returns the props to spread onto the Motion card
+- [x] **Step 2 — Build `useCardGestures.ts`.** Returns the props to spread onto the Motion card
       (drag axis, constraints, elastic, the `onDragEnd` handler) plus pointer handlers for tap
       detection, and takes `onFlip` / `onNext` callbacks.
-  - [ ] Track pointer-down coordinates and timestamp in a ref; decide on pointer-up via the pure
+  - [x] Track pointer-down coordinates and timestamp in a ref; decide on pointer-up via the pure
         function. Use a ref, not state — a re-render per pointer move would fight the drag
-  - [ ] Mark a recognised drag in a ref on `onDragStart` and clear it after the pointer-up decision,
+  - [x] Mark a recognised drag in a ref on `onDragStart` and clear it after the pointer-up decision,
         so a drag that ends below threshold does not also register as a tap
-  - [ ] On commit: call `onNext`. `GameScreen` already stops audio on card change (plan 1), so
+  - [x] On commit: call `onNext`. `GameScreen` already stops audio on card change (plan 1), so
         nothing extra is needed here — verify that rather than duplicating the call
-  - [ ] Guard against a commit firing twice for one gesture (a fast flick can produce overlapping
+  - [x] Guard against a commit firing twice for one gesture (a fast flick can produce overlapping
         callbacks), and against a commit on the last card racing the transition to `ended`
-- [ ] **Step 3 — Make `Card` draggable.** Convert the flip shell's outer element to a Motion element
+- [x] **Step 3 — Make `Card` draggable.** Convert the flip shell's outer element to a Motion element
       with `drag="x"`, constrained, with snap-back below threshold and an exit animation on commit.
-  - [ ] `touch-action: none` on the draggable surface — a Tailwind utility if one covers it,
+  - [x] `touch-action: none` on the draggable surface — a Tailwind utility if one covers it,
         otherwise a plain rule in `src/index.css`. Without it, the browser's own scroll handling
         steals the gesture on touch devices
-  - [ ] Keep the flip transform and the drag transform from fighting each other: the rotation
+  - [x] Keep the flip transform and the drag transform from fighting each other: the rotation
         belongs to the inner face wrapper (plan 1's structure), the drag to the outer element
-  - [ ] Do not let a drag in progress trigger a flip — that is what the tap decision is for
-- [ ] **Step 4 — Build `CardStack.tsx`.** The current card on top, plus up to 2 backs behind it at
+  - [x] Do not let a drag in progress trigger a flip — that is what the tap decision is for
+- [x] **Step 4 — Build `CardStack.tsx`.** The current card on top, plus up to 2 backs behind it at
       small offsets and scales to suggest a deck.
-  - [ ] Backs render **no card content, no QR, and no audio** — a placeholder back face only. They
+  - [x] Backs render **no card content, no QR, and no audio** — a placeholder back face only. They
         exist to be seen, not read
-  - [ ] Wrap the top card in `AnimatePresence` so the committed card animates out while the next
+  - [x] Wrap the top card in `AnimatePresence` so the committed card animates out while the next
         card takes its place, keyed by card id
-  - [ ] Handle the tail of the deck: with one card left there are no backs, and the stack must not
+  - [x] Handle the tail of the deck: with one card left there are no backs, and the stack must not
         render a phantom back for a card that does not exist. `noUncheckedIndexedAccess` will make
         this explicit
-  - [ ] Handle the duplicate-id case from the fixture deck: a playlist may legitimately contain the
+  - [x] Handle the duplicate-id case from the fixture deck: a playlist may legitimately contain the
         same track twice, so an `AnimatePresence` key of the bare card id can collide between
         adjacent cards. Key on id plus deck index
-- [ ] **Step 5 — Add keyboard controls to `GameScreen`**: Space flips, → advances.
-  - [ ] Attach at the window level in an effect, cleaned up on unmount
-  - [ ] `preventDefault()` on Space so the page does not scroll
-  - [ ] Ignore the event when the active element is an input, textarea, or has `contenteditable` —
+- [x] **Step 5 — Add keyboard controls to `GameScreen`**: Space flips, → advances.
+  - [x] Attach at the window level in an effect, cleaned up on unmount
+  - [x] `preventDefault()` on Space so the page does not scroll
+  - [x] Ignore the event when the active element is an input, textarea, or has `contenteditable` —
         plan 3 adds a text input to the landing screen and this handler must not eat its spaces
-  - [ ] **Ignore Space when the active element is a button** — otherwise one press both activates
+  - [x] **Ignore Space when the active element is a button** — otherwise one press both activates
         the focused Play/Pause button and flips the card. Consider moving focus off the control
         after a click as a belt-and-braces measure
-  - [ ] Ignore auto-repeat (held-key) events, so leaning on → does not deal the whole deck
-  - [ ] Only handle keys while the game is actually playable; the container passes that in
+  - [x] Ignore auto-repeat (held-key) events, so leaning on → does not deal the whole deck
+  - [x] Only handle keys while the game is actually playable; the container passes that in
 - [ ] **Step 6 — Verify on real devices.** `plan.md` says plainly that touch is where this breaks,
       and jsdom cannot substitute. Use `pnpm dev --host` over the LAN or a preview deploy.
   - [ ] iOS Safari: tap-to-flip reliability, swipe-to-advance, no rubber-band scroll or
@@ -178,7 +178,7 @@ a single press.
   - [ ] Check the layout does not shift on the iOS Safari toolbar show/hide — the card is
         viewport-sized, and `dvh` behaves differently from `vh` there. Full responsive work is
         Phase 7, but a card that cannot be reached is a Phase 5 problem
-- [ ] **Step 7 — Run the full gate**: `pnpm typecheck && pnpm lint && pnpm test && pnpm build`.
+- [x] **Step 7 — Run the full gate**: `pnpm typecheck && pnpm lint && pnpm test && pnpm build`.
       Note `eslint-plugin-react-hooks` is active on `src/**` and will flag a ref or callback used in
       an effect without the right dependencies.
 
@@ -188,42 +188,42 @@ a single press.
 
 **Pure gesture decisions (node environment, `src/game/gestures.test.ts`) — the real coverage:**
 
-- [ ] `should commit when the horizontal offset exceeds the distance threshold` — covers the slow
+- [x] `should commit when the horizontal offset exceeds the distance threshold` — covers the slow
       deliberate drag
-- [ ] `should commit when velocity exceeds the flick threshold even with a small offset` — covers
+- [x] `should commit when velocity exceeds the flick threshold even with a small offset` — covers
       the fast flick
-- [ ] `should not commit below both thresholds` — covers snap-back
-- [ ] `should commit for a left swipe and for a right swipe` — covers the both-directions decision
-- [ ] `should treat exactly-at-threshold as committed` — pins the boundary so a later refactor
+- [x] `should not commit below both thresholds` — covers snap-back
+- [x] `should commit for a left swipe and for a right swipe` — covers the both-directions decision
+- [x] `should treat exactly-at-threshold as committed` — pins the boundary so a later refactor
       cannot flip it silently
-- [ ] `should recognise a still, brief pointer sequence as a tap` — covers tap-to-flip
-- [ ] `should not recognise a sequence as a tap when a drag was recognised` — the core
+- [x] `should recognise a still, brief pointer sequence as a tap` — covers tap-to-flip
+- [x] `should not recognise a sequence as a tap when a drag was recognised` — the core
       disambiguation
-- [ ] `should not recognise a long press as a tap` — covers the duration bound
-- [ ] `should tolerate small vertical movement in a tap` — covers the thumb-tap-is-never-still case
-- [ ] `should not recognise large vertical movement as a tap` — covers the other side of that bound
-- [ ] `should not recognise a horizontal move beyond the tap radius as a tap` — the case that
+- [x] `should not recognise a long press as a tap` — covers the duration bound
+- [x] `should tolerate small vertical movement in a tap` — covers the thumb-tap-is-never-still case
+- [x] `should not recognise large vertical movement as a tap` — covers the other side of that bound
+- [x] `should not recognise a horizontal move beyond the tap radius as a tap` — the case that
       would otherwise reveal the answer the player was about to guess
 
 **Keyboard and wiring (jsdom, `src/components/GameScreen.test.tsx`):**
 
-- [ ] `should flip on Space` — covers the keyboard flip
-- [ ] `should advance on ArrowRight` — covers the keyboard advance
-- [ ] `should prevent default on Space` — covers page-scroll suppression
-- [ ] `should ignore Space while focus is in a text input` — covers plan 3's landing input
-- [ ] `should ignore Space while focus is on a button` — covers the double-action bug on Play/Pause
-- [ ] `should ignore auto-repeat key events` — covers a held → dealing the deck
-- [ ] `should not handle keys when the game is not playable` — covers the guard
-- [ ] `should remove the key handler on unmount` — covers the effect cleanup
+- [x] `should flip on Space` — covers the keyboard flip
+- [x] `should advance on ArrowRight` — covers the keyboard advance
+- [x] `should prevent default on Space` — covers page-scroll suppression
+- [x] `should ignore Space while focus is in a text input` — covers plan 3's landing input
+- [x] `should ignore Space while focus is on a button` — covers the double-action bug on Play/Pause
+- [x] `should ignore auto-repeat key events` — covers a held → dealing the deck
+- [x] `should not handle keys when the game is not playable` — covers the guard
+- [x] `should remove the key handler on unmount` — covers the effect cleanup
 
 **Stack rendering (jsdom, `src/components/CardStack.test.tsx`):**
 
-- [ ] `should render the current card on top` — covers the basic case
-- [ ] `should render up to two backs behind the current card` — covers the stacked visual
-- [ ] `should render no backs on the last card` — covers the tail of the deck
-- [ ] `should not render title, artist, year, or a QR code for the backs` — the leak-and-cost
+- [x] `should render the current card on top` — covers the basic case
+- [x] `should render up to two backs behind the current card` — covers the stacked visual
+- [x] `should render no backs on the last card` — covers the tail of the deck
+- [x] `should not render title, artist, year, or a QR code for the backs` — the leak-and-cost
       decision, and the assertion that stops a later "just reuse Card for the backs" refactor
-- [ ] `should give adjacent duplicate-id cards distinct keys` — covers the duplicate-track case,
+- [x] `should give adjacent duplicate-id cards distinct keys` — covers the duplicate-track case,
       using the fixture deck's duplicate pair
 
 **Not covered by automated tests, deliberately:** the drag path itself. Motion's drag reads element

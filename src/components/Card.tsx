@@ -29,15 +29,33 @@
  * library, and these compile to exactly that -- no custom stylesheet, and no `@theme` tokens,
  * which are Phase 7's job.
  *
- * **This component does not flip itself on click.** Distinguishing a tap from a drag is
- * plan 2's problem and needs the gesture state that plan 2 owns, so the trigger is the
- * caller's to supply.
+ * **This component does not decide what a flip is.** Distinguishing a tap from a drag is
+ * Phase 5's problem and lives in `src/game/gestures.ts` behind `useCardGestures`; this file
+ * receives the resulting handlers as `gestureProps` and spreads them. `onFlip` remains part
+ * of the contract for the same reason it always was -- a caller must not be able to forget
+ * that a card needs a flip trigger from somewhere.
+ *
+ * ## Two transforms, two elements (Phase 5)
+ *
+ * The drag lives on the OUTER element and the flip rotation on the inner face wrapper, and
+ * they must stay that way. Both are CSS transforms on the same axis of the same box if they
+ * share an element: Motion writes `transform: translateX(...)` from the drag while Tailwind's
+ * `rotate-y-180` writes its own, and the last writer wins -- so a mid-flip drag would snap
+ * the rotation away, or the flip would cancel the drag offset. Separate elements compose
+ * instead of competing.
  */
+
+import { motion } from 'motion/react';
 
 import { CardHiddenSide } from './CardHiddenSide';
 import { CardRevealSide } from './CardRevealSide';
 import type { CardAudioControls } from '../hooks/useCardAudio';
+import type { CardGestureProps } from '../hooks/useCardGestures';
+import type { CommitDirection } from '../game/gestures';
 import type { Card as CardData } from '../../shared/types';
+
+/** How far a committed card travels as it leaves, in CSS pixels. Comfortably off-screen. */
+const EXIT_DISTANCE_PX = 600;
 
 export interface CardProps {
   card: CardData;
@@ -48,17 +66,53 @@ export interface CardProps {
   /**
    * Part of the contract, and deliberately NOT read in this file.
    *
-   * The prop exists so that plan 2 can attach it to the pointer handler it builds without
-   * changing this component's signature, and so a caller cannot forget that a card needs a
-   * flip trigger from somewhere. In Phase 4 the trigger is a button in `App.tsx`'s harness.
+   * Phase 5 routes the flip through `gestureProps.onPointerUp` instead, because deciding
+   * whether a pointer sequence was a tap needs state this component has no business owning.
+   * The prop stays so that a caller cannot wire up a card without saying what a flip does --
+   * and so `App.tsx`'s harness buttons keep working.
    */
   onFlip: () => void;
   onExit: () => void;
+  /**
+   * From `useCardGestures`. Optional: `Card` renders and flips perfectly well without it,
+   * which is what lets the Phase 4 card tests stay free of gesture setup.
+   */
+  gestureProps?: CardGestureProps;
+  /**
+   * Which way this card leaves when it is committed, from `useCardGestures`.
+   *
+   * The card exits the way it was thrown rather than always the same way. Only meaningful
+   * inside an `AnimatePresence` (see `CardStack`); harmless elsewhere.
+   */
+  exitDirection?: CommitDirection;
 }
 
-export function Card({ card, isFlipped, isYearPending, audio, onExit }: CardProps) {
+export function Card({
+  card,
+  isFlipped,
+  isYearPending,
+  audio,
+  onExit,
+  gestureProps,
+  exitDirection = 'left',
+}: CardProps) {
   return (
-    <div className="perspective-distant h-[28rem] w-72">
+    /*
+      `touch-none` is `touch-action: none`, and on a touch device it is the difference between
+      a working swipe and no swipe at all: without it the browser claims the gesture for its
+      own scroll handling and Motion never sees the pointer move. Paired with the
+      `overscroll-behavior: none` in `src/index.css`, which stops the vertical component of a
+      swipe from triggering pull-to-refresh.
+    */
+    <motion.div
+      className="perspective-distant h-[28rem] w-72 touch-none"
+      {...gestureProps}
+      exit={{
+        x: exitDirection === 'left' ? -EXIT_DISTANCE_PX : EXIT_DISTANCE_PX,
+        opacity: 0,
+        transition: { duration: 0.25 },
+      }}
+    >
       <div
         data-testid="card-inner"
         data-flipped={isFlipped ? 'true' : 'false'}
@@ -81,6 +135,6 @@ export function Card({ card, isFlipped, isYearPending, audio, onExit }: CardProp
           {isFlipped ? <CardRevealSide card={card} isYearPending={isYearPending} /> : null}
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }

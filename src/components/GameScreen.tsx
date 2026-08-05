@@ -1,17 +1,17 @@
 /**
- * The card's host: one `<audio>` element for the whole session, one card, and the wiring
- * between them.
+ * The card's host: one `<audio>` element for the whole session, the stacked deck, and the
+ * keyboard controls.
  *
- * It is the integration seam of Phase 4 and stays PRESENTATIONAL: every callback arrives as a
- * prop and nothing here calls `useGameSession()`. Plan 3 builds the container that does, and
+ * It is the integration seam of Phases 4-5 and stays PRESENTATIONAL: every callback arrives as
+ * a prop and nothing here calls `useGameSession()`. Plan 3 builds the container that does, and
  * adds the HUD and the notices to this file.
  *
  * ## The audio element lives here, not in the card
  *
  * `useCardAudio` explains the reasoning in full; the short version is that a single element
  * makes "a track never bleeds into the next card and never doubles up" structurally
- * impossible rather than a rule to enforce. Plan 2 renders 2-3 stacked cards at once, and
- * per-card elements would overlap and play together in exactly that window.
+ * impossible rather than a rule to enforce. `CardStack` renders 3 cards at once, which is
+ * exactly the window where per-card elements would overlap and play together.
  *
  * ## Two stop rules, both effects
  *
@@ -19,30 +19,72 @@
  * obvious of the two and it is Phase 4's own: once the answer is on screen the preview has no
  * job left, and leaving it running means the next card starts against the previous track's
  * audio if the player advances quickly.
+ *
+ * The card-change rule is also what covers a SWIPE, which is why `useCardGestures` does not
+ * stop audio itself: one owner of the stop rule, not two.
  */
 
 import { useEffect, useRef } from 'react';
 
-import { Card } from './Card';
+import { CardStack } from './CardStack';
 import { useCardAudio } from '../hooks/useCardAudio';
 import type { Card as CardData } from '../../shared/types';
 
+/** `KeyboardEvent.key` for the flip. A literal because `'Space'` is the *code*, not the key. */
+const FLIP_KEY = ' ';
+
+/** `KeyboardEvent.key` for advancing. `ArrowLeft` is deliberately unhandled -- see below. */
+const NEXT_KEY = 'ArrowRight';
+
 export interface GameScreenProps {
-  card: CardData;
+  /** The shuffled deck, straight from `GameState.deck`. */
+  deck: CardData[];
+  /** Index of the current card, straight from `GameState.currentIndex`. */
+  currentIndex: number;
   isFlipped: boolean;
   /** True only for `year === undefined` — from `isCurrentYearPending`. */
   isYearPending: boolean;
   onFlip: () => void;
-  /**
-   * Part of the contract and not read in Phase 4, exactly like `Card.onFlip`: advancing is a
-   * swipe, and plan 2 owns gestures. Declared now so plan 2 adds a handler rather than a prop.
-   */
   onNext: () => void;
   onExit: () => void;
+  /**
+   * Whether the session can actually be played right now -- `status === 'playing'`.
+   *
+   * Gates both the gestures and the key handler. The container owns the answer; deriving it
+   * here would mean this component knowing about `GameStatus`, which is exactly the session
+   * knowledge it is supposed not to have.
+   */
+  isPlayable: boolean;
 }
 
-export function GameScreen({ card, isFlipped, isYearPending, onFlip, onExit }: GameScreenProps) {
-  const audio = useCardAudio(card.previewUrl);
+/**
+ * Is focus somewhere that owns its own keystrokes?
+ *
+ * Plan 3 puts a playlist-URL input on the landing screen, and this handler must not eat its
+ * spaces. `isContentEditable` is checked as well as the tag names because a rich-text host is
+ * a `div` as far as `tagName` is concerned.
+ */
+function isTextEntryElement(element: Element | null): boolean {
+  if (!(element instanceof HTMLElement)) return false;
+  if (element.isContentEditable) return true;
+
+  return (
+    element.tagName === 'INPUT' || element.tagName === 'TEXTAREA' || element.tagName === 'SELECT'
+  );
+}
+
+export function GameScreen({
+  deck,
+  currentIndex,
+  isFlipped,
+  isYearPending,
+  onFlip,
+  onNext,
+  onExit,
+  isPlayable,
+}: GameScreenProps) {
+  const currentCard = deck[currentIndex];
+  const audio = useCardAudio(currentCard?.previewUrl);
   const { audioRef, stop } = audio;
 
   /**
@@ -66,11 +108,79 @@ export function GameScreen({ card, isFlipped, isYearPending, onFlip, onExit }: G
    * Belt and braces with `useCardAudio`'s own src-swap effect, and deliberately so: that
    * effect keys on `previewUrl`, and two different cards can share one (a duplicated track in
    * the deck -- which Phase 3 handles explicitly because playlists really do that). Keying on
-   * the ID here is what covers that case.
+   * the ID here is what covers that case, and it is also what makes a swipe stop the audio
+   * without `useCardGestures` having to know about audio at all.
    */
+  const cardId = currentCard?.id;
   useEffect(() => {
     stop();
-  }, [card.id, stop]);
+  }, [cardId, stop]);
+
+  /**
+   * Keyboard controls: Space flips, → advances.
+   *
+   * ===================================================================
+   *  A WINDOW-LEVEL HANDLER, NOT A HANDLER ON A FOCUSED ELEMENT.
+   *
+   *  The card is not a control and nobody's hands are on it -- a player
+   *  on a laptop is sitting back. A handler bound to a focusable card
+   *  would be dead for as long as focus was anywhere else, which is most
+   *  of the time, and "the keyboard works only after you click the card
+   *  first" is indistinguishable from broken.
+   *
+   *  The cost of window level is that this handler sees keystrokes meant
+   *  for other things, hence the three guards below. Each one is a real
+   *  bug, not defensive padding:
+   *
+   *  1. AUTO-REPEAT. Leaning on → deals the entire deck, and the deck is
+   *     one-directional -- there is no way back from that.
+   *  2. TEXT ENTRY. Plan 3's landing input would lose every space to the
+   *     flip handler, so typing a playlist URL would silently flip cards.
+   *  3. SPACE ON A FOCUSED BUTTON. The subtle one, and invisible until
+   *     someone plays with a keyboard after clicking Play: Space is how a
+   *     button is activated, so one press would BOTH toggle audio and
+   *     flip the card -- revealing the answer as a side effect of
+   *     pressing play.
+   * ===================================================================
+   */
+  useEffect(() => {
+    if (!isPlayable) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Guard 1. Held keys.
+      if (event.repeat) return;
+
+      const active = document.activeElement;
+
+      // Guard 2. Applies to both keys: an input is entitled to every keystroke it gets.
+      if (isTextEntryElement(active)) return;
+
+      if (event.key === FLIP_KEY) {
+        // Guard 3. Space only -- ArrowRight does nothing to a focused button, so there is no
+        // double-action to avoid there. Focus is deliberately NOT stolen from the button
+        // after a click: silently moving a keyboard user's focus is a worse bug than the one
+        // it would paper over, and this guard already closes it.
+        if (active instanceof HTMLButtonElement) return;
+
+        // Space scrolls the page by default, and the card is viewport-sized.
+        event.preventDefault();
+        onFlip();
+        return;
+      }
+
+      if (event.key === NEXT_KEY) {
+        onNext();
+      }
+
+      // ArrowLeft is intentionally unhandled. There is no previous card -- the deck is
+      // one-directional by design -- so the safe response to a player pressing it is nothing
+      // at all. A "no going back" hint is a Phase 7 call.
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isPlayable, onFlip, onNext]);
 
   const handleExit = () => {
     // Stop BEFORE handing control away: `onExit` unmounts this screen in plan 3, and a
@@ -89,13 +199,16 @@ export function GameScreen({ card, isFlipped, isYearPending, onFlip, onExit }: G
       */}
       <audio ref={audioRef} preload="none" data-testid="session-audio" />
 
-      <Card
-        card={card}
+      <CardStack
+        deck={deck}
+        currentIndex={currentIndex}
         isFlipped={isFlipped}
         isYearPending={isYearPending}
         audio={audio}
         onFlip={onFlip}
+        onNext={onNext}
         onExit={handleExit}
+        isEnabled={isPlayable}
       />
     </main>
   );

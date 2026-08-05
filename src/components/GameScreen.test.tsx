@@ -10,7 +10,7 @@
  * not about whether a function exists.
  */
 
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GameScreen } from './GameScreen';
@@ -24,19 +24,30 @@ vi.mock('qrcode', () => ({ toDataURL: toDataURLMock }));
 
 let calls: string[] = [];
 
+/**
+ * The helper still speaks in terms of ONE card, even though `GameScreen` now takes a deck and
+ * an index (Phase 5's stack needs to see what is coming next). It wraps the card in a
+ * single-card deck: every assertion below is about the audio element, and a one-card deck is
+ * the shape that renders no backs and so keeps those assertions about exactly one thing.
+ */
 function renderScreen(props: {
   card?: typeof highConfidenceCard;
   isFlipped?: boolean;
   onExit?: () => void;
+  onFlip?: () => void;
+  onNext?: () => void;
+  isPlayable?: boolean;
 }) {
   const element = (
     <GameScreen
-      card={props.card ?? highConfidenceCard}
+      deck={[props.card ?? highConfidenceCard]}
+      currentIndex={0}
       isFlipped={props.isFlipped ?? false}
       isYearPending={false}
-      onFlip={vi.fn()}
-      onNext={vi.fn()}
+      onFlip={props.onFlip ?? vi.fn()}
+      onNext={props.onNext ?? vi.fn()}
       onExit={props.onExit ?? vi.fn()}
+      isPlayable={props.isPlayable ?? true}
     />
   );
 
@@ -145,5 +156,188 @@ describe('GameScreen', () => {
     render(renderScreen({}));
 
     expect(screen.getByTestId('session-audio').getAttribute('preload')).toBe('none');
+  });
+});
+
+/**
+ * Phase 5's keyboard controls.
+ *
+ * These are the ONLY gesture tests that can exist in jsdom. Motion's drag reads element
+ * geometry jsdom does not compute, so a simulated pointer sequence would prove nothing about
+ * the swipe; the thresholds are covered in `src/game/gestures.test.ts` and the drag itself on
+ * real devices. Keyboard handling has no such problem -- it is a window listener and a few
+ * conditionals, and every one of those conditionals is a real bug it prevents.
+ *
+ * Events are dispatched at `window` rather than at an element, because that is where the
+ * handler lives: the card is not a control and nobody's hands are on it, so a focus-dependent
+ * handler would be dead most of the time.
+ */
+describe('GameScreen keyboard controls', () => {
+  beforeEach(() => {
+    toDataURLMock.mockReset();
+    toDataURLMock.mockImplementation((text) =>
+      Promise.resolve(`data:image/png;base64,QR(${text})`),
+    );
+
+    // jsdom implements neither method, and `GameScreen`'s stop-on-mount effect calls `pause()`
+    // for every render below. Stubbed only to keep "Not implemented" out of the output --
+    // nothing here asserts on audio, which is what the first describe block is for.
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+    vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  it('should flip on Space', () => {
+    const onFlip = vi.fn();
+    render(renderScreen({ onFlip }));
+
+    fireEvent.keyDown(window, { key: ' ' });
+
+    expect(onFlip).toHaveBeenCalledTimes(1);
+  });
+
+  it('should advance on ArrowRight', () => {
+    const onNext = vi.fn();
+    render(renderScreen({ onNext }));
+
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+
+    expect(onNext).toHaveBeenCalledTimes(1);
+  });
+
+  it('should prevent default on Space', () => {
+    // Space scrolls the page by default and the card is viewport-sized, so an unprevented
+    // press would flip the card and scroll it out of view in the same gesture.
+    // `fireEvent` returns false when the event was cancelled.
+    const onFlip = vi.fn();
+    render(renderScreen({ onFlip }));
+
+    const wasNotCancelled = fireEvent.keyDown(window, { key: ' ' });
+
+    expect(wasNotCancelled).toBe(false);
+    expect(onFlip).toHaveBeenCalledTimes(1);
+  });
+
+  it('should not prevent default on ArrowRight', () => {
+    // The converse, so the `preventDefault` above is provably scoped to Space rather than
+    // applied to everything the handler sees. ArrowRight has no default worth suppressing.
+    render(renderScreen({}));
+
+    expect(fireEvent.keyDown(window, { key: 'ArrowRight' })).toBe(true);
+  });
+
+  it('should ignore Space while focus is in a text input', () => {
+    // Plan 3 puts a playlist-URL input on the landing screen. Without this guard, typing a URL
+    // with a space in it would silently flip cards -- and the input would lose the space.
+    const onFlip = vi.fn();
+    render(renderScreen({ onFlip }));
+
+    const input = document.createElement('input');
+    document.body.append(input);
+    input.focus();
+
+    try {
+      fireEvent.keyDown(window, { key: ' ' });
+      expect(onFlip).not.toHaveBeenCalled();
+    } finally {
+      input.remove();
+    }
+  });
+
+  it('should ignore Space while focus is on a button', () => {
+    // ===================================================================
+    //  THE DOUBLE-ACTION BUG, and the reason it is worth a test: it is
+    //  invisible until someone plays with a keyboard after clicking Play.
+    //
+    //  Space is how a focused button is activated. Without this guard one
+    //  press would BOTH toggle the audio and flip the card -- so pressing
+    //  play would reveal the answer as a side effect.
+    // ===================================================================
+    const onFlip = vi.fn();
+    render(renderScreen({ onFlip }));
+
+    screen.getByRole('button', { name: 'Play' }).focus();
+
+    fireEvent.keyDown(window, { key: ' ' });
+
+    expect(onFlip).not.toHaveBeenCalled();
+  });
+
+  it('should still advance on ArrowRight while focus is on a button', () => {
+    // The button guard is scoped to Space on purpose: ArrowRight does nothing to a focused
+    // button, so there is no double-action, and disabling the advance after the player has
+    // touched a control would be its own small hostility.
+    const onNext = vi.fn();
+    render(renderScreen({ onNext }));
+
+    screen.getByRole('button', { name: 'Play' }).focus();
+
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+
+    expect(onNext).toHaveBeenCalledTimes(1);
+  });
+
+  it('should ignore auto-repeat key events', () => {
+    // Leaning on the arrow key would otherwise deal the entire deck, and the deck is
+    // one-directional -- there is no way back from that.
+    const onFlip = vi.fn();
+    const onNext = vi.fn();
+    render(renderScreen({ onFlip, onNext }));
+
+    fireEvent.keyDown(window, { key: 'ArrowRight', repeat: true });
+    fireEvent.keyDown(window, { key: ' ', repeat: true });
+
+    expect(onNext).not.toHaveBeenCalled();
+    expect(onFlip).not.toHaveBeenCalled();
+  });
+
+  it('should not handle keys when the game is not playable', () => {
+    // `preparing` and `ended` both land here. Advancing past the end of the deck, or flipping
+    // a card that has not been dealt yet, are both states the reducer should never be asked
+    // about in the first place.
+    const onFlip = vi.fn();
+    const onNext = vi.fn();
+    render(renderScreen({ onFlip, onNext, isPlayable: false }));
+
+    fireEvent.keyDown(window, { key: ' ' });
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+
+    expect(onFlip).not.toHaveBeenCalled();
+    expect(onNext).not.toHaveBeenCalled();
+  });
+
+  it('should ignore ArrowLeft', () => {
+    // There is no previous card -- the deck is one-directional by design -- so the safe
+    // response to a player pressing it is nothing at all. Asserted rather than left implicit,
+    // because "back" is exactly the behaviour someone will later add without reading Phase 3.
+    const onFlip = vi.fn();
+    const onNext = vi.fn();
+    render(renderScreen({ onFlip, onNext }));
+
+    fireEvent.keyDown(window, { key: 'ArrowLeft' });
+
+    expect(onFlip).not.toHaveBeenCalled();
+    expect(onNext).not.toHaveBeenCalled();
+  });
+
+  it('should remove the key handler on unmount', () => {
+    // A window listener outlives the component that added it. Plan 3 unmounts this screen on
+    // Exit and on the end of the deck, and a surviving handler would keep dispatching FLIP and
+    // NEXT into a session that has already ended.
+    const onFlip = vi.fn();
+    const onNext = vi.fn();
+    const { unmount } = render(renderScreen({ onFlip, onNext }));
+
+    unmount();
+
+    fireEvent.keyDown(window, { key: ' ' });
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+
+    expect(onFlip).not.toHaveBeenCalled();
+    expect(onNext).not.toHaveBeenCalled();
   });
 });
