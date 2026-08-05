@@ -409,25 +409,46 @@ guess is not an improvement on the first. The arithmetic is recorded in `src/gam
       offered at all, lives there too (post-reveal, so it spoils nothing) rather than in a pre-Start list.
       A load-time notice may say "some years could not be confirmed" **without naming tracks or years** —
       count only.
-- [x] **Follow-on:** what happens to a `confidence: 'none'` card (no year at all)? — **Resolved 2026-08-05:
+- [x] **Follow-on:** what happens to a `confidence: 'none'` card (no year at all)? — ~~**Resolved 2026-08-05:
       it stays in the deck and is fully playable**, which is also what §5's Phase 2 completion note had
       already decided; the fork above was a contradiction with it rather than a genuinely open choice.
       The revealed side renders the third state of the year slot — a "check this one yourself" prompt —
       and nothing is removed from the deck and no count-only notice is needed. Same principle as an
-      unplayable track: the QR always works, so the card still plays. Phase 3 verified it 15 times over
-      on a real 42-card deck (a third of an ordinary playlist resolves to `none`), and Phase 4 builds
+      unplayable track: the QR always works, so the card still plays.~~ Phase 3 verified it 15 times over
+      on a real 42-card deck (a third of an ordinary playlist resolves to `none`), and Phase 4 built
       the display as state 3 of the three-state year slot.
+      **REVERSED 2026-08-05 by the developer, after playing it: a card with no year is REMOVED from the
+      deck.** A Hitster card is placed on a timeline by its year, so a card without one has nothing to
+      play — the QR working is not enough to make it a card, which is where the "same principle as an
+      unplayable track" reasoning above went wrong. **Low confidence is unaffected** and stays in the
+      deck, flagged unconfirmed on the revealed side: `low` carries a real year, found with the
+      release-group filters dropped. Three consequences, all of them live: the deck **shrinks by roughly
+      a third** on a real playlist and the HUD's "cards left" therefore falls as well as rising; the
+      card-1 gate had to be rephrased from "the resolved card was card 1" to "the first card has a year",
+      because card 1 resolving to `null` now leaves; and `YEAR_RESOLVED` carries no reason, so a card
+      lost to a network fault is dropped exactly like one MusicBrainz has never heard of — deliberately,
+      since the alternative puts an unplayable card back on the table. The one blanket failure is
+      exempt: `not-configured` dispatches `YEAR_LOOKUPS_UNAVAILABLE` instead of a hundred nulls, so a
+      deployment with no `MUSICBRAINZ_USER_AGENT` still yields a **yearless deck rather than an empty
+      one**. Implemented in `gameReducer`'s `YEAR_RESOLVED` branch, and filtered at all three entry
+      points (`START`, `YEAR_RESOLVED`, `RESUME`) so no card in a live deck can hold `year: null`.
+      `CardRevealSide` keeps its third state as the shape it renders for a save written before the
+      reversal.
 - [x] **Should Restart keep the same seed (a rematch) or take a fresh one?** — **Resolved 2026-08-05 by
       the developer: a fresh shuffle.** Restart re-deals `state.deck` with no seed argument, so `START`
       generates a new one and the order genuinely changes; the end screen says "Same tracks, new order"
       so nobody has to guess. It re-deals from the DECK rather than from a remembered fetch result,
       which means it works after a resumed session too and costs **zero** year lookups — the resolved
       years travel with the cards. A same-seed rematch stays one argument away if it is ever wanted.
-- [x] **Should the preparing screen show a resolved/total count, or only a status line?** — **Resolved
+- [x] **Should the preparing screen show a resolved/total count, or only a status line?** — ~~**Resolved
       2026-08-05 by the developer: show the count.** It is leak-free (a number names no track) and it is
-      honest about progress on a cold deck. The screen also states that the game starts as soon as the
-      first card is ready, because without that the count reads as a progress bar that must reach the
-      total, and a one-second wait then feels stalled at "3 of 42".
+      honest about progress on a cold deck.~~ **Reversed the same day, by the developer, after seeing it:
+      only the status line.** "0 of 100 years found" read as a progress bar that had to fill before the
+      game could start, which is the opposite of what the gate does — it waits for ONE lookup. The line
+      that says so ("the game starts as soon as the first card is ready") stays and is now the whole of
+      the screen's account of the wait; `PreparingScreen` takes no count props at all, and
+      `resolvedCount` stays exported beside the reducer with its tests for whenever a progress readout
+      is wanted again.
 - [x] **What should the end screen report as "cards played" if the player exits early?** — **Resolved
       2026-08-05: the case cannot arise.** The container routes an Exit to the landing screen, and only a
       deck that ran out reaches the end screen, so "cards played" is always the whole deck. Confirmed

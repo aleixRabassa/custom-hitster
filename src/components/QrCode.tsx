@@ -32,6 +32,10 @@
  * The consequence to preserve: `size` is what the cache key and the generation counter are built
  * from, and `displaySize` must never enter either, or the two come back together.
  *
+ * **The image is not draggable.** A native image drag pre-empts pointer events, so pressing the
+ * QR and moving would lift a ghost of the code instead of swiping the card -- over most of the
+ * hidden face's area. See the attribute's own comment below.
+ *
  * **A superseded result is dropped.** `qrcode` resolves a promise; a fast card advance can
  * therefore resolve the PREVIOUS card's code after the new URL is already on screen. The
  * generation counter below is what stops that from painting the wrong track's code, which
@@ -159,8 +163,27 @@ export function QrCode({ url, size, displaySize, alt = DEFAULT_ALT }: QrCodeProp
       alt={alt}
       width={size}
       height={size}
+      /*
+        ===========================================================================
+         `draggable={false}` IS A SWIPE FIX, NOT A STYLE CHOICE.
+
+         An `<img>` is natively draggable, and the browser's native image drag wins
+         over pointer events: pressing on the QR and moving lifts a translucent
+         ghost of the code, `pointercancel` fires, and the card never moves. Since
+         the QR fills most of the hidden face, that is most of the card's swipe
+         surface -- the deck reads as broken exactly where a player is most likely
+         to put a thumb.
+
+         `select-none` closes the same hole for the mouse: without it a drag across
+         the card starts a text selection instead, which also steals the gesture.
+
+         Neither has any effect on scanning -- a phone camera reads pixels, not the
+         drag API.
+        ===========================================================================
+      */
+      draggable={false}
       style={{ width: renderedSize, height: renderedSize }}
-      className="rounded bg-white"
+      className="rounded bg-white select-none"
     />
   );
 }

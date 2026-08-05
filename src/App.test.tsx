@@ -243,6 +243,81 @@ describe('App', () => {
     expect(screen.queryByTestId('hud')).toBeNull();
   });
 
+  it('should end the session when every card turns out to have no year', async () => {
+    // ===================================================================
+    //  THE REVERSAL, END TO END THROUGH THE CONTAINER.
+    //
+    //  A yearless card is dropped from the deck (2026-08-05), so a deck of
+    //  tracks MusicBrainz knows nothing about drains to nothing. The reducer
+    //  answers `ended`; what this pins is that the container then shows a
+    //  SCREEN rather than hanging on the preparing spinner -- which is what
+    //  it would do if the gate were still waiting on card 1's lookup, since
+    //  every lookup here completes and every card leaves.
+    // ===================================================================
+    stubDroppingYearApi();
+    renderApp(playlistFetch(200, playlistResult()));
+
+    startPlaylist();
+
+    expect(await screen.findByText(/deck finished/i)).not.toBeNull();
+    expect(screen.queryByTestId('hud')).toBeNull();
+    // And nothing about the tracks it dropped is on screen.
+    for (const card of UNRESOLVED_DECK) {
+      expect(screen.queryByText(card.title)).toBeNull();
+    }
+  });
+
+  it('should keep playing the cards that do have a year when others are dropped', async () => {
+    // The realistic shape of the reversal: SOME cards resolve, some do not. Phase 3 measured
+    // `none` on roughly a third of a real 42-card playlist, so this is the ordinary case and not an
+    // edge one -- the deck shrinks under the player and the game carries on.
+    let lookups = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => {
+        lookups += 1;
+        // Every other lookup finds nothing, so half the deck leaves.
+        const found = lookups % 2 === 1;
+
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: { get: () => null },
+          json: () =>
+            Promise.resolve({
+              year: found ? 1975 : null,
+              confidence: found ? 'high' : 'none',
+              source: 'release-group',
+              cached: true,
+              cleanedTitle: 'x',
+              stripped: { remaster: false, live: false, feature: false, version: false },
+            }),
+        });
+      }),
+    );
+
+    renderApp(playlistFetch(200, playlistResult()));
+    startPlaylist();
+
+    // The gate opened on a card that HAS a year -- the first lookup found one.
+    await waitFor(() => {
+      expect(screen.queryByTestId('hud')).not.toBeNull();
+    });
+
+    // The HUD's count falls as the crawl drops cards, which is the visible consequence. It must
+    // land strictly between "nothing dropped" and "nothing left".
+    await waitFor(() => {
+      const hud = screen.getByTestId('hud').textContent ?? '';
+      expect(hud).toMatch(/\d+ cards? left/);
+      const remaining = Number(/(\d+) cards? left/.exec(hud)?.[1] ?? '-1');
+      expect(remaining).toBeGreaterThan(0);
+      expect(remaining).toBeLessThan(UNRESOLVED_DECK.length - 1);
+    });
+
+    // And the game is still playable on a shrinking deck.
+    expect(await screen.findByRole('img')).not.toBeNull();
+  });
+
   it('should keep the game playable while cards 2..n have no year', async () => {
     // ===================================================================
     //  THE INVARIANT `plan.md` WARNS REGRESSES SILENTLY, asserted at the UI

@@ -14,15 +14,29 @@
  *    low      -> the year, plus an explicit "unconfirmed" marker. Showing a
  *                possibly-wrong year beats showing none, PROVIDED it is always
  *                marked (plan.md §5, decided 2026-08-04).
- *    none     -> `year: null`. No year exists; prompt the player to check this
- *                one themselves. A third of an ordinary deck lands here (15 of
- *                42 measured), so this is a common card, not an edge case.
+ *    none     -> `year: null`. No year exists. **A card in this state no longer
+ *                REACHES a live deck** -- see below -- and this branch is kept
+ *                for the one payload that can still carry one.
  *    pending  -> `year: undefined`. The lookup has not come back yet. It WILL.
  *
  *  The last two are the pair most likely to be merged, because both are "no
  *  year on screen" -- but one resolves and the other never will, and telling a
  *  player to go and check a year that is about to arrive is a bug.
  * ===========================================================================
+ *
+ * ## `none` is now a vestigial state, and it stays anyway
+ *
+ * It was a COMMON card until 2026-08-05 -- a third of an ordinary deck, 15 of 42 measured -- and
+ * that day the developer reversed the decision behind it: a card whose lookup finds no year is
+ * removed from the deck rather than played without one, because a Hitster card is placed on a
+ * timeline BY its year. `gameReducer` filters at all three entry points, so no card in a live deck
+ * holds `year: null` any more.
+ *
+ * The branch below is not dead code, though. `Card.year` still models the shape of a lookup
+ * RESULT, and a session SAVED BEFORE the reversal is a real payload that can hold a yearless card;
+ * `RESUME` filters those, but this is the display that would be correct if one ever slipped
+ * through, and it is asserted in this component's tests. Deleting it would trade a documented
+ * fallback for a blank year slot.
  *
  * ===========================================================================
  *  THIS IS THE ONE PLACE IN THE APP WHERE ANNOUNCING TRACK DATA IS CORRECT.

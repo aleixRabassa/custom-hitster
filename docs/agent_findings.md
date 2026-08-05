@@ -1450,3 +1450,108 @@ are concerned, and no test asserted a colour on that element.
 The same hazard applies to every custom-token utility family in this repo — `bg-surface*`, `border-*`,
 `text-fg*`, `max-w-content`, `text-year*` — and to the two `@utility` composites, though those at least
 tend to be visibly missing rather than invisibly wrong.
+
+---
+
+## 2026-08-05 — `AnimatePresence mode="popLayout"` needs its child to accept a ref, and does nothing at all without one
+
+The reported symptom was that a swiped card's replacement **rose up from below the screen** instead
+of already sitting behind it. `CardStack` looked correct and said so in a comment:
+
+```tsx
+<AnimatePresence initial={false} mode="popLayout">
+  <Card key={`${currentCard.id}:${currentIndex}`} ... />
+</AnimatePresence>
+```
+
+`popLayout` exists to take the outgoing child **out of layout flow** so the incoming one keeps the
+slot it is vacating. Motion implements it in `PopChild`:
+
+1. `React.cloneElement(children, { ref: composedRef })` — it needs a handle on the DOM node;
+2. `getSnapshotBeforeUpdate` measures `offsetTop` / `offsetLeft` / computed width and height;
+3. a `useInsertionEffect` injects `[data-motion-pop-id] { position: absolute !important; ... }`.
+
+Steps 2 and 3 are both guarded by `ref.current`. **`Card` was a plain function component that
+accepted no ref**, so the cloned ref landed on nothing, `ref.current` stayed null, and the effect
+returned early. No warning, no error, no visible configuration problem — `popLayout` was declared,
+documented, and inert.
+
+What that produced: the stack container is `position: relative` with a fixed size, and both cards
+were then ordinary in-flow block children. The outgoing card sat at the top; **the incoming card was
+laid out a full `--card-height` below it**, off the bottom of the deck and usually off the viewport,
+until the exit animation finished and the old card unmounted — at which point the new one snapped up
+into place.
+
+The fix is one prop: `Card` accepts `ref?: Ref<HTMLDivElement>` and puts it on the outer
+`motion.div`. React 19 passes `ref` to function components as an ordinary prop, so no `forwardRef`
+is involved. It also restores the **paint order** the animation needs for free: once popped, the
+outgoing card is a positioned element and so paints in a later layer than the in-flow card beneath
+it, which is what puts the next card *behind* the one sliding away rather than over it. No z-index
+needed.
+
+**Testability.** `Card.test.tsx` now pins the necessary half — the ref reaches the OUTER element,
+not the inner flip wrapper. The sufficient half is unreachable in this repo: jsdom computes no
+layout, so `getComputedStyle(el).height` is `auto`, `parseFloat` gives `NaN`, and Motion's own
+measurement bails before it ever sets `data-motion-pop-id`. Any `AnimatePresence mode="popLayout"`
+regression of this kind is a **browser check only**.
+
+**Generalisation worth remembering:** every Motion feature that has to touch the DOM node of an
+`AnimatePresence` child (`popLayout`, and layout animations through a wrapper component) requires
+that child to forward a ref. A function component in between silently disables it.
+
+---
+
+## 2026-08-05 — `.click()` on a button whose handler sets React state does not flush before the next line
+
+Four new `GameScreen` tests failed on `getByRole('button', { name: 'Keep playing' })` — the exit
+confirmation dialog simply was not in the DOM — while the assertions around them were right.
+
+The cause is which helper opens it. `element.click()` dispatches a real DOM event **outside**
+Testing Library's `act()` wrapper, so a `setState` in the handler is scheduled but not necessarily
+committed by the time the next statement queries the DOM. `fireEvent.click(element)` wraps the
+dispatch in `act()` and the re-render has happened when it returns.
+
+The existing audio presses in the same file use `.click()` and are fine, which is what made this
+confusing: `play` / `pause` / `restart` go through a ref to the media element and change **no React
+state**, so there is nothing to flush.
+
+**Rule of thumb for this repo:** `fireEvent` for anything that changes React state; `.click()` is
+only safe for a handler whose entire effect is a call on a mock or a ref.
+
+---
+
+## 2026-08-05 — Dropping yearless cards is a reducer change with a long tail, and a shared test stub hid most of it
+
+The developer reversed the `confidence: 'none'` decision (see `plan.md` §6): a card whose lookup
+finds no year is now REMOVED from the deck rather than played without one. The reducer edit is
+contained; the consequences were not, and they are worth knowing before touching this again.
+
+**1. The card-1 gate had to be rephrased.** It opened on "the resolved card WAS `deck[0]`". With
+drops that condition opens the gate onto a *brand new* first card whose lookup has not been
+dispatched, so the player lands on the pending `····` slot. It is now a property of the deck —
+`deck[0]?.year !== undefined`, evaluated against the NEXT deck — which also self-heals the
+already-resolved-first-card hang that `START` needed its own guard for.
+
+**2. `year: null` is not only "MusicBrainz has no year".** `resolver.ts` also settles at `null` on a
+400 (`invalid-request`) and on transient failures that survive its deferred pass, and
+`YEAR_RESOLVED` carries no reason. So a network blip now drops cards. Accepted deliberately: an
+unplayable card is unplayable whatever the cause. The one blanket failure is exempt because it was
+already modelled separately — `not-configured` dispatches `YEAR_LOOKUPS_UNAVAILABLE`, so a
+deployment with no `MUSICBRAINZ_USER_AGENT` yields a yearless deck rather than an **empty** one.
+That exemption is the difference between a misconfigured deploy being playable and being a blank
+end screen, and it is asserted.
+
+**3. Removing an element from the deck is an index problem, not a filter problem.** Cards dropped
+from behind the player move `currentIndex` back; a dropped CURRENT card leaves the index alone (the
+array closes up under it) but **must reset `isFlipped`** — that flag belongs to the card that left,
+and carrying it over mounts the incoming card already revealed, which is a leak rather than a
+glitch. A dropped current card with nothing after it ends the session, because clamping would send
+the player backwards onto a card they have already played.
+
+**4. A shared test stub turned one decision into eight failures.** `App.test.tsx`'s `stubYearApi()`
+answered every lookup with `year: null` — chosen originally as "the minimum response that opens the
+gate without inventing years". Post-reversal that stub *deletes the deck*: the session went straight
+to `ended` and every test that only wanted to reach the game screen found the end screen. The stub
+now returns a real year, with `stubDroppingYearApi` beside it for the drop path. When a decision
+changes what a value MEANS, grep the test doubles for that value before assuming the failures are
+regressions.

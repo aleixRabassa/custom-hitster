@@ -83,6 +83,19 @@ describe('QrCode', () => {
     expect(image.getAttribute('alt')).toBe('Scan to play in Spotify');
   });
 
+  it('should not be draggable, so a swipe starting on the code moves the card', async () => {
+    // The QR covers most of the hidden face, and an `<img>` is natively draggable: the browser's
+    // image drag pre-empts the pointer sequence, so pressing here and moving lifted a ghost of
+    // the code and cancelled the swipe. jsdom fires no native drag, so this pins the ATTRIBUTE
+    // rather than the behaviour -- the browser half is one swipe starting on the code.
+    render(<QrCode url="https://open.spotify.com/track/x" size={160} />);
+
+    const image = await screen.findByRole('img');
+    expect(image.getAttribute('draggable')).toBe('false');
+    // Same hole for the mouse: a drag across the card must not start a text selection either.
+    expect(image.className).toContain('select-none');
+  });
+
   it('should regenerate when the url prop changes', async () => {
     const first = 'https://open.spotify.com/track/aaaaaaaaaaaaaaaaaaaaaa';
     const second = 'https://open.spotify.com/track/bbbbbbbbbbbbbbbbbbbbbb';

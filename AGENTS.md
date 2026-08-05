@@ -32,11 +32,37 @@ Several decisions in this repo look like mistakes and are not. If something seem
 
 **The three controls are NOT on the card** (`src/components/CardControls.tsx`, rendered by `GameScreen` beside the stack), and putting them back would reintroduce a real bug: `gestureProps.onPointerUp` is bound to the card's outer element, so a pointer-up on a button inside the card is read as a tap and flips it — pressing Play revealed the answer. **Nothing interactive may be rendered inside `Card`.** Two tests assert the absence.
 
+**Five developer decisions landed on 2026-08-05, after Phase 7 plan 1. Two of them reverse
+something `plan.md` had already resolved, so read these before "fixing" the code back:**
+
+- **A card whose year lookup finds nothing is REMOVED from the deck** (`gameReducer`, `YEAR_RESOLVED`).
+  This reverses `plan.md` §6's `confidence: 'none'` follow-on, which had it stay and play. **Low
+  confidence is unaffected** — it carries a real year. Consequences: the deck shrinks by roughly a
+  third on a real playlist, the card-1 gate is phrased as "the first card has a year" rather than "the
+  resolved card was card 1", and all three entry points (`START`, `YEAR_RESOLVED`, `RESUME`) filter, so
+  **no card in a live deck holds `year: null`**. `CardRevealSide`'s `none` branch is kept for
+  pre-reversal saves only.
+- **The preparing screen shows no resolved/total count.** Also a reversal; `PreparingScreen` takes no
+  count props. `resolvedCount` stays exported beside the reducer, with its tests, and has no caller.
+- **Exit goes through a confirmation dialog** (`ExitConfirmDialog`, opened by `GameScreen`). While it is
+  open `GameScreen`'s window key handler is disabled — that is guard 4, and it exists because → would
+  otherwise deal a card behind the backdrop.
+- **The control bar's icons are inline SVG, not text glyphs**, sized from one token
+  (`--size-control-icon`). ▶ and ❙❙ rendered at different weights and could resolve to an emoji font;
+  nothing in CSS could equalise them. Exit is the emergency-exit pictogram in `--color-danger`.
+- **`Card` accepts a `ref` and it is load-bearing**: `AnimatePresence mode="popLayout"` reaches the
+  outgoing card through it, and silently does nothing without it — the incoming card was being laid out
+  a full card-height below the outgoing one. See `docs/agent_findings.md`.
+
 **Manual verification outstanding, and no local check will ever close it:**
 
 - Phase 4: the QR scan was verified on a real phone (2026-08-05). The **devtools DOM search on an unflipped card** and the **Android lock-screen check** are still owed — the lock-screen one is the only leak vector no test in this repo can reach.
 - Phase 5: the **real-device touch pass was deliberately not performed** (decided 2026-08-05). The five gesture thresholds in `src/game/gestures.ts` are documented starting guesses that have never met a thumb. If touch input misbehaves, **those constants are the first place to look** — not the hook, and not Motion. The checklist that was never run is preserved in [`docs/development.md`](./docs/development.md) §5, and the gap is listed in its §8 Known limitations.
 - Phase 6: **progressive loading against a real preview deployment with Upstash configured** (step 15 of [`plan.phase-4-6-screens.md`](./docs/plans/plan.phase-4-6-screens.md), carried over from Phase 3) is not done. Nothing local models it: the shared cache and the 1 req/s gate are both backed by the Upstash variables, and without them the gate paces nothing. It also owes the **50-track cold-deck wall clock**, unmeasured since Phase 2, and a **count of `/api/year` requests under React 19 StrictMode** — `use-game-session.ts` has a double-crawl guard that nothing tests.
+- The 2026-08-05 decisions above owe two browser checks that nothing local can stand in for: **one
+  swipe**, to confirm the next card sits behind the sliding one rather than rising from below (jsdom
+  computes no layout, so Motion's `popLayout` measurement bails there no matter what the code does),
+  and **one QR scan at the larger 14/18 size** on the smallest card, where the code is ~144px.
 - Phase 7 (first half): **all four behavioural passes are outstanding** — reduced motion with the OS preference set, three widths, keyboard-only, and a screen reader over one flip — plus the before/after screenshot comparison. The environment is the reason, not the effort: jsdom has no media queries, no `matchMedia`, no layout and no a11y tree, so class-name assertions are the ceiling. **Prioritise the screen reader.** Checklists in [`docs/development.md`](./docs/development.md) §5, gaps in its §8.
 
 **The Phase 4/5 fixture harness is gone**, and so is `public/dev-preview.wav`, the generated audio file that stood in for the fixture cards' invented preview URLs. The fixture deck itself stays at `src/components/__fixtures__/cards.ts` — it is what every component test renders from. To look at one specific card shape, run a component test in watch mode; there is no longer a page that walks the deck.
