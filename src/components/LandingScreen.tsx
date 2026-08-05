@@ -1,5 +1,5 @@
 /**
- * The landing screen: paste a playlist link, or pick one of five.
+ * The landing screen: paste a playlist link, or pick one of suggested ones.
  *
  * ===========================================================================
  *  THIS IS A PRE-START SURFACE, SO IT MUST LEAK NOTHING ABOUT ANY DECK.
@@ -42,36 +42,41 @@ import { isSpotifyShortLink, parsePlaylistUrl, spotifyPlaylistUrl } from '../../
 import type { PlaylistClientErrorCode } from '../game/playlist-client';
 
 /**
- * The five ready-to-try playlists, so a first-time visitor does not need a playlist of their own
+ * The nine ready-to-try playlists, so a first-time visitor does not need a playlist of their own
  * to see the app work.
  *
  * ===========================================================================
- *  RE-VERIFIED 2026-08-05. All five resolve to the intended playlist, checked
- *  by `entity.uri` AND `entity.name` in the embed payload rather than by a 200
- *  response -- editorial playlists get their contents refreshed by Spotify, so a
- *  200 is not evidence that an id still means the same playlist (plan.md §5).
- *
- *  Track counts at that check: 50, 100, 50, 100, 100 -- matching Phase 0's own
- *  measurements exactly, including Reggae Classics' two preview-less tracks.
- *  Rock Classics, Reggae Classics and All Out 80s return exactly
- *  MAX_EMBED_TRACKS, so all three raise the truncation notice by design.
+ *  VERIFIED 2026-08-06, when this set replaced the five Phase 0 ids (RapCaviar
+ *  is the one that survived). All nine resolve to the intended playlist, checked
+ *  by `entity.uri` AND `entity.name`
+ *  in the embed payload rather than by a 200 response -- editorial playlists get
+ *  their contents refreshed by Spotify, so a 200 is not evidence that an id still
+ *  means the same playlist (plan.md §5).
  *
  *  Re-verify the same way before shipping any future change here.
  * ===========================================================================
  *
- * The labels are genre/era names taken from Spotify's own playlist titles. None of them describes
- * a track, which is what keeps this section leak-free.
+ * The labels are Spotify's own playlist titles and the blurbs are genre/era names. None of them
+ * describes a track or a year, which is what keeps this section leak-free.
  *
  * Stored as ids and turned into full links at the click, via `spotifyPlaylistUrl()`. The id is the
  * thing that was verified above and the thing a re-verification checks, so it stays the constant;
  * the URL is derived so the two can never disagree.
  */
 export const SUGGESTED_PLAYLISTS: readonly { id: string; label: string; blurb: string }[] = [
-  { id: '37i9dQZF1DXcBWIGoYBM5M', label: 'Today’s Top Hits', blurb: 'Current pop' },
-  { id: '37i9dQZF1DWXRqgorJj26U', label: 'Rock Classics', blurb: '60s–2020s rock' },
+  {
+    id: '2zmXlpkOMN92NlQaE2M62c',
+    label: 'Éxitos Verano 2000s & 2010s',
+    blurb: 'Spanish summer hits',
+  },
+  { id: '37i9dQZF1DX1HCSfq0nSal', label: 'PEGAO', blurb: 'Reggaeton' },
+  { id: '2wJx2AIytvpaSJLsc2wy3V', label: 'Radio BrianPer', blurb: 'Mixed radio' },
+  { id: '7nnjdGCdCe24vVeSlFpGQV', label: 'Electro Latino Mejores Temazos', blurb: 'Latin electro' },
+  { id: '37i9dQZEVXbNFJfN1Vw8d9', label: 'Top 50 España', blurb: 'Spain chart' },
+  { id: '2ASgmy04ZIcIXLBn8nkmKj', label: 'This is Duki (all songs)', blurb: 'Argentine trap' },
+  { id: '37i9dQZEVXbMDoHDwVN2tF', label: 'Top 50 Global', blurb: 'Global chart' },
+  { id: '37i9dQZF1DXaxEKcoCdWHD', label: 'Exitos España', blurb: 'Spanish hits' },
   { id: '37i9dQZF1DX0XUsuxWHRQd', label: 'RapCaviar', blurb: 'Hip-hop' },
-  { id: '37i9dQZF1DXbSbnqxMTGx9', label: 'Reggae Classics', blurb: 'Reggae' },
-  { id: '37i9dQZF1DX4UtSsGT1Sbe', label: 'All Out 80s', blurb: '80s' },
 ];
 
 export interface LandingScreenProps {
@@ -246,7 +251,7 @@ export function LandingScreen({ onSubmit, isLoading, errorCode }: LandingScreenP
                 }}
                 disabled={isLoading}
                 /*
-                  `focus-visible`, not `focus`. These five are the buttons that make the
+                  `focus-visible`, not `focus`. These are the buttons that make the
                   distinction visible: they submit and the screen is replaced, so a `focus:` ring
                   would be the last thing a mouse user saw of the landing screen. With
                   `focus-visible` a click leaves no ring and a Tab still shows one.

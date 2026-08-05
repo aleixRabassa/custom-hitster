@@ -27,6 +27,21 @@ function renderLanding(props: Partial<Parameters<typeof LandingScreen>[0]> = {})
   return { ...rendered, onSubmit };
 }
 
+/**
+ * Query a suggestion button by its label.
+ *
+ * The label is ESCAPED before it becomes a pattern, and that is load-bearing rather than
+ * defensive: "This is Duki (all songs)" contains parentheses, and an unescaped `new RegExp()`
+ * turns them into a capture group -- the pattern then matches "This is Duki all songs", which
+ * appears nowhere, and the query fails on a button that renders perfectly. A plain string is not
+ * an option either, because the accessible name is the label AND the blurb.
+ */
+function suggestionButton(label: string) {
+  return screen.getByRole('button', {
+    name: new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'),
+  });
+}
+
 /** Type a value into the URL box and press Start. */
 function submit(value: string) {
   fireEvent.change(screen.getByLabelText('Playlist link'), { target: { value } });
@@ -147,18 +162,15 @@ describe('LandingScreen', () => {
     );
     expect((screen.getByLabelText('Playlist link') as HTMLInputElement).disabled).toBe(true);
     for (const playlist of SUGGESTED_PLAYLISTS) {
-      expect(
-        (screen.getByRole('button', { name: new RegExp(playlist.label, 'i') }) as HTMLButtonElement)
-          .disabled,
-      ).toBe(true);
+      expect((suggestionButton(playlist.label) as HTMLButtonElement).disabled).toBe(true);
     }
   });
 
-  it('should render five suggested playlists', () => {
-    // Five, so a first-time visitor with no playlist of their own can still see the app work.
+  it('should render eight suggested playlists', () => {
+    // Eight, so a first-time visitor with no playlist of their own can still see the app work.
     renderLanding();
 
-    expect(SUGGESTED_PLAYLISTS).toHaveLength(5);
+    expect(SUGGESTED_PLAYLISTS).toHaveLength(8);
     for (const playlist of SUGGESTED_PLAYLISTS) {
       expect(screen.queryByText(playlist.label)).not.toBeNull();
     }
@@ -170,20 +182,20 @@ describe('LandingScreen', () => {
     // id: the id parsed fine but put a 22-character string where the placeholder promises a URL.
     const { onSubmit } = renderLanding();
 
-    fireEvent.click(screen.getByRole('button', { name: /Rock Classics/i }));
+    fireEvent.click(suggestionButton('Top 50 Global'));
 
-    const expected = 'https://open.spotify.com/playlist/37i9dQZF1DWXRqgorJj26U';
+    const expected = 'https://open.spotify.com/playlist/37i9dQZEVXbMDoHDwVN2tF';
     expect(onSubmit).toHaveBeenCalledWith(expected);
     expect((screen.getByLabelText('Playlist link') as HTMLInputElement).value).toBe(expected);
   });
 
   it('should submit a full URL for every suggestion', () => {
-    // Every one, not just the sampled Rock Classics above: a suggestion whose id were mistyped to
+    // Every one, not just the sampled Top 50 Global above: a suggestion whose id were mistyped to
     // the wrong length would still fill the box, and only the submission would reveal it.
     for (const playlist of SUGGESTED_PLAYLISTS) {
       const { onSubmit } = renderLanding();
 
-      fireEvent.click(screen.getByRole('button', { name: new RegExp(playlist.label, 'i') }));
+      fireEvent.click(suggestionButton(playlist.label));
 
       expect(onSubmit).toHaveBeenCalledWith(`https://open.spotify.com/playlist/${playlist.id}`);
       // Submitted at all, which means the client-side parse passed -- so the id really is a
@@ -256,15 +268,15 @@ describe('LandingScreen', () => {
     //  without one. Before Phase 7 all eleven interactive elements in the
     //  app fell back to the browser default over a near-black page.
     //
-    //  `focus-visible`, not `focus`: the five suggestion buttons submit and
+    //  `focus-visible`, not `focus`: the eight suggestion buttons submit and
     //  replace the screen, so a `focus:` ring would be the last thing a
     //  mouse user saw of the landing screen.
     // ===================================================================
     const { container } = renderLanding();
 
     const interactive = [...container.querySelectorAll('button, input')];
-    // The input, Start, and five suggestions.
-    expect(interactive).toHaveLength(7);
+    // The input, Start, and one button per suggestion.
+    expect(interactive).toHaveLength(2 + SUGGESTED_PLAYLISTS.length);
 
     for (const element of interactive) {
       expect(element.className).toContain('focus-visible:focus-ring');
@@ -290,8 +302,9 @@ describe('LandingScreen', () => {
       expect(text).not.toContain(card.artist);
     }
 
-    // And no year-shaped string anywhere: the labels are genre/era names, and "All Out 80s" is a
-    // decade rather than a release year, which is exactly the distinction this pins.
+    // And no year-shaped string anywhere: the labels are Spotify's own titles and the blurbs are
+    // genre/era names. "Éxitos Verano 2000s & 2010s" is the case this pins -- a decade written as
+    // "2000s" is not a release year, and the `\b` after the digits is what tells the two apart.
     expect(text).not.toMatch(/\b(19|20)\d{2}\b/);
   });
 });
