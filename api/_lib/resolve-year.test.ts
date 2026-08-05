@@ -297,3 +297,210 @@ describe('resolveYear', () => {
     expect(outcome).toMatchObject({ ok: false, code: 'not-configured' });
   });
 });
+
+// ===========================================================================
+//  THE REMIX FALLBACK
+//
+//  Measured 2026-08-05 on a real 42-track playlist: 15 cards resolved to no
+//  year, and FIVE of them carried an unstripped "- Remix". This tier exists for
+//  those five, and only ever runs after both other tiers have already failed.
+// ===========================================================================
+
+const REMIX_TITLE = `${NO_WOMAN_NO_CRY.title} - Remix`;
+
+/** The `recording:"…"` phrase as it appears inside the built URL. */
+function encodedRecordingPhrase(title: string): string {
+  return encodeURIComponent(`recording:"${title}"`);
+}
+
+/**
+ * A fetch double that answers the RECORDING search differently depending on WHICH TITLE was
+ * queried -- the whole point of this tier is that the two queries return different things.
+ *
+ * Only a query for exactly `NO_WOMAN_NO_CRY.title` finds anything; every other title comes back
+ * empty, which is what MusicBrainz actually did for all five measured "- Remix" tracks. Keying
+ * on the exact phrase rather than on the word "remix" is what lets the same double prove the
+ * NEGATIVE case too: a title whose tail must not be stripped stays unresolved.
+ */
+function titleAwareFetch(options: { baseSearch?: unknown } = {}): {
+  fetch: FetchLike;
+  urls: string[];
+} {
+  const urls: string[] = [];
+  const basePhrase = encodedRecordingPhrase(NO_WOMAN_NO_CRY.title);
+
+  const fetch: FetchLike = (url) => {
+    urls.push(url);
+    if (url.includes('/release-group?')) {
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(noWomanNoCryReleaseGroups),
+      });
+    }
+
+    const body = url.includes(basePhrase)
+      ? (options.baseSearch ?? noWomanNoCrySearch)
+      : emptySearch;
+
+    return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) });
+  };
+
+  return { fetch, urls };
+}
+
+describe('resolveYear remix fallback', () => {
+  it('should retry without the remix suffix when nothing else found a year', async () => {
+    const cache = recordingCache();
+    const { fetch } = titleAwareFetch();
+
+    const outcome = await resolveYear(
+      {
+        title: REMIX_TITLE,
+        artist: NO_WOMAN_NO_CRY.artist,
+        durationMs: NO_WOMAN_NO_CRY.durationMs,
+      },
+      { cache, fetchImpl: fetch, gate: countingGate(), userAgent: USER_AGENT },
+    );
+
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+
+    expect(outcome.result).toMatchObject({
+      year: NO_WOMAN_NO_CRY.expectedYear,
+      // Downgraded even though the STRICT pass matched: the title had to be rewritten to find
+      // it, which is exactly what `low` (and Phase 6's unconfirmed marker) is for.
+      confidence: 'low',
+      viaTitle: NO_WOMAN_NO_CRY.title,
+      // The primary query's title, and what the cache key is derived from -- so it reads the
+      // same on a hit as on a miss.
+      cleanedTitle: REMIX_TITLE,
+    });
+  });
+
+  it('should drop durationMs from the fallback query', async () => {
+    // A remix is not the same length as the song it remixes, so bounding by the remix's
+    // duration would exclude the very recording being looked for. This is the assertion that
+    // stops someone "tidying up" the fallback by reusing the primary scoring input.
+    const { fetch, urls } = titleAwareFetch();
+
+    await resolveYear(
+      {
+        title: REMIX_TITLE,
+        artist: NO_WOMAN_NO_CRY.artist,
+        durationMs: NO_WOMAN_NO_CRY.durationMs,
+      },
+      { cache: createMemoryCache(), fetchImpl: fetch, gate: countingGate(), userAgent: USER_AGENT },
+    );
+
+    const fallbackQueries = urls.filter(
+      (url) => !url.includes('/release-group?') && !url.toLowerCase().includes('remix'),
+    );
+
+    expect(fallbackQueries.length).toBeGreaterThan(0);
+    expect(fallbackQueries.every((url) => !url.includes('dur%3A'))).toBe(true);
+  });
+
+  it('should not run the fallback when the primary passes already found a year', async () => {
+    // The cost is bounded to tracks that were about to be blank anyway: nothing that resolves
+    // normally spends a request here.
+    const { fetch, urls } = titleAwareFetch();
+
+    const outcome = await resolveYear(TRACK, {
+      cache: createMemoryCache(),
+      fetchImpl: fetch,
+      gate: countingGate(),
+      userAgent: USER_AGENT,
+    });
+
+    expect(outcome.ok && outcome.result.confidence).toBe('high');
+    expect(outcome.ok && outcome.result.viaTitle).toBeUndefined();
+    // Two requests: the recording search and the release-group enrichment. No third.
+    expect(urls).toHaveLength(2);
+  });
+
+  it('should not strip a trailing segment that is not a remix', async () => {
+    // The end-to-end guard against over-eager stripping, which is the failure mode that
+    // silently changes which SONG is being asked about: "…- Reprise" is a different track from
+    // the title one. If the fallback fired here it would query the bare title and confidently
+    // return 1974 for the wrong recording, so a null is the pass condition.
+    const { fetch, urls } = titleAwareFetch();
+
+    const outcome = await resolveYear(
+      { title: `${NO_WOMAN_NO_CRY.title} - Reprise`, artist: NO_WOMAN_NO_CRY.artist },
+      { cache: createMemoryCache(), fetchImpl: fetch, gate: countingGate(), userAgent: USER_AGENT },
+    );
+
+    expect(outcome.ok && outcome.result.year).toBeNull();
+    expect(outcome.ok && outcome.result.viaTitle).toBeUndefined();
+    // And no query was ever made for the bare title.
+    const basePhrase = encodedRecordingPhrase(NO_WOMAN_NO_CRY.title);
+    expect(urls.some((url) => url.includes(basePhrase))).toBe(false);
+  });
+
+  it('should keep the null result when the fallback also finds nothing', async () => {
+    const cache = recordingCache();
+    const { fetch } = titleAwareFetch({ baseSearch: emptySearch });
+
+    const outcome = await resolveYear(
+      { title: REMIX_TITLE, artist: NO_WOMAN_NO_CRY.artist },
+      { cache, fetchImpl: fetch, gate: countingGate(), userAgent: USER_AGENT },
+    );
+
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+
+    expect(outcome.result).toMatchObject({ year: null, confidence: 'none' });
+    expect(outcome.result.viaTitle).toBeUndefined();
+    // Still cached, and still under the original key: the answer for THIS title is known.
+    expect(cache.writes).toHaveLength(1);
+    expect(cache.writes[0]?.key).toBe(yearCacheKey(NO_WOMAN_NO_CRY.artist, REMIX_TITLE));
+    expect(cache.writes[0]?.ttl).toBe(NO_YEAR_TTL_SECONDS);
+  });
+
+  it('should not turn a fallback upstream failure into a request failure', async () => {
+    // A definite "no year" must not become a 502 that makes the client retry a card whose
+    // answer is already known -- the fallback is an optimisation, not a dependency.
+    let call = 0;
+    const fetch: FetchLike = (url) => {
+      call += 1;
+      // Everything the primary ladder asks for succeeds (and finds nothing); the first
+      // fallback query fails.
+      if (!url.toLowerCase().includes('remix')) {
+        return Promise.resolve({ ok: false, status: 503, json: () => Promise.resolve({}) });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(emptySearch) });
+    };
+
+    const outcome = await resolveYear(
+      { title: REMIX_TITLE, artist: NO_WOMAN_NO_CRY.artist },
+      { cache: createMemoryCache(), fetchImpl: fetch, gate: countingGate(), userAgent: USER_AGENT },
+    );
+
+    expect(call).toBeGreaterThan(1);
+    expect(outcome).toMatchObject({ ok: true });
+    expect(outcome.ok && outcome.result.year).toBeNull();
+  });
+
+  it('should carry viaTitle through the cache', async () => {
+    // It lives on the stored `YearResult`, so a cache hit explains itself exactly as the
+    // original miss did. Storing only the year and confidence would lose the one field that
+    // says "we asked about a different title than the card shows".
+    const cache = createMemoryCache();
+    const { fetch } = titleAwareFetch();
+    const track = { title: REMIX_TITLE, artist: NO_WOMAN_NO_CRY.artist };
+    const deps = { cache, fetchImpl: fetch, gate: countingGate(), userAgent: USER_AGENT };
+
+    await resolveYear(track, deps);
+    const second = await resolveYear(track, deps);
+
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+
+    expect(second.result).toMatchObject({
+      cached: true,
+      confidence: 'low',
+      viaTitle: NO_WOMAN_NO_CRY.title,
+    });
+  });
+});

@@ -203,7 +203,23 @@ export type YearFailureReason =
  * and a null year always carries a reason.
  */
 export type YearResult =
-  | { year: number; confidence: 'high' | 'low'; source: YearSource }
+  | {
+      year: number;
+      confidence: 'high' | 'low';
+      source: YearSource;
+      /**
+       * Set only when the year was found by a FALLBACK query against a rewritten title --
+       * today that means a remix suffix was dropped and the underlying song was asked about
+       * instead (`stripRemixSuffix()` in `shared/year.ts`).
+       *
+       * Present for exactly the reason `cleanedTitle` is (decision 18): when a year looks
+       * wrong the first question is what was actually searched for, and "we asked about a
+       * different title than the card shows" is the most important possible answer to that
+       * question. Such a result always reports `confidence: 'low'`, so Phase 6 already flags
+       * it as unconfirmed; this says WHY.
+       */
+      viaTitle?: string;
+    }
   | { year: null; confidence: 'none'; reason: YearFailureReason };
 
 /**
@@ -294,9 +310,15 @@ export interface YearLookupResult {
   /**
    * The title actually queried, after cleaning. Returned deliberately: when a year looks
    * wrong the first question is always what was searched for (decision 18).
+   *
+   * This is the PRIMARY query's title, and it is also what the cache key is derived from, so
+   * it reads the same on a cache hit as on a miss. When a remix fallback found the year, the
+   * rewritten title it used is reported separately in `viaTitle`.
    */
   cleanedTitle: string;
   stripped: TitleStripFlags;
+  /** See `YearResult.viaTitle`. Absent unless a fallback query found the year. */
+  viaTitle?: string;
 }
 
 /**

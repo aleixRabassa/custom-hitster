@@ -267,17 +267,28 @@ wait is therefore one lookup, not a queue drain.
   - [x] Guard against React 19 StrictMode's double-invoked effects starting two resolvers — an
         idempotent `start()` and a real cleanup, verified by watching the request count in the browser
 
-- [ ] **Verify progressive loading against a real playlist** — the invariant that
+- [x] **Verify progressive loading against a real playlist** — the invariant that
       [plan.md](./plan.md) §5 warns "regresses silently, because a deck of cached years resolves fast
       enough to hide a blocking implementation in local testing".
-  - [ ] Drive a real deck through the hook from a temporary scratch harness (not committed), against a
+      **Done 2026-08-05 against a real 42-track playlist — see Manual Verification Results below.**
+  - [x] Drive a real deck through the hook from a temporary scratch harness (not committed), against a
         **preview deployment** rather than `vercel dev` — the dev server adds ~4 s per request and does
-        not persist the gate, so it measures the dev server and unpaces MusicBrainz (2026-08-04 finding)
-  - [ ] Confirm the first card becomes playable in roughly one lookup, not one deck
-  - [ ] Confirm cards 2..n fill in while the deck is being played, and that a rapid advance to an
-        unresolved card resolves **that** card next
-  - [ ] **Measure the wall clock for a 50-track cold deck.** This number is still owed from Phase 2,
-        which could not measure it locally, and it belongs in `agent_findings.md`
+        not persist the gate, so it measures the dev server and unpaces MusicBrainz (2026-08-04 finding).
+        **Deviation: no Vercel CLI is installed, so there is no preview deploy and no `vercel dev`
+        either. Run instead as an IN-PROCESS harness — the real handlers served over a local
+        `node:http` server, driven through `year-client.ts`. That is the same setup the 2026-08-04
+        finding calls "the honest number for the resolver itself"; it excludes only Vercel invocation
+        overhead, the Redis round trips and the edge. The harness drove the reducer and resolver
+        directly, NOT the hook, which needs a React runtime (Phase 4's jsdom decision).**
+  - [x] Confirm the first card becomes playable in roughly one lookup, not one deck —
+        **6.06 s, 1/42 cards resolved**
+  - [x] Confirm cards 2..n fill in while the deck is being played, and that a rapid advance to an
+        unresolved card resolves **that** card next — **jumped to index 41; it resolved in 5.67 s,
+        versus ~145 s if it had waited for deck order**
+  - [x] **Measure the wall clock for a 50-track cold deck.** This number is still owed from Phase 2,
+        which could not measure it locally, and it belongs in `agent_findings.md` —
+        **153.0 s for 42 cards, ~3.64 s/card, so ~3 min for 50. Recorded in `agent_findings.md`
+        (2026-08-05).**
 
 - [x] **Run the full local verification pass** — `pnpm typecheck && pnpm lint && pnpm test && pnpm build`,
       all four green. There are no hooks and no CI; the checks are ours to run.
@@ -509,12 +520,22 @@ in the reducer or the resolver instead** — that rule is what keeps the unteste
 - [ ] **What does Phase 6 show while `preparing`?** A count-only progress line is safe; anything naming
       a track or a year is the spoiler surface the 2026-08-04 finding rules out. Phase 3 only has to
       expose `status` and `resolvedCount` — the wording is Phase 6's call
-- [ ] **What is the real wall clock for a cold 50-track deck?** Owed from Phase 2, unmeasurable through
+- [x] **What is the real wall clock for a cold 50-track deck?** Owed from Phase 2, unmeasurable through
       `vercel dev`, and it decides whether the crawl genuinely stays ahead of ordinary play or whether
-      the priority jump fires constantly. Answer it during the verification step
-- [ ] **How often does the relaxed tier actually fire on an ordinary playlist?** Phase 2 measured 14/14
+      the priority jump fires constantly. Answer it during the verification step.
+      **ANSWERED 2026-08-05: ~3.64 s per cold card (153 s for 42), so ~3 min for 50. The crawl does
+      NOT stay ahead of ordinary play — a player who spends less than ~4 s per card outruns it, so the
+      priority jump is a routine path, not a rare one. It cost 5.67 s when it fired.**
+- [x] **How often does the relaxed tier actually fire on an ordinary playlist?** Phase 2 measured 14/14
       strict on a set curated for difficulty and flagged the real ratio as unknown. Phase 3 is the first
-      time whole real playlists get resolved, so it is the first chance to find out
+      time whole real playlists get resolved, so it is the first chance to find out.
+      **ANSWERED 2026-08-05, and the answer reframes Phase 6: on a real personal playlist it was
+      high 19 / low 8 / none 15 — 45% / 19% / 36%. A THIRD of an ordinary deck has no year at all, so
+      "no year" is a normal card state and the manual-entry affordance is load-bearing. Five of the 15
+      misses share an unstripped `- Remix` suffix (`shared/year.ts`). **FIXED the same day** — see
+      `docs/agent_findings.md` (2026-08-05, "The remix fallback"): `/api/year` gained a third tier that
+      retries with the remix suffix dropped, recovering 3 of those 5 cards (`none` 36% → 29%). Phase 2
+      code, changed at the developer's request.**
 - [ ] **Should a resumed session re-attempt cards that settled at `none`?** MusicBrainz data does
       improve, and the server caches negatives with a short TTL — but re-attempting spends global budget
       on lookups already known to fail. Defaulting to "no" unless the measurements above suggest
@@ -592,12 +613,45 @@ still outstanding.
 `pnpm typecheck && pnpm lint && pnpm test && pnpm build` all pass. The suite is 216 tests, 82 of them
 new under `src/game/`.
 
-**Still outstanding, because it needs a preview deployment rather than a local run:**
+### Manual Verification Results — 2026-08-05
 
-- The whole **"Verify progressive loading against a real playlist"** step — including the **wall
-  clock for a 50-track cold deck** owed from Phase 2, the strict-versus-relaxed ratio on an ordinary
-  playlist, how often a real session hits a 429, and the React 19 StrictMode single-resolver check.
-  `vercel dev` cannot answer any of them (~4 s per request of dev-server overhead, and the gate paces
-  nothing there — 2026-08-04 finding), so they wait for a preview deploy with Upstash configured.
+Playlist: `5KFmETOxEWVEtpa1voRfDU` ("rabacumple", 42 tracks, `truncated=false`, `skippedCount=0`),
+supplied by the developer. Method: a throwaway harness (deleted) that served the REAL
+`api/playlist.ts` and `api/year.ts` over a local `node:http` server and drove the reducer + resolver
+against them through `src/game/year-client.ts`. Cold memory cache, per-instance gate, sequential crawl,
+so MusicBrainz was paced at 1.1 s. Full detail in `docs/agent_findings.md` (2026-08-05).
+
+| Measurement                          | Result                                             |
+| ------------------------------------ | -------------------------------------------------- |
+| Full cold crawl, 42 cards            | **153.0 s** (~3.64 s/card, so ~3 min for 50)       |
+| **Card-1 gate** (`START` → `playing`) | **6.06 s**, with 1/42 cards resolved              |
+| Priority jump to index 41            | **5.67 s** (vs ~145 s in deck order)               |
+| `/api/playlist`                      | 514 ms                                             |
+| Lookups for 42 cards                 | 43 — one real 502, retried, then `2018/low`         |
+| 429s seen by the client              | **0** (see below)                                  |
+| Confidence spread                    | high 19 / low 8 / **none 15**                      |
+| Warm re-crawl over the resolved deck | **0 lookups**                                      |
+
+- **Card 1 playable after one lookup, on a cold deck** — verified.
+- **Cards 2..n filled in during play, and a rapid advance resolved THAT card next** — verified: the
+  jump serviced index 41 after finishing the in-flight card, then resumed the ordered walk at index 2.
+- **A `confidence: 'none'` card stays playable and is never skipped** — verified 15 times over.
+- **With `MUSICBRAINZ_USER_AGENT` unset the deck starts and plays, yearless** — verified, and it spent
+  exactly ONE lookup before halting rather than one per card.
+- **Ending the session stops the resolver** — `stop()` verified in the harness; unit-tested besides.
+- **Zero 429s**, and this is structural rather than luck: a single sequential client waits ~1.1 s for
+  its own permit, under the gate's 1.5 s `DEFAULT_MAX_WAIT_MS`, so it never rejects itself. **429
+  back-pressure is a multi-user phenomenon and cannot be observed in single-client testing** — which is
+  precisely why the resolver's 429 path is unit-tested rather than trusted to a manual run.
+
+**Still outstanding:**
+
+- **React 19 StrictMode single-resolver count** and a **genuine mid-game browser reload through
+  `useGameSession`** — both need a React runtime, i.e. Phase 4's jsdom decision, or a deployment.
+  The resolver half of resume is verified (a warm re-crawl issues zero lookups) and the storage format
+  is unit-tested; what is unverified is the hook wiring between them.
+- **The real 429 rate**, which needs concurrent players against a deployment with the Redis gate live.
+- Numbers from a **real Vercel deployment** (invocation overhead, Upstash round trips, the edge cache).
+  No Vercel CLI is installed here, so neither a preview deploy nor `vercel dev` was available.
 - The **documentation updates** and the **Phase 3 checkboxes in `plan.md`** (including closing §6's
   follow-on question about `confidence: 'none'` cards), which are deliberately a separate pass.

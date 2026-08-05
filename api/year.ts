@@ -155,6 +155,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     };
     if (outcome.result.source !== undefined) body.source = outcome.result.source;
     if (outcome.result.reason !== undefined) body.reason = outcome.result.reason;
+    // Set only when a fallback query against a rewritten title found the year -- today, a
+    // dropped remix suffix. Always accompanied by `confidence: 'low'`.
+    if (outcome.result.viaTitle !== undefined) body.viaTitle = outcome.result.viaTitle;
 
     res.setHeader('Cache-Control', CACHE_CONTROL[body.confidence]);
     res.status(200).json(body);

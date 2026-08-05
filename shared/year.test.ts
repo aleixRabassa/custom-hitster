@@ -6,6 +6,7 @@ import {
   cleanTrackTitle,
   normalizeForCacheKey,
   pickBestRecording,
+  stripRemixSuffix,
   yearCacheKey,
 } from './year';
 import type { RecordingCandidate } from './types';
@@ -155,6 +156,87 @@ describe('cleanTrackTitle', () => {
 });
 
 // ===========================================================================
+//  THE REMIX FALLBACK TITLE
+//
+//  Not part of `cleanTrackTitle()` on purpose -- a remix is often a real,
+//  separately-credited recording, so the FIRST query must keep the full title.
+//  This produces the SECOND query, used only when the first found no year at
+//  all. See the block comment on `stripRemixSuffix()`.
+// ===========================================================================
+
+describe('stripRemixSuffix', () => {
+  it('should strip the "- Remix" tail Spotify actually uses', () => {
+    // All five measured 2026-08-05 on a real playlist, where each of them resolved to NO year
+    // with the suffix left on. This was the single largest identifiable cause of a blank card.
+    expect(stripRemixSuffix('Ella No Es Tuya - Remix')).toBe('Ella No Es Tuya');
+    expect(stripRemixSuffix('Pininfarina - Remix')).toBe('Pininfarina');
+    expect(stripRemixSuffix('Tumba la Casa - Remix')).toBe('Tumba la Casa');
+    expect(stripRemixSuffix('Además de Mí - Remix')).toBe('Además de Mí');
+    expect(stripRemixSuffix('4 KISSUS - Remix')).toBe('4 KISSUS');
+  });
+
+  it('should strip a named remixer', () => {
+    // The remixer's name is part of the segment more often than not, which is what the
+    // optional leading group in the pattern is for.
+    expect(stripRemixSuffix('Faded - Alan Walker Remix')).toBe('Faded');
+    expect(stripRemixSuffix('Dákiti (Bad Bunny Remix)')).toBe('Dákiti');
+    expect(stripRemixSuffix('Levels - Skrillex Remix Edit')).toBe('Levels');
+  });
+
+  it('should strip the parenthesised and bracketed forms', () => {
+    expect(stripRemixSuffix('Titanium (Remix)')).toBe('Titanium');
+    expect(stripRemixSuffix('Titanium [Remix]')).toBe('Titanium');
+  });
+
+  it('should strip the neighbouring version families it is named for', () => {
+    expect(stripRemixSuffix('Animals - Bootleg')).toBe('Animals');
+    expect(stripRemixSuffix('Animals - VIP Mix')).toBe('Animals');
+    expect(stripRemixSuffix('Animals - Re-Mix')).toBe('Animals');
+    expect(stripRemixSuffix('Animals - Remix Version')).toBe('Animals');
+  });
+
+  it('should be case-insensitive about the tail', () => {
+    expect(stripRemixSuffix('Song - REMIX')).toBe('Song');
+    expect(stripRemixSuffix('Song - remix')).toBe('Song');
+  });
+
+  it('should return undefined for a title with no remix tail', () => {
+    // The caller spends a whole MusicBrainz request on a non-undefined answer, so a false
+    // positive here costs a request against a budget shared by every user of the app.
+    expect(stripRemixSuffix('Bohemian Rhapsody')).toBeUndefined();
+    expect(stripRemixSuffix('No Woman No Cry')).toBeUndefined();
+    expect(stripRemixSuffix('Levels - Radio Edit')).toBeUndefined();
+    expect(stripRemixSuffix('Sgt. Pepper - Reprise')).toBeUndefined();
+  });
+
+  it('should not strip a release name that merely contains the word', () => {
+    // "The Remix Album" and "Remixes" name RELEASES, not version tails. Stripping them would
+    // change which song is being searched for, which is the failure mode the whole allow-list
+    // approach in this module exists to avoid.
+    expect(stripRemixSuffix('Song - The Remix Album')).toBeUndefined();
+    expect(stripRemixSuffix('Song - Remixes')).toBeUndefined();
+  });
+
+  it('should not strip a word that is part of the title itself', () => {
+    // No trailing segment at all: the pattern requires a separator, exactly as
+    // `cleanTrackTitle()` does for "Live and Let Die".
+    expect(stripRemixSuffix('Remix')).toBeUndefined();
+    expect(stripRemixSuffix('Remix Culture')).toBeUndefined();
+    expect(stripRemixSuffix('Anti-Remix')).toBeUndefined();
+  });
+
+  it('should return undefined when the title is nothing but a remix tail', () => {
+    // There is no underlying song to ask about, so no request should be spent on it.
+    expect(stripRemixSuffix('- Remix')).toBeUndefined();
+    expect(stripRemixSuffix('(Remix)')).toBeUndefined();
+  });
+
+  it('should tolerate a non-string input', () => {
+    expect(stripRemixSuffix(undefined as unknown as string)).toBeUndefined();
+  });
+});
+
+// ===========================================================================
 //  CACHE KEY
 // ===========================================================================
 
@@ -189,7 +271,9 @@ describe('normalizeForCacheKey', () => {
     const key = yearCacheKey('Queen', 'Bohemian Rhapsody');
 
     expect(key).toBe(`mbyear:${YEAR_CACHE_SCHEMA_VERSION}:queen|bohemian rhapsody`);
-    expect(key.startsWith('mbyear:v1:')).toBe(true);
+    // Pinned literally as well, so a bump has to be a DELIBERATE two-line change rather than
+    // something that slips through because every assertion interpolated the constant.
+    expect(key.startsWith('mbyear:v2:')).toBe(true);
   });
 });
 

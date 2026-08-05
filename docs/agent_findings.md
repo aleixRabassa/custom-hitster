@@ -374,3 +374,232 @@ Seen in the same session, and consistent with the per-invocation process churn: 
 with Node 25.9.0 printed `Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c,
 line 76` mid-run, more than once, without affecting any response. Not traced further, and no evidence it
 involves this repo's code.
+
+## 2026-08-05 — Phase 3 driven against a real playlist: the numbers Phase 2 owed, and a third of an ordinary deck has no year
+
+Ran the Phase 3 game layer end to end against a real personal playlist
+(`5KFmETOxEWVEtpa1voRfDU`, "rabacumple", 42 tracks, no truncation, no skipped entries) using a
+throwaway harness that served the REAL `api/playlist.ts` and `api/year.ts` handlers over a local
+`node:http` server and drove `src/game`'s reducer + resolver against them through
+`src/game/year-client.ts`. So the whole path was exercised — HTTP, status mapping, sequencing,
+retries — not a stub of it. Deck cold (empty memory cache), gate in per-instance mode, one process,
+sequential crawl, so MusicBrainz was paced at 1.1 s throughout.
+
+This is the same **in-process** setup the 2026-08-04 entry above calls "the honest number for the
+resolver itself": it includes the gate spacing and both MusicBrainz round trips and excludes only
+Vercel invocation overhead, the Redis round trips and the edge. A preview deployment will be somewhat
+slower per card; it will not be slower in a way that changes any conclusion below, because the 1.1 s
+gate spacing dominates.
+
+**The wall clock Phase 2 could not measure:**
+
+| Measurement                                       | Result                                             |
+| ------------------------------------------------- | -------------------------------------------------- |
+| Full cold crawl, 42 cards                         | **153.0 s** (~3.64 s/card, so ~3 min for 50 cards) |
+| **Card-1 gate** (`START` → `playing`)             | **6.06 s** — one lookup, not one deck              |
+| Priority jump (player outran the crawl)           | **5.67 s**                                         |
+| `/api/playlist`                                   | 514 ms                                             |
+| Lookups issued for 42 cards                       | 43 (one retry)                                     |
+| Warm re-crawl over the resolved deck              | **0 lookups**                                      |
+
+Per-card cold latency ranged **1.08–11.27 s**, wider than the 1.3–3.6 s Phase 2 measured on its
+curated set. Card 1 alone cost 6.0 s, so **the pre-Start wait is ~6 s in practice, not ~2 s** — worth
+knowing before Phase 6 words the loading screen.
+
+**The progressive-loading invariants all hold, measured rather than assumed.** Card 1 became playable
+after one completed lookup with 1/42 cards resolved; flip worked immediately; jumping to the LAST card
+(index 41) made the resolver finish its in-flight card and then resolve *that* card next (11.7 s mark,
+deck 3/42 resolved) before resuming the ordered walk at index 2. Waiting in deck order would have cost
+~145 s instead of 5.7 s.
+
+**The answer to plan.phase-3.md's open question about the relaxed tier, and it is not good news:**
+
+```
+high = 19  (45%)    low = 8  (19%)    none = 15  (36%)
+```
+
+Phase 2's "14/14 strict" was measured on a set curated for classic-rock difficulty. On an **ordinary
+personal playlist** — Latin/reggaeton, Catalan pop, current chart tracks, a couple of novelty tracks —
+**a third of the deck resolves to no year at all**, and only 45% reaches `high`. Phase 6 must therefore
+treat "no year" as a NORMAL card state, not an edge case: a manual-entry affordance on the revealed
+side is load-bearing, not a nicety. It also confirms decision 5 (a `confidence: 'none'` card stays in
+the deck) was the only workable choice — dropping them would delete a third of this playlist.
+
+**Five of the 15 misses share one unstripped suffix: `- Remix`** (`Ella No Es Tuya - Remix`,
+`Pininfarina - Remix`, `Tumba la Casa - Remix`, `Además de Mí - Remix`, `4 KISSUS - Remix`).
+`FAMILY_PATTERNS` in `shared/year.ts` strips `- Live`, `- Remaster`, `- Radio Edit`, `- Extended Mix`
+and so on, but nothing matches a bare `Remix` — the `version` family's `(?:version|edit|mix|cut)`
+alternation is anchored, so "remix" does not match "mix". Adding it would be consistent with decision
+14 (Hitster asks when the SONG came out, so a remix should report the original's year, exactly as a
+live take does) and is the single highest-value change available to the year resolver. **Not made here:
+it is Phase 2 code and a product decision.** Untested guess at the ceiling: up to 5 of 42 cards on this
+deck, i.e. `none` 36% → ~24%.
+
+**Zero 429s in 43 lookups.** A single sequential client never trips its own gate: `acquire()` waits
+~1.1 s, which is under the 1.5 s `DEFAULT_MAX_WAIT_MS`, so it gets the permit instead of a 429. **429
+back-pressure is a multi-user phenomenon and is therefore unobservable in single-client testing** —
+which is exactly why the resolver's 429 path is unit-tested rather than trusted to manual verification.
+The real 429 rate still needs a deployment with concurrent players.
+
+**The transient-retry policy earned its keep on the very first real deck.** One genuine
+`502 upstream-unavailable` occurred (`Sunflower - Spider-Man: Into the Spider-Verse`, at the 87.6 s
+mark); the resolver backed off and retried, and the retry returned `2018/low`. Without the retry that
+card would have been deferred and possibly blanked. 43 lookups for 42 cards is the whole cost of that
+policy on a healthy run.
+
+**A misconfigured deployment behaves as designed.** With `MUSICBRAINZ_USER_AGENT` deleted, the deck
+started, went straight to `playing`, set `yearLookupsUnavailable`, and spent **exactly one** lookup
+before halting the crawl — not one per card.
+
+**Still not verified locally, and still needs a real deployment:** the React 19 StrictMode
+single-resolver check (needs a React runtime, so Phase 4's jsdom decision), a genuine mid-game browser
+reload through `useGameSession`, and the 429 rate under concurrency.
+
+## 2026-08-05 — Two Vitest 4 gotchas that cost a whole 150 s harness run
+
+1. **`--reporter=basic` no longer exists in Vitest 4** and fails as `Failed to load custom Reporter
+   from basic` — a startup error, not a warning, so nothing runs.
+2. **Vitest 4's default reporter swallows test stdout on a PASSING test.** A 153 s live harness ran
+   green and printed only the summary; every `console.log` was lost. For any harness whose OUTPUT is
+   the point, write results to a file with `writeFileSync` instead of logging them.
+
+Also: **Vitest does not put `.env.local` into `process.env`.** Vite only exposes `VITE_`-prefixed
+values, and on `import.meta.env`. Since `api/year.ts` reads `process.env['MUSICBRAINZ_USER_AGENT']` per
+request, a harness that needs it must parse `.env.local` itself.
+
+## 2026-08-05 — The remix fallback: a third resolution tier, measured at 3 of 5 recovered
+
+Acting on the finding above (five of one playlist's fifteen yearless cards carried an unstripped
+`- Remix`), `/api/year` now has a third tier. Built and verified the same day.
+
+**How it works.** `stripRemixSuffix()` in `shared/year.ts` is a new pure export that drops a trailing
+remix segment (`- Remix`, `(Bad Bunny Remix)`, `- Bootleg`, `- VIP Mix`, `- Remix Version`).
+`resolveYear()` calls it ONLY when the strict and relaxed passes have both returned `year: null`, then
+re-queries MusicBrainz with the base title and runs strict-then-relaxed again over those candidates.
+
+**Why it is a fallback rather than part of `cleanTrackTitle()`.** Every family in `FAMILY_PATTERNS` is
+stripped on the first attempt because the literal suffix breaks the query outright ("Bohemian Rhapsody
+- Remastered 2011" returns zero results). A remix is different: it is often a real, separately-credited
+recording that MusicBrainz knows under its full title, so stripping it up front would throw away the
+exact match and ask about a *different* song. Try the title as given; only then ask about the
+underlying song.
+
+**Three deliberate choices, each with a test that pins it:**
+
+1. **A hit is always downgraded to `confidence: 'low'`,** even when the strict pass matched. The title
+   had to be rewritten to find it, which is exactly the "show with an unconfirmed marker" case `low`
+   exists for — and a remix genuinely can be a different song rather than a new take on one.
+2. **`durationMs` is dropped from the fallback query and from its scoring.** A remix is not the same
+   length as the song it remixes, so the `dur:` bound would exclude the very recording being looked
+   for. Reusing the primary scoring input is the obvious "tidy-up" that would break this, hence the
+   test named for it.
+3. **A fallback upstream failure is swallowed.** The primary passes already produced a definite "no
+   year"; turning that into a 502 would make the client retry a card whose answer is known.
+
+`YearResult` and `YearLookupResult` gained an optional **`viaTitle`**, set only on a fallback hit, for
+the reason `cleanedTitle` exists (decision 18): when a year looks wrong, "we asked about a different
+title than the card shows" is the most important possible answer to "what was searched for". It lives
+on the cached `YearResult`, so a cache hit explains itself exactly as the original miss did.
+`cleanedTitle` still reports the PRIMARY query's title — the one the cache key is derived from — so it
+reads the same either way. It reaches the browser through `year-client.ts` untouched; Phase 3 does not
+store it on the `Card`, so Phase 6 must read it from the response if it wants to show it.
+
+**`YEAR_CACHE_SCHEMA_VERSION` was deliberately NOT bumped**, despite the module's own rule about
+bumping it when resolution changes. This tier can only improve tracks that previously resolved to
+`none`, and `none` entries have a **1-day** TTL, so the masking is bounded at 24 h and self-healing. A
+bump would additionally invalidate every 30-day `high` entry that this change cannot affect — strictly
+worse.
+
+**Measured live against the same playlist (`5KFmETOxEWVEtpa1voRfDU`), all 5 remix cards:**
+
+| Card                     | Result                                       |
+| ------------------------ | -------------------------------------------- |
+| `Pininfarina - Remix`    | **2020 / low** via "Pininfarina" (recording) |
+| `4 KISSUS - Remix`       | **2024 / low** via "4 KISSUS" (release-group) |
+| `Tumba la Casa - Remix`  | **2015 / low** via "Tumba la Casa" (recording) |
+| `Ella No Es Tuya - Remix` | still `none` — MusicBrainz has neither form  |
+| `Además de Mí - Remix`   | still `none` — same                          |
+
+**3 of 5 recovered**, so this deck goes from 15 yearless cards to 12 (36% → 29%). The two remaining
+misses are genuine data gaps, not query problems. Spot-checking the three: "Tumba la Casa" is correctly
+2015 (the remix itself is 2016), and the other two are plausible.
+
+**The latency consequence is the important operational finding: a successful fallback took 13.5–16.0 s**
+(vs 4.8–14.2 s for a failing one), because it runs after the primary ladder has already spent up to
+three gated requests. That is **past Vercel's default 10 s Node function limit** — and the 2026-08-05
+measurement above already showed a plain lookup peaking at 11.3 s, so the limit was a latent problem
+before this change rather than one it introduced. **`vercel.json` now sets `functions: {"api/*.ts":
+{"maxDuration": 30}}`.** That value is unverified against a real deployment (no Vercel CLI here) and is
+the one change in this batch that can only be validated by deploying.
+
+## 2026-08-05 — Validated against a real Vercel preview deployment, and the project has NO environment variables
+
+Installed the Vercel CLI (`npm install -g vercel`, 58.5.1 — global, so `package.json` and the pnpm
+lockfile are untouched; the CLI does not belong in the deployed dependency set) and deployed a
+**preview** (never `--prod`) of the working tree. Auth was already present for `aleix-rabassa`, and the
+repo is linked through `.vercel/repo.json`.
+
+**What the deployment proves.**
+
+- **`maxDuration: 30` is valid and in force.** Not inferred from a silent success: setting it to
+  `999999` and deploying fails the build with _"The value for maxDuration must be between 1 second and
+  300 seconds"_. So Vercel validates the field at build time, this account's ceiling is **300 s**, and
+  30 passed. Plenty of headroom remains if the remix fallback ever needs more.
+- **The `functions: {"api/*.ts": …}` glob matches.** `vercel inspect` lists `λ api/hello`,
+  `λ api/playlist`, `λ api/year`; a pattern matching nothing is a build error, not a warning.
+- **`/api/year` runs correctly in the deployed runtime**, which is the only place the `.js`-extension
+  import discipline can be verified (AGENTS.md: an extensionless specifier builds clean and fails at
+  runtime). The new `stripRemixSuffix` import is fine — no `FUNCTION_INVOCATION_FAILED`.
+  - `Levels - Radio Edit` / Avicii → `2013 / high`, `cleanedTitle: "Levels"`, `version: true`.
+  - **`Tumba la Casa - Remix` → `2015 / low`, `viaTitle: "Tumba la Casa"`.** The remix fallback works
+    end to end on real Vercel.
+  - `Además de Mí - Remix` (the slowest local case at 14.2 s) → `null / none`, HTTP 200, no 504.
+- **The edge cache tier works:** a repeated `/api/playlist` was served with `"source":"static"`,
+  `"cache":"HIT"` in the runtime logs.
+
+**What it does NOT prove: function duration.** `vercel curl` (the supported way through Deployment
+Protection) has its own overhead of **10.5–16.5 s**, sampled three times on `/api/hello`, which is the
+same magnitude as the requests being measured. Wall clocks came out at 13.8 s for a normal lookup and
+16.2–16.9 s for the two remix lookups, and the noise swallows the signal entirely. Getting clean numbers
+needs a **Protection Bypass for Automation** secret (a project setting, so the developer has to create
+it) or protection disabled for the preview. The in-process figures from earlier today remain the honest
+per-lookup numbers.
+
+**THE OPERATIONAL FINDING, and it is the important one: the Vercel project has ZERO environment
+variables** (`vercel env ls` → "No Environment Variables found"). Two consequences, both visible in the
+preview's cold-start logs:
+
+```
+[year-cache] using in-memory cache (per-instance, not shared)
+[rate-limit] using per-instance pacing (does NOT enforce the global 1 req/s)
+```
+
+1. **`MUSICBRAINZ_USER_AGENT` is unset, so a real deployment 500s `not-configured` on every year
+   lookup.** The preview above only worked because the value was passed as a one-off
+   `vercel deploy -e MUSICBRAINZ_USER_AGENT=…`, which does not persist to the project.
+2. **Without Upstash there is no shared cache and no global gate.** Per-instance pacing does not
+   enforce MusicBrainz's 1 req/s across concurrent invocations, so a deployed multi-user session can
+   aggregate past the published limit — the thing that gets clients blocked. **Do not drive a whole
+   deck against a deployment until `UPSTASH_REDIS_REST_URL`/`_TOKEN` are set.** For the same reason
+   the validation above was deliberately four hand-spaced requests, not a crawl.
+
+Unrelated noise seen in the logs, recorded so it is not re-investigated: `(node:4) [DEP0169]
+DeprecationWarning: url.parse()` on every invocation. It comes from `@vercel/node`'s own request
+handling under Node 25, not from this repo's code.
+
+## 2026-08-05 — YEAR_CACHE_SCHEMA_VERSION bumped to v2
+
+Bumped at the developer's instruction, superseding the "deliberately NOT bumped" note in the remix
+fallback entry above. The rule in `shared/year.ts` is unconditional — bump when resolution logic
+changes — and the remix fallback changes it, so v1 → **v2**.
+
+The reasoning for the earlier hesitation still stands as a description of the cost, and it is worth
+knowing: the new tier can only improve entries that were `none`, and those carry a 1-day TTL, so v1
+would have washed out by itself within 24 h. Bumping additionally discards every `high` entry, which
+has a 30-day TTL. **So the first play of any playlist after this ships re-resolves its whole deck
+against a 1 req/s budget shared by every user** — with the measured cost of ~3.6 s per cold card, that
+is ~3 minutes of crawl for a 50-card deck that would otherwise have been instant. The trade taken is
+that a version segment only bumped when someone judges it necessary is a version nobody can trust.
+
+Currently zero-cost in practice: with no Upstash configured (see the entry above) nothing is shared or
+durable anyway, so there are no production entries to invalidate yet.

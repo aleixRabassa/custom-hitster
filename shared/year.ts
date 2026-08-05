@@ -165,6 +165,62 @@ function classifySegment(tail: string): StripFamily | undefined {
   return undefined;
 }
 
+/**
+ * A trailing remix segment: "Remix", "Bad Bunny Remix", "Remix Version", "(VIP Mix)",
+ * "- Bootleg".
+ *
+ * The optional leading `.+\s` is what makes "Bad Bunny Remix" and "Alan Walker Remix" work --
+ * the remixer's name is part of the segment far more often than not. It is anchored at both
+ * ends on purpose: "The Remix Album" and "Remixes" do NOT match, because those are the titles
+ * of releases rather than version tails, and stripping them would change which song is being
+ * searched for.
+ */
+const REMIX_SEGMENT_PATTERN =
+  /^(?:.+\s)?(?:re-?mix|bootleg|refix|rework|vip(?:\s+mix)?)(?:\s+(?:version|edit))?$/;
+
+/**
+ * Drop a trailing remix segment, or return `undefined` when there is none.
+ *
+ * ===========================================================================
+ *  DELIBERATELY NOT PART OF `cleanTrackTitle()`. IT IS A FALLBACK QUERY.
+ *
+ *  Every family in `FAMILY_PATTERNS` is stripped on the FIRST attempt, because
+ *  the literal suffix breaks the query outright ("Bohemian Rhapsody -
+ *  Remastered 2011" returns zero results). A remix is different: it is often a
+ *  real, separately-credited recording that MusicBrainz knows under its full
+ *  title, so stripping it up front would throw away the exact match and query
+ *  a DIFFERENT song instead.
+ *
+ *  So the ladder is: try the title as given, and only if that yields no year at
+ *  all, come back here and ask about the underlying song. That is what
+ *  `api/_lib/resolve-year.ts` does, and it is why the result of a fallback hit
+ *  reports `low` confidence -- the title had to be rewritten to find it.
+ *
+ *  WHY IT EXISTS AT ALL: measured 2026-08-05 on a real 42-track playlist, 15
+ *  cards resolved to no year and FIVE of them carried an unstripped "- Remix"
+ *  ("Ella No Es Tuya - Remix", "Pininfarina - Remix", "Tumba la Casa - Remix",
+ *  "Además de Mí - Remix", "4 KISSUS - Remix"). It was the single largest
+ *  identifiable cause of a blank card. See docs/agent_findings.md.
+ * ===========================================================================
+ *
+ * Pure, and it never returns an empty string: a title that is nothing but a remix segment
+ * ("- Remix") has no underlying song to ask about, so it returns `undefined` and the caller
+ * spends no request on it.
+ */
+export function stripRemixSuffix(title: string): string | undefined {
+  if (typeof title !== 'string') return undefined;
+
+  const match = TRAILING_SEGMENT_PATTERN.exec(title.trim());
+  if (!match) return undefined;
+
+  const head = (match[1] ?? '').trim();
+  const tail = (match[2] ?? match[3] ?? match[4] ?? '').trim().toLowerCase();
+
+  if (head === '' || !REMIX_SEGMENT_PATTERN.test(tail)) return undefined;
+
+  return head;
+}
+
 // ===========================================================================
 //  CACHE KEY
 // ===========================================================================
@@ -177,8 +233,18 @@ function classifySegment(tail: string): StripFamily | undefined {
  * no version segment, improved scoring would be masked indefinitely by stale entries and
  * the improvement would look like it did not work. Bumping this invalidates every cached
  * year in one edit, which is far cheaper than reasoning about which entries are poisoned.
+ *
+ * **v2 (2026-08-05):** the remix fallback in `api/_lib/resolve-year.ts` — a track whose title
+ * carries a remix suffix can now resolve where it previously could not. Bumped on the rule
+ * above rather than on necessity: the tier only affects entries that were `none`, and those
+ * expire after a day anyway, so v1 would have washed out on its own within 24 h. The cost of
+ * bumping is that every `high` entry (30-day TTL) is discarded too, so **the first play of any
+ * playlist after this ships re-resolves its whole deck against a 1 req/s budget that is global
+ * across all users.** Done deliberately, at the developer's instruction, to keep the rule
+ * unconditional: a version that is only bumped when someone judges it necessary is a version
+ * nobody can trust.
  */
-export const YEAR_CACHE_SCHEMA_VERSION = 'v1';
+export const YEAR_CACHE_SCHEMA_VERSION = 'v2';
 
 /**
  * Lowercase, de-accent, drop punctuation, collapse whitespace.
