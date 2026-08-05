@@ -122,6 +122,35 @@ describe('CardControls', () => {
     expect(onExit).toHaveBeenCalledTimes(1);
   });
 
+  it('should give every control a focus-visible style', () => {
+    // Class-name level, with the caveat spelled out in `LandingScreen.test.tsx`: it proves the
+    // utility is present, not that the ring is legible. What it catches is a fourth control added
+    // without one. `focus-visible` rather than `focus` so a mouse press on Play does not leave a
+    // ring sitting on the card for the rest of the game.
+    render(<CardControls audio={stubAudio()} onExit={vi.fn()} />);
+
+    const buttons = screen.getAllByRole('button');
+    expect(buttons).toHaveLength(3);
+    for (const button of buttons) {
+      expect(button.className).toContain('focus-visible:focus-ring');
+    }
+  });
+
+  it('should meet the touch-target minimum on all three controls', () => {
+    // 44px square, from `--size-touch-target`. These were `px-4 py-2` around a single glyph --
+    // roughly 40px tall and narrower than that wide -- on the surface a thumb is most likely to be
+    // near while swiping a card.
+    //
+    // Class-name level again, and here the caveat bites hardest: jsdom computes no layout, so this
+    // cannot measure 44 of anything. It asserts the utility is applied; that the utility MEANS
+    // 44px is asserted in `src/index.css` and checked by the manual pass.
+    render(<CardControls audio={stubAudio()} onExit={vi.fn()} />);
+
+    for (const button of screen.getAllByRole('button')) {
+      expect(button.className).toContain('touch-target');
+    }
+  });
+
   it('should invoke play, pause, and restart on their controls', () => {
     const audio = stubAudio();
     const { rerender } = render(<CardControls audio={audio} onExit={vi.fn()} />);

@@ -40,24 +40,46 @@ import type { Card } from '../../shared/types';
 
 export interface CardHiddenSideProps {
   card: Card;
-  /** QR edge length in CSS pixels. */
+  /**
+   * The QR's GENERATED bitmap edge length in pixels. Not its displayed size — see below.
+   *
+   * Overridable for tests and for a future caller that needs a different bitmap; the displayed
+   * size is not a prop, because it is a property of the card's layout rather than of this face.
+   */
   qrSize?: number;
 }
 
-const DEFAULT_QR_SIZE = 176;
+/**
+ * The bitmap the QR is encoded at, in pixels.
+ *
+ * Sized for the LARGEST the code is ever displayed at, which is 176px — `--qr-display-size` is
+ * 11/18 of the card's width and the card's width tops out at 288px. Fixed, and it stays fixed
+ * (Phase 7 decision 4): the displayed size became fluid, the generated one must not follow it,
+ * because `toDataURL` is asynchronous and a viewport-derived size would re-encode on every frame
+ * of a resize. Downscaling a finished code in CSS is free.
+ */
+const QR_BITMAP_SIZE = 176;
 
-export function CardHiddenSide({ card, qrSize = DEFAULT_QR_SIZE }: CardHiddenSideProps) {
+/**
+ * The CSS length the code is DRAWN at, tracking the card. Defined in `src/index.css`.
+ *
+ * A string handed straight to `QrCode`'s `displaySize`, and deliberately not something this file
+ * computes: the card's geometry lives in one `@theme` block and this is one more consumer of it.
+ */
+const QR_DISPLAY_SIZE = 'var(--qr-display-size)';
+
+export function CardHiddenSide({ card, qrSize = QR_BITMAP_SIZE }: CardHiddenSideProps) {
   return (
     <div className="flex h-full w-full flex-col items-center justify-center gap-6 p-6">
       {/* Always rendered, for every card, whatever the state of audio. plan.md §2. */}
-      <QrCode url={spotifyTrackUrl(card.id)} size={qrSize} />
+      <QrCode url={spotifyTrackUrl(card.id)} size={qrSize} displaySize={QR_DISPLAY_SIZE} />
 
       {/*
         Generic on purpose, and it is the only text this face may carry: it says how the card is
         used, never anything about the track. Kept short because the face has to stay readable
         on a phone.
       */}
-      <p className="text-xs text-neutral-500">Scan to play the full song</p>
+      <p className="text-xs text-text-muted">Scan to play the full song</p>
     </div>
   );
 }

@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { isSpotifyShortLink, parsePlaylistUrl, spotifyTrackUrl } from './spotify-url';
+import {
+  isSpotifyShortLink,
+  parsePlaylistUrl,
+  spotifyPlaylistUrl,
+  spotifyTrackUrl,
+} from './spotify-url';
 
 /**
  * A real playlist ID (Today's Top Hits), used everywhere below so that a failure is
@@ -25,6 +30,21 @@ describe('spotifyTrackUrl', () => {
       ok: false,
       code: 'unsupported-entity',
     });
+  });
+});
+
+describe('spotifyPlaylistUrl', () => {
+  it('should build an open.spotify.com playlist URL from a bare id', () => {
+    // This exact string is what a suggested-playlist button puts in the landing form, so the
+    // shape is the contract -- and it must match the placeholder the input advertises.
+    expect(spotifyPlaylistUrl(ID)).toBe(`https://open.spotify.com/playlist/${ID}`);
+  });
+
+  it('should output a playlist link that parsePlaylistUrl accepts, recovering the same id', () => {
+    // The round trip. Unlike `spotifyTrackUrl`, this builder's output is meant to be parsed back:
+    // the landing screen validates a suggestion's link exactly as it validates a pasted one, so a
+    // builder the parser disagreed with would make every suggestion show an inline error.
+    expect(parsePlaylistUrl(spotifyPlaylistUrl(ID))).toEqual({ ok: true, id: ID });
   });
 });
 

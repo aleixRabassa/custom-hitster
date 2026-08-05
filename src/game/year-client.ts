@@ -114,10 +114,16 @@ export async function lookupYear(
     query.set('durationMs', String(Math.round(track.durationMs)));
   }
 
+  // Destructured, never called as `options.fetchImpl(...)`: a method call hands the native
+  // `fetch` the options object as its receiver, and the browser answers "Illegal invocation",
+  // which the `catch` below would report as `network`. Same fix, same reason, as
+  // `playlist-client.ts` -- see the long comment there.
+  const { fetchImpl } = options;
+
   let response: YearFetchResponse;
   try {
     const init = options.signal ? { signal: options.signal } : undefined;
-    response = await options.fetchImpl(`${YEAR_ENDPOINT}?${query.toString()}`, init);
+    response = await fetchImpl(`${YEAR_ENDPOINT}?${query.toString()}`, init);
   } catch {
     // Offline, DNS failure, or an abort from `resolver.stop()`. All three are "the request did
     // not happen"; the resolver already ignores everything after a stop, so they need no

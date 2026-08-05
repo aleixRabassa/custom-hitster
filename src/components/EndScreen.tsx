@@ -27,19 +27,21 @@ export interface EndScreenProps {
 
 export function EndScreen({ cardsPlayed, playlistName, onRestart, onNewPlaylist }: EndScreenProps) {
   return (
-    <main className="flex min-h-dvh flex-col items-center justify-center gap-8 bg-neutral-950 p-6 text-neutral-100">
+    <main className="flex min-h-dvh flex-col items-center justify-center gap-8 bg-page p-6 text-fg">
       <div className="flex flex-col items-center gap-2 text-center">
         <h1 className="text-3xl font-semibold">Deck finished</h1>
-        <p className="text-sm text-neutral-400">
+        <p className="text-sm text-fg-secondary">
           {cardsPlayed === 1 ? '1 card played' : `${cardsPlayed} cards played`} from {playlistName}
         </p>
       </div>
 
-      <div className="flex w-full max-w-sm flex-col gap-3">
+      <div className="flex w-full max-w-content flex-col gap-3">
         <button
           type="button"
           onClick={onRestart}
-          className="rounded-lg bg-emerald-600 px-4 py-2 font-medium text-white hover:bg-emerald-500"
+          // `text-on-accent`, not `text-white`: see `LandingScreen`'s Start button. White on the
+          // accent measured 3.67:1 and is a 1.4.3 failure; the background is unchanged.
+          className="touch-target rounded-lg bg-accent px-4 py-2 font-medium text-on-accent hover:bg-accent-hover focus-visible:focus-ring"
         >
           Play again
         </button>
@@ -48,12 +50,12 @@ export function EndScreen({ cardsPlayed, playlistName, onRestart, onNewPlaylist 
           Worth saying out loud: a player who has just heard forty songs wants to know whether
           "play again" means the same order. It does not -- a fresh seed reshuffles.
         */}
-        <p className="text-center text-xs text-neutral-500">Same tracks, new order</p>
+        <p className="text-center text-xs text-fg-muted">Same tracks, new order</p>
 
         <button
           type="button"
           onClick={onNewPlaylist}
-          className="rounded-lg border border-neutral-700 px-4 py-2 font-medium text-neutral-200 hover:border-neutral-600"
+          className="touch-target rounded-lg border border-border-strong px-4 py-2 font-medium text-fg hover:border-border-hover focus-visible:focus-ring"
         >
           New playlist
         </button>

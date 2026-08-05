@@ -106,10 +106,34 @@ export async function fetchPlaylist(
 ): Promise<PlaylistOutcome> {
   const query = new URLSearchParams({ url });
 
+  /*
+    ===========================================================================
+     DESTRUCTURED BEFORE THE CALL, AND THAT IS LOAD-BEARING.
+
+     `options.fetchImpl(...)` is a METHOD call, so the function runs with
+     `options` as its receiver. The browser's native `fetch` is brand-checked:
+     given a receiver that is not the global object it throws
+
+       TypeError: Failed to execute 'fetch' on 'Window': Illegal invocation
+
+     ...which the `catch` below then reports as `network` -- "Could not reach the
+     server" for a request that was never attempted. Every Start in a real
+     browser failed that way. NOTHING in this repo could catch it: every test
+     stub here is a plain function with no brand check, and the node
+     environment's `fetch` has none either.
+
+     A bare call passes `undefined`, which WebIDL resolves to the global, so this
+     works for the real `fetch` and for any stub alike. The injection sites bind
+     as well (`usePlaylist`, `use-game-session`) -- belt and braces, because the
+     failure is invisible until someone opens the app.
+    ===========================================================================
+  */
+  const { fetchImpl } = options;
+
   let response: PlaylistFetchResponse;
   try {
     const init = options.signal ? { signal: options.signal } : undefined;
-    response = await options.fetchImpl(`${PLAYLIST_ENDPOINT}?${query.toString()}`, init);
+    response = await fetchImpl(`${PLAYLIST_ENDPOINT}?${query.toString()}`, init);
   } catch {
     // Offline, DNS failure, or an abort. All three are "the request did not happen"; an abort
     // is only ever caused by this app itself moving on, so it needs no separate code.

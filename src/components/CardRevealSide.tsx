@@ -23,6 +23,33 @@
  *  year on screen" -- but one resolves and the other never will, and telling a
  *  player to go and check a year that is about to arrive is a bug.
  * ===========================================================================
+ *
+ * ===========================================================================
+ *  THIS IS THE ONE PLACE IN THE APP WHERE ANNOUNCING TRACK DATA IS CORRECT.
+ *
+ *  The `role="status"` below is a POLITE LIVE REGION, and it looks exactly like
+ *  the leak the rest of the app is built to avoid. It is the opposite of one.
+ *
+ *  Before Phase 7 the flip was SILENT to assistive technology: a player pressed
+ *  Space, this component mounted, and nothing was announced. The payoff of the
+ *  entire game -- the year -- was available to an eye and to nothing else. A
+ *  card with a QR code and no audible reveal is not a game a screen-reader user
+ *  can play.
+ *
+ *  Why it cannot leak: this component is mounted ONLY while the card is flipped
+ *  (`Card.tsx`, and that is the DOM-presence rule, not an optimisation). There
+ *  is no unflipped card on which this region exists, so there is nothing for it
+ *  to announce early. That is also why the region belongs HERE and nowhere else:
+ *  `CardHiddenSide`, `CardStack`'s backs and the HUD are all live on an
+ *  unflipped card, and a live region on any of them would announce a card the
+ *  player is meant to be guessing. `CardHiddenSide.test.tsx` asserts the
+ *  absence.
+ *
+ *  POLITE, not assertive. The reveal is expected and was asked for; interrupting
+ *  whatever the screen reader is mid-sentence on would be rude about news the
+ *  player already requested. `role="status"` carries `aria-live="polite"`
+ *  implicitly and is the smaller declaration.
+ * ===========================================================================
  */
 
 import type { Card } from '../../shared/types';
@@ -39,18 +66,24 @@ export interface CardRevealSideProps {
 
 export function CardRevealSide({ card, isYearPending }: CardRevealSideProps) {
   return (
-    <div className="flex h-full w-full flex-col items-center justify-center gap-6 p-6 text-center">
+    // The live region wraps the year, the title AND the artist, so one announcement carries the
+    // whole reveal rather than three. See the header block for why this is safe here and nowhere
+    // else in the app.
+    <div
+      role="status"
+      className="flex h-full w-full flex-col items-center justify-center gap-6 p-6 text-center"
+    >
       <YearSlot card={card} isYearPending={isYearPending} />
 
       <div className="flex flex-col gap-1">
-        <p className="text-xl font-semibold text-neutral-100">{card.title}</p>
+        <p className="text-xl font-semibold text-fg">{card.title}</p>
         {/*
           The artist string is rendered VERBATIM. `shared/artists.ts` documents why splitting
           it is forbidden for display: the separators Spotify joins with also occur inside
           real artist names, so "Earth, Wind & Fire" would render as three artists and corrupt
           the reveal -- the payoff of the entire game.
         */}
-        <p className="text-base text-neutral-400">{card.artist}</p>
+        <p className="text-base text-fg-secondary">{card.artist}</p>
       </div>
     </div>
   );
@@ -62,10 +95,15 @@ function YearSlot({ card, isYearPending }: CardRevealSideProps) {
   if (isYearPending) {
     return (
       <div className="flex flex-col items-center gap-2">
-        <p className="text-5xl font-bold text-neutral-600" aria-hidden="true">
+        {/*
+          `aria-hidden` decoration, and the one colour in the app deliberately left below 4.5:1
+          (1.94:1, measured). It is not content: the line beneath it carries the whole meaning, so
+          WCAG 1.4.3 exempts it and raising it would be a visual change Phase 8 owns.
+        */}
+        <p className="text-year-pending font-bold text-fg-decorative" aria-hidden="true">
           ····
         </p>
-        <p className="text-sm text-neutral-400">Still looking up the year…</p>
+        <p className="text-sm text-fg-secondary">Still looking up the year…</p>
       </div>
     );
   }
@@ -73,8 +111,8 @@ function YearSlot({ card, isYearPending }: CardRevealSideProps) {
   if (card.year === null || card.year === undefined) {
     return (
       <div className="flex flex-col items-center gap-2">
-        <p className="text-3xl font-bold text-neutral-300">Year unknown</p>
-        <p className="text-sm text-amber-300">Check this one yourself</p>
+        <p className="text-year-none font-bold text-fg-heading">Year unknown</p>
+        <p className="text-sm text-warning">Check this one yourself</p>
       </div>
     );
   }
@@ -83,8 +121,8 @@ function YearSlot({ card, isYearPending }: CardRevealSideProps) {
 
   return (
     <div className="flex flex-col items-center gap-2">
-      <p className="text-6xl font-bold tracking-tight text-neutral-50">{card.year}</p>
-      {isUnconfirmed ? <p className="text-sm text-amber-300">Unconfirmed year</p> : null}
+      <p className="text-year font-bold tracking-tight text-fg-strong">{card.year}</p>
+      {isUnconfirmed ? <p className="text-sm text-warning">Unconfirmed year</p> : null}
     </div>
   );
 }

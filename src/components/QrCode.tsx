@@ -18,6 +18,20 @@
  * it the card's layout jumps when the code resolves, which is most visible on the card that
  * matters most -- the first one.
  *
+ * ## The generated size and the displayed size are two props, and that is Phase 7 decision 4
+ *
+ * `size` is the bitmap `toDataURL` encodes and it is a FIXED number of pixels. `displaySize` is
+ * any CSS length and may be fluid -- `CardHiddenSide` passes a token that tracks the card.
+ *
+ * Conflating them, which is what this component did through Phase 6, is what would make the code
+ * regenerate on every frame of a resize once the card became fluid: `toDataURL` returns a promise,
+ * so a viewport-derived generation size would need a debounce, extra state, and would flash the
+ * placeholder mid-resize. Downscaling a finished QR in CSS costs nothing instead -- it does not
+ * harm scannability, and the error correction level is already `M`.
+ *
+ * The consequence to preserve: `size` is what the cache key and the generation counter are built
+ * from, and `displaySize` must never enter either, or the two come back together.
+ *
  * **A superseded result is dropped.** `qrcode` resolves a promise; a fast card advance can
  * therefore resolve the PREVIOUS card's code after the new URL is already on screen. The
  * generation counter below is what stops that from painting the wrong track's code, which
@@ -36,8 +50,22 @@ import { toDataURL } from 'qrcode';
 export interface QrCodeProps {
   /** The URL to encode. For a card this is `spotifyTrackUrl(card.id)`. */
   url: string;
-  /** Rendered edge length in CSS pixels. Also the placeholder's size, so the layout is stable. */
+  /**
+   * The GENERATED bitmap's edge length in pixels.
+   *
+   * A fixed number, chosen for the largest size the code will ever be shown at. It feeds
+   * `toDataURL` and the cache key, so changing it re-encodes; it must never be derived from the
+   * viewport. See the header block.
+   */
   size: number;
+  /**
+   * The RENDERED edge length, as any CSS length — a token, a `calc()`, or a plain `px` string.
+   *
+   * Applied to the image and to the placeholder alike, so the layout is stable across the async
+   * generation. Defaults to `size` in pixels, which is the pre-Phase-7 behaviour and what every
+   * caller other than `CardHiddenSide` still wants.
+   */
+  displaySize?: string;
   /**
    * Generic by default and generic in every override. Never interpolate a track title,
    * artist, or year into it.
@@ -52,7 +80,9 @@ function cacheKey(url: string, size: number): string {
   return `${size}|${url}`;
 }
 
-export function QrCode({ url, size, alt = DEFAULT_ALT }: QrCodeProps) {
+export function QrCode({ url, size, displaySize, alt = DEFAULT_ALT }: QrCodeProps) {
+  const renderedSize = displaySize ?? `${size}px`;
+
   /**
    * The generated code TOGETHER WITH the key it belongs to.
    *
@@ -106,11 +136,31 @@ export function QrCode({ url, size, alt = DEFAULT_ALT }: QrCodeProps) {
     return (
       <div
         aria-hidden="true"
-        className="animate-pulse rounded bg-neutral-800"
-        style={{ width: size, height: size }}
+        /*
+          `data-motion="qr-placeholder"` is the reduced-motion hook: the block in `src/index.css`
+          drops the pulse and keeps the box, because the box's job is to hold the card's layout
+          while `toDataURL` resolves and it goes on doing that perfectly well while still.
+        */
+        data-motion="qr-placeholder"
+        className="animate-pulse rounded bg-surface-raised"
+        style={{ width: renderedSize, height: renderedSize }}
       />
     );
   }
 
-  return <img src={dataUrl} alt={alt} width={size} height={size} className="rounded bg-white" />;
+  return (
+    /*
+      `width`/`height` carry the BITMAP's size, so the intrinsic dimensions and the aspect ratio
+      the browser reserves are the real ones; the inline style is what the code is actually drawn
+      at. When `displaySize` is omitted the two agree, which is the pre-Phase-7 behaviour.
+    */
+    <img
+      src={dataUrl}
+      alt={alt}
+      width={size}
+      height={size}
+      style={{ width: renderedSize, height: renderedSize }}
+      className="rounded bg-white"
+    />
+  );
 }

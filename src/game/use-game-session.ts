@@ -119,7 +119,11 @@ export function useGameSession(options: UseGameSessionOptions = {}): GameSession
     if (!isActive) return;
 
     const resolver = createYearResolver(stateRef.current.deck, {
-      lookup: (track, signal) => lookupYear(track, { fetchImpl: fetch, signal }),
+      // `fetch` BOUND to the global: the native one is brand-checked, so handing it over
+      // unbound and having it called as `options.fetchImpl(...)` threw "Illegal invocation"
+      // and every year lookup came back `network`. See `playlist-client.ts`.
+      lookup: (track, signal) =>
+        lookupYear(track, { fetchImpl: globalThis.fetch.bind(globalThis), signal }),
       sleep: realSleep,
       onResolved: ({ cardId, year, confidence }) => {
         dispatch({ type: 'YEAR_RESOLVED', cardId, year, confidence });

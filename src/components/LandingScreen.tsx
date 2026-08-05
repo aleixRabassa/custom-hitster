@@ -29,7 +29,16 @@
 import { useState } from 'react';
 
 import { playlistErrorMessage } from '../game/messages';
-import { isSpotifyShortLink, parsePlaylistUrl } from '../../shared/spotify-url';
+
+/**
+ * The id `aria-describedby` points at while an error is on screen.
+ *
+ * A module constant rather than a `useId()`: there is exactly one landing screen in the app at any
+ * moment (`App.tsx`'s status switch renders one screen), so a collision is not reachable, and a
+ * stable literal is what makes the test assertion readable.
+ */
+const ERROR_MESSAGE_ID = 'playlist-url-error';
+import { isSpotifyShortLink, parsePlaylistUrl, spotifyPlaylistUrl } from '../../shared/spotify-url';
 import type { PlaylistClientErrorCode } from '../game/playlist-client';
 
 /**
@@ -52,6 +61,10 @@ import type { PlaylistClientErrorCode } from '../game/playlist-client';
  *
  * The labels are genre/era names taken from Spotify's own playlist titles. None of them describes
  * a track, which is what keeps this section leak-free.
+ *
+ * Stored as ids and turned into full links at the click, via `spotifyPlaylistUrl()`. The id is the
+ * thing that was verified above and the thing a re-verification checks, so it stays the constant;
+ * the URL is derived so the two can never disagree.
  */
 export const SUGGESTED_PLAYLISTS: readonly { id: string; label: string; blurb: string }[] = [
   { id: '37i9dQZF1DXcBWIGoYBM5M', label: 'Today’s Top Hits', blurb: 'Current pop' },
@@ -108,17 +121,17 @@ export function LandingScreen({ onSubmit, isLoading, errorCode }: LandingScreenP
   };
 
   return (
-    <main className="flex min-h-dvh flex-col items-center justify-center gap-8 bg-neutral-950 p-6 text-neutral-100">
+    <main className="flex min-h-dvh flex-col items-center justify-center gap-8 bg-page p-6 text-fg">
       <div className="flex flex-col items-center gap-2 text-center">
         <h1 className="text-3xl font-semibold">Custom Hitster</h1>
-        <p className="max-w-sm text-sm text-neutral-400">
+        <p className="max-w-content text-sm text-fg-secondary">
           Paste a public Spotify playlist link to deal a deck. Scan a card to hear the song, then
           guess the year.
         </p>
       </div>
 
       <form
-        className="flex w-full max-w-sm flex-col gap-3"
+        className="flex w-full max-w-content flex-col gap-3"
         onSubmit={(event) => {
           // The page must not navigate: this is a single-page app and a real form submission
           // would reload it back to `idle`, throwing away the session that is being started.
@@ -127,7 +140,25 @@ export function LandingScreen({ onSubmit, isLoading, errorCode }: LandingScreenP
         }}
       >
         <label className="flex flex-col gap-1 text-sm">
-          <span className="text-neutral-400">Playlist link</span>
+          <span className="text-fg-secondary">Playlist link</span>
+          {/*
+            ===================================================================
+             NO `aria-label` ON THIS INPUT, AND ADDING ONE BACK IS A DEFECT.
+
+             It carried `aria-label="Spotify playlist link"` through Phase 6,
+             alongside the visible `Playlist link` above. `aria-label` WINS over
+             a wrapping label, so the accessible name did not match the visible
+             text -- which is a WCAG 2.5.3 (Label in Name) failure and breaks
+             speech control outright: "click Playlist link" matched nothing on
+             the screen, because the only name the browser knew was the hidden
+             one.
+
+             The wrapping `<label>` already supplies a correct name, so the
+             attribute was redundant as well as harmful. `LandingScreen.test.tsx`
+             queries by the VISIBLE text, which is the query that fails if the
+             attribute ever comes back.
+            ===================================================================
+          */}
           <input
             type="text"
             value={value}
@@ -138,8 +169,18 @@ export function LandingScreen({ onSubmit, isLoading, errorCode }: LandingScreenP
               setLocalErrorCode(undefined);
             }}
             placeholder="https://open.spotify.com/playlist/…"
-            aria-label="Spotify playlist link"
             aria-invalid={shownErrorCode !== undefined}
+            /*
+              `aria-describedby` pointed at the error message WHILE ONE EXISTS, and undefined
+              otherwise -- a describedby naming an element that is not in the document is a
+              dangling reference some screen readers report as an error.
+
+              `aria-invalid` alone was the Phase 6 state, and it says only THAT the value is
+              wrong. The reason was announced once by `role="alert"` and then unreachable: a
+              player who tabbed back to the field heard "invalid" and no explanation. This is
+              what makes the reason available on focus as well as at the moment it arrives.
+            */
+            aria-describedby={shownErrorCode === undefined ? undefined : ERROR_MESSAGE_ID}
             /*
               `autoComplete="off"` and `spellCheck={false}`: this is a URL, and a spell-check
               underline plus an autofill dropdown over a pasted link is noise. `inputMode="url"`
@@ -149,7 +190,7 @@ export function LandingScreen({ onSubmit, isLoading, errorCode }: LandingScreenP
             spellCheck={false}
             inputMode="url"
             disabled={isLoading}
-            className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-neutral-100 placeholder:text-neutral-600 disabled:opacity-50"
+            className="rounded-lg border border-border-strong bg-surface px-3 py-2 text-fg placeholder:text-fg-muted focus-visible:focus-ring disabled:opacity-(--opacity-disabled)"
           />
         </label>
 
@@ -159,8 +200,11 @@ export function LandingScreen({ onSubmit, isLoading, errorCode }: LandingScreenP
             screen reader otherwise gets no signal that a submission failed at all. The copy comes
             from the client-side map; the server's own `message` field is deliberately not
             rendered (see `messages.ts`).
+
+            The `id` is the other half of the input's `aria-describedby`. Both exist only while
+            there is an error, so the reference is never dangling.
           */
-          <p role="alert" className="text-sm text-red-400">
+          <p id={ERROR_MESSAGE_ID} role="alert" className="text-sm text-danger">
             {playlistErrorMessage(shownErrorCode)}
           </p>
         )}
@@ -171,33 +215,47 @@ export function LandingScreen({ onSubmit, isLoading, errorCode }: LandingScreenP
           // `usePlaylist` aborts the first request anyway, so this is the visible half of a
           // guarantee the hook already makes.
           disabled={isLoading}
-          className="rounded-lg bg-emerald-600 px-4 py-2 font-medium text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+          /*
+            `text-on-accent` rather than `text-white`, and that is a contrast fix rather than a
+            rename: white on `--color-accent` measured 3.67:1, a 1.4.3 failure on the app's
+            primary action at 16px. The background is unchanged; only the label darkens, to
+            5.40:1 at rest and 8.03:1 on hover.
+          */
+          className="touch-target rounded-lg bg-accent px-4 py-2 font-medium text-on-accent hover:bg-accent-hover focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)"
         >
           {isLoading ? 'Loading…' : 'Start'}
         </button>
       </form>
 
-      <section className="flex w-full max-w-sm flex-col gap-2">
-        <h2 className="text-sm text-neutral-400">Or try one of these</h2>
+      <section className="flex w-full max-w-content flex-col gap-2">
+        <h2 className="text-sm text-fg-secondary">Or try one of these</h2>
 
         <ul className="flex flex-col gap-2">
           {SUGGESTED_PLAYLISTS.map((playlist) => (
             <li key={playlist.id}>
               <button
                 type="button"
-                // Fills the input AND submits, so the suggestion behaves exactly as if the link
-                // had been pasted -- including leaving the URL visible, which is how a player
-                // learns what a valid link looks like.
+                // Fills the input with the FULL link AND submits, so the suggestion behaves
+                // exactly as if that link had been pasted -- including leaving it visible, which
+                // is how a player learns what a valid link looks like. It used to fill in the
+                // bare id, which parsed but taught the wrong shape.
                 onClick={() => {
-                  setValue(playlist.id);
-                  submit(playlist.id);
+                  const url = spotifyPlaylistUrl(playlist.id);
+                  setValue(url);
+                  submit(url);
                 }}
                 disabled={isLoading}
-                className="flex w-full items-baseline justify-between gap-3 rounded-lg border border-neutral-800 bg-neutral-900 px-3 py-2 text-left hover:border-neutral-700 disabled:cursor-not-allowed disabled:opacity-50"
+                /*
+                  `focus-visible`, not `focus`. These five are the buttons that make the
+                  distinction visible: they submit and the screen is replaced, so a `focus:` ring
+                  would be the last thing a mouse user saw of the landing screen. With
+                  `focus-visible` a click leaves no ring and a Tab still shows one.
+                */
+                className="flex w-full touch-target items-baseline justify-between gap-3 rounded-lg border border-border bg-surface px-3 py-2 text-left hover:border-border-strong focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)"
               >
                 <span className="text-sm">{playlist.label}</span>
                 {/* Genre/era only. Never a track, an artist or a year -- see the header block. */}
-                <span className="text-xs text-neutral-500">{playlist.blurb}</span>
+                <span className="text-xs text-fg-muted">{playlist.blurb}</span>
               </button>
             </li>
           ))}

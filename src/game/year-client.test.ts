@@ -54,6 +54,30 @@ function stubFetch(options: StubOptions = {}): { fetchImpl: YearFetch; urls: str
   return { fetchImpl, urls };
 }
 
+/**
+ * A `fetch` double that brand-checks its receiver, as the browser's native one does.
+ *
+ * The twin of `brandCheckedFetch` in `playlist-client.test.ts`, and it guards the same bug: called
+ * as `options.fetchImpl(...)`, the real `fetch` gets the options object as `this` and throws
+ * "Illegal invocation" before any request is made -- which this client's `catch` reported as
+ * `network`, so every year lookup in a real browser failed and no card ever got a year. A
+ * `function`, not an arrow, because an arrow has no `this` to check.
+ */
+function brandCheckedFetch(): YearFetch {
+  return function (this: unknown) {
+    if (this !== undefined && this !== globalThis) {
+      throw new TypeError("Failed to execute 'fetch' on 'Window': Illegal invocation");
+    }
+
+    return Promise.resolve({
+      ok: true,
+      status: 200,
+      headers: headers(),
+      json: () => Promise.resolve(SUCCESS),
+    });
+  };
+}
+
 function queryOf(url: string): URLSearchParams {
   return new URLSearchParams(url.slice(url.indexOf('?') + 1));
 }
@@ -69,6 +93,16 @@ describe('lookupYear', () => {
       expect(queryOf(url).get('title')).toBe(TRACK.title);
       expect(queryOf(url).get('artist')).toBe('Queen');
       expect(queryOf(url).get('durationMs')).toBe('354320');
+    });
+  });
+
+  it('should not call fetch with the options object as its receiver', async () => {
+    // The regression test for the browser-only "Illegal invocation" failure. Going back to
+    // `options.fetchImpl(...)` here would silently disable every year lookup in the app while
+    // leaving all sixteen tests below green.
+    expect(await lookupYear(TRACK, { fetchImpl: brandCheckedFetch() })).toEqual({
+      ok: true,
+      result: SUCCESS,
     });
   });
 

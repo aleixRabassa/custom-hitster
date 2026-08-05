@@ -128,7 +128,7 @@ function renderApp(fetchImpl: PlaylistFetch, storage = memoryStorage()) {
 
 /** Paste a URL and press Start. */
 function startPlaylist(url = PLAYLIST_URL) {
-  fireEvent.change(screen.getByLabelText('Spotify playlist link'), { target: { value: url } });
+  fireEvent.change(screen.getByLabelText('Playlist link'), { target: { value: url } });
   fireEvent.click(screen.getByRole('button', { name: /start/i }));
 }
 
@@ -153,7 +153,7 @@ describe('App', () => {
     stubHangingYearApi();
     renderApp(playlistFetch(200, playlistResult()));
 
-    expect(screen.queryByLabelText('Spotify playlist link')).not.toBeNull();
+    expect(screen.queryByLabelText('Playlist link')).not.toBeNull();
     expect(screen.queryByTestId('hud')).toBeNull();
   });
 
@@ -297,7 +297,7 @@ describe('App', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Exit game' }));
 
-    expect(await screen.findByLabelText('Spotify playlist link')).not.toBeNull();
+    expect(await screen.findByLabelText('Playlist link')).not.toBeNull();
     expect(screen.queryByText(/deck finished/i)).toBeNull();
   });
 
@@ -313,7 +313,7 @@ describe('App', () => {
       expect(screen.queryByTestId('hud')).not.toBeNull();
     });
     fireEvent.click(screen.getByRole('button', { name: 'Exit game' }));
-    await screen.findByLabelText('Spotify playlist link');
+    await screen.findByLabelText('Playlist link');
 
     // Game 2: play it out. The end screen must appear.
     startPlaylist();
@@ -340,7 +340,7 @@ describe('App', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /new playlist/i }));
 
-    expect(await screen.findByLabelText('Spotify playlist link')).not.toBeNull();
+    expect(await screen.findByLabelText('Playlist link')).not.toBeNull();
   });
 
   it('should resume a persisted session on mount', async () => {
@@ -363,7 +363,7 @@ describe('App', () => {
 
     // Straight to the game screen -- no landing screen, and no playlist request.
     expect(screen.queryByTestId('hud')).not.toBeNull();
-    expect(screen.queryByLabelText('Spotify playlist link')).toBeNull();
+    expect(screen.queryByLabelText('Playlist link')).toBeNull();
     await screen.findByRole('img');
   });
 

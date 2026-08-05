@@ -29,7 +29,7 @@ function renderLanding(props: Partial<Parameters<typeof LandingScreen>[0]> = {})
 
 /** Type a value into the URL box and press Start. */
 function submit(value: string) {
-  fireEvent.change(screen.getByLabelText('Spotify playlist link'), { target: { value } });
+  fireEvent.change(screen.getByLabelText('Playlist link'), { target: { value } });
   fireEvent.click(screen.getByRole('button', { name: /start/i }));
 }
 
@@ -128,7 +128,7 @@ describe('LandingScreen', () => {
     submit('nonsense');
     expect(screen.queryByRole('alert')).not.toBeNull();
 
-    fireEvent.change(screen.getByLabelText('Spotify playlist link'), {
+    fireEvent.change(screen.getByLabelText('Playlist link'), {
       target: { value: PLAYLIST_URL },
     });
 
@@ -145,9 +145,7 @@ describe('LandingScreen', () => {
     expect((screen.getByRole('button', { name: /loading/i }) as HTMLButtonElement).disabled).toBe(
       true,
     );
-    expect((screen.getByLabelText('Spotify playlist link') as HTMLInputElement).disabled).toBe(
-      true,
-    );
+    expect((screen.getByLabelText('Playlist link') as HTMLInputElement).disabled).toBe(true);
     for (const playlist of SUGGESTED_PLAYLISTS) {
       expect(
         (screen.getByRole('button', { name: new RegExp(playlist.label, 'i') }) as HTMLButtonElement)
@@ -166,17 +164,111 @@ describe('LandingScreen', () => {
     }
   });
 
-  it('should submit the corresponding URL when a suggestion is clicked', () => {
+  it('should submit the full playlist URL when a suggestion is clicked', () => {
     // Fill AND submit, exactly as if the link had been pasted -- including leaving the value in the
-    // box, which is how a player learns what a valid link looks like.
+    // box, which is how a player learns what a valid link looks like. The FULL link, not the bare
+    // id: the id parsed fine but put a 22-character string where the placeholder promises a URL.
     const { onSubmit } = renderLanding();
 
     fireEvent.click(screen.getByRole('button', { name: /Rock Classics/i }));
 
-    expect(onSubmit).toHaveBeenCalledWith('37i9dQZF1DWXRqgorJj26U');
-    expect((screen.getByLabelText('Spotify playlist link') as HTMLInputElement).value).toBe(
-      '37i9dQZF1DWXRqgorJj26U',
-    );
+    const expected = 'https://open.spotify.com/playlist/37i9dQZF1DWXRqgorJj26U';
+    expect(onSubmit).toHaveBeenCalledWith(expected);
+    expect((screen.getByLabelText('Playlist link') as HTMLInputElement).value).toBe(expected);
+  });
+
+  it('should submit a full URL for every suggestion', () => {
+    // Every one, not just the sampled Rock Classics above: a suggestion whose id were mistyped to
+    // the wrong length would still fill the box, and only the submission would reveal it.
+    for (const playlist of SUGGESTED_PLAYLISTS) {
+      const { onSubmit } = renderLanding();
+
+      fireEvent.click(screen.getByRole('button', { name: new RegExp(playlist.label, 'i') }));
+
+      expect(onSubmit).toHaveBeenCalledWith(`https://open.spotify.com/playlist/${playlist.id}`);
+      // Submitted at all, which means the client-side parse passed -- so the id really is a
+      // well-formed 22-character Spotify id and the derived link is one the server will accept.
+      expect(screen.queryByRole('alert')).toBeNull();
+      cleanup();
+    }
+  });
+
+  it("should expose the input's accessible name as its visible label", () => {
+    // ===================================================================
+    //  A WCAG 2.5.3 (LABEL IN NAME) FIX, ASSERTED BY THE QUERY ITSELF.
+    //
+    //  The input carried `aria-label="Spotify playlist link"` alongside the
+    //  visible `Playlist link` from the wrapping `<label>`. `aria-label`
+    //  WINS, so the accessible name did not match the visible text -- which
+    //  breaks speech control outright ("click Playlist link" matched nothing
+    //  on screen) and is a straight 2.5.3 failure.
+    //
+    //  Querying by the VISIBLE text is the assertion: it is the query that
+    //  fails the moment an `aria-label` comes back. The attribute check
+    //  below says the same thing directly, because a future `aria-label`
+    //  that HAPPENED to read "Playlist link" would satisfy the query while
+    //  still being the redundant attribute that caused this.
+    // ===================================================================
+    renderLanding();
+
+    const input = screen.getByRole('textbox', { name: 'Playlist link' });
+    expect(input.hasAttribute('aria-label')).toBe(false);
+    // And the name really is coming from the label element a sighted player reads.
+    expect(screen.getByText('Playlist link').tagName).toBe('SPAN');
+    expect(screen.getByLabelText('Playlist link')).toBe(input);
+  });
+
+  it('should associate the error message with the input via aria-describedby', () => {
+    // `aria-invalid` alone says only THAT the value is wrong. The reason was announced once by
+    // `role="alert"` and then unreachable, so a player who tabbed back to the field heard
+    // "invalid" and no explanation.
+    renderLanding();
+
+    // No error yet: the attribute must be ABSENT rather than pointing at nothing. A describedby
+    // naming an element that is not in the document is a dangling reference, which some screen
+    // readers report as an error of their own.
+    const before = screen.getByRole('textbox', { name: 'Playlist link' });
+    expect(before.hasAttribute('aria-describedby')).toBe(false);
+    expect(before.getAttribute('aria-invalid')).toBe('false');
+
+    submit('nonsense');
+
+    const input = screen.getByRole('textbox', { name: 'Playlist link' });
+    const alert = screen.getByRole('alert');
+    expect(input.getAttribute('aria-invalid')).toBe('true');
+    // The link is real: the id it names is the element actually carrying the message.
+    expect(input.getAttribute('aria-describedby')).toBe(alert.getAttribute('id'));
+    expect(alert.getAttribute('id')).toBeTruthy();
+  });
+
+  it('should give every interactive element a focus-visible style', () => {
+    // ===================================================================
+    //  A CLASS-NAME ASSERTION, AND A DELIBERATELY WEAK ONE.
+    //
+    //  It proves the utility is present. It cannot prove the ring is
+    //  visible, legible, or the right colour -- jsdom applies no stylesheet
+    //  and computes no layout, so there is nothing stronger available here.
+    //  The contrast is verified by calculation (recorded in
+    //  `agent_findings.md`) and the appearance by the keyboard pass in
+    //  `development.md` §5.
+    //
+    //  What it DOES catch is the common regression: a button added later
+    //  without one. Before Phase 7 all eleven interactive elements in the
+    //  app fell back to the browser default over a near-black page.
+    //
+    //  `focus-visible`, not `focus`: the five suggestion buttons submit and
+    //  replace the screen, so a `focus:` ring would be the last thing a
+    //  mouse user saw of the landing screen.
+    // ===================================================================
+    const { container } = renderLanding();
+
+    const interactive = [...container.querySelectorAll('button, input')];
+    // The input, Start, and five suggestions.
+    expect(interactive).toHaveLength(7);
+
+    for (const element of interactive) {
+      expect(element.className).toContain('focus-visible:focus-ring');
+    }
   });
 
   it('should not render any track information', () => {

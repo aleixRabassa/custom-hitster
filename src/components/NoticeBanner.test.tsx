@@ -99,6 +99,32 @@ describe('NoticeBanner', () => {
     expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 
+  it('should give the dismiss control a focus-visible style and a touch target', () => {
+    // Dismiss was the SMALLEST target in the app -- `px-1` around a single ✕ -- and it sits above
+    // the card, which is the surface a thumb is nearest while swiping. Of everywhere the
+    // touch-target minimum was applied, this is the one that was most likely to be missed by a
+    // real finger and hit by accident mid-gesture.
+    //
+    // Class-name level, with the caveat given in full in `LandingScreen.test.tsx`.
+    renderBanner({ truncated: true });
+
+    const dismiss = screen.getByRole('button', { name: 'Dismiss notice' });
+    expect(dismiss.className).toContain('touch-target');
+    expect(dismiss.className).toContain('focus-visible:focus-ring');
+  });
+
+  it('should match the card width rather than a content column', () => {
+    // This banner sits directly above the card. It was `max-w-sm` (24rem) against a card of `w-72`
+    // (18rem), so on any viewport wide enough for either to reach its cap it overhung the deck by
+    // 3rem on each side. Sharing `--card-width` is what makes them agree at every viewport instead
+    // of at none. `Hud` does the same, for the same reason.
+    renderBanner({ truncated: true });
+
+    const banner = screen.getByTestId('notice-banner');
+    expect(banner.className).toContain('max-w-(--card-width)');
+    expect(banner.className).not.toContain('max-w-sm');
+  });
+
   it('should never gate anything: it renders no confirm or blocking control', () => {
     // No notice here may ever gate Start. Every one of them describes a deck that is already dealt
     // and already playable, so the only control is dismissal.

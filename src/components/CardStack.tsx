@@ -42,10 +42,25 @@ import type { Card as CardData } from '../../shared/types';
  */
 const VISIBLE_BACKS = 2;
 
-/** Vertical offset per back, in CSS pixels. Each back sits slightly lower than the one above. */
+/**
+ * Vertical offset per back, in CSS pixels. Each back sits slightly lower than the one above.
+ *
+ * DELIBERATELY STILL ABSOLUTE after Phase 7 made the card fluid, which was an open question
+ * (plan 1, question 2). A fixed 10px is a larger proportion of a 288px-tall card than of a
+ * 448px one -- but the offset's job is to be PERCEPTIBLE, and 10px is close to the minimum
+ * that reads as "there is another card behind this one" at all. Scaling it down to ~6px on the
+ * smallest card would make the depth cue faintest exactly where the stack is already tightest,
+ * which is the wrong direction. Like every other number in this file it was chosen by eye and
+ * has never been seen on a phone.
+ */
 const BACK_OFFSET_PX = 10;
 
-/** Scale reduction per back. Small: the backs suggest depth, they do not perform it. */
+/**
+ * Scale reduction per back. Small: the backs suggest depth, they do not perform it.
+ *
+ * This one needed no Phase 7 decision -- `scale()` is proportional by construction, so 4% of a
+ * smaller card is already a smaller absolute inset.
+ */
 const BACK_SCALE_STEP = 0.04;
 
 export interface CardStackProps {
@@ -91,8 +106,13 @@ export function CardStack({
       `isolate` creates a stacking context so the backs' `-z-10` stays behind the current card
       without escaping to sit behind the screen's own background. Without it the backs are
       positioned elements and would paint OVER the in-flow card.
+
+      The size tokens are THE SAME PAIR `Card` uses, and that is the point of them: this wrapper
+      and the card it holds carried `h-[28rem] w-72` separately until Phase 7, and the backs are
+      `absolute inset-0` on this element -- so the two literals had to agree or the peeking backs
+      misaligned, with nothing enforcing it. `CardStack.test.tsx` asserts the class strings match.
     */
-    <div className="relative isolate h-[28rem] w-72">
+    <div className="relative isolate h-(--card-height) w-(--card-width)">
       {backs.map((back, offset) => (
         <div
           /*
@@ -108,7 +128,7 @@ export function CardStack({
             depth cue, and announcing two blank groups before every card is noise.
           */
           aria-hidden="true"
-          className="absolute inset-0 -z-10 rounded-2xl border border-neutral-800 bg-neutral-900"
+          className="absolute inset-0 -z-10 rounded-2xl border border-border bg-surface"
           style={{
             transform: `translateY(${(offset + 1) * BACK_OFFSET_PX}px) scale(${
               1 - (offset + 1) * BACK_SCALE_STEP

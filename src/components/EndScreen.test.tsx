@@ -73,6 +73,26 @@ describe('EndScreen', () => {
     expect(container.textContent ?? '').toMatch(/new order/i);
   });
 
+  it('should give both actions a focus-visible style', () => {
+    // Class-name level, with the caveat given in full in `LandingScreen.test.tsx`. These two are
+    // the only interactive elements on the screen, so the count is asserted as well: a third
+    // button added without a ring fails here.
+    render(
+      <EndScreen
+        cardsPlayed={42}
+        playlistName="Rock Classics"
+        onRestart={vi.fn()}
+        onNewPlaylist={vi.fn()}
+      />,
+    );
+
+    const buttons = screen.getAllByRole('button');
+    expect(buttons).toHaveLength(2);
+    for (const button of buttons) {
+      expect(button.className).toContain('focus-visible:focus-ring');
+    }
+  });
+
   it('should not render any track information', () => {
     // The deck is over, so this is the ONE screen where a leak would cost nothing -- and the
     // assertion is here anyway, because "here is what you played" is the obvious thing to add and

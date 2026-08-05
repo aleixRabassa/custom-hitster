@@ -126,6 +126,68 @@ describe('QrCode', () => {
     expect(screen.getByRole('img').getAttribute('src')).toBe(fakeDataUrl(fast));
   });
 
+  it('should render at the display size while generating at the fixed bitmap size', async () => {
+    // ===================================================================
+    //  THE TWO SIZES MUST STAY TWO SIZES. Phase 7 decision 4.
+    //
+    //  Through Phase 6 one `size` prop was both the generated bitmap and
+    //  the rendered box. Once the card became fluid, keeping them
+    //  conflated would mean `toDataURL` -- which returns a PROMISE -- being
+    //  called again on every frame of a resize: a debounce, extra state,
+    //  and the placeholder flashing mid-drag.
+    //
+    //  So the assertion is that the two travel separately. The generation
+    //  call sees the fixed pixel count; the element carries the fluid CSS
+    //  length. Conflating them again fails here.
+    // ===================================================================
+    const url = 'https://open.spotify.com/track/3z8h0TU7ReDPLIbEnYhWZb';
+    const display = 'var(--qr-display-size)';
+
+    render(<QrCode url={url} size={176} displaySize={display} />);
+
+    // The placeholder holds the DISPLAY size, so the card's layout is stable across the async gap.
+    const placeholder = document.querySelector('[data-motion="qr-placeholder"]');
+    expect(placeholder).not.toBeNull();
+    expect((placeholder as HTMLElement).style.width).toBe(display);
+
+    const image = await screen.findByRole('img');
+    // Generation got the BITMAP size and nothing else. `width` in the options is what `qrcode`
+    // encodes at, and it must be the fixed number rather than the CSS length.
+    expect(toDataURLMock).toHaveBeenCalledWith(url, expect.objectContaining({ width: 176 }));
+    expect(toDataURLMock).toHaveBeenCalledTimes(1);
+
+    // The element carries BOTH: the attributes are the intrinsic bitmap dimensions, so the browser
+    // reserves the right aspect ratio, and the inline style is what it is actually drawn at.
+    expect(image.getAttribute('width')).toBe('176');
+    expect(image.getAttribute('height')).toBe('176');
+    expect((image as HTMLElement).style.width).toBe(display);
+    expect((image as HTMLElement).style.height).toBe(display);
+  });
+
+  it('should fall back to the bitmap size when no display size is given', () => {
+    // The pre-Phase-7 behaviour, and what every caller other than `CardHiddenSide` still wants.
+    // Asserted so that making `displaySize` required — or defaulting it to something fluid — does
+    // not silently change what a bare `<QrCode url size>` renders.
+    render(<QrCode url="https://open.spotify.com/track/x" size={160} />);
+
+    const placeholder = document.querySelector('[data-motion="qr-placeholder"]') as HTMLElement;
+    expect(placeholder.style.width).toBe('160px');
+    expect(placeholder.style.height).toBe('160px');
+  });
+
+  it('should expose the reduced-motion hook on the placeholder', () => {
+    // The component half of a contract with `src/index.css`, which drops the pulse and keeps the
+    // box under `prefers-reduced-motion: reduce`. jsdom evaluates no media query, so the CSS half
+    // is the canary in `src/index.css.test.ts`; renaming the attribute in one file and not the
+    // other is what this catches.
+    render(<QrCode url="https://open.spotify.com/track/x" size={160} />);
+
+    const placeholder = document.querySelector('[data-motion="qr-placeholder"]');
+    expect(placeholder).not.toBeNull();
+    // The pulse is still declared -- reduced motion removes it, it is not absent by default.
+    expect((placeholder as HTMLElement).className).toContain('animate-pulse');
+  });
+
   it('should keep the placeholder when generation fails', async () => {
     // Nothing useful to say to the player and nothing to retry: the input is a URL built
     // from an opaque id, so a rejection means the library is broken, not the data.

@@ -3,6 +3,7 @@
  */
 
 import { cleanup, render, screen } from '@testing-library/react';
+import { MotionConfig } from 'motion/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Card } from './Card';
@@ -98,5 +99,76 @@ describe('Card', () => {
     const images = await screen.findAllByRole('img');
     expect(images).toHaveLength(1);
     expect(screen.getByTestId('card-hidden-face').contains(images[0] ?? null)).toBe(true);
+  });
+
+  it('should render the card at the token-backed size rather than a literal', () => {
+    // The regression this guards is a card sized by a hardcoded pair again. `CardStack` holds the
+    // OTHER half of what used to be `h-[28rem] w-72` written out twice, and its own test asserts
+    // that the two elements carry the same string -- which is only meaningful if this one is a
+    // token. A class-name assertion proves the utility is present and nothing about the rendered
+    // size; jsdom computes no layout, so that is the whole of what is available here.
+    const { container } = render(
+      <Card card={highConfidenceCard} isFlipped={false} isYearPending={false} onFlip={vi.fn()} />,
+    );
+
+    const outer = container.firstElementChild;
+    expect(outer?.className).toContain('h-(--card-height)');
+    expect(outer?.className).toContain('w-(--card-width)');
+    expect(outer?.className).not.toMatch(/\bh-\[|\bw-\d/);
+  });
+
+  it('should take the flip duration from the token and expose the reduced-motion hook', () => {
+    // Two halves of one contract with `src/index.css`. The duration must come from
+    // `--duration-flip`, and `data-motion="flip"` is the selector the
+    // `prefers-reduced-motion: reduce` block collapses that duration through. jsdom evaluates no
+    // media query, so the CSS half is covered by the canary in `src/index.css.test.ts` -- this is
+    // the component half, which is the part a component change can break.
+    const { container } = renderCard(false);
+    const inner = container.querySelector('[data-testid="card-inner"]');
+
+    expect(inner?.getAttribute('data-motion')).toBe('flip');
+    expect(inner?.className).toContain('duration-(--duration-flip)');
+  });
+
+  it('should render inside a reducedMotion MotionConfig despite jsdom having no matchMedia', () => {
+    // ===================================================================
+    //  THE `matchMedia` CANARY, and the only automated evidence for what
+    //  was an open question of this plan. The answer had two halves and the
+    //  first one contradicted the plan's own assumption.
+    //
+    //  1. jsdom 30 DOES NOT IMPLEMENT `window.matchMedia`. It is
+    //     `undefined`, not a quirky implementation -- measured 2026-08-05.
+    //     The plan said "jsdom does implement it; whether Motion's listener
+    //     registration is happy with jsdom's implementation is the thing to
+    //     check". There is no implementation to be happy with.
+    //
+    //  2. MOTION TOLERATES ITS ABSENCE ANYWAY, so NO STUB IS NEEDED -- not
+    //     here and not in any of the other jsdom files. Motion 12.43 guards
+    //     the lookup internally and resolves the preference as "not set".
+    //
+    //  This test exists because `src/main.tsx` wraps the app in
+    //  `<MotionConfig reducedMotion="user">` and NOTHING in this repo renders
+    //  `main.tsx` -- `App.test.tsx` renders `<App />` directly. Without this,
+    //  a jsdom or Motion upgrade that turned (2) into a throw would be
+    //  discovered in a browser rather than in the suite.
+    //
+    //  If it ever does break, the stub goes in the individual jsdom files --
+    //  NOT in a global `setupFiles`, which `toolchain.md` §5 records as
+    //  deliberately absent.
+    //
+    //  THE COST, which is worth being explicit about: because the preference
+    //  can never read as "reduce" here, no jsdom test in this repo can
+    //  observe reduced-motion BEHAVIOUR. That is the same wall the CSS side
+    //  hits, and it is why `src/index.css.test.ts` is a text canary.
+    // ===================================================================
+    expect(window.matchMedia).toBeUndefined();
+
+    const { container } = render(
+      <MotionConfig reducedMotion="user">
+        <Card card={highConfidenceCard} isFlipped={false} isYearPending={false} onFlip={vi.fn()} />
+      </MotionConfig>,
+    );
+
+    expect(container.querySelector('[data-testid="card-inner"]')).not.toBeNull();
   });
 });

@@ -82,7 +82,12 @@ export function NoticeBanner({
       */
       role="status"
       data-testid="notice-banner"
-      className="flex w-full max-w-sm items-start gap-3 rounded-lg border border-amber-900/60 bg-amber-950/40 px-3 py-2 text-xs text-amber-200"
+      /*
+        `max-w-(--card-width)` for the same reason as `Hud`: this banner sits above the card and
+        was `max-w-sm` (24rem) against a card of 18rem, so on a wide screen it overhung the deck
+        on both sides. Sharing the card's own width token makes them agree at every viewport.
+      */
+      className="flex w-full max-w-(--card-width) items-start gap-3 rounded-lg border border-warning-border/60 bg-warning-surface/40 px-3 py-2 text-xs text-warning-text"
     >
       <ul className="flex flex-1 flex-col gap-1">
         {notices.map((notice) => (
@@ -92,11 +97,17 @@ export function NoticeBanner({
         ))}
       </ul>
 
+      {/*
+        `touch-target` matters most here of anywhere in the app. This was `px-1` around a single ✕
+        -- the smallest target in the app -- sitting above the card, which is the surface a thumb
+        is nearest while swiping. A 44px square is the WCAG 2.5.5 minimum; `-my-1` absorbs the
+        extra height back out of the banner's own box so the row does not grow.
+      */}
       <button
         type="button"
         onClick={onDismiss}
         aria-label="Dismiss notice"
-        className="shrink-0 rounded px-1 text-amber-400 hover:text-amber-200"
+        className="-my-1 flex shrink-0 touch-target items-center justify-center rounded text-warning-glyph hover:text-warning-text focus-visible:focus-ring"
       >
         ✕
       </button>

@@ -109,7 +109,10 @@ export function usePlaylist(options: UsePlaylistOptions = {}): UsePlaylistResult
 
     void (async () => {
       const outcome = await fetchPlaylist(url, {
-        fetchImpl: fetchImplRef.current ?? (globalThis.fetch as PlaylistFetch),
+        // BOUND to the global. The native `fetch` is brand-checked, and passing it unbound made
+        // every Start fail as `network` ("Could not reach the server") for a request that never
+        // left the page. `fetchPlaylist` no longer calls it as a method either; both halves stay.
+        fetchImpl: fetchImplRef.current ?? (globalThis.fetch.bind(globalThis) as PlaylistFetch),
         signal: controller.signal,
       });
 

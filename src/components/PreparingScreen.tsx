@@ -46,7 +46,7 @@ export interface PreparingScreenProps {
 
 export function PreparingScreen({ resolvedCount, totalCount, notice }: PreparingScreenProps) {
   return (
-    <main className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-neutral-950 p-6 text-neutral-100">
+    <main className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-page p-6 text-fg">
       {notice}
 
       {/*
@@ -55,13 +55,18 @@ export function PreparingScreen({ resolvedCount, totalCount, notice }: Preparing
       */}
       <div role="status" className="flex flex-col items-center gap-3 text-center">
         {/*
-          A plain CSS spin. `prefers-reduced-motion` is Phase 7's job across the whole app, so
-          this is deliberately not special-cased here -- doing it in one component would leave the
-          card's flip and the swipe animation unhandled and look like the problem was solved.
+          A plain CSS spin, and under `prefers-reduced-motion: reduce` it is HIDDEN rather than
+          stopped (decision 7). A stationary spinner is a dead grey circle that reads as a hung
+          app, and this element is already `aria-hidden` -- so removing it costs nothing, because
+          the status line and the resolved/total count below carry every piece of information it
+          conveys. The rule itself is in `src/index.css`, keyed on `data-motion="spinner"`; no
+          component in this app reads the preference (decision 3), which is what stops the next
+          animation added from being silently unhandled.
         */}
         <div
           aria-hidden="true"
-          className="size-8 animate-spin rounded-full border-2 border-neutral-700 border-t-emerald-500"
+          data-motion="spinner"
+          className="size-(--size-spinner) animate-spin rounded-full border-2 border-border-strong border-t-accent-bright"
         />
 
         <p className="text-lg font-medium">Dealing your deck…</p>
@@ -70,7 +75,7 @@ export function PreparingScreen({ resolvedCount, totalCount, notice }: Preparing
           Count-only, and the number is the ONLY thing this screen knows how to say about the deck.
           Rendered even at 0 so the line does not appear and shift the layout a moment later.
         */}
-        <p className="text-sm text-neutral-400">
+        <p className="text-sm text-fg-secondary">
           {resolvedCount} of {totalCount} years found
         </p>
 
@@ -79,7 +84,7 @@ export function PreparingScreen({ resolvedCount, totalCount, notice }: Preparing
           the count above reads as a progress bar that has to reach the total, which would make a
           one-second wait feel like a stalled forty-two-step one.
         */}
-        <p className="max-w-xs text-xs text-neutral-500">
+        <p className="max-w-narrow text-xs text-fg-muted">
           The game starts as soon as the first card is ready — the rest fill in while you play.
         </p>
       </div>

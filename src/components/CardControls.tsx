@@ -47,6 +47,24 @@
 
 import type { CardAudioControls } from '../hooks/useCardAudio';
 
+/**
+ * Every button here carries the same four utilities, so they live in one string.
+ *
+ * `touch-target` is 44px square (`--size-touch-target`) and it is a fix, not a nicety: `px-4 py-2`
+ * around a single glyph is roughly 40px tall and narrower than that wide, on the surface a thumb
+ * is most likely to be near while swiping a card. `focus-visible:focus-ring` is the app's one ring
+ * -- `focus-visible` rather than `focus` so a mouse click does not leave a ring behind. Both are
+ * defined as `@utility` in `src/index.css`.
+ *
+ * `disabled:opacity-(--opacity-disabled)` replaces `disabled:opacity-40`, which put the glyph at
+ * 3.46:1 against `--color-surface-raised` -- the dimmest text in the app, on the one card a player
+ * most wants to act on. The token measures 5.94:1.
+ */
+const BUTTON_CLASSES =
+  'flex touch-target items-center justify-center rounded-full bg-surface-raised px-4 py-2 ' +
+  'text-fg hover:bg-surface-raised-hover focus-visible:focus-ring ' +
+  'disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)';
+
 export interface CardControlsProps {
   /** From `useCardAudio`, owned by `GameScreen`. This component never touches the element. */
   audio: CardAudioControls;
@@ -65,12 +83,7 @@ export function CardControls({ audio, onExit }: CardControlsProps) {
           whose audio does not work -- which is precisely the card they are most likely to
           want to leave on.
         */}
-        <button
-          type="button"
-          onClick={onExit}
-          aria-label="Exit game"
-          className="rounded-full bg-neutral-800 px-4 py-2 text-neutral-100 hover:bg-neutral-700"
-        >
+        <button type="button" onClick={onExit} aria-label="Exit game" className={BUTTON_CLASSES}>
           ■
         </button>
 
@@ -83,7 +96,7 @@ export function CardControls({ audio, onExit }: CardControlsProps) {
           onClick={isPlaying ? pause : play}
           disabled={!canPlay}
           aria-label={isPlaying ? 'Pause' : 'Play'}
-          className="rounded-full bg-neutral-800 px-4 py-2 text-neutral-100 hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-40"
+          className={BUTTON_CLASSES}
         >
           {isPlaying ? '❙❙' : '▶'}
         </button>
@@ -94,7 +107,7 @@ export function CardControls({ audio, onExit }: CardControlsProps) {
           onClick={restart}
           disabled={!canPlay}
           aria-label="Restart"
-          className="rounded-full bg-neutral-800 px-4 py-2 text-neutral-100 hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-40"
+          className={BUTTON_CLASSES}
         >
           ↺
         </button>
@@ -103,7 +116,7 @@ export function CardControls({ audio, onExit }: CardControlsProps) {
       {canPlay ? null : (
         // Generic on purpose: it says the preview is missing, never which track it is missing
         // for. The QR still works, so this is a note rather than an error.
-        <p className="text-xs text-neutral-500">No preview available — scan to play</p>
+        <p className="text-xs text-fg-muted">No preview available — scan to play</p>
       )}
     </div>
   );

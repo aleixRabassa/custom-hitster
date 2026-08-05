@@ -43,10 +43,50 @@ function fetchReturning(scripted: PlaylistFetchResponse): PlaylistFetch {
   return vi.fn<PlaylistFetch>(() => Promise.resolve(scripted));
 }
 
+/**
+ * A `fetch` double that BRAND-CHECKS its receiver, the way the browser's native one does.
+ *
+ * ===========================================================================
+ *  THIS MODELS THE ONE BUG NO OTHER TEST IN THIS REPO COULD SEE.
+ *
+ *  The native `fetch` throws `TypeError: Failed to execute 'fetch' on 'Window':
+ *  Illegal invocation` when its receiver is not the global object -- and calling
+ *  it as `options.fetchImpl(...)` hands it the options object. The client's
+ *  `catch` then turned that into `network`, so every Start reported "Could not
+ *  reach the server" for a request that never left the page.
+ *
+ *  Neither environment this suite can run in reproduces that on its own: every
+ *  other stub here is a plain function, and node's `fetch` is not brand-checked
+ *  either. So the check is written out explicitly. A `function` declaration, not
+ *  an arrow -- an arrow has no `this` to inspect, which is exactly what made
+ *  this class of bug invisible.
+ * ===========================================================================
+ */
+function brandCheckedFetch(scripted: PlaylistFetchResponse): PlaylistFetch {
+  return function (this: unknown) {
+    if (this !== undefined && this !== globalThis) {
+      throw new TypeError("Failed to execute 'fetch' on 'Window': Illegal invocation");
+    }
+
+    return Promise.resolve(scripted);
+  };
+}
+
 describe('fetchPlaylist', () => {
   it('should return the playlist result for a 200 body', async () => {
     const outcome = await fetchPlaylist(PLAYLIST_URL, {
       fetchImpl: fetchReturning(response(200, RESULT)),
+    });
+
+    expect(outcome).toEqual({ ok: true, result: RESULT });
+  });
+
+  it('should not call fetch with the options object as its receiver', async () => {
+    // The regression test for the "Could not reach the server" bug. If this client ever goes back
+    // to `options.fetchImpl(...)`, the native `fetch` gets `options` as `this` and throws before a
+    // request is made -- and the failure reads as the player's Wi-Fi rather than as our call site.
+    const outcome = await fetchPlaylist(PLAYLIST_URL, {
+      fetchImpl: brandCheckedFetch(response(200, RESULT)),
     });
 
     expect(outcome).toEqual({ ok: true, result: RESULT });

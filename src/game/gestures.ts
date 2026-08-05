@@ -50,10 +50,26 @@ export type CommitDirection = 'left' | 'right';
 /**
  * How far a drag must travel horizontally to advance, in CSS pixels.
  *
- * The card is 288px wide (`w-72`), so this is a third of its width: far enough that a thumb
- * resting and sliding slightly cannot reach it, short enough that the player does not have to
- * throw the card off-screen. Deliberately NOT a percentage of the viewport -- the gesture is
- * against the card, and Phase 7's responsive work changes the viewport, not the intent.
+ * Chosen against a card 288px wide, which is what `w-72` was through Phases 5 and 6: a third of
+ * its width -- far enough that a thumb resting and sliding slightly cannot reach it, short enough
+ * that the player does not have to throw the card off-screen. Deliberately NOT a percentage of
+ * the viewport: the gesture is against the card, not against the window.
+ *
+ * ===========================================================================
+ *  PHASE 7 MADE THE CARD FLUID, AND 288px IS NOW ONLY ITS CEILING.
+ *
+ *  `--card-width` in `src/index.css` clamps down to 185px on a short viewport --
+ *  a phone in landscape, or a small phone in portrait. At that end 96px is 52%
+ *  of the card's width rather than 33%, so a commit takes a visibly longer drag
+ *  on a small screen than on a large one.
+ *
+ *  NOT retuned here, because retuning it would be guessing twice instead of
+ *  once. All five thresholds in this file are documented starting values that
+ *  have never met a thumb (`development.md` §5 and §8), and the fix for that is
+ *  a real-device pass, not a second number chosen by eye. This block exists so
+ *  that when the pass happens, whoever runs it knows the threshold is
+ *  card-relative in intent and viewport-independent in fact.
+ * ===========================================================================
  */
 export const SWIPE_COMMIT_DISTANCE_PX = 96;
 

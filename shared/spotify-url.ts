@@ -142,6 +142,28 @@ export function spotifyTrackUrl(id: string): string {
 }
 
 /**
+ * Build the public web URL for a playlist from a bare id — the inverse of `parsePlaylistUrl()`,
+ * and the one output of this module that round-trips back through it as `{ ok: true }`.
+ *
+ * This exists because a bare id is not a link. Phase 6's suggested-playlist buttons used to put
+ * the raw id into the landing form, which parsed fine (see `SPOTIFY_ID_PATTERN` below) but showed
+ * the player a 22-character string where the placeholder promised
+ * `https://open.spotify.com/playlist/…`. The form is meant to teach what a valid link looks like,
+ * so a suggestion now fills it with the same thing a paste would.
+ *
+ * No `?si=` parameter. That is Spotify's per-share tracking token, minted by whoever pressed
+ * Share; there is none to invent here, and `parsePlaylistUrl()` discards it anyway.
+ *
+ * The id is NOT validated, for the same reason `spotifyTrackUrl()` does not validate one: these
+ * ids are checked-in constants, and a builder that could fail would push an error branch into a
+ * render path. Interpolation is safe because a Spotify id is 22 base62 characters — nothing in
+ * that alphabet can escape the path segment.
+ */
+export function spotifyPlaylistUrl(id: string): string {
+  return `https://open.spotify.com/playlist/${id}`;
+}
+
+/**
  * Is this a Spotify short link -- the shape the mobile share sheet produces?
  *
  * A separate predicate rather than a third `ParsePlaylistUrlResult` variant (decision 4). The
@@ -178,7 +200,10 @@ export function isSpotifyShortLink(input: string): boolean {
  * - `open.spotify.com/user/{user}/playlist/{id}` -- the legacy path, and the two prefixes
  *   combined (`/intl-es/user/{user}/playlist/{id}`)
  * - `spotify:playlist:{id}`
- * - a bare 22-character ID (what Phase 6's suggested-playlist buttons pass)
+ * - a bare 22-character ID. Kept as a LENIENCY, not because anything in the app relies on it:
+ *   the suggested-playlist buttons used to pass one and now pass `spotifyPlaylistUrl(id)`
+ *   instead. Someone who pastes just the id from a URL they truncated is not making a mistake
+ *   worth an error message.
  *
  * NOT accepted, and it cannot be: a `spotify.link` short URL. It carries no playlist ID at all,
  * so only a redirect can resolve it. `isSpotifyShortLink()` is how a caller recognises one, and
@@ -194,7 +219,7 @@ export function parsePlaylistUrl(input: string): ParsePlaylistUrlResult {
   const trimmed = input.trim();
   if (trimmed === '') return { ok: false, code: 'invalid-url' };
 
-  // A bare ID, e.g. from the suggested-playlist buttons.
+  // A bare ID -- a leniency for a truncated paste; nothing in the app submits one. See the header.
   if (SPOTIFY_ID_PATTERN.test(trimmed)) return { ok: true, id: trimmed };
 
   const uriMatch = SPOTIFY_URI_PATTERN.exec(trimmed);

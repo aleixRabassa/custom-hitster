@@ -140,6 +140,39 @@ describe('CardStack', () => {
     expect(toDataURLMock.mock.calls[0]?.[0]).toContain(highConfidenceCard.id);
   });
 
+  it('should size the stack wrapper from the same token as the card', () => {
+    // ===================================================================
+    //  THE POINT OF THIS TEST IS THAT THE TWO CANNOT DRIFT.
+    //
+    //  This wrapper and the card inside it each carried `h-[28rem] w-72`
+    //  through Phase 6, and the two literals were REQUIRED to agree: the
+    //  peeking backs are `absolute inset-0` on this wrapper, so a card
+    //  resized without the wrapper leaves the backs the old size and the
+    //  deck stops lining up. NOTHING enforced it -- there was no test, and
+    //  the two values lived in different files.
+    //
+    //  So the assertion is on EQUALITY of the size classes, not merely on
+    //  each being a token. A future change that retokenises one and not the
+    //  other fails here.
+    // ===================================================================
+    const { container } = renderStack(fixtureDeck, 0);
+
+    const wrapper = container.firstElementChild;
+    // The card's outer element is `card-inner`'s parent -- `Card` puts the drag on the outside and
+    // the rotation on the inner wrapper, and it is the OUTER one that carries the size.
+    const cardOuter = container.querySelector('[data-testid="card-inner"]')?.parentElement;
+
+    const sizeClasses = (element: Element | null | undefined) =>
+      (element?.className ?? '')
+        .split(/\s+/)
+        .filter((name) => name.startsWith('h-') || name.startsWith('w-'))
+        .sort()
+        .join(' ');
+
+    expect(sizeClasses(wrapper)).toBe('h-(--card-height) w-(--card-width)');
+    expect(sizeClasses(cardOuter)).toBe(sizeClasses(wrapper));
+  });
+
   it('should give adjacent duplicate-id cards distinct keys', () => {
     // ===================================================================
     //  A playlist may legitimately contain the same track twice, and

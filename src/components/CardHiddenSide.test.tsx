@@ -60,6 +60,31 @@ describe('CardHiddenSide', () => {
     expect(screen.queryAllByRole('button')).toEqual([]);
   });
 
+  it('should not put a live region on the hidden side', async () => {
+    // ===================================================================
+    //  THE NEGATIVE HALF OF THE PHASE 7 REVEAL ANNOUNCEMENT.
+    //
+    //  `CardRevealSide` gained a polite live region, because the flip was
+    //  silent to assistive technology and the payoff of the game was
+    //  therefore invisible to it. That is correct exactly once -- after a
+    //  flip the player asked for.
+    //
+    //  A live region on THIS face would announce a card the player is meant
+    //  to be guessing, which is the same leak as printing the title on it.
+    //  This face is mounted the entire time the card is unflipped, so the
+    //  exposure is the whole game rather than a moment.
+    //
+    //  It joins the leak assertions below rather than replacing them: those
+    //  cover what is SAID, this covers whether anything is said at all.
+    // ===================================================================
+    const { container } = render(<CardHiddenSide card={highConfidenceCard} />);
+    await screen.findByRole('img');
+
+    expect(container.querySelectorAll('[role="status"]')).toHaveLength(0);
+    expect(container.querySelectorAll('[role="alert"]')).toHaveLength(0);
+    expect(container.querySelectorAll('[aria-live]')).toHaveLength(0);
+  });
+
   it('should not render the title, artist, or year anywhere in the DOM', async () => {
     // ===================================================================
     //  THE LEAK TEST. This is the automated defence of the product's

@@ -1092,3 +1092,292 @@ been dealt?" **cannot be `state.status === 'idle'`**, which is the obvious versi
 session sits at `ended` while the landing screen is on screen, so a playlist submitted from there would
 never be dealt at all. `App.tsx` compares the **result object's identity** through a ref instead, which
 is correct regardless of status and is also what makes the effect idempotent under StrictMode.
+
+---
+
+## 2026-08-05 — An unbound native `fetch` called as `options.fetchImpl(...)` throws "Illegal invocation", and both HTTP clients did it
+
+**Symptom:** pressing Start showed _"Could not reach the server. Check your connection and try again."_
+— the `network` code — with the dev server up and answering. Every Start in a real browser failed this
+way, and every year lookup did too, so no card could ever have received a year.
+
+**Cause, and it is a two-part cause.** `usePlaylist` passed the bare global `fetch` as `fetchImpl`, and
+`fetchPlaylist` invoked it as `await options.fetchImpl(url, init)` — a **method call**, so the function
+ran with `options` as its receiver. The browser's `fetch` is brand-checked: WebIDL resolves a
+`null`/`undefined` receiver to the global (which is why `const f = fetch; f(url)` works fine) but
+rejects any other object with
+
+```
+TypeError: Failed to execute 'fetch' on 'Window': Illegal invocation
+```
+
+The client's `try/catch` around the call — there to turn a genuine offline failure into a result rather
+than an exception — swallowed that TypeError and reported `network`. So a call-site bug was presented to
+the player as their own Wi-Fi. `year-client.ts` + `use-game-session.ts` had the identical pair.
+
+**Why all five local checks passed, and would have kept passing.** Every `fetch` double in this repo is
+a plain function or an arrow with no receiver check, and **the node environment's `fetch` is not
+brand-checked either** — verified 2026-08-05. The bug existed only in a browser, i.e. only where nothing
+in this repo runs. `App.test.tsx` drives the whole flow end to end through a stub and could not see it.
+
+**Fix, applied at both layers deliberately.** The clients destructure (`const { fetchImpl } = options`)
+so the call passes `undefined` as the receiver, and the two injection sites pass
+`globalThis.fetch.bind(globalThis)`. Either alone is sufficient; both are cheap and the failure is
+invisible until someone opens the app. `playlist-client.test.ts` and `year-client.test.ts` now each
+carry a `brandCheckedFetch()` double that **throws unless its receiver is `undefined` or the global** —
+a `function`, not an arrow, since an arrow has no `this` to inspect. Confirmed those tests fail against
+the old call style before they were made to pass.
+
+**The general rule for this repo:** a DOM built-in handed across a seam must be bound, and an injected
+function must never be called as a property of its options bag. `api/_lib/musicbrainz.ts` uses the same
+`deps.fetchImpl(...)` shape and is **not** affected — Node's `fetch` has no receiver brand check — but it
+is the same pattern, so do not copy it into `src/`.
+
+**Still not verified end to end:** that a full game now starts. That needs `npx vercel dev` in a real
+browser — under `pnpm dev` the corrected fetch reaches Vite, which answers the function's transpiled
+source with status 200, so Start now fails as `unexpected-payload` instead. Different message, same
+unplayable dev server, exactly as `docs/development.md` §4 describes.
+
+---
+
+## 2026-08-05 — `vercel.json`'s SPA rewrite made the app blank under `npx vercel dev`, and that is why nobody had seen it run
+
+Found while verifying the `fetch` fix above in a real browser. The page loaded, `<title>` was right, and
+**`#root` stayed empty with no console error** — so the app had never actually been played locally at
+all, under either dev server.
+
+The rewrite was:
+
+```json
+{ "source": "/((?!api/).*)", "destination": "/index.html" }
+```
+
+**In production that is harmless**, because Vercel matches the filesystem BEFORE applying rewrites:
+`dist/assets/index-*.js` is a real file, so it is served directly and the rewrite only catches unknown
+routes. **Under `vercel dev` there is no `dist`** — Vite serves modules from source on demand, so
+`/src/main.tsx` matches no static file, the catch-all fires, and the module script tag receives
+`index.html`. The browser parses HTML as JavaScript, `main.tsx` never executes, and nothing mounts. No
+error surfaces because the failure is a `<script type="module">` whose body is markup.
+
+Confirmed directly: `curl http://localhost:3000/src/main.tsx` returned the full `index.html`
+(`Content-Type: text/html`) before the fix and transpiled JS (`text/javascript`) after.
+
+**Fix** — narrow the source so it cannot swallow dev-server paths:
+
+```json
+{ "source": "/((?!api/|@)[^.]*)", "destination": "/index.html" }
+```
+
+`[^.]*` excludes anything with a file extension (`/src/main.tsx`, `/node_modules/.vite/deps/*.js`,
+`/logo.png`, and production's `/assets/*.js`), and the `@` alternation excludes Vite's own `/@vite/client`
+and `/@react-refresh`, which carry no dot. Extensionless paths — the only shape an app route can have —
+still fall through to `index.html`, so **production behaviour is unchanged**: every path that reached the
+SPA fallback before still reaches it.
+
+Worth knowing that this app has no client-side router at all (`App.tsx`'s status switch, decision 1), so
+the fallback currently protects exactly one route, `/`. It is kept because Phase 8's shareable deck URL
+is the first thing that could need it.
+
+**End-to-end verification, finally done (2026-08-05, Chrome, `npx vercel dev`):** clicking the Rock
+Classics suggestion filled the box with the full `open.spotify.com/playlist/...` link, `/api/playlist`
+returned 100 cards with `truncated: true` (so the truncation notice fired, as documented), the preparing
+screen counted years, the card-1 gate opened into the game screen with "99 cards left", the QR rendered,
+and a flip revealed a year with its confidence label. **The unflipped card's text content carried no
+title, artist or year** — the leak assertion holds in a real browser, not just in jsdom.
+
+One quality observation, not a defect and not fixed: the first card resolved "Psycho Killer - 2005
+Remaster" to **2025** with `low` confidence, which the UI correctly labels "Unconfirmed year". The real
+release is 1977 — MusicBrainz matched a recent reissue. The confidence plumbing behaved exactly as
+designed; the ranking is a separate question and belongs with the year-resolution work, not here.
+
+---
+
+## 2026-08-05 — Measured contrast ratios for every colour pair in the app, and the four that failed
+
+Computed for Phase 7 plan 1 step 9 by converting Tailwind v4's `oklch()` palette values to sRGB and
+applying the WCAG 2.x relative-luminance formula — not eyeballed, and not read off a devtools panel.
+Recorded here so a Phase 8 palette change has a baseline to beat rather than a fresh argument.
+
+| Foreground                     | Background                        | Ratio    | Verdict                            |
+| ------------------------------ | --------------------------------- | -------- | ---------------------------------- |
+| `neutral-600` (placeholder)    | `neutral-900` (URL input)         | **2.30** | **FAIL** — worst in the app        |
+| `white`                        | `emerald-600` (Start, Play again) | **3.67** | **FAIL** — the primary action      |
+| `neutral-100` at `opacity-40`  | `neutral-800` (disabled controls) | **3.46** | **FAIL** — dimmest text in the app |
+| `neutral-500`                  | `neutral-950` (HUD and 3 others)  | **4.18** | **FAIL** — and used at `text-xs`   |
+| `neutral-600` (`····` glyph)   | `neutral-800`                     | 1.94     | exempt — `aria-hidden` decoration  |
+| `neutral-400`                  | `neutral-950`                     | 7.63     | pass                               |
+| `neutral-300` ("Year unknown") | `neutral-800`                     | 10.20    | pass                               |
+| `amber-300` (unconfirmed year) | `neutral-800`                     | 10.45    | pass                               |
+| `amber-200` (notice copy)      | `amber-950/40` over `neutral-950` | 14.71    | pass                               |
+| `red-400` (landing error)      | `neutral-950`                     | 6.84     | pass                               |
+
+**Two of the four failures were not on the plan's list.** The plan named the placeholder, the
+`neutral-500` muted text and the disabled opacity. `white` on `emerald-600` — the label of the app's
+primary action, at 16px, on two screens — turned up only because the audit computed everything rather
+than the enumerated four. That is the argument for computing everything.
+
+**The replacements, and why each is the value it is:**
+
+- **`--color-fg-muted: oklch(65% 0 none)`** replaces both `neutral-500` and the `neutral-600`
+  placeholder. One token, because the two roles share the binding constraint: it has to clear 4.5:1 on
+  the page (6.12), on a card face (5.54) **and** on a control surface (4.67). Tailwind's neutral scale
+  jumps 55.6% to 70.8% with nothing between, and `neutral-500` fails on `neutral-900` (3.79) while
+  `neutral-400` is as bright as the label text it sits under — so this is a custom lightness rather than
+  a palette shade. **The minimum passing lightness is 60% on `neutral-900` and 64.5% on `neutral-800`**;
+  65% is the first round number clearing both.
+- **`--color-on-accent: oklch(14.5% 0 none)`** (the value of `neutral-950`) replaces `text-white` on the
+  primary buttons: 5.40:1 at rest, 8.03:1 on the `emerald-500` hover. The **backgrounds are unchanged**,
+  which is what makes this the smallest possible fix — `emerald-700` with white would have passed too
+  (5.37) but would have forced the hover state _darker_ than the resting one to keep passing, which is
+  backwards.
+- **`--opacity-disabled: 0.6`** replaces `disabled:opacity-40`: 5.94:1. `0.5` also passes (4.59) but with
+  no margin.
+
+**The one left failing deliberately:** the `····` pending glyph at 1.94:1. It is `aria-hidden` decoration
+beside a text line carrying the whole meaning, so WCAG 1.4.3 exempts it, and raising it would be a visual
+change Phase 8 owns.
+
+**The focus ring** is one colour for the whole app, `oklch(97% 0 none)`, picked against the lightest
+surface it must clear: 13.86:1 on `neutral-800`, 16.42 on `neutral-900`, 18.15 on the page. On the emerald
+primary button it is 3.36:1, which clears the 3:1 WCAG 1.4.11 asks of a non-text indicator — and the 2px
+outline offset puts most of the ring on the page background there anyway. An emerald ring was the obvious
+alternative and is wrong for exactly one reason: it would be nearly invisible on the emerald button.
+
+---
+
+## 2026-08-05 — `aria-label` on an input with a visible label is a WCAG 2.5.3 failure, not a belt-and-braces improvement
+
+The landing screen's URL input carried **both** a wrapping `<label>` with a visible `Playlist link` span
+**and** `aria-label="Spotify playlist link"`. That looks like redundant helpfulness. It is a defect:
+
+- **`aria-label` wins.** It overrides the label element entirely, so the accessible name was
+  "Spotify playlist link" while the visible text said "Playlist link".
+- **That fails WCAG 2.5.3 (Label in Name)**, which requires the accessible name to contain the visible
+  label text.
+- **It breaks speech control outright.** "Click Playlist link" matches nothing, because the only name the
+  browser knows is one the user cannot see.
+
+**The general trap, worth carrying beyond this repo:** `aria-label` is not additive. Reaching for it on an
+element that already has a visible label _removes_ information rather than adding it. The rule of thumb is
+that `aria-label` belongs only on controls with **no** visible text — which in this app is exactly the
+three icon-only card controls and the notice's dismiss glyph, all of which correctly have one.
+
+The fix was deleting the attribute; the wrapping label already supplied a correct name. **Ten test queries
+across `LandingScreen.test.tsx` and `App.test.tsx` used `getByLabelText('Spotify playlist link')` and all
+ten failed**, which is the shape this defect takes when it is fixed: the tests had been asserting the
+wrong name because they were written against the same misconception.
+
+Related and fixed at the same time: `aria-invalid` was set with no `aria-describedby`, so the _reason_ for
+the error was announced once by `role="alert"` and then unreachable. A player who tabbed back to the field
+heard "invalid" and no explanation.
+
+---
+
+## 2026-08-05 — The card flip was silent to assistive technology, and the fix looks exactly like the leak the app forbids
+
+Found while auditing Phase 6's components. A keyboard or screen-reader player pressed Space,
+`CardRevealSide` mounted, and **nothing was announced**. The payoff of the entire game — the year — was
+available to an eye and to nothing else. A card with a QR code and no audible reveal is not a game a
+screen-reader user can play at all.
+
+The fix is a polite live region (`role="status"`) wrapping the year, title and artist. **This is the one
+place in the app where announcing track data is correct**, and it is worth stating plainly because it
+superficially resembles the leak every other surface is built to avoid:
+
+- `CardRevealSide` is mounted **only** while the card is flipped (`Card.tsx`'s DOM-presence rule). There
+  is no unflipped card on which the region exists, so there is nothing for it to announce early.
+- Anywhere else it would be the leak. `CardHiddenSide`, `CardStack`'s backs and the HUD are all live
+  _while the card is a mystery_. `CardHiddenSide.test.tsx` now asserts the absence of any live region for
+  that reason, alongside the existing text-and-attribute leak assertions.
+- Polite, not assertive: the reveal was requested, so interrupting the screen reader mid-sentence would be
+  rude about news the player asked for.
+
+**The generalisable point:** the leak rule is about _DOM presence while the card is unflipped_, and it is
+`Card.tsx`'s conditional mount that enforces it. Once that is understood, "announce the reveal" and "leak
+nothing" stop being in tension. A future reader who files this live region as a bug will be reasoning from
+the rule without the mounting condition.
+
+---
+
+## 2026-08-05 — jsdom 30 has no `window.matchMedia` at all, and Motion 12 does not care
+
+Phase 7 plan 1's first open question was whether `<MotionConfig reducedMotion="user">` needs a
+`matchMedia` stub under jsdom. The plan assumed "jsdom does implement it; whether Motion's listener
+registration is happy with jsdom's implementation is the thing to check". Measured:
+
+- **`window.matchMedia` is `undefined`** under jsdom 30 / Vitest 4.1. Not a partial implementation — the
+  property does not exist. (`window === globalThis` there, and neither has it.)
+- **Motion 12.43 tolerates its absence.** `MotionConfig reducedMotion="user"` wrapping a `motion.div`
+  with `drag` inside an `AnimatePresence` renders without throwing; Motion guards the lookup and resolves
+  the preference as "not set".
+- **So no stub is needed anywhere** — not in `Card.test.tsx`, not in the other jsdom files, and
+  emphatically not in a global `setupFiles`, which `toolchain.md` §5 records as deliberately absent.
+
+`Card.test.tsx` carries a focused test asserting both halves, because `src/main.tsx` is where
+`MotionConfig` lives and **nothing in this repo renders `main.tsx`** — `App.test.tsx` renders `<App />`
+directly. Without that test a Motion or jsdom upgrade turning tolerance into a throw would be discovered
+in a browser.
+
+**The consequence to remember:** because the preference can never read as "reduce", **no jsdom test in
+this repo can observe reduced-motion behaviour**. That is the same wall the CSS side hits — jsdom
+evaluates no media queries — and it is why `src/index.css.test.ts` is a labelled text canary rather than a
+behaviour test.
+
+---
+
+## 2026-08-05 — Two ways of reading a sibling file inside Vite both fail, and the tidier one fails silently
+
+Hit while writing the reduced-motion CSS canary, which needs `src/index.css` as text. Both obvious
+approaches are wrong, and the failure modes are worth knowing before the next test needs a fixture file.
+
+**`import css from './index.css?raw'` returns an empty string.** Vitest's `test.css` option defaults to
+`false`, so CSS modules are replaced with empty stubs — `?raw` included. Assertions over `''` mostly pass
+vacuously; only a `not.toBeNull()` pair failed, which is the sole reason this was caught rather than
+committed as a green test checking nothing.
+
+**`readFileSync(new URL('./index.css', import.meta.url))` throws `TypeError: The URL must be of scheme file`.**
+Vite has a dedicated transform for the `new URL(<string literal>, import.meta.url)` pattern: it treats it
+as an **asset reference** and rewrites it to the asset's served URL, which is not a `file:` one. This is
+the standard ESM idiom for locating a sibling file, and it is precisely the one that cannot be used inside
+a Vite project. Note that a **bare** `import.meta.url` is untouched and is a normal `file:///…` URL — it
+is the literal-first-argument form that triggers the rewrite.
+
+**What works:** take the bare URL apart with `node:path`.
+
+```ts
+readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'index.css'), 'utf8');
+```
+
+`node:*` imports typecheck fine under `tsconfig.app.json` despite its `"types": ["vite/client"]` — that
+option limits automatically-included _global_ declarations, not explicit module resolution.
+
+---
+
+## 2026-08-05 — Tailwind v4 harvests utility class names out of prose, and this repo's comments are enormous
+
+Discovered while accounting for the CSS bundle's growth in Phase 7 plan 1 step 13. Tailwind v4's automatic
+content detection scans every non-gitignored file, **markdown included**, and its extractor takes any
+candidate-shaped token — so a class name written in a sentence generates real CSS.
+
+Measured on the Phase 6 baseline, with no source changes at all:
+
+| Build                           | CSS      | gzip    |
+| ------------------------------- | -------- | ------- |
+| as committed                    | 16.90 kB | 4.24 kB |
+| with `@source not "../**/*.md"` | 15.18 kB | 3.98 kB |
+
+**1.72 kB — about 10% of the stylesheet — was generated purely from prose in `AGENTS.md` and `docs/`.**
+The utilities it produces are unreferenced by any component: `.select-none`, `.ring`, `.filter`,
+`.underline`, `.collapse`, `.resize`, `.container`, `.max-w-sm`, `.w-72`, `.duration-500` and so on. Some
+come from documentation genuinely discussing utilities; others from ordinary English words that happen to
+be Tailwind utility names ("transition", "transform", "visible", "hidden", "block", "static", "table",
+"inline", "grow", "shrink").
+
+The same effect operates inside `src/` — the Phase 7 comments that name the _old_ utilities they replaced
+each keep a dead rule alive, and drag the default theme variables they reference along with them.
+
+**Deliberately not fixed.** A one-line `@source not "../**/*.md";` in `src/index.css` reclaims the 1.72 kB
+and was measured to work, but CSS bundle size belongs to `plan.phase-7-robustness.md` (bundle splitting
+and the Lighthouse pass), and this repo's house style values those comments highly enough that mangling
+them to dodge a scanner would be the wrong trade. **Recorded so plan 2 starts with the number rather than
+the investigation** — and so nobody reads the Phase 7 CSS growth as being entirely tokens.

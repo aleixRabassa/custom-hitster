@@ -209,7 +209,7 @@ export function GameScreen({
   };
 
   return (
-    <main className="flex min-h-dvh flex-col items-center justify-center gap-6 bg-neutral-950 p-6">
+    <main className="flex min-h-dvh flex-col items-center justify-center gap-6 bg-page p-6">
       {/*
         THE session audio element. `preload="none"` so nothing is fetched until the player
         actually asks -- a 100-card deck must not pull 100 previews for cards nobody reaches.

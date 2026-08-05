@@ -39,6 +39,44 @@ describe('Hud', () => {
     expect(screen.queryByText('Reggae Classics')).not.toBeNull();
   });
 
+  it('should match the card width rather than a content column', () => {
+    // The HUD sits directly above the card and is supposed to line up with it. It was `max-w-sm`
+    // (24rem) against a card of `w-72` (18rem), so on any viewport wide enough for either to reach
+    // its cap the count floated 3rem out past the deck on each side -- they lined up at no width
+    // where it was visible. Sharing `--card-width` is what makes them agree at every viewport.
+    //
+    // `NoticeBanner` carries the same assertion, because it is the other element above the card.
+    render(<Hud cardsRemaining={5} playlistName="Rock Classics" />);
+
+    const hud = screen.getByTestId('hud');
+    expect(hud.className).toContain('max-w-(--card-width)');
+    expect(hud.className).not.toContain('max-w-sm');
+    // Still `w-full` beneath the cap, so a narrow phone gets the full width rather than 18rem of
+    // overflow.
+    expect(hud.className).toContain('w-full');
+  });
+
+  it('should keep a long playlist name truncated', () => {
+    // A user-created playlist name has no length limit worth relying on, and the HUD is now capped
+    // at the card's width rather than at a wider content column -- so there is LESS room than there
+    // was, and the truncation matters more. The count must keep its space: `shrink-0` on the count
+    // plus `truncate` on the name is what stops a long name pushing "17 cards left" off the row.
+    render(
+      <Hud
+        cardsRemaining={17}
+        playlistName="An extremely long user created playlist name that will not fit on a phone"
+      />,
+    );
+
+    const hud = screen.getByTestId('hud');
+    const name = hud.firstElementChild;
+    const count = hud.querySelector('[role="status"]');
+
+    expect(name?.className).toContain('truncate');
+    expect(count?.className).toContain('shrink-0');
+    expect(hud.textContent).toContain('17 cards left');
+  });
+
   it('should not render an exit control', () => {
     // ===================================================================
     //  Exit lives in `CardControls`, beside the card, and there is exactly

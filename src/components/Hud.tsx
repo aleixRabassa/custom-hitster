@@ -32,7 +32,17 @@ export function Hud({ cardsRemaining, playlistName }: HudProps) {
   return (
     <div
       data-testid="hud"
-      className="flex w-full max-w-sm items-baseline justify-between gap-3 text-xs text-neutral-500"
+      /*
+        Capped at the CARD's width, not at a content column.
+
+        This line sits directly above the card and is supposed to line up with it. It was
+        `max-w-sm` (24rem) against a card of `w-72` (18rem), so on any viewport wide enough for
+        either to reach its cap the HUD overhung the card by 3rem on each side -- visible as a
+        count floating out past the deck. They never lined up at any width where it mattered.
+        Sharing `--card-width` is what makes them agree at every viewport rather than at none.
+        `NoticeBanner` does the same, for the same reason.
+      */
+      className="flex w-full max-w-(--card-width) items-baseline justify-between gap-3 text-xs text-fg-muted"
     >
       {/*
         The playlist NAME is safe and the track titles are not, which is worth stating because the

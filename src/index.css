@@ -1,9 +1,290 @@
 /*
  * Tailwind CSS v4 is CSS-first: this single import replaces the v3
  * @tailwind base/components/utilities trio, and no tailwind.config.js exists.
- * Design tokens (@theme) are deliberately deferred to Phase 7.
+ *
+ * THIS FILE IS THE APP'S DESIGN SURFACE. A v3 reader looking for
+ * `tailwind.config.js` should read the `@theme` block below instead -- it is
+ * where every colour, dimension, duration and interaction minimum in the app is
+ * named. Components consume tokens; they do not invent literals. Phase 8
+ * redesigns the card by changing values HERE, not by hunting utilities across
+ * nine components.
  */
 @import 'tailwindcss';
+
+/*
+ * ===========================================================================
+ *  THE TOKENS NAME VALUES THAT ALREADY EXISTED. Phase 7 plan 1, decision 1.
+ *
+ *  Every value below was measured out of the components as they stood at the
+ *  end of Phase 6, and the extraction changed nothing by eye. The FOUR
+ *  exceptions are contrast corrections, each carrying its measured "before"
+ *  ratio in a comment, and each is a WCAG 1.4.3 failure rather than a design
+ *  preference. Ratios were computed rather than eyeballed; the full table is in
+ *  `docs/agent_findings.md`.
+ *
+ *  Values are written as literal `oklch()` rather than as `var(--color-neutral-900)`
+ *  on purpose. Tailwind emits only the default theme variables that some
+ *  generated utility actually references, so a token defined in terms of one
+ *  could resolve to nothing once the last direct use of that shade disappeared.
+ *  The shade each value came from is in the comment beside it, which is where
+ *  that information belongs anyway.
+ *
+ *  `static` rather than a bare `@theme`: it emits every variable regardless of
+ *  whether a utility references it, which is what the un-namespaced tokens
+ *  below (`--card-height`, `--duration-flip`, ...) need. Those are consumed
+ *  through arbitrary-value utilities like `h-(--card-height)` and by the custom
+ *  utilities at the bottom of this file, and by `@media
+ *  (prefers-reduced-motion)`, none of which Tailwind tracks as a use.
+ * ===========================================================================
+ */
+@theme static {
+  /* --- Surfaces ---------------------------------------------------------- */
+
+  --color-page: oklch(14.5% 0 none); /* was neutral-950 */
+  --color-surface: oklch(
+    20.5% 0 none
+  ); /* was neutral-900 — hidden face, backs, input, suggestions */
+  --color-surface-raised: oklch(
+    26.9% 0 none
+  ); /* was neutral-800 — reveal face, controls, QR placeholder */
+  --color-surface-raised-hover: oklch(37.1% 0 none); /* was neutral-700 */
+
+  /*
+   * Two border tokens whose values coincide with two surface tokens. They are
+   * kept separate because they are separate decisions: Phase 8 can lighten a
+   * border without lightening the face it sits on.
+   */
+  --color-border: oklch(26.9% 0 none); /* was neutral-800 */
+  --color-border-strong: oklch(37.1% 0 none); /* was neutral-700 */
+  --color-border-hover: oklch(43.9% 0 none); /* was neutral-600 */
+
+  /* --- Text -------------------------------------------------------------- */
+
+  --color-fg: oklch(97% 0 none); /* was neutral-100 */
+  --color-fg-strong: oklch(98.5% 0 none); /* was neutral-50 — the resolved year */
+  --color-fg-heading: oklch(87% 0 none); /* was neutral-300 — "Year unknown" */
+  --color-fg-secondary: oklch(70.8% 0 none); /* was neutral-400 */
+
+  /*
+   * CONTRAST FIX 1 of 4. Replaces BOTH `text-neutral-500` and the URL input's
+   * `placeholder:text-neutral-600`, which were 4.18:1 on the page and 2.30:1 in
+   * the input -- the second is the worst ratio in the app and placeholder text
+   * is content. One token because the two roles share a constraint: this value
+   * has to clear 4.5:1 on the page, on a card face and on a control surface.
+   * At oklch(65%) it is 6.12:1 / 5.54:1 / 4.67:1 respectively.
+   */
+  --color-fg-muted: oklch(65% 0 none);
+
+  /*
+   * NOT a contrast fix, and deliberately left failing. This is the `····`
+   * pending glyph only, which is `aria-hidden` decoration beside a text line
+   * that carries the whole meaning -- WCAG 1.4.3 exempts it, and raising it
+   * would be a visual change decision 1 reserves for Phase 8. Measured 1.94:1
+   * on `--color-surface-raised`.
+   */
+  --color-fg-decorative: oklch(43.9% 0 none); /* was neutral-600 */
+
+  /* --- Accents ----------------------------------------------------------- */
+
+  --color-accent: oklch(59.6% 0.145 163.225); /* was emerald-600 — Start, Play again */
+  --color-accent-hover: oklch(69.6% 0.17 162.48); /* was emerald-500 */
+
+  /*
+   * The same value as `--color-accent-hover`, and a separate token for the same
+   * reason the border tokens are separate from the surface ones: the preparing
+   * spinner's leading arc is not a hover state, and Phase 8 should be able to
+   * brighten one without brightening the other.
+   */
+  --color-accent-bright: oklch(69.6% 0.17 162.48); /* was emerald-500 — the spinner's arc */
+
+  /*
+   * CONTRAST FIX 2 of 4. The primary buttons' label was `text-white` on
+   * `--color-accent`: 3.67:1, a straight 1.4.3 failure on the app's primary
+   * action at 16px. The BACKGROUNDS are unchanged -- only the label darkens --
+   * which is the smallest edit that fixes it: 5.40:1 at rest and 8.03:1 on
+   * hover. Found by the step 9 audit rather than listed in it.
+   */
+  --color-on-accent: oklch(14.5% 0 none); /* was white */
+
+  --color-warning: oklch(
+    87.9% 0.169 91.605
+  ); /* was amber-300 — unconfirmed year (10.45:1, passes) */
+  --color-warning-text: oklch(
+    92.4% 0.12 95.746
+  ); /* was amber-200 — notice copy (14.71:1, passes) */
+  --color-warning-glyph: oklch(82.8% 0.189 84.429); /* was amber-400 — the Dismiss ✕ */
+  --color-warning-surface: oklch(27.9% 0.077 45.635); /* was amber-950, used at /40 */
+  --color-warning-border: oklch(41.4% 0.112 45.904); /* was amber-900, used at /60 */
+
+  --color-danger: oklch(70.4% 0.191 22.216); /* was red-400 — the landing error (6.84:1, passes) */
+
+  /*
+   * The focus ring, and it is one colour for the whole app on purpose: a ring
+   * that changed with its surface is four things to keep legible instead of
+   * one. Picked against the LIGHTEST surface it has to clear -- 13.86:1 on
+   * `--color-surface-raised`, 16.42:1 on `--color-surface`, 18.15:1 on the
+   * page. On the emerald primary button it is 3.36:1, which clears the 3:1 that
+   * WCAG 1.4.11 asks of a non-text indicator; the 2px offset puts most of the
+   * ring on the page background there anyway.
+   */
+  --color-focus-ring: oklch(97% 0 none);
+
+  /* --- Card geometry ----------------------------------------------------- */
+
+  /*
+   * ===========================================================================
+   *  ONE PAIR OF TOKENS, CONSUMED BY BOTH `Card` AND `CardStack`.
+   *
+   *  Those two files each carried `h-[28rem] w-72` and the two literals were
+   *  REQUIRED to match -- the stack's peeking backs are `absolute inset-0` on a
+   *  wrapper sized by the second pair, so a change to one and not the other
+   *  silently misaligns the deck. Nothing enforced it. This is that pair.
+   *
+   *  HEIGHT is the primary term and WIDTH is derived from it, rather than the
+   *  other way round, because height is what actually runs out: the card shares
+   *  a `min-h-dvh` column with the HUD, the notice and the control bar. Deriving
+   *  the width preserves the 9:14 ratio the Phase 6 pair implied (288 × 448)
+   *  through every viewport, which a clamp on each axis independently would not.
+   *
+   *  The three terms of the clamp:
+   *
+   *    18rem   floor. 288px tall / 185px wide -- small, but a 320×568 phone in
+   *            landscape has 375px of height for everything.
+   *    62dvh   the fluid middle. `dvh`, not `vh`: open question 4 asked whether
+   *            a short wide viewport needs a viewport-height term, and it does.
+   *            Without one, a phone in landscape gets a 448px card in a 375px
+   *            viewport. `dvh` also survives a mobile browser's collapsing
+   *            address bar, which `vh` does not.
+   *    124vw   the narrow-viewport guard. 124vw of height is 80vw of width once
+   *            the ratio is applied, so the card can never exceed 80% of a very
+   *            narrow-but-tall viewport. Inside `min()` rather than as a second
+   *            clamp so the ratio still holds when this term wins.
+   *    28rem   ceiling. Exactly the Phase 6 height, so a desktop card is
+   *            unchanged and does not become a billboard.
+   *
+   *  At 412×915 and at every desktop size this resolves to exactly 288 × 448 --
+   *  the pre-change values. It is only below roughly 723px of viewport height
+   *  that the card starts to shrink, which is the point.
+   * ===========================================================================
+   */
+  --card-height: clamp(18rem, min(62dvh, 124vw), 28rem);
+  --card-width: calc(var(--card-height) * 9 / 14);
+
+  /*
+   * The QR code's DISPLAYED edge length, fluid with the card. 11/18 of the
+   * card's width is exactly 176px at the card's 288px ceiling, which was the
+   * Phase 6 value.
+   *
+   * The GENERATED bitmap's size is a different number and must stay one
+   * (decision 4): `toDataURL` is asynchronous, so a generation size that tracked
+   * the viewport would re-encode the code on every resize frame and flash the
+   * placeholder while it did. `QrCode.tsx` takes the two separately.
+   */
+  --qr-display-size: calc(var(--card-width) * 11 / 18);
+
+  /* --- Content column ---------------------------------------------------- */
+
+  /*
+   * Replaces `max-w-sm` on the three screens where it is a reading measure.
+   * 24rem is exactly `max-w-sm`, so nothing moves.
+   *
+   * `Hud` and `NoticeBanner` do NOT use this: they sit directly above the card
+   * and are supposed to line up with it, which at `max-w-sm` (24rem) against a
+   * card of 18rem they never did. They take `--card-width` instead. See the
+   * plan's execution note 2.
+   */
+  --container-content: 24rem;
+
+  /* Replaces `max-w-xs` on the preparing screen's one explanatory line. */
+  --container-narrow: 20rem;
+
+  /* The preparing spinner's edge length. Exactly `size-8`, unchanged. */
+  --size-spinner: 2rem;
+
+  /* --- Type scale -------------------------------------------------------- */
+
+  /*
+   * The year is the whole point of Hitster, so it is the largest thing in the
+   * app and it gets named. Values are Tailwind's own `text-6xl` / `text-5xl` /
+   * `text-3xl`, unchanged.
+   */
+  --text-year: 3.75rem;
+  --text-year--line-height: 1;
+  --text-year-pending: 3rem;
+  --text-year-pending--line-height: 1;
+  --text-year-none: 1.875rem;
+  --text-year-none--line-height: calc(2.25 / 1.875);
+
+  /* --- Motion ------------------------------------------------------------ */
+
+  /*
+   * The flip's duration and the reduced-motion collapse of it, together, so the
+   * media query at the bottom of this file and Phase 8 have one place to reach.
+   *
+   * `1ms` rather than `0s` for the reduced case: a zero-duration transition
+   * fires no `transitionend`, and nothing depends on one today but a
+   * near-instant one keeps that option open at no visible cost.
+   */
+  --duration-flip: 500ms;
+  --duration-flip-reduced: 1ms;
+
+  /*
+   * The committed card's exit. Named here for Phase 8, but the value is applied
+   * in JS -- `Card.tsx` hands it to Motion's `exit` transition, which takes
+   * seconds and cannot read a CSS variable. `Card.tsx` carries the constant and
+   * points back at this token; the two must be changed together.
+   */
+  --duration-card-exit: 250ms;
+
+  /* --- Interaction minimums ---------------------------------------------- */
+
+  /*
+   * 44px. WCAG 2.5.5 and Apple's HIG both land here, and the three round card
+   * controls were roughly 40 × 28 before it -- narrower than tall, around a
+   * single glyph, on the surface a thumb is most likely to be near while
+   * swiping. The notice's Dismiss ✕ was `px-1`, the smallest target in the app.
+   */
+  --size-touch-target: 2.75rem;
+
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+
+  /*
+   * CONTRAST FIX 3 of 4. Play/Pause and Restart were `disabled:opacity-40`,
+   * which puts `--color-fg` at 3.46:1 over `--color-surface-raised` -- the
+   * dimmest text in the app, on the exact card a player most wants to act on.
+   * 0.6 measures 5.94:1 and is still plainly dimmer than an enabled control.
+   *
+   * Also replaces the landing screen's `disabled:opacity-50` on the input, the
+   * submit button and the suggestions. Those were not a failure (they dim a
+   * whole control, not text on a fixed background) but one disabled look in one
+   * place is the point of the token, and 0.5 → 0.6 is imperceptible.
+   */
+  --opacity-disabled: 0.6;
+}
+
+/*
+ * ===========================================================================
+ *  TWO COMPOSITE UTILITIES, SO ELEVEN CALL SITES CANNOT DRIFT.
+ *
+ *  Both exist because the alternative is four utilities repeated at every
+ *  interactive element, which is four chances to get one wrong and no single
+ *  place to change them in Phase 8. Written as `@utility` rather than as a
+ *  bare class so Tailwind's variants compose: the components below use
+ *  `focus-visible:focus-ring`, and `focus-visible` is doing real work there --
+ *  see the note on it in the plan's step 6.
+ * ===========================================================================
+ */
+
+@utility focus-ring {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+@utility touch-target {
+  min-height: var(--size-touch-target);
+  min-width: var(--size-touch-target);
+}
 
 /*
  * Kill pull-to-refresh and rubber-band scrolling on the page root.
@@ -15,10 +296,68 @@
  * `body`: a browser can take the behaviour from either, depending on which is the scrolling
  * element.
  *
- * Plain CSS, not an `@theme` token: it is a behavioural fix, not a design value, and design
- * tokens are Phase 7.
+ * Plain CSS, not an `@theme` token: it is a behavioural fix, not a design value.
  */
 html,
 body {
   overscroll-behavior: none;
+}
+
+/*
+ * ===========================================================================
+ *  REDUCED MOTION: FOUR ANIMATION SURFACES, TWO DECLARATIONS.
+ *
+ *  This block covers the three CSS animations. The fourth surface -- Motion's
+ *  drag and the 600px directional card exit -- is JS and is covered by
+ *  `<MotionConfig reducedMotion="user">` in `src/main.tsx`. Together those two
+ *  are the whole strategy, and NO presentational component reads the preference
+ *  itself. That is decision 3, and the reason is specific: reading
+ *  `useReducedMotion()` in three components silently misses whatever animation
+ *  the next phase adds, while this block is the obvious place to add a fourth
+ *  line.
+ *
+ *  SCOPED TO THREE SELECTORS, NOT `* { transition: none }`. A blanket rule is
+ *  indiscriminate: it would also kill transitions that carry meaning, and the
+ *  flip below is exactly one of those -- the reveal still has to HAPPEN, it just
+ *  must not travel.
+ *
+ *  The hooks are `data-motion` attributes rather than class names because they
+ *  are a styling contract between this file and three components, and an
+ *  attribute says that out loud where a bare class looks like a Tailwind
+ *  utility somebody forgot to remove.
+ *
+ *  jsdom does not evaluate media queries, so nothing in this repo can test that
+ *  these rules APPLY. `src/index.css.test.ts` is a text-level canary over this
+ *  block -- it proves the block exists and names all three surfaces, and it is
+ *  labelled a canary in its own header. The real check is manual, with the OS
+ *  preference set: `docs/development.md` §5.
+ * ===========================================================================
+ */
+@media (prefers-reduced-motion: reduce) {
+  /*
+   * The FLIP. Collapsed, not removed: it is a state toggle rather than
+   * decoration, so the face still changes -- instantly.
+   */
+  [data-motion='flip'] {
+    transition-duration: var(--duration-flip-reduced);
+  }
+
+  /*
+   * The preparing screen's SPINNER. Hidden, not stopped. A stationary spinner
+   * is a dead grey circle that reads as a hung app; it is already
+   * `aria-hidden`, and the screen's "Dealing your deck…" line and its
+   * resolved/total count carry every piece of information it conveys, so
+   * removing it loses nothing (decision 7).
+   */
+  [data-motion='spinner'] {
+    display: none;
+  }
+
+  /*
+   * The QR PLACEHOLDER's pulse. The box stays, at the same size: its job is to
+   * hold the card's layout while `toDataURL` resolves, and it keeps doing that.
+   */
+  [data-motion='qr-placeholder'] {
+    animation: none;
+  }
 }

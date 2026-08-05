@@ -26,8 +26,15 @@
  *
  * Styling uses Tailwind v4's built-in 3D transform utilities (`perspective-*`,
  * `transform-3d`, `backface-hidden`, `rotate-y-*`). `plan.md` asks for plain CSS 3D with no
- * library, and these compile to exactly that -- no custom stylesheet, and no `@theme` tokens,
- * which are Phase 7's job.
+ * library, and these compile to exactly that -- no custom stylesheet.
+ *
+ * ## The card's size comes from `--card-height` / `--card-width`, and so does `CardStack`'s
+ *
+ * Both files carried `h-[28rem] w-72` until Phase 7, and the two literals were REQUIRED to
+ * match: the stack's peeking backs are `absolute inset-0` on a wrapper sized by the second
+ * pair, so a change here and not there silently misaligned the deck, and nothing enforced it.
+ * The pair now comes from two tokens in `src/index.css`, whose header explains the clamp.
+ * `CardStack.test.tsx` asserts the two elements carry the same class string.
  *
  * **This component does not decide what a flip is.** Distinguishing a tap from a drag is
  * Phase 5's problem and lives in `src/game/gestures.ts` behind `useCardGestures`; this file
@@ -63,6 +70,20 @@ import type { Card as CardData } from '../../shared/types';
 
 /** How far a committed card travels as it leaves, in CSS pixels. Comfortably off-screen. */
 const EXIT_DISTANCE_PX = 600;
+
+/**
+ * How long that exit takes, in SECONDS -- Motion's unit, not CSS's.
+ *
+ * The same value is named `--duration-card-exit: 250ms` in `src/index.css` so Phase 8 has one
+ * place to look, but it cannot be READ from there: Motion's `transition.duration` is a number of
+ * seconds handed to a JS animation, and a CSS custom property is a string resolved by the
+ * browser at paint time. So the two are deliberately duplicated and must be changed together.
+ *
+ * Under `prefers-reduced-motion` this animation is not shortened -- `MotionConfig
+ * reducedMotion="user"` in `src/main.tsx` makes Motion animate opacity instead of the transform,
+ * so the card fades over the same 250ms rather than flying 600px.
+ */
+const EXIT_DURATION_S = 0.25;
 
 export interface CardProps {
   card: CardData;
@@ -107,32 +128,39 @@ export function Card({
       swipe from triggering pull-to-refresh.
     */
     <motion.div
-      className="perspective-distant h-[28rem] w-72 touch-none"
+      className="perspective-distant h-(--card-height) w-(--card-width) touch-none"
       {...gestureProps}
       exit={{
         x: exitDirection === 'left' ? -EXIT_DISTANCE_PX : EXIT_DISTANCE_PX,
         opacity: 0,
-        transition: { duration: 0.25 },
+        transition: { duration: EXIT_DURATION_S },
       }}
     >
       <div
         data-testid="card-inner"
         data-flipped={isFlipped ? 'true' : 'false'}
-        className={`relative h-full w-full transition-transform duration-500 transform-3d ${
+        /*
+          `data-motion="flip"` is the reduced-motion hook, and it is an ATTRIBUTE rather than a
+          class because it is a contract with the `@media (prefers-reduced-motion: reduce)` block
+          in `src/index.css` -- which collapses this duration so the face changes instantly
+          without travelling. No component in this app reads the preference itself (decision 3).
+        */
+        data-motion="flip"
+        className={`relative h-full w-full transition-transform duration-(--duration-flip) transform-3d ${
           isFlipped ? 'rotate-y-180' : ''
         }`}
       >
         {/* The hidden face stays mounted throughout -- a 3D flip needs both faces to exist. */}
         <div
           data-testid="card-hidden-face"
-          className="absolute inset-0 overflow-hidden rounded-2xl bg-neutral-900 backface-hidden"
+          className="absolute inset-0 overflow-hidden rounded-2xl bg-surface backface-hidden"
         >
           <CardHiddenSide card={card} />
         </div>
 
         <div
           data-testid="card-reveal-face"
-          className="absolute inset-0 overflow-hidden rounded-2xl bg-neutral-800 backface-hidden rotate-y-180"
+          className="absolute inset-0 overflow-hidden rounded-2xl bg-surface-raised backface-hidden rotate-y-180"
         >
           {isFlipped ? <CardRevealSide card={card} isYearPending={isYearPending} /> : null}
         </div>
