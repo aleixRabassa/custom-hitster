@@ -32,54 +32,54 @@ tests.
 
 ### Requires from Phase 2
 
-| Input                                            | Description                                                                                                                          |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `Card` in `shared/types.ts`                      | The deck element. `year` is already three-state (`undefined` = not looked up, `null` = looked up and nothing found, number = resolved) |
-| `PlaylistSummary` / `PlaylistResult`             | What a started session records about the deck it is playing                                                                          |
-| `TrackRef` in `shared/types.ts`                  | A `Card` is structurally a valid `TrackRef`, so the resolver passes cards straight to the lookup                                     |
-| `GET /api/year` — one track per request          | The only endpoint this phase calls. Query: `title`, `artist`, `durationMs`                                                           |
-| `YearLookupResult` / `YearErrorCode`             | The response and error unions the year client maps onto                                                                              |
-| 429 + `retryAfterMs` (and the `Retry-After` header) | The back-pressure contract the resolver backs off on                                                                                 |
-| `YearConfidence` (`high` / `low` / `none`)       | Recorded on the card; consumed by Phase 6's revealed side, not here                                                                  |
+| Input                                               | Description                                                                                                                            |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `Card` in `shared/types.ts`                         | The deck element. `year` is already three-state (`undefined` = not looked up, `null` = looked up and nothing found, number = resolved) |
+| `PlaylistSummary` / `PlaylistResult`                | What a started session records about the deck it is playing                                                                            |
+| `TrackRef` in `shared/types.ts`                     | A `Card` is structurally a valid `TrackRef`, so the resolver passes cards straight to the lookup                                       |
+| `GET /api/year` — one track per request             | The only endpoint this phase calls. Query: `title`, `artist`, `durationMs`                                                             |
+| `YearLookupResult` / `YearErrorCode`                | The response and error unions the year client maps onto                                                                                |
+| 429 + `retryAfterMs` (and the `Retry-After` header) | The back-pressure contract the resolver backs off on                                                                                   |
+| `YearConfidence` (`high` / `low` / `none`)          | Recorded on the card; consumed by Phase 6's revealed side, not here                                                                    |
 
 ### Produces for downstream phases
 
-| Output                                                 | Consumed by                                                                              |
-| ------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
-| `GameState` / `GameAction` in `src/game/types.ts`      | Phase 4's card component and Phase 6's screens                                            |
-| `useGameSession()` in `src/game/use-game-session.ts`   | Phase 6 — the single entry point that wires reducer, resolver and persistence together    |
-| `shuffleDeck()` in `src/game/shuffle.ts`               | Phase 8's shareable deck URL (playlist id + seed reproduces the deck exactly)             |
-| Derived selectors (`isCurrentYearPending`, `cardsRemaining`, `resolvedCount`) | Phase 4's year slot, Phase 6's HUD and loading state                    |
-| `status: 'preparing'`                                  | Phase 6's loading screen — the only place a pre-Start wait may be rendered                |
-| The `localStorage` session format and its version key  | Phase 6's resume affordance; Phase 8 if a saved-decks feature ever lands                  |
+| Output                                                                        | Consumed by                                                                            |
+| ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `GameState` / `GameAction` in `src/game/types.ts`                             | Phase 4's card component and Phase 6's screens                                         |
+| `useGameSession()` in `src/game/use-game-session.ts`                          | Phase 6 — the single entry point that wires reducer, resolver and persistence together |
+| `shuffleDeck()` in `src/game/shuffle.ts`                                      | Phase 8's shareable deck URL (playlist id + seed reproduces the deck exactly)          |
+| Derived selectors (`isCurrentYearPending`, `cardsRemaining`, `resolvedCount`) | Phase 4's year slot, Phase 6's HUD and loading state                                   |
+| `status: 'preparing'`                                                         | Phase 6's loading screen — the only place a pre-Start wait may be rendered             |
+| The `localStorage` session format and its version key                         | Phase 6's resume affordance; Phase 8 if a saved-decks feature ever lands               |
 
 ---
 
 ## Scope & Affected Areas
 
-| Area                                | Type     | Notes                                                                                                                                                            |
-| ----------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `src/game/types.ts`                 | New      | `GameState`, `GameStatus`, `GameAction`, the persisted-session shape. Client-only, so deliberately **not** added to `shared/types.ts`                              |
-| `src/game/shuffle.ts`               | New      | String-seeded PRNG plus Fisher–Yates. Pure                                                                                                                       |
-| `src/game/shuffle.test.ts`          | New      | Reproducibility, permutation correctness, distribution sanity                                                                                                    |
-| `src/game/reducer.ts`               | New      | `gameReducer` and the derived selectors. Pure                                                                                                                    |
-| `src/game/reducer.test.ts`          | New      | The transition table, plus the card-1 gate invariant                                                                                                             |
-| `src/game/year-client.ts`           | New      | `GET /api/year` wrapper: builds the query, maps HTTP status onto a typed outcome union, never throws. `fetch` injected                                           |
-| `src/game/year-client.test.ts`      | New      | Query construction and every status branch, against an injected fetch                                                                                            |
-| `src/game/resolver.ts`              | New      | The sequential background loop: ordering, priority jump, 429 back-off, error retry, abort. Framework-free; clock and sleep injected                              |
-| `src/game/resolver.test.ts`         | New      | The bulk of this plan's test surface — sequencing, back-off, and the never-blocks invariant                                                                      |
-| `src/game/persistence.ts`           | New      | Serialize, validate, load, clear. `Storage` injected so it runs under the node test environment                                                                  |
-| `src/game/persistence.test.ts`      | New      | Round-trip, version mismatch, corrupt payload, quota failure                                                                                                     |
-| `src/game/use-game-session.ts`      | New      | The React hook. Deliberately thin — wiring only, no logic, and therefore not unit-tested (see Testing Strategy)                                                  |
-| `docs/architecture.md`              | Modified | New client-side game-layer section; mark Phase 3 `[built]` in §1 and §7; record the `src/game/` boundary                                                          |
-| `docs/api.md`                       | Modified | Note that `/api/year`'s 429 contract now has a documented client, and cross-reference the resolver as the reference consumer                                     |
-| `docs/development.md`               | Modified | How to exercise the resolver locally, and the Upstash warning that applies when resolving a whole deck                                                           |
-| `docs/agent_findings.md`            | Modified | Dated entries — see Documentation Updates                                                                                                                        |
-| `docs/plans/plan.md`                | Modified | Tick the Phase 3 checkboxes; **close §6's follow-on question** about `confidence: 'none'` cards                                                                   |
-| `docs/plans/plan.phase-3.md`        | Modified | Tick steps and append execution notes as they land                                                                                                               |
-| `AGENTS.md`                         | Modified | Phase status → "Phase 3 complete, Phase 4 next"; add this file to the documentation index                                                                        |
-| `src/App.tsx`                       | Unchanged | Stays the Phase 1 placeholder. This phase renders nothing                                                                                                        |
-| `vite.config.ts`                    | Unchanged | `environment: 'node'` holds; `include` already covers `src/**`. jsdom stays a Phase 4 decision                                                                    |
+| Area                           | Type      | Notes                                                                                                                                 |
+| ------------------------------ | --------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/game/types.ts`            | New       | `GameState`, `GameStatus`, `GameAction`, the persisted-session shape. Client-only, so deliberately **not** added to `shared/types.ts` |
+| `src/game/shuffle.ts`          | New       | String-seeded PRNG plus Fisher–Yates. Pure                                                                                            |
+| `src/game/shuffle.test.ts`     | New       | Reproducibility, permutation correctness, distribution sanity                                                                         |
+| `src/game/reducer.ts`          | New       | `gameReducer` and the derived selectors. Pure                                                                                         |
+| `src/game/reducer.test.ts`     | New       | The transition table, plus the card-1 gate invariant                                                                                  |
+| `src/game/year-client.ts`      | New       | `GET /api/year` wrapper: builds the query, maps HTTP status onto a typed outcome union, never throws. `fetch` injected                |
+| `src/game/year-client.test.ts` | New       | Query construction and every status branch, against an injected fetch                                                                 |
+| `src/game/resolver.ts`         | New       | The sequential background loop: ordering, priority jump, 429 back-off, error retry, abort. Framework-free; clock and sleep injected   |
+| `src/game/resolver.test.ts`    | New       | The bulk of this plan's test surface — sequencing, back-off, and the never-blocks invariant                                           |
+| `src/game/persistence.ts`      | New       | Serialize, validate, load, clear. `Storage` injected so it runs under the node test environment                                       |
+| `src/game/persistence.test.ts` | New       | Round-trip, version mismatch, corrupt payload, quota failure                                                                          |
+| `src/game/use-game-session.ts` | New       | The React hook. Deliberately thin — wiring only, no logic, and therefore not unit-tested (see Testing Strategy)                       |
+| `docs/architecture.md`         | Modified  | New client-side game-layer section; mark Phase 3 `[built]` in §1 and §7; record the `src/game/` boundary                              |
+| `docs/api.md`                  | Modified  | Note that `/api/year`'s 429 contract now has a documented client, and cross-reference the resolver as the reference consumer          |
+| `docs/development.md`          | Modified  | How to exercise the resolver locally, and the Upstash warning that applies when resolving a whole deck                                |
+| `docs/agent_findings.md`       | Modified  | Dated entries — see Documentation Updates                                                                                             |
+| `docs/plans/plan.md`           | Modified  | Tick the Phase 3 checkboxes; **close §6's follow-on question** about `confidence: 'none'` cards                                       |
+| `docs/plans/plan.phase-3.md`   | Modified  | Tick steps and append execution notes as they land                                                                                    |
+| `AGENTS.md`                    | Modified  | Phase status → "Phase 3 complete, Phase 4 next"; add this file to the documentation index                                             |
+| `src/App.tsx`                  | Unchanged | Stays the Phase 1 placeholder. This phase renders nothing                                                                             |
+| `vite.config.ts`               | Unchanged | `environment: 'node'` holds; `include` already covers `src/**`. jsdom stays a Phase 4 decision                                        |
 
 **No dependency changes.** No jsdom, no Testing Library, no Zustand, no PRNG library.
 
@@ -293,11 +293,15 @@ wait is therefore one lookup, not a queue drain.
 - [x] **Run the full local verification pass** — `pnpm typecheck && pnpm lint && pnpm test && pnpm build`,
       all four green. There are no hooks and no CI; the checks are ours to run.
 
-- [ ] **Update the documentation** — see Documentation Updates, including closing
-      [plan.md](./plan.md) §6's follow-on question.
+- [x] **Update the documentation** — see Documentation Updates, including closing
+      [plan.md](./plan.md) §6's follow-on question. **Done 2026-08-05**, as step 0b of
+      [plan.phase-4-6-card-ui.md](./plan.phase-4-6-card-ui.md): the code landed in `43e59cc` with
+      `plan.md`, `AGENTS.md` and `architecture.md` untouched, so three documents announced Phase 3 as
+      upcoming work for a day. Closed before Phase 4's UI was built on top of them.
 
-- [ ] **Tick the Phase 3 checkboxes in `docs/plans/plan.md`**, annotating each with what execution
-      actually produced, in the style Phase 2 established.
+- [x] **Tick the Phase 3 checkboxes in `docs/plans/plan.md`**, annotating each with what execution
+      actually produced, in the style Phase 2 established. **Done 2026-08-05** — all seven, plus a
+      completion note carrying the measured numbers.
 
 ---
 
@@ -422,36 +426,46 @@ in the reducer or the resolver instead** — that rule is what keeps the unteste
 
 ## Documentation Updates
 
-- [ ] `docs/architecture.md` — add a client-side game-layer section covering `src/game/`: the reducer
+- [x] `docs/architecture.md` — add a client-side game-layer section covering `src/game/`: the reducer
       is pure, the resolver is framework-free and injectable, React is wiring only. State the import
       boundary explicitly (`src/game/` may use DOM APIs and the `@/` alias; nothing under `api/` may
       ever import it). Mark Phase 3 `[built]` in §1 and §7, and add the progressive-loading path to the
-      data-flow picture
-- [ ] `docs/architecture.md` — record the **card-1 gate as an invariant of the app**, not an
+      data-flow picture — **done 2026-08-05: new §3 subsection "The client game layer (`src/game/`)"**
+- [x] `docs/architecture.md` — record the **card-1 gate as an invariant of the app**, not an
       implementation detail: Start waits on one lookup, never on the deck. It is the thing most likely
-      to be "simplified" away by someone who only ever tested a fully cached playlist
-- [ ] `docs/api.md` — note that `/api/year`'s 429 + `retryAfterMs` contract now has a reference client
+      to be "simplified" away by someone who only ever tested a fully cached playlist — **done, at the
+      end of that same subsection, with the 6.06 s versus 153.0 s pair as the argument**
+- [x] `docs/api.md` — note that `/api/year`'s 429 + `retryAfterMs` contract now has a reference client
       in `src/game/resolver.ts`, and that a 429 is expected behaviour under a cold deck rather than an
-      error to be alarmed by
-- [ ] `docs/development.md` — how to exercise the resolver, and the warning that carries over from
+      error to be alarmed by — **done, and corrected: a real cold deck saw ZERO 429s, because one
+      sequential loop never contends with itself. The gate exists for concurrent users**
+- [x] `docs/development.md` — how to exercise the resolver, and the warning that carries over from
       Phase 2: **configure Upstash before resolving a whole deck**, because without it nothing paces
       MusicBrainz locally and a 50-card deck is ~100 unthrottled requests against a service that blocks
-      for it. Also that `vercel dev` cannot be used for any timing measurement
-- [ ] `docs/development.md` — that Phase 3 adds no test dependencies and the environment is still
-      `node`; jsdom remains a Phase 4 decision
-- [ ] `docs/agent_findings.md` — dated (ISO 8601) entries for: the **measured wall clock of a 50-track
+      for it. Also that `vercel dev` cannot be used for any timing measurement — **done 2026-08-05: new
+      §4 subsection "Exercising the client-side resolver"**
+- [x] `docs/development.md` — that Phase 3 adds no test dependencies and the environment is still
+      `node`; jsdom remains a Phase 4 decision. **Superseded the same day**: Phase 3 added no
+      dependencies, but Phase 4's step 1 resolved the jsdom decision immediately afterwards, so the
+      test counts and the environment paragraph are owned by
+      [plan.phase-4-6-card-ui.md](./plan.phase-4-6-card-ui.md) instead. Counts refreshed to 233/14 here
+- [x] `docs/agent_findings.md` — dated (ISO 8601) entries for: the **measured wall clock of a 50-track
       cold deck against a preview deployment** (owed from Phase 2 and unmeasurable there); whether the
       strict pass or the relaxed pass dominates on an ordinary playlist rather than the curated tricky
       set (also still open from Phase 2, and a real deck finally answers it); how often a real session
       actually hits a 429; and any React 19 StrictMode double-start surprise in the hook. **Tell the
-      developer when an entry is added**, per `AGENTS.md`
-- [ ] `docs/plans/plan.md` — tick all four Phase 3 checkboxes with execution annotations, and **close
+      developer when an entry is added**, per `AGENTS.md` — **done 2026-08-05** (the
+      "Phase 3 driven against a real playlist" entry, plus the two Vitest 4 gotchas and the preview
+      deployment validation)
+- [x] `docs/plans/plan.md` — tick all four Phase 3 checkboxes with execution annotations, and **close
       §6's follow-on question**: a `confidence: 'none'` card stays in the deck and is playable, which
       also resolves the contradiction with the Phase 2 completion note in §5 that had already decided it
-- [ ] `docs/plans/plan.phase-3.md` — tick steps as they complete and append an Execution Notes section
+      — **done 2026-08-05** (seven checkboxes, not four: the nested progressive-loading items count)
+- [x] `docs/plans/plan.phase-3.md` — tick steps as they complete and append an Execution Notes section
       where reality differed, in the style of [plan.phase-2-year.md](./plan.phase-2-year.md)
-- [ ] `AGENTS.md` — phase status to "Phase 3 complete, Phase 4 next", and add this plan to the
-      documentation index table
+- [x] `AGENTS.md` — phase status to "Phase 3 complete, Phase 4 next", and add this plan to the
+      documentation index table — **done 2026-08-05**, along with index rows for the three
+      `plan.phase-4-6-*.md` files
 - [x] Inline comment in `src/game/resolver.ts` — the measured numbers (1.3–3.6 s cold, 0 ms cached,
       budget **global across all users**) and therefore why the loop is sequential and why a 429 is not
       an error. Without this the loop is a prime candidate for "optimisation" into a `Promise.all`
@@ -495,22 +509,22 @@ in the reducer or the resolver instead** — that rule is what keeps the unteste
 
 ## Assumptions & Decisions
 
-| #   | Assumption / Decision                                                                                                                        | Rationale                                                                                                                                                                                                          |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | **Headless phase.** No UI ships; `src/App.tsx` stays the Phase 1 placeholder                                                                 | Keeps the Phase 3/4 boundary clean and avoids UI written to be deleted. Considered a throwaway debug harness and a minimal real landing input; both build ahead of the plan. A scratch harness may exist uncommitted for the manual checks |
-| 2   | **Standalone resolver engine + reducer sink**, React as a wiring hook                                                                        | Chosen over a reducer-owned `useEffect` drain loop (timing logic only reachable through React, untestable in a node environment) and over Zustand + persist (adds a dependency `plan.md` chose against, and the resolver would still live outside the store) |
-| 3   | **Continuous full-deck crawl**, not a lookahead window                                                                                       | Matches `plan.md` §5 verbatim, can never be outrun, and warms the shared server cache for the next player. A window would save global budget on abandoned decks but deviates from the plan and adds a resume trigger on every `NEXT`      |
-| 4   | **`START` enters `preparing`; card 1's completed lookup transitions to `playing`** — a refinement of `plan.md`'s "dispatches as soon as card 1 has a year" | Gating on "has a year" would hang forever on a card that legitimately resolves to `null`. Holding the wait in the reducer also makes the playable-while-unresolved invariant unit-testable, which is the test `plan.md` explicitly asks for |
-| 5   | **A `confidence: 'none'` card stays in the deck and is playable**                                                                            | Confirms the 2026-08-04 decision recorded in `plan.md` §5 and closes the contradicting open fork in §6. Same principle as an unplayable track: the QR always works, so the card still plays. Dropping cards would also mean removing them after they may already have been dealt |
-| 6   | **Priority jump on outrun; only the year slot waits**                                                                                        | The player is looking at exactly one card, so the wait is one lookup (~1.3–3.6 s) rather than a queue drain. Chosen over strict deck order (potentially minutes) and over never blocking (a year appearing mid-guess changes the game)   |
-| 7   | **Random seed per game, persisted, with `START` accepting an override**                                                                      | A party game must not deal the same order every time, which rules out deriving the seed from the playlist id. The optional override makes Phase 8's shareable deck URL a caller change with no reducer change, at zero cost today        |
-| 8   | **Full session persisted, including resolved years, behind a versioned key**                                                                 | A reload then costs zero MusicBrainz requests against a globally shared budget. Chosen over persisting only seed + index (every year re-resolved, and a changed playlist silently changes the deck). No age cap: one less branch, and a stale deck is harmless |
-| 9   | **Framework-free logic, node test environment, no new dependencies**                                                                         | Holds the jsdom decision at Phase 4 where `vite.config.ts` already documents it. The price is that the hook is manually verified rather than unit-tested — accepted, and bounded by the rule that logic must not accumulate there        |
-| 10  | **429 is back-pressure, not failure**; a card is never marked resolved or skipped because of one                                             | Directly from Phase 2's contract and the `plan.md` §5 completion note. Encoded as its own test because it is the most likely misreading                                                                                                  |
-| 11  | **`not-configured` stops the crawl entirely; other upstream errors get a deferred second pass**                                              | A missing `MUSICBRAINZ_USER_AGENT` fails identically for all 100 cards, so retrying is pure waste; a transient MusicBrainz blip is the opposite, and must not permanently blank a third of the deck                                       |
-| 12  | **`GameState` lives in `src/game/types.ts`, not `shared/types.ts`**                                                                          | It is browser-only and no function needs it. `shared/types.ts` already reserves `GameState` for Phase 3 while forbidding it from widening `Card`; keeping it out of `shared/` honours both halves                                        |
-| 13  | **`YEAR_RESOLVED` matches by card id, not by index**                                                                                         | The priority jump makes resolver order and deck order diverge routinely; index matching would corrupt the deck the first time it did                                                                                                     |
-| 14  | **The saved deck is readable in devtools, and that is accepted**                                                                             | The same exposure the in-memory deck already has, so obfuscation buys nothing real. Written down rather than left to be discovered, per the 2026-08-04 "leaks nothing is a property of the whole app" finding                            |
+| #   | Assumption / Decision                                                                                                                                                                               | Rationale                                                                                                                                                                                                                                                                                                                                                                                                 |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **Headless phase.** No UI ships; `src/App.tsx` stays the Phase 1 placeholder                                                                                                                        | Keeps the Phase 3/4 boundary clean and avoids UI written to be deleted. Considered a throwaway debug harness and a minimal real landing input; both build ahead of the plan. A scratch harness may exist uncommitted for the manual checks                                                                                                                                                                |
+| 2   | **Standalone resolver engine + reducer sink**, React as a wiring hook                                                                                                                               | Chosen over a reducer-owned `useEffect` drain loop (timing logic only reachable through React, untestable in a node environment) and over Zustand + persist (adds a dependency `plan.md` chose against, and the resolver would still live outside the store)                                                                                                                                              |
+| 3   | **Continuous full-deck crawl**, not a lookahead window                                                                                                                                              | Matches `plan.md` §5 verbatim, can never be outrun, and warms the shared server cache for the next player. A window would save global budget on abandoned decks but deviates from the plan and adds a resume trigger on every `NEXT`                                                                                                                                                                      |
+| 4   | **`START` enters `preparing`; card 1's completed lookup transitions to `playing`** — a refinement of `plan.md`'s "dispatches as soon as card 1 has a year"                                          | Gating on "has a year" would hang forever on a card that legitimately resolves to `null`. Holding the wait in the reducer also makes the playable-while-unresolved invariant unit-testable, which is the test `plan.md` explicitly asks for                                                                                                                                                               |
+| 5   | **A `confidence: 'none'` card stays in the deck and is playable**                                                                                                                                   | Confirms the 2026-08-04 decision recorded in `plan.md` §5 and closes the contradicting open fork in §6. Same principle as an unplayable track: the QR always works, so the card still plays. Dropping cards would also mean removing them after they may already have been dealt                                                                                                                          |
+| 6   | **Priority jump on outrun; only the year slot waits**                                                                                                                                               | The player is looking at exactly one card, so the wait is one lookup (~1.3–3.6 s) rather than a queue drain. Chosen over strict deck order (potentially minutes) and over never blocking (a year appearing mid-guess changes the game)                                                                                                                                                                    |
+| 7   | **Random seed per game, persisted, with `START` accepting an override**                                                                                                                             | A party game must not deal the same order every time, which rules out deriving the seed from the playlist id. The optional override makes Phase 8's shareable deck URL a caller change with no reducer change, at zero cost today                                                                                                                                                                         |
+| 8   | **Full session persisted, including resolved years, behind a versioned key**                                                                                                                        | A reload then costs zero MusicBrainz requests against a globally shared budget. Chosen over persisting only seed + index (every year re-resolved, and a changed playlist silently changes the deck). No age cap: one less branch, and a stale deck is harmless                                                                                                                                            |
+| 9   | **Framework-free logic, node test environment, no new dependencies**                                                                                                                                | Holds the jsdom decision at Phase 4 where `vite.config.ts` already documents it. The price is that the hook is manually verified rather than unit-tested — accepted, and bounded by the rule that logic must not accumulate there                                                                                                                                                                         |
+| 10  | **429 is back-pressure, not failure**; a card is never marked resolved or skipped because of one                                                                                                    | Directly from Phase 2's contract and the `plan.md` §5 completion note. Encoded as its own test because it is the most likely misreading                                                                                                                                                                                                                                                                   |
+| 11  | **`not-configured` stops the crawl entirely; other upstream errors get a deferred second pass**                                                                                                     | A missing `MUSICBRAINZ_USER_AGENT` fails identically for all 100 cards, so retrying is pure waste; a transient MusicBrainz blip is the opposite, and must not permanently blank a third of the deck                                                                                                                                                                                                       |
+| 12  | **`GameState` lives in `src/game/types.ts`, not `shared/types.ts`**                                                                                                                                 | It is browser-only and no function needs it. `shared/types.ts` already reserves `GameState` for Phase 3 while forbidding it from widening `Card`; keeping it out of `shared/` honours both halves                                                                                                                                                                                                         |
+| 13  | **`YEAR_RESOLVED` matches by card id, not by index**                                                                                                                                                | The priority jump makes resolver order and deck order diverge routinely; index matching would corrupt the deck the first time it did                                                                                                                                                                                                                                                                      |
+| 14  | **The saved deck is readable in devtools, and that is accepted**                                                                                                                                    | The same exposure the in-memory deck already has, so obfuscation buys nothing real. Written down rather than left to be discovered, per the 2026-08-04 "leaks nothing is a property of the whole app" finding                                                                                                                                                                                             |
 | 15  | **Shuffle first, then request years.** `START` shuffles synchronously; the resolver is only ever handed an already-shuffled deck, and "card 1" always means the first card of the **shuffled** deck | `plan.md` §3 spends a paragraph on this because the two are easy to get backwards. Resolve-then-shuffle would spend the first (and slowest) request on a track that then lands somewhere random in the deck, leaving the actual card 1 unresolved and Start blocked on a lookup that already finished for a card nobody is looking at. The shuffle is pure and instant, so there is no reason to defer it |
 
 ---
@@ -586,7 +600,7 @@ still outstanding.
    `YEAR_RESOLVED` therefore updates **every** card carrying that id rather than the first match —
    an index or first-match write would leave the second copy pending for the whole game. Two tests
    cover it (`should update every copy of a duplicated card id`, `should look a duplicated card id
-   up only once`).
+up only once`).
 3. **The hook keeps a `sessionId` counter** (`src/game/use-game-session.ts`). The resolver effect
    cannot depend on `state.deck` (a new array on every resolved year, so the crawl would restart
    ~100 times a game) and cannot key on the seed alone (`START` with an explicitly supplied seed —
@@ -597,7 +611,7 @@ still outstanding.
    "game-2" to hashes differing in one low bit, and mulberry32's first output then barely moves — so
    two consecutive games would deal near-identical opening cards. Two tests exist purely for this
    (`should produce a different order for two seeds differing in one character`, `should spread cards
-   across the deck rather than rotating it`).
+across the deck rather than rotating it`).
 5. **A permanently rate-limited deployment crawls forever, by design.** There is no cap on
    consecutive 429s for one card: the plan is explicit that a 429 neither settles nor skips a card,
    and every wait is floored at 500 ms, so the loop is paced rather than spinning. `stop()` is the
@@ -621,16 +635,16 @@ supplied by the developer. Method: a throwaway harness (deleted) that served the
 against them through `src/game/year-client.ts`. Cold memory cache, per-instance gate, sequential crawl,
 so MusicBrainz was paced at 1.1 s. Full detail in `docs/agent_findings.md` (2026-08-05).
 
-| Measurement                          | Result                                             |
-| ------------------------------------ | -------------------------------------------------- |
-| Full cold crawl, 42 cards            | **153.0 s** (~3.64 s/card, so ~3 min for 50)       |
-| **Card-1 gate** (`START` → `playing`) | **6.06 s**, with 1/42 cards resolved              |
-| Priority jump to index 41            | **5.67 s** (vs ~145 s in deck order)               |
-| `/api/playlist`                      | 514 ms                                             |
-| Lookups for 42 cards                 | 43 — one real 502, retried, then `2018/low`         |
-| 429s seen by the client              | **0** (see below)                                  |
-| Confidence spread                    | high 19 / low 8 / **none 15**                      |
-| Warm re-crawl over the resolved deck | **0 lookups**                                      |
+| Measurement                           | Result                                       |
+| ------------------------------------- | -------------------------------------------- |
+| Full cold crawl, 42 cards             | **153.0 s** (~3.64 s/card, so ~3 min for 50) |
+| **Card-1 gate** (`START` → `playing`) | **6.06 s**, with 1/42 cards resolved         |
+| Priority jump to index 41             | **5.67 s** (vs ~145 s in deck order)         |
+| `/api/playlist`                       | 514 ms                                       |
+| Lookups for 42 cards                  | 43 — one real 502, retried, then `2018/low`  |
+| 429s seen by the client               | **0** (see below)                            |
+| Confidence spread                     | high 19 / low 8 / **none 15**                |
+| Warm re-crawl over the resolved deck  | **0 lookups**                                |
 
 - **Card 1 playable after one lookup, on a cold deck** — verified.
 - **Cards 2..n filled in during play, and a rapid advance resolved THAT card next** — verified: the
@@ -653,5 +667,17 @@ so MusicBrainz was paced at 1.1 s. Full detail in `docs/agent_findings.md` (2026
 - **The real 429 rate**, which needs concurrent players against a deployment with the Redis gate live.
 - Numbers from a **real Vercel deployment** (invocation overhead, Upstash round trips, the edge cache).
   No Vercel CLI is installed here, so neither a preview deploy nor `vercel dev` was available.
-- The **documentation updates** and the **Phase 3 checkboxes in `plan.md`** (including closing §6's
-  follow-on question about `confidence: 'none'` cards), which are deliberately a separate pass.
+- ~~The **documentation updates** and the **Phase 3 checkboxes in `plan.md`** (including closing §6's
+  follow-on question about `confidence: 'none'` cards), which are deliberately a separate pass.~~
+  **Closed 2026-08-05** as step 0b of [plan.phase-4-6-card-ui.md](./plan.phase-4-6-card-ui.md).
+
+### Where the outstanding verification went — 2026-08-05
+
+Everything left above needs a React runtime or a real deployment, and both of those arrive with a UI.
+**All of it moved to [plan.phase-4-6-screens.md](./plan.phase-4-6-screens.md)** (Phase 6), which is the
+plan that builds the container calling `useGameSession()` — the StrictMode single-resolver count, the
+mid-game browser reload through the hook, and the real-deployment numbers. Phase 4 resolved the jsdom
+question that blocked the first two (component tests opt in per file with a
+`@vitest-environment jsdom` docblock), but Phase 4 mounts the card against a **fixture** deck with local
+state and never calls `useGameSession()`, so it is not the place to exercise the hook. Nothing here was
+dropped; it was deferred to the first plan that can actually run it.

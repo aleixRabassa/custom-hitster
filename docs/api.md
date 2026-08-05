@@ -165,6 +165,12 @@ Because each request is a separate function invocation, the 1 req/s budget **can
 
 A `429` is **not a bug**. It is the designed back-pressure signal: the client is expected to wait `retryAfterMs` and retry that card later.
 
+**There is now a reference client for this contract: `src/game/year-client.ts` and `src/game/resolver.ts`** (Phase 3). Read them before writing another caller — between them they encode three things this table does not make obvious:
+
+- A 429 neither settles nor skips a card. The resolver waits `retryAfterMs` (clamped into [500, 10000] ms, plus jitter) and comes back to the same card. A permanently rate-limited deployment therefore crawls forever by design, paced rather than spinning.
+- **`not-configured` is recognised from the response BODY, never from the 500 status alone**, because `internal-error` shares that status and wants the opposite handling — one stops the whole crawl, the other is transient. A bodyless or unrecognised 500 degrades to `upstream-unavailable`.
+- Under a cold deck, 429s are rarer than this section suggests: a single sequential loop paced at ~1.1 s/lookup never contends with itself, and a real 42-card crawl saw **zero** (2026-08-05). The gate exists for concurrent _users_, which is exactly why it cannot be an in-process queue.
+
 ---
 
 ## 2. Layout

@@ -2,20 +2,21 @@
 
 Custom Hitster is a **client-heavy single-page app with a thin serverless backend**. The game itself — shuffle, flip, swipe, audio, progress — runs entirely in the browser. The backend exists only to do the three things a browser cannot: reach a CORS-blocked endpoint, set a custom `User-Agent`, and hold a cache shared across all users.
 
-> **Implementation status: Phase 1 (skeleton) complete; Phase 2 playlist ingestion built.** The shell, `/api/hello`, and the playlist path (`parsePlaylistUrl()`, the embed adapter, `/api/playlist`) exist today. Year resolution and the cache do not. Sections below are marked **[built]** or **[planned]** throughout; planned shapes come from [`plans/plan.md`](./plans/plan.md) §3 and are recorded here because they determine where new code belongs, not because they exist.
+> **Implementation status: Phases 1–3 complete.** The shell, all three functions (`/api/hello`, `/api/playlist`, `/api/year`), the year cache, and the client-side game layer (`src/game/` — reducer, seeded shuffle, `localStorage` resume, progressive loading) exist today. No UI beyond the placeholder shell does: the card, the screens and the gestures are Phases 4–6. Sections below are marked **[built]** or **[planned]** throughout; planned shapes come from [`plans/plan.md`](./plans/plan.md) §3 and are recorded here because they determine where new code belongs, not because they exist.
 
 ---
 
 ## 1. Components
 
-| Component            | Technology                         | Location  | Status                                                    |
-| -------------------- | ---------------------------------- | --------- | --------------------------------------------------------- |
-| Browser SPA          | Vite 8 + React 19 + Tailwind CSS 4 | `src/`    | **[built]** shell only                                    |
-| Serverless functions | Vercel Functions (Node 24 runtime) | `api/`    | **[built]** `hello`, `playlist`, `year`                   |
-| Portable shared code | TypeScript, no platform APIs       | `shared/` | **[built]** types, URL parsing, artist helper, year logic |
-| Year cache           | Upstash Redis (REST)               | —         | **[built]** behind `YearCache`; in-memory locally         |
+| Component            | Technology                         | Location    | Status                                                    |
+| -------------------- | ---------------------------------- | ----------- | --------------------------------------------------------- |
+| Browser SPA          | Vite 8 + React 19 + Tailwind CSS 4 | `src/`      | **[built]** shell + game layer; no card UI yet            |
+| Client game layer    | Pure TS + one React hook           | `src/game/` | **[built]** reducer, shuffle, resolver, persistence       |
+| Serverless functions | Vercel Functions (Node 24 runtime) | `api/`      | **[built]** `hello`, `playlist`, `year`                   |
+| Portable shared code | TypeScript, no platform APIs       | `shared/`   | **[built]** types, URL parsing, artist helper, year logic |
+| Year cache           | Upstash Redis (REST)               | —           | **[built]** behind `YearCache`; in-memory locally         |
 
-There is **no database, no message broker, no background worker, and no container runtime** in this project, and none are planned. The only persistent stores are the Upstash Redis cache (built, server-side, optional) and `localStorage` (planned, client-side).
+There is **no database, no message broker, no background worker, and no container runtime** in this project, and none are planned. The only persistent stores are the Upstash Redis cache (built, server-side, optional) and `localStorage` (built, client-side — `src/game/persistence.ts`).
 
 The Upstash dependency is **optional by design**: `createCache()` and `createRateLimitGate()` both fall back to per-instance implementations when the variables are absent, so the repo clones and runs with no accounts of any kind. Both log which mode they picked at cold start, because a silent fallback in production looks exactly like a cache that never hits.
 
@@ -157,6 +158,31 @@ GET /api/year?title=…&artist=…&durationMs=…
 
 Three orderings in that diagram are load-bearing and easy to "tidy" into bugs. **The cache is read before the gate**, so a replayed deck costs nothing and waits for nothing. **The second MusicBrainz call is batched**, so the request count is two regardless of whether the pool held 12 candidates or 842. **The year comes from the release GROUP's `first-release-date`, never from the release date inlined in the search response** — the latter is the reissue date and is wrong by decades (Billie Jean 2012, Bohemian Rhapsody 2001).
 
+### The client game layer (`src/game/`) — built
+
+Phase 3's whole session lives in one subtree, and only one file in it knows about React:
+
+```
+src/game/
+  types.ts            GameState, GameAction, PersistedSession. Browser-only, so NOT in shared/
+  reducer.ts          Pure. Every transition, plus the derived selectors (currentCard,
+                      isCurrentYearPending, cardsRemaining, resolvedCount)
+  shuffle.ts          Seeded Fisher-Yates + hashSeed()/mulberry32. Pure, reproducible
+  year-client.ts      The only /api/year caller. Maps status + body onto a typed result
+  resolver.ts         The sequential crawl: ordering, retries, back-off, priority jump.
+                      Framework-free — lookup, sleep and callbacks are all injected
+  persistence.ts      The localStorage format, behind an injectable StorageLike
+  use-game-session.ts The ONLY React file. Effect wiring, no game logic
+```
+
+Three properties of that split are load-bearing:
+
+- **The reducer is pure and the resolver is framework-free**, so both are tested as plain functions with no DOM and no timers of their own. `use-game-session.ts` is deliberately thin enough to go untested — and the rule that keeps that honest is written at the top of the file: any logic accumulating there belongs in the reducer or the resolver instead.
+- **`YEAR_RESOLVED` matches by card id, never by index.** The priority jump makes the resolver's order and the deck's order diverge routinely, and a duplicated track (legal in a playlist) must have **every** copy updated, not the first match.
+- **`src/game/` is browser code.** It may use DOM APIs and the `@/` alias; nothing under `api/` may ever import it, and `GameState` must not migrate into `shared/types.ts` — see §2.
+
+**The card-1 gate is an invariant of the app, not an implementation detail.** `START` waits for **one** year lookup to _complete_ — where a `null` year is a completed lookup — and never for the deck. Cards 2..n filling in during play is normal, not a loading state. This is the single most likely thing to be "simplified" into a wait-for-everything by someone who only ever tested a playlist whose years were all cached, because a warm deck resolves fast enough to hide the difference. Measured on a real 42-card cold deck (2026-08-05): the gate cleared in **6.06 s**, the full crawl took **153.0 s**. Those two numbers are the whole argument.
+
 ### Planned — the rest of the loop
 
 ```
@@ -169,9 +195,9 @@ Browser (SPA)                          Serverless (Vercel Functions)
 │ (start on card 1)    │◀──────────────│                        [built]  │
 │  · back off on 429   │  year          │  · 1 req/s gate + cache        │
 ├──────────────────────┤               └─────────────────────────────────┘
-│ shuffle (seeded)     │                              ↓
-│ flip / swipe / audio │                     Upstash Redis (year cache)
-│ localStorage resume  │
+│ shuffle (seeded)     │  [built]                     ↓
+│ localStorage resume  │  [built]            Upstash Redis (year cache)
+│ flip / swipe / audio │  Phases 4-5
 └──────────────────────┘
 ```
 
@@ -254,15 +280,15 @@ An SPA needs a catch-all rewrite so unmatched paths return `index.html` and clie
 
 Everything below is **not built**, except where a row says otherwise. The authoritative source for what belongs in which phase is [`plans/plan.md`](./plans/plan.md) §5 — **do not build ahead of the current phase.**
 
-| Phase | Adds                                                                                                                                                                                                                                          |
-| ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2     | ~~`parsePlaylistUrl()`, `/api/playlist`, `/api/year`, the `YearCache` interface, the 1 req/s gate, year-resolution logic~~ **[built] — phase complete**                                                                                       |
-| 3     | `GameState`, reducer (`START`/`FLIP`/`NEXT`/`END`), seeded Fisher–Yates shuffle, localStorage resume, progressive loading (sequential, backing off on 429). The `Card` type itself is **[built]** — Phase 3 must not widen it with game state |
-| 4     | Card component with CSS 3D flip, QR rendering, `previewUrl` + `<audio>` playback                                                                                                                                                              |
-| 5     | Swipe-to-next, tap-to-flip, stacked-deck visuals, keyboard controls                                                                                                                                                                           |
-| 6     | Landing page, suggested playlists, loading state, **reveal-side unconfirmed-year marking**, HUD, end screen                                                                                                                                   |
-| 7     | Visual design, `@theme` design tokens, error/offline states, responsive, a11y, Lighthouse                                                                                                                                                     |
-| 8     | Out of v1: shareable deck URL, PWA, PDF export, difficulty filters, multiplayer scoring                                                                                                                                                       |
+| Phase | Adds                                                                                                                                                                                            |
+| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2     | ~~`parsePlaylistUrl()`, `/api/playlist`, `/api/year`, the `YearCache` interface, the 1 req/s gate, year-resolution logic~~ **[built] — phase complete**                                         |
+| 3     | ~~`GameState`, reducer, seeded Fisher–Yates shuffle, localStorage resume, progressive loading~~ **[built] — phase complete**, in `src/game/` (see §3). `Card` was never widened with game state |
+| 4     | Card component with CSS 3D flip, QR rendering, `previewUrl` + `<audio>` playback — **in progress**                                                                                              |
+| 5     | Swipe-to-next, tap-to-flip, stacked-deck visuals, keyboard controls                                                                                                                             |
+| 6     | Landing page, suggested playlists, loading state, **reveal-side unconfirmed-year marking**, HUD, end screen                                                                                     |
+| 7     | Visual design, `@theme` design tokens, error/offline states, responsive, a11y, Lighthouse                                                                                                       |
+| 8     | Out of v1: shareable deck URL, PWA, PDF export, difficulty filters, multiplayer scoring                                                                                                         |
 
 Two dependencies are already installed with **no importers yet**, deliberately, so Phase 1 locks one coherent dependency tree: `motion` (Phase 5 gestures) and `qrcode` + `@types/qrcode` (Phase 4 QR).
 

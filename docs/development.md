@@ -179,6 +179,14 @@ Expect **1.3-3.6 s per cold track** (measured 2026-08-04 in-process, with the ga
 
 > As with the embed adapter, none of the resolution logic needs `vercel dev`: `shared/year.test.ts`, `api/_lib/musicbrainz.test.ts` and `api/_lib/resolve-year.test.ts` cover it offline against captured fixtures, including a fixture-backed accuracy suite over the Phase 0 known-tricky tracks.
 
+### Exercising the client-side resolver (`src/game/`)
+
+`src/game/resolver.ts` is the sequential crawl that drives `/api/year` for a whole deck. Its tests inject a fake `lookup` and a fake `sleep`, so they cover ordering, retries, back-off and the priority jump offline and instantly — **that is the normal way to work on it.** Only reach for a real deck when you are measuring something.
+
+When you do, **configure Upstash first.** Without `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` nothing paces MusicBrainz across invocations, and a 50-card deck becomes ~100 unthrottled requests against a service that rate-limits to 1 req/s and blocks clients that ignore it. The per-instance fallback is enough for one-off `curl`s and not enough for a crawl.
+
+**And do not measure through `vercel dev`** — the ~4 s per-invocation overhead above swamps the numbers, and the fresh process per request means the gate and cache never persist anyway. Phase 3's figures were taken by serving the real `api/playlist.ts` and `api/year.ts` over a plain `node:http` server and driving the reducer and resolver against them; the harness was thrown away, and the numbers are in [`agent_findings.md`](./agent_findings.md) (2026-08-05). Reference points for a cold 42-card deck: card-1 gate **6.06 s**, full crawl **153.0 s**, warm re-crawl **0 lookups**.
+
 ---
 
 ## 5. Running tests
@@ -188,7 +196,7 @@ pnpm test          # once
 pnpm test:watch    # watch mode
 ```
 
-Current suite: **118 tests across 9 files**, all passing, and **all of them offline** — no test touches the network. That is deliberate: a test that really called MusicBrainz would be rate-limited to 1 req/s, would drift as the database improves, and would fail for reasons unrelated to the code.
+Current suite: **233 tests across 14 files**, all passing, and **all of them offline** — no test touches the network. That is deliberate: a test that really called MusicBrainz would be rate-limited to 1 req/s, would drift as the database improves, and would fail for reasons unrelated to the code.
 
 The suite runs green **with no environment variables set at all**, which is the new-contributor path. If you have to configure something to make tests pass, that is a bug.
 

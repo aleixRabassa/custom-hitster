@@ -16,9 +16,17 @@ export default defineConfig({
   // Vitest reads its config from this key, so no separate vitest.config.ts exists.
   // Split it out only if the app and test configs later need to diverge.
   test: {
-    // Node environment only. `jsdom` and Testing Library are deliberately NOT
-    // installed yet -- this phase's tests are pure logic. The first component
-    // test arrives in Phase 4, which is when a DOM environment should be added.
+    // `node` is the DEFAULT, not the only environment. jsdom and Testing Library
+    // arrived in Phase 4, and a test that needs a DOM opts in PER FILE with a
+    //
+    //   /** @vitest-environment jsdom */
+    //
+    // docblock as the first thing in the file (verified honoured under Vitest 4.1
+    // on 2026-08-05; `test.projects` was the fallback and proved unnecessary).
+    //
+    // Keeping node as the default is deliberate: it is what makes a DOM API
+    // accidentally added to `shared/` -- which must stay portable to `api/` --
+    // fail a test run instead of passing quietly. Do not globalise jsdom here.
     environment: 'node',
     include: ['{src,shared,api}/**/*.{test,spec}.{ts,tsx}'],
   },

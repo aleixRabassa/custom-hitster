@@ -4,3 +4,21 @@
  * Design tokens (@theme) are deliberately deferred to Phase 7.
  */
 @import 'tailwindcss';
+
+/*
+ * Kill pull-to-refresh and rubber-band scrolling on the page root.
+ *
+ * Phase 5's swipe gesture tolerates vertical movement while the player drags a card
+ * sideways, and on a phone that vertical component is exactly what triggers the browser's
+ * pull-to-refresh -- so a swipe near the top of the screen reloads the app and loses the
+ * session instead of advancing the card. This is one line and it must be on BOTH `html` and
+ * `body`: a browser can take the behaviour from either, depending on which is the scrolling
+ * element.
+ *
+ * Plain CSS, not an `@theme` token: it is a behavioural fix, not a design value, and design
+ * tokens are Phase 7.
+ */
+html,
+body {
+  overscroll-behavior: none;
+}

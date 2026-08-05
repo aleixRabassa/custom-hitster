@@ -19,8 +19,12 @@ Several decisions in this repo look like mistakes and are not. If something seem
 | [`docs/plans/plan.phase-1.md`](./docs/plans/plan.phase-1.md)                   | Phase 1 detail, decisions, and execution notes                                                            |
 | [`docs/plans/plan.phase-2-playlist.md`](./docs/plans/plan.phase-2-playlist.md) | Phase 2, first half — URL parsing, the embed adapter, `/api/playlist`                                     |
 | [`docs/plans/plan.phase-2-year.md`](./docs/plans/plan.phase-2-year.md)         | Phase 2, second half — the cache, the MusicBrainz adapter, year resolution, `/api/year`                   |
+| [`docs/plans/plan.phase-3.md`](./docs/plans/plan.phase-3.md)                   | Phase 3 — the reducer, seeded shuffle, persistence, and the progressive-loading resolver                   |
+| [`docs/plans/plan.phase-4-6-card-ui.md`](./docs/plans/plan.phase-4-6-card-ui.md) | Phase 4 — the DOM test environment, the flip card, the QR code, and card audio                          |
+| [`docs/plans/plan.phase-4-6-gestures.md`](./docs/plans/plan.phase-4-6-gestures.md) | Phase 5 — swipe, tap-versus-drag, the stacked deck, keyboard controls                                 |
+| [`docs/plans/plan.phase-4-6-screens.md`](./docs/plans/plan.phase-4-6-screens.md) | Phase 6 — landing, the playlist client, notices, the HUD, the end screen, the session container         |
 
-**Do not build ahead of the current phase.** The plan defers things deliberately. Current phase: **2 (data layer) is complete** — playlist ingestion (`parsePlaylistUrl()`, the embed adapter, `/api/playlist`) and year resolution (`shared/year.ts`, the MusicBrainz adapter, the `YearCache` interface, the 1 req/s gate, `/api/year`) are both built. **Phase 3 — game state, seeded shuffle, and progressive loading — is next**, per [`docs/plans/plan.md`](./docs/plans/plan.md) §5.
+**Do not build ahead of the current phase.** The plan defers things deliberately. Current phase: **3 (deck & game state) is complete** — the reducer, the seeded shuffle, `localStorage` resume and the progressive-loading resolver are all built in `src/game/`, on top of Phase 2's data layer. **Phase 4 — the card UI (CSS 3D flip, QR code, `previewUrl` audio) — is in progress**, per [`docs/plans/plan.md`](./docs/plans/plan.md) §5 and [`plan.phase-4-6-card-ui.md`](./docs/plans/plan.phase-4-6-card-ui.md).
 
 ---
 

@@ -193,13 +193,21 @@ Browser (SPA)                          Serverless (Vercel Functions)
 
 ### Phase 3 — Deck & Game State
 
-- [ ] `Card` and `GameState` types; reducer with `START`, `FLIP`, `NEXT`, `END`
-- [ ] Seeded Fisher–Yates shuffle (reproducible decks) + tests — runs **before** year resolution, so the resolver walks the deck in play order (§3)
-- [ ] localStorage persist/resume mid-game
-- [ ] **Progressive loading — `START` gates on card 1's year alone, never on the deck.** Background-fill cards 2..n in deck order while play proceeds; block gracefully only if the player outruns the resolver. Concretely:
-  - [ ] The resolver is a **sequential loop over the shuffled deck**, one `/api/year` call at a time, honouring a 429's `retryAfterMs`. Not a `Promise.all` over all 100 cards — that would stampede the 1 req/s gate into ~99 rejections
-  - [ ] `START` dispatches as soon as card 1 has a year; the loop keeps running across the whole session
-  - [ ] A test that asserts the game is playable while cards 2..n are still `undefined` — this is the invariant that regresses silently, because a deck of cached years resolves fast enough to hide a blocking implementation in local testing
+- [x] `Card` and `GameState` types; reducer with `START`, `FLIP`, `NEXT`, `END` — `GameState` lives in `src/game/types.ts`, not `shared/`, because no function needs it; the reducer also carries `YEAR_RESOLVED`, `RESUME` and `YEAR_LOOKUPS_UNAVAILABLE`, each with exactly one caller
+- [x] Seeded Fisher–Yates shuffle (reproducible decks) + tests — runs **before** year resolution, so the resolver walks the deck in play order (§3). `hashSeed()` needed an avalanche step: plain FNV-1a made "game-1" and "game-2" deal near-identical opening cards
+- [x] localStorage persist/resume mid-game — `src/game/persistence.ts`, a `v1`-keyed format validated field by field on read, behind an injectable `StorageLike`
+- [x] **Progressive loading — `START` gates on card 1's year alone, never on the deck.** Background-fill cards 2..n in deck order while play proceeds; block gracefully only if the player outruns the resolver. Concretely:
+  - [x] The resolver is a **sequential loop over the shuffled deck**, one `/api/year` call at a time, honouring a 429's `retryAfterMs`. Not a `Promise.all` over all 100 cards — that would stampede the 1 req/s gate into ~99 rejections
+  - [x] `START` dispatches as soon as card 1 has a year; the loop keeps running across the whole session
+  - [x] A test that asserts the game is playable while cards 2..n are still `undefined` — this is the invariant that regresses silently, because a deck of cached years resolves fast enough to hide a blocking implementation in local testing
+
+> Detail, decisions, and execution notes: [plan.phase-3.md](./plan.phase-3.md).
+>
+> **Phase 3 is complete (code in `43e59cc`, 2026-08-04; measured against a real playlist 2026-08-05).** Verified numbers, all in [`agent_findings.md`](../agent_findings.md) (2026-08-05): a 42-card cold deck crawls in **153.0 s** (~3.64 s/card), the **card-1 gate cleared in 6.06 s** with 1 of 42 resolved, a rapid advance to index 41 resolved **that** card in 5.67 s instead of ~145 s, a warm re-crawl cost **0 lookups**, and the client saw **0** 429s because a sequential loop paced at 1.1 s never contends with itself. A third of an ordinary deck (15 of 42) settled at `confidence: 'none'` and every one stayed playable.
+>
+> Two deviations worth carrying forward: a 500 is mapped to `not-configured` only from the response **body** (`api/year.ts` also returns 500 for its catch-all, and the two want opposite handling), and `YEAR_RESOLVED` updates **every** card sharing an id, because a playlist may legitimately hold the same track twice.
+>
+> **Real-deployment verification of progressive loading moved to [plan.phase-4-6-screens.md](./plan.phase-4-6-screens.md)** — it needs a UI to exercise, and that plan is what produces one.
 
 ### Phase 4 — Card UI
 
@@ -247,6 +255,17 @@ Browser (SPA)                          Serverless (Vercel Functions)
 - [ ] Responsive: phone, tablet, desktop
 - [ ] Basic a11y: focus states, ARIA on controls, respect `prefers-reduced-motion`
 - [ ] Lighthouse pass; lazy-load QR/audio code
+- [ ] **"Added by" attribution on the revealed side** — show who added that track to the
+      playlist, alongside title/artist/year, once the card is flipped. **Blocked on data
+      availability, not on UI:** the embed endpoint is the sole track source (§2's "no
+      Spotify credentials" decision), and Phase 0's field inventory for it (§5) is
+      exhaustive and has no `added_by`-shaped field at track level. Spotify's own Web API
+      does expose `added_by.id` on playlist items, but only through auth paths §2 already
+      ruled out for "anyone with a public link" — Client Credentials cannot read `items`,
+      and user-authorized PKCE only covers playlists the logged-in user owns. Before
+      building: either re-spike the embed payload to confirm it still lacks the field, or
+      treat this as needing a new auth path and re-open §2. Do not build a UI for this
+      against an assumed field that Phase 0 never found.
 - [ ] README: setup, env vars, deploy, known limitations
 
 ### Phase 8 — Nice-to-haves (explicitly out of v1)
@@ -272,9 +291,14 @@ Browser (SPA)                          Serverless (Vercel Functions)
       offered at all, lives there too (post-reveal, so it spoils nothing) rather than in a pre-Start list.
       A load-time notice may say "some years could not be confirmed" **without naming tracks or years** —
       count only.
-- [ ] **Follow-on:** what happens to a `confidence: 'none'` card (no year at all)? Options: leave it out
-      of the deck with a count-only notice (mirrors `skippedCount`), or keep it and reveal "year unknown".
-      Cannot be fixed pre-Start any more, so this is now a real fork. Phase 3/6 call.
+- [x] **Follow-on:** what happens to a `confidence: 'none'` card (no year at all)? — **Resolved 2026-08-05:
+      it stays in the deck and is fully playable**, which is also what §5's Phase 2 completion note had
+      already decided; the fork above was a contradiction with it rather than a genuinely open choice.
+      The revealed side renders the third state of the year slot — a "check this one yourself" prompt —
+      and nothing is removed from the deck and no count-only notice is needed. Same principle as an
+      unplayable track: the QR always works, so the card still plays. Phase 3 verified it 15 times over
+      on a real 42-card deck (a third of an ordinary playlist resolves to `none`), and Phase 4 builds
+      the display as state 3 of the three-state year slot.
 
 ---
 

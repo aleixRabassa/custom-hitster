@@ -1,12 +1,32 @@
 import { describe, expect, it } from 'vitest';
 
-import { parsePlaylistUrl } from './spotify-url';
+import { parsePlaylistUrl, spotifyTrackUrl } from './spotify-url';
 
 /**
  * A real playlist ID (Today's Top Hits), used everywhere below so that a failure is
  * never about a hand-invented ID being the wrong length.
  */
 const ID = '37i9dQZF1DXcBWIGoYBM5M';
+
+/** A real track ID (Bohemian Rhapsody), for the same reason `ID` is a real playlist ID. */
+const TRACK_ID = '3z8h0TU7ReDPLIbEnYhWZb';
+
+describe('spotifyTrackUrl', () => {
+  it('should build an open.spotify.com track URL from a bare id', () => {
+    // This exact string is what the card's QR code encodes, so the shape is the contract.
+    expect(spotifyTrackUrl(TRACK_ID)).toBe(`https://open.spotify.com/track/${TRACK_ID}`);
+  });
+
+  it('should output a track link that parsePlaylistUrl rejects as unsupported-entity', () => {
+    // The two helpers must agree about what a track link is. `unsupported-entity` rather
+    // than `invalid-url` is the whole point: a track link is recognisably Spotify, so
+    // pasting one into the landing form deserves "that's a track, not a playlist".
+    expect(parsePlaylistUrl(spotifyTrackUrl(TRACK_ID))).toEqual({
+      ok: false,
+      code: 'unsupported-entity',
+    });
+  });
+});
 
 describe('parsePlaylistUrl', () => {
   it('should parse a plain open.spotify.com playlist URL', () => {

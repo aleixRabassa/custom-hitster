@@ -88,6 +88,30 @@ const KNOWN_NON_PLAYLIST_ENTITIES = new Set([
 ]);
 
 /**
+ * Build the public web URL for a track from a bare `Card.id`.
+ *
+ * This is what the QR code on the card's hidden side encodes, and it is the ONLY link
+ * that gets a player to the whole song: `Card.previewUrl` is a 30-second MP3 and the app
+ * has no Spotify playback session (plan.md §2). Phase 8's shareable-deck work needs the
+ * same builder.
+ *
+ * It lives here rather than in `src/` for the reason the rest of this module does: it is
+ * pure, DOM-free, and the counterpart to `parsePlaylistUrl()` — one file owns the shape of
+ * a Spotify link in both directions. Note that `parsePlaylistUrl()` rejects this output as
+ * `unsupported-entity`, which is correct and asserted in the tests: a track link is a valid
+ * Spotify link and emphatically not a playlist.
+ *
+ * The ID is NOT validated. A `Card.id` came from the embed payload's own
+ * `spotify:track:{id}` URI, so there is nothing here to guard against, and a builder that
+ * could fail would push a pointless error branch into every caller — including the QR
+ * component's render path. Interpolation is safe because a Spotify ID is 22 base62
+ * characters: nothing in that alphabet can escape the path segment.
+ */
+export function spotifyTrackUrl(id: string): string {
+  return `https://open.spotify.com/track/${id}`;
+}
+
+/**
  * Turn any of the accepted forms into a bare playlist ID.
  *
  * Accepted:
