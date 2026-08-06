@@ -13,15 +13,32 @@
  * impossible rather than a rule to enforce. `CardStack` renders 3 cards at once, which is
  * exactly the window where per-card elements would overlap and play together.
  *
- * ## Two stop rules, both effects
+ * ## ONE stop rule, and the second one was DELETED on purpose (2026-08-06)
  *
- * Audio stops when the card is FLIPPED and when the CARD CHANGES. The flip rule is the less
- * obvious of the two and it is Phase 4's own: once the answer is on screen the preview has no
- * job left, and leaving it running means the next card starts against the previous track's
- * audio if the player advances quickly.
+ * Audio stops when the CARD CHANGES, and that is the only rule. It is also what covers a
+ * SWIPE, which is why `useCardGestures` does not stop audio itself: one owner of the stop
+ * rule, not two.
  *
- * The card-change rule is also what covers a SWIPE, which is why `useCardGestures` does not
- * stop audio itself: one owner of the stop rule, not two.
+ * ===========================================================================
+ *  THERE USED TO BE A STOP-ON-FLIP EFFECT HERE. DO NOT PUT IT BACK.
+ *
+ *  "Surely the preview should stop once the answer is showing" is Phase 4's own
+ *  reasoning, it is the obvious thing to re-add, and playing the game disagrees
+ *  with it: HEARING THE SONG WHILE READING THE YEAR IS THE POINT OF THE REVEAL.
+ *  A flip that killed the music turned the payoff into silence.
+ *
+ *  The rule's second justification -- that a lingering preview would bleed into
+ *  the next card -- is already covered in full by the card-change rule below,
+ *  which keys on card id and fires before the new src is loaded. So the effect
+ *  was deleted and NOTHING replaced it; no behaviour moved anywhere else.
+ *
+ *  `CardControls` lives outside the card, so Play/Pause stays reachable while the
+ *  reveal is on screen and a player who does want silence has a button for it.
+ *
+ *  Reversal of a completed phase, so it is written down in `plan.md` §5,
+ *  `AGENTS.md`'s dated-decisions block and `docs/agent_findings.md` as well as
+ *  here, and `GameScreen.test.tsx` asserts the NON-stop.
+ * ===========================================================================
  *
  * ## Exit goes through a confirmation, and this file owns whether it is showing
  *
@@ -32,7 +49,7 @@
  * is the non-obvious half -- see guard 4.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import { CardControls } from './CardControls';
@@ -126,22 +143,7 @@ export function GameScreen({
   const [isExitConfirmOpen, setIsExitConfirmOpen] = useState(false);
 
   /**
-   * Stop on flip.
-   *
-   * Keyed on the transition INTO flipped rather than on `isFlipped` being true, so a re-render
-   * while already flipped does not keep re-stopping -- harmless today, but it would silently
-   * make playback impossible if a later phase ever allowed audio from the revealed side.
-   */
-  const wasFlippedRef = useRef(isFlipped);
-  useEffect(() => {
-    const wasFlipped = wasFlippedRef.current;
-    wasFlippedRef.current = isFlipped;
-
-    if (isFlipped && !wasFlipped) stop();
-  }, [isFlipped, stop]);
-
-  /**
-   * Stop on card change.
+   * Stop on card change. The only stop rule -- see the header block for the one that was deleted.
    *
    * Belt and braces with `useCardAudio`'s own src-swap effect, and deliberately so: that
    * effect keys on `previewUrl`, and two different cards can share one (a duplicated track in

@@ -1901,3 +1901,137 @@ The corollary is the uncomfortable one: **a green run does not prove the jsdom h
 here, because the file and test counts are checked (36 and 497), but a `pnpm test` glanced at for its
 exit code alone would have passed 339 tests and skipped every component test in the repo. The counts
 are the thing to read.
+
+## 2026-08-06 — Phase 4's stop-on-flip audio rule reversed: the preview now survives the reveal
+
+Developer decision, executed as step 1 of
+[`plan.phase-8-features.md`](./plans/plan.phase-8-features.md). **`GameScreen` had two stop rules and
+now has one.** Audio stops when the CARD CHANGES and when Exit is confirmed; it no longer stops when
+the card is flipped.
+
+Why it is a deletion rather than a move — the part worth keeping, because a deleted rule with no
+explanation is a rule someone restores:
+
+- The flip rule's first justification was Phase 4's own: "once the answer is on screen the preview has
+  no job left." Playing the game disagrees. **Hearing the song while reading the year is the point of
+  the reveal**, and a flip that killed the music turned the payoff into silence.
+- Its second justification — a lingering preview bleeding into the next card — is **already covered by
+  the card-change effect**, which keys on `currentCard.id` rather than on `previewUrl` (so a
+  duplicated track in the deck is covered too) and fires before the new `src` is set. That effect is
+  also what makes a SWIPE stop the audio, which is why `useCardGestures` still knows nothing about
+  audio.
+
+So `wasFlippedRef` and its effect are gone, `useRef` left `GameScreen`'s import list, and **nothing
+was added anywhere**. `CardControls` renders outside the card (the Phase 5 pointer-up bug fix), so
+Play/Pause is reachable while the reveal is showing without any UI work — a player who wants silence
+has a button for it.
+
+Two things carry the reversal forward for the next session: `GameScreen.test.tsx`'s
+`should not stop audio when the card is flipped` asserts `calls` is empty **and** that the `src` is
+untouched, and the header block in `GameScreen.tsx` says why the rule went. The
+stop-on-card-change and stop-on-exit tests passed unmodified, which is what confirms the right effect
+was deleted.
+
+**Not verifiable locally:** that the preview is actually still audible after a flip on a device. It
+rides with the step 23 touch pass.
+
+## 2026-08-06 — A mount-lifetime "already submitted" ref breaks the share link under StrictMode
+
+Found while building the shareable deck URL (`plan.phase-8-features.md` step 7). The first version of
+`App.tsx`'s link effect had the obvious guard:
+
+```ts
+if (deckLink === null || linkSubmittedRef.current) return;
+linkSubmittedRef.current = true;
+request(spotifyPlaylistUrl(deckLink.playlistId));
+```
+
+**Under React 19 StrictMode this deals no deck at all.** The sequence: effects run, the request goes
+out and the ref is set; StrictMode then simulates an unmount, and `usePlaylist`'s own mount cleanup
+**aborts the controller and nulls it**, so the in-flight response is later discarded by its own
+staleness guard; effects re-run, the ref says "already submitted", and the app sits on the landing
+screen forever with `requestState` stuck at `loading`. Development only, which is the worst place for
+it — every local run of a shared link would look broken.
+
+**The rule this yields:** in this codebase, an effect that starts work another hook cancels on cleanup
+must not be guarded by a ref that survives the cleanup. Either reset the guard in the effect's own
+cleanup, or have no guard at all — which is what `App.tsx` does now, because both of that effect's
+dependencies (`deckLink` from a lazy state initialiser, `request` from a `useCallback([])`) are stable
+by construction, so the body runs exactly once per mount. Production: one request. StrictMode: two,
+with the first aborted — the same shape as the year resolver's double mount.
+
+`App.test.tsx`'s `should read the link exactly once under StrictMode double rendering` is the
+regression test, and note what it can and cannot assert: `parseDeckLink` is pure, so the number of
+PARSES is unobservable and irrelevant. It asserts the deal — the deck arrives, with the link's seed —
+and bounds the fetch count at two.
+
+## 2026-08-06 — The saved-playlist library leaked on the WRITE side, not the read side
+
+`savePlaylist(storage, entry)` originally stored the caller's object verbatim. `SavedPlaylist` is a
+structural interface, and TypeScript's excess-property check **does not fire for a spread or for a
+variable** — so `savePlaylist(storage, { ...somethingLarger })` type-checked and wrote every extra
+field to `localStorage`. The store is read on the **landing screen**, which is the app's one
+pre-start surface, so a caller who later passed a `PlaylistResult` would have put track titles one
+devtools panel away from a player who had not started yet.
+
+Caught by the module's own leak test (`should store nothing beyond id, name and timestamp`), which
+smuggles a `cards` array past the type the way a spread would. The fix is a three-field rebuild at
+the write, mirroring what `validateEntry` does at the read — the same reason `persistence.ts`'s
+`validateSession` rebuilds instead of casting. **Validating only on read is not enough when the
+store itself is the leak surface.**
+
+## 2026-08-06 — PDF text: WinAnsi already covers Spanish, and the two cases that still bite
+
+Measurements behind the sanitise-rather-than-embed decision (`plan.phase-8-features.md` step 18, open
+question 3), all in `src/game/pdf-text.ts`:
+
+- **WinAnsi (Latin-1 plus a punctuation block) covers every Spanish, Portuguese, French, German and
+  Italian glyph** — `á é í ó ú ü ñ ¡ ¿ ç ã õ` all pass through untouched. Four of the nine suggested
+  playlists are Spanish or Latin, so the common case is a **no-op**. That is what made embedding a
+  200–400 kB font the wrong trade: it would fix Polish and Turkish while still failing on Cyrillic and
+  CJK, which need a much larger font again.
+- **A stroked or barred letter does not decompose.** `ż` → NFD → `z` + dot above, so stripping marks
+  works. `ł`, `đ`, `ı`, `ħ`, `ŧ`, `œ` have **no combining mark at all**, so they fell through to `?`
+  and printed Polish as `Zaz?c`. Fixed with a short hand-written fallback map; anything needing a
+  judgement about a language stays `?`.
+- **The filename needed a SECOND, stricter pass.** `sanitizeForPdf` correctly KEEPS `É` — WinAnsi can
+  draw it — but a filename cannot, and the `[^a-z0-9]` slug filter then deleted it: "Éxitos Verano"
+  became `hitster-xitos-verano.pdf`, silently missing the playlist's first letter. `pdfFileName` now
+  strips marks before slugging.
+
+What the player loses, and it is in `development.md` §8: a Cyrillic or CJK title prints as `?`
+placeholders. **The year and the QR are unaffected** — digits are ASCII and the QR is an image — so
+such a card still plays and still scans to the right track.
+
+## 2026-08-06 — `dist/assets/qrcode-loader-*.js` is React glue, NOT the QR encoder
+
+Step 22 verification, and a trap worth naming because the chunk's name invites exactly the wrong
+conclusion. After `loadQrcode` moved to its own module (`src/game/qrcode-loader.ts`, shared by
+`QrCode.tsx` and `usePdfExport`), Rolldown named the **shared vendor chunk** after it. That chunk is
+10.81 kB, is `modulepreload`ed on the landing screen, and contains **React's JSX runtime** — it is
+what used to be emitted as `preload-helper-*.js` (11.68 kB, likewise preloaded). It contains no
+`toDataURL`, no `dijkstra` and no encoder. Preloaded bytes before: 12.58 kB; after: 12.90 kB.
+
+**Verified in a real network log, not only in the build output** (Chrome against `vite preview`, hard
+reload of the landing screen). Exactly six requests: the document, `index-*.js`,
+`rolldown-runtime-*.js`, `preload-helper-*.js`, `qrcode-loader-*.js` and the CSS. **Not** requested:
+`jspdf.es.min-*.js` (399.95 kB / 129.95 kB gzip), `html2canvas-*.js` (199.49 kB), `purify.es-*.js`,
+`index.es-*.js`, `browser-*.js` (the QR encoder, 23.47 kB) and `GameScreen-*.js`.
+
+So jsPDF's optional dependencies are split out and stay unfetched, and the export path costs one
+chunk. Re-run this check the same way after any new dependency: the build output alone cannot tell a
+`modulepreload` from a name.
+
+## 2026-08-06 — A `beforeAll` that times out SKIPS the whole file, and reads as a failure
+
+`pnpm test` reported `1 failed | 39 passed` with `src/App.test.tsx (27 tests | 27 skipped)`, while
+`pnpm vitest run src/App.test.tsx` passed 27/27 on its own. The cause is the warm-up hook that awaits
+`import('./components/GameScreen')` to move Vite's first-time transform of ~250 `motion` modules
+outside every `waitFor`: it had moved that cost **into the default 10 s hook timeout** instead, which
+a fully parallel run of a suite grown to 40 files exceeds. A timed-out `beforeAll` skips every test in
+the file, so the summary blames the file rather than the clock.
+
+Fixed by giving the hook an explicit `60_000` budget — a ceiling, not a duration anything waits.
+**Two summary shapes now mean "not a real failure", and they are different:** `Errors` with zero
+failed tests means the jsdom workers never started (re-run; see the 2026-08-05 entry), and `N skipped`
+in one file means a hook timed out.

@@ -99,7 +99,19 @@ describe('GameScreen', () => {
     expect(container.querySelectorAll('audio')).toHaveLength(1);
   });
 
-  it('should stop audio when the card is flipped', () => {
+  it('should not stop audio when the card is flipped', () => {
+    // ===================================================================
+    //  THE 2026-08-06 REVERSAL, AND THE ONE ASSERTION THAT PINS IT.
+    //
+    //  This test used to assert the opposite. Phase 4 stopped the preview on
+    //  the flip -- "once the answer is on screen the preview has no job
+    //  left" -- and playing the game disagreed: hearing the song while
+    //  reading the year is the point of the reveal.
+    //
+    //  The bleed case that rule also cited is covered by the card-change
+    //  test below, which is why the effect was deleted rather than moved. If
+    //  a stop-on-flip is ever re-added, this fails first.
+    // ===================================================================
     const { rerender } = render(renderScreen({}));
 
     screen.getByRole('button', { name: 'Play' }).click();
@@ -108,11 +120,12 @@ describe('GameScreen', () => {
     calls = [];
     rerender(renderScreen({ isFlipped: true }));
 
-    // Once the answer is on screen the preview has no job left -- and leaving it running is
-    // how the next card starts against the previous track's audio.
-    expect(calls).toContain(`pause:${highConfidenceCard.previewUrl}`);
+    // Same call-order recording as every other audio test here: nothing paused the element, and
+    // nothing re-started it either -- the flip is simply not an audio event any more.
+    expect(calls).toEqual([]);
+    // And the source is untouched, so playback is still where the player left it.
     const audio = screen.getByTestId('session-audio') as HTMLAudioElement;
-    expect(audio.currentTime).toBe(0);
+    expect(audio.getAttribute('src')).toBe(highConfidenceCard.previewUrl);
   });
 
   it('should stop audio when the card changes', () => {

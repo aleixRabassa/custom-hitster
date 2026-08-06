@@ -16,16 +16,27 @@ const PLAYLIST_URL = 'https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M';
 
 function renderLanding(props: Partial<Parameters<typeof LandingScreen>[0]> = {}) {
   const onSubmit = props.onSubmit ?? vi.fn();
+  const onRemoveSaved = props.onRemoveSaved ?? vi.fn();
   const rendered = render(
     <LandingScreen
       onSubmit={onSubmit}
       isLoading={props.isLoading ?? false}
       {...(props.errorCode ? { errorCode: props.errorCode } : {})}
+      // Defaults to empty, which is the first-time visitor's screen and the one every assertion
+      // written before the library existed was written against.
+      savedPlaylists={props.savedPlaylists ?? []}
+      onRemoveSaved={onRemoveSaved}
     />,
   );
 
-  return { ...rendered, onSubmit };
+  return { ...rendered, onSubmit, onRemoveSaved };
 }
+
+/** Two saved playlists, most-recent-first as the library stores them. */
+const SAVED = [
+  { id: '2zmXlpkOMN92NlQaE2M62c', name: 'Party Mix', savedAt: 2_000 },
+  { id: '37i9dQZF1DX1HCSfq0nSal', name: 'Road Trip', savedAt: 1_000 },
+];
 
 /**
  * Query a suggestion button by its label.
@@ -345,5 +356,115 @@ describe('LandingScreen', () => {
     // genre/era names. "Éxitos Verano 2000s & 2010s" is the case this pins -- a decade written as
     // "2000s" is not a release year, and the `\b` after the digits is what tells the two apart.
     expect(text).not.toMatch(/\b(19|20)\d{2}\b/);
+  });
+
+  describe('the saved-playlist library', () => {
+    it('should render saved playlists and submit one on click', () => {
+      // A saved row submits by exactly the path a suggestion does -- the id becomes a full URL and
+      // goes through the same `submit`, which also fills the input. There is no second entry point.
+      const { onSubmit } = renderLanding({ savedPlaylists: SAVED });
+
+      expect(screen.getByText('Your playlists')).not.toBeNull();
+      // EXACT names, not patterns: the remove control beside each row names the same playlist, so a
+      // `/party mix/i` regex matches both buttons in the row. The row's own name is the name alone.
+      expect(screen.getByRole('button', { name: 'Party Mix' })).not.toBeNull();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Road Trip' }));
+
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+      expect(onSubmit).toHaveBeenCalledWith(
+        'https://open.spotify.com/playlist/37i9dQZF1DX1HCSfq0nSal',
+      );
+      // And the input shows what was submitted, which is how a player learns the shape of a link.
+      expect((screen.getByLabelText('Playlist link') as HTMLInputElement).value).toBe(
+        'https://open.spotify.com/playlist/37i9dQZF1DX1HCSfq0nSal',
+      );
+    });
+
+    it('should keep the library order it was given', () => {
+      // The library is most-recent-first and this screen must not re-sort it: the player's mental
+      // model is "the one I saved last is at the top".
+      renderLanding({ savedPlaylists: SAVED });
+
+      const names = screen
+        .getAllByRole('button')
+        .map((button) => button.textContent ?? '')
+        .filter((text) => text.includes('Party Mix') || text.includes('Road Trip'));
+      expect(names[0]).toContain('Party Mix');
+      expect(names[1]).toContain('Road Trip');
+    });
+
+    it('should render nothing when the library is empty', () => {
+      // NOTHING, not a placeholder (step 14): a first-time visitor already has the form and nine
+      // suggestions, and a block explaining an empty list is noise on the app's front door.
+      renderLanding({ savedPlaylists: [] });
+
+      expect(screen.queryByText('Your playlists')).toBeNull();
+      // The suggestions are untouched, so the count is the pre-library one.
+      expect(screen.getAllByRole('button')).toHaveLength(1 + SUGGESTED_PLAYLISTS.length);
+    });
+
+    it('should remove a saved playlist', () => {
+      const { onRemoveSaved, onSubmit } = renderLanding({ savedPlaylists: SAVED });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Remove Party Mix from your playlists' }));
+
+      expect(onRemoveSaved).toHaveBeenCalledExactlyOnceWith('2zmXlpkOMN92NlQaE2M62c');
+      // And removing did NOT submit. The two buttons are siblings rather than nested for exactly
+      // this reason -- a remove control inside the play button would activate both.
+      expect(onSubmit).not.toHaveBeenCalled();
+    });
+
+    it('should name the playlist in every remove control', () => {
+      // A screen with four rows of "Remove" gives a screen-reader user no way to tell which row
+      // they are on. The name carries the playlist; the ✕ is `aria-hidden` decoration.
+      renderLanding({ savedPlaylists: SAVED });
+
+      for (const saved of SAVED) {
+        expect(
+          screen.getByRole('button', { name: `Remove ${saved.name} from your playlists` }),
+        ).not.toBeNull();
+      }
+    });
+
+    it('should give every library control a focus-visible style and a touch target', () => {
+      // Same class-name caveat as the assertion above: it catches a control added without a ring,
+      // which is the regression that actually happens. Both buttons per row are checked.
+      const { container } = renderLanding({ savedPlaylists: SAVED });
+
+      const interactive = [...container.querySelectorAll('button, input')];
+      // The input, Start, two buttons per saved row, and one per suggestion.
+      expect(interactive).toHaveLength(2 + SAVED.length * 2 + SUGGESTED_PLAYLISTS.length);
+
+      for (const element of interactive) {
+        expect(element.className).toContain('focus-visible:focus-ring');
+      }
+      for (const button of screen.getAllByRole('button')) {
+        expect(button.className).toContain('touch-target');
+      }
+    });
+
+    it('should disable the library while a request is in flight', () => {
+      // Consistent with the suggestions and with Start: a second submission mid-request is what the
+      // disabled state exists to stop, and a remove that lands mid-deal is a confusing race.
+      renderLanding({ savedPlaylists: SAVED, isLoading: true });
+
+      for (const button of screen.getAllByRole('button')) {
+        expect((button as HTMLButtonElement).disabled).toBe(true);
+      }
+    });
+
+    it('should render no track information for a saved playlist either', () => {
+      // The library stores a playlist NAME, which is the same class of data the suggestions show.
+      // This is the assertion that fails if an entry ever grows a track list.
+      const { container } = renderLanding({ savedPlaylists: SAVED });
+      const text = container.textContent ?? '';
+
+      for (const card of fixtureDeck) {
+        expect(text).not.toContain(card.title);
+        expect(text).not.toContain(card.artist);
+      }
+      expect(text).not.toMatch(/\b(19|20)\d{2}\b/);
+    });
   });
 });

@@ -38,6 +38,18 @@ Several decisions in this repo look like mistakes and are not. If something seem
 
 **The three controls are NOT on the card** (`src/components/CardControls.tsx`, rendered by `GameScreen` beside the stack), and putting them back would reintroduce a real bug: `gestureProps.onPointerUp` is bound to the card's outer element, so a pointer-up on a button inside the card is read as a tap and flips it — pressing Play revealed the answer. **Nothing interactive may be rendered inside `Card`.** Two tests assert the absence.
 
+**A sixth developer decision landed on 2026-08-06, and it reverses a Phase 4 checkbox: the song
+keeps playing when the card is FLIPPED.** Audio now stops on exactly two things — the card
+changing, and a confirmed Exit. "Surely the preview should stop once the answer is on screen" is
+Phase 4's own reasoning, it is the obvious thing to re-add, and **hearing the song while reading the
+year is the point of the reveal** — a flip that killed the music turned the payoff into silence. The
+other half of Phase 4's justification, a lingering preview bleeding into the next card, was already
+covered in full by the **card-change rule** (keyed on card id, and also what makes a swipe stop the
+audio), so `GameScreen`'s stop-on-flip effect and its `wasFlippedRef` were **deleted with nothing
+put in their place**. `CardControls` is outside the card, so Play/Pause stays reachable during the
+reveal for a player who does want silence. `GameScreen.test.tsx` asserts the **non**-stop, and
+`useCardAudio`'s `stop` doc line no longer claims a flip calls it.
+
 **Five developer decisions landed on 2026-08-05, after Phase 7 plan 1. Two of them reverse
 something `plan.md` had already resolved, so read these before "fixing" the code back:**
 

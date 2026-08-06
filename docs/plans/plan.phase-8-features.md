@@ -53,46 +53,46 @@ the QR scan and the Android lock-screen check that have been owed since Phase 4.
 
 ### Requires from plan.phase-8-look-and-shell
 
-| Output                             | Description                                                                                                                                                    |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| The `@theme` token names           | The PDF's layout module reads token **names** for structure; its colour values are a separate print palette by decision 6. Soft — current names work today     |
-| The post-redesign Lighthouse score | Consumed only by the PDF step's bundle check. If plan 1 has not landed, measure against Phase 7's Performance 99 / LCP 1.6 s and re-check afterwards           |
+| Output                             | Description                                                                                                                                                |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The `@theme` token names           | The PDF's layout module reads token **names** for structure; its colour values are a separate print palette by decision 6. Soft — current names work today |
+| The post-redesign Lighthouse score | Consumed only by the PDF step's bundle check. If plan 1 has not landed, measure against Phase 7's Performance 99 / LCP 1.6 s and re-check afterwards       |
 
 ### Produces for downstream plans
 
-| Output | Consumed by  |
-| ------ | ------------ |
+| Output | Consumed by   |
+| ------ | ------------- |
 | —      | No downstream |
 
 ---
 
 ## Scope & Affected Areas
 
-| Area                                       | Type     | Notes                                                                                                            |
-| ------------------------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------ |
-| `src/components/GameScreen.tsx`            | Modified | The stop-on-flip effect and `wasFlippedRef` are deleted; the header's "Two stop rules" block becomes one          |
-| `src/components/GameScreen.test.tsx`       | Modified | The stop-on-flip test inverts; the stop-on-card-change and stop-on-exit tests stay exactly as they are            |
-| `src/hooks/useCardAudio.ts`                | Modified | Comment only — `stop`'s doc line says "Called on flip, on card change, and on Exit" and one third of that is gone |
-| `src/game/deck-link.ts`                    | New      | Pure parse/build for the share URL. Node tests, no DOM                                                            |
-| `src/game/deck-link.test.ts`               | New      | Node environment                                                                                                  |
-| `src/game/playlist-library.ts`             | New      | Pure, injected `StorageLike`, versioned key. Modelled on `persistence.ts`                                         |
-| `src/game/playlist-library.test.ts`        | New      | Node environment                                                                                                  |
-| `src/game/pdf-sheet.ts`                    | New      | Pure sheet geometry: grid, card positions, duplex column mirroring. Node tests                                    |
-| `src/game/pdf-sheet.test.ts`               | New      | Node environment                                                                                                  |
-| `src/hooks/usePdfExport.ts`                | New      | The binding half: the dynamic `import()`, QR generation per card, progress, the download                          |
-| `src/App.tsx`                              | Modified | Reads the link params once; threads the seed into `start`; owns the library's storage calls                       |
-| `src/App.test.tsx`                         | Modified | The link entry path, and that a saved session outranks a link                                                     |
-| `src/components/LandingScreen.tsx`         | Modified | A "Your playlists" section beside `SUGGESTED_PLAYLISTS`, with a remove control per row                            |
-| `src/components/LandingScreen.test.tsx`    | Modified | The new section, empty state, and removal                                                                         |
-| `src/components/EndScreen.tsx`             | Modified | Three new affordances: copy link, save playlist, export PDF                                                       |
-| `src/components/EndScreen.test.tsx`        | Modified | All three, plus the copy-failure path                                                                             |
-| `package.json`                             | Modified | The PDF library as a **dependency** (it ships to the browser), pnpm only                                          |
-| `docs/architecture.md`                     | Modified | §2 for the two new `src/game/` modules; §3 for the link entry, the library and the export chunk                   |
-| `docs/development.md`                      | Modified | §5 manual rows including the device pass; §8 known limitations                                                    |
-| `docs/agent_findings.md`                   | Modified | The reproducibility caveat, the PDF font gotcha, the device-pass results                                          |
-| `docs/plans/plan.md`                       | Modified | §5 — three boxes, the Phase 4 audio reversal, and §6's two-tab open question restated                             |
-| `AGENTS.md`                                | Modified | The audio reversal belongs in the dated-decisions block; the two new `src/game/` modules                          |
-| `README.md`                                | Modified | Sharing, saving and printing, and what a shared link does and does not guarantee                                  |
+| Area                                    | Type     | Notes                                                                                                             |
+| --------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------- |
+| `src/components/GameScreen.tsx`         | Modified | The stop-on-flip effect and `wasFlippedRef` are deleted; the header's "Two stop rules" block becomes one          |
+| `src/components/GameScreen.test.tsx`    | Modified | The stop-on-flip test inverts; the stop-on-card-change and stop-on-exit tests stay exactly as they are            |
+| `src/hooks/useCardAudio.ts`             | Modified | Comment only — `stop`'s doc line says "Called on flip, on card change, and on Exit" and one third of that is gone |
+| `src/game/deck-link.ts`                 | New      | Pure parse/build for the share URL. Node tests, no DOM                                                            |
+| `src/game/deck-link.test.ts`            | New      | Node environment                                                                                                  |
+| `src/game/playlist-library.ts`          | New      | Pure, injected `StorageLike`, versioned key. Modelled on `persistence.ts`                                         |
+| `src/game/playlist-library.test.ts`     | New      | Node environment                                                                                                  |
+| `src/game/pdf-sheet.ts`                 | New      | Pure sheet geometry: grid, card positions, duplex column mirroring. Node tests                                    |
+| `src/game/pdf-sheet.test.ts`            | New      | Node environment                                                                                                  |
+| `src/hooks/usePdfExport.ts`             | New      | The binding half: the dynamic `import()`, QR generation per card, progress, the download                          |
+| `src/App.tsx`                           | Modified | Reads the link params once; threads the seed into `start`; owns the library's storage calls                       |
+| `src/App.test.tsx`                      | Modified | The link entry path, and that a saved session outranks a link                                                     |
+| `src/components/LandingScreen.tsx`      | Modified | A "Your playlists" section beside `SUGGESTED_PLAYLISTS`, with a remove control per row                            |
+| `src/components/LandingScreen.test.tsx` | Modified | The new section, empty state, and removal                                                                         |
+| `src/components/EndScreen.tsx`          | Modified | Three new affordances: copy link, save playlist, export PDF                                                       |
+| `src/components/EndScreen.test.tsx`     | Modified | All three, plus the copy-failure path                                                                             |
+| `package.json`                          | Modified | The PDF library as a **dependency** (it ships to the browser), pnpm only                                          |
+| `docs/architecture.md`                  | Modified | §2 for the two new `src/game/` modules; §3 for the link entry, the library and the export chunk                   |
+| `docs/development.md`                   | Modified | §5 manual rows including the device pass; §8 known limitations                                                    |
+| `docs/agent_findings.md`                | Modified | The reproducibility caveat, the PDF font gotcha, the device-pass results                                          |
+| `docs/plans/plan.md`                    | Modified | §5 — three boxes, the Phase 4 audio reversal, and §6's two-tab open question restated                             |
+| `AGENTS.md`                             | Modified | The audio reversal belongs in the dated-decisions block; the two new `src/game/` modules                          |
+| `README.md`                             | Modified | Sharing, saving and printing, and what a shared link does and does not guarantee                                  |
 
 ---
 
@@ -136,112 +136,112 @@ reachable while the reveal is showing without any UI work.
 
 ### A. The audio reversal
 
-- [ ] **1. Delete the stop-on-flip effect in `GameScreen`.** Remove `wasFlippedRef` and the effect that
+- [x] **1. Delete the stop-on-flip effect in `GameScreen`.** Remove `wasFlippedRef` and the effect that
       calls `stop()` on the transition into flipped. Leave the card-change effect and the exit-confirm
       `stop()` untouched — they are the two rules that survive.
-- [ ] **2. Rewrite the header comment.** "Two stop rules, both effects" becomes one rule, and it should
+- [x] **2. Rewrite the header comment.** "Two stop rules, both effects" becomes one rule, and it should
       say why the flip rule went: the bleed case is covered by the card-change rule, and hearing the song
       while reading the year is the reveal's point. A deleted rule with no explanation is a rule someone
       restores.
-- [ ] **3. Fix `useCardAudio`'s `stop` doc line**, which claims it is "Called on flip, on card change,
+- [x] **3. Fix `useCardAudio`'s `stop` doc line**, which claims it is "Called on flip, on card change,
       and on Exit". The function is unchanged; only the comment is wrong.
-- [ ] **4. Invert the test.** `GameScreen.test.tsx`'s "should stop audio when the card is flipped"
+- [x] **4. Invert the test.** `GameScreen.test.tsx`'s "should stop audio when the card is flipped"
       becomes an assertion that it does **not**, and it keeps the same call-order recording the file's
       other audio tests use. Confirm the card-change and exit-confirm tests still pass unmodified — if
       either breaks, the wrong effect was deleted.
-- [ ] **5. Record the reversal.** This overturns a Phase 4 checkbox (`plan.md` §5, "Pause/stop audio on
+- [x] **5. Record the reversal.** This overturns a Phase 4 checkbox (`plan.md` §5, "Pause/stop audio on
       flip/next/restart") and Phase 4 is a completed phase. It goes in `plan.md` dated, in `AGENTS.md`'s
       dated-decisions block, and in `agent_findings.md` — the same treatment the five 2026-08-05
       decisions got.
 
 ### B. The shareable deck URL
 
-- [ ] **6. Build `src/game/deck-link.ts` as pure functions.** A parser from a query string to
+- [x] **6. Build `src/game/deck-link.ts` as pure functions.** A parser from a query string to
       `{ playlistId, seed }` or null, and a builder from an origin, an id and a seed to a URL string.
       No DOM, no `window` — the caller passes the string in. That is what keeps its tests in the node
       environment.
-  - [ ] Validate the playlist id through the existing `shared/` URL parser rather than a new regex. A
+  - [x] Validate the playlist id through the existing `shared/` URL parser rather than a new regex. A
         bare id is already one of the forms it accepts, so this is reuse, not a special case.
-  - [ ] Validate the seed's shape and bound its length. The app generates the seed, so its alphabet is
+  - [x] Validate the seed's shape and bound its length. The app generates the seed, so its alphabet is
         known; anything else is rejected and the link is treated as absent. An unvalidated seed goes
         into `hashSeed` and then into a persisted session.
-  - [ ] A malformed link **falls back to the plain landing screen with no error**. Someone mangling a
+  - [x] A malformed link **falls back to the plain landing screen with no error**. Someone mangling a
         URL in a chat client is not a failure state worth a red banner.
-- [ ] **7. Read the link once, in `App.tsx`, and never again.** A lazy state initialiser or a ref — not
+- [x] **7. Read the link once, in `App.tsx`, and never again.** A lazy state initialiser or a ref — not
       an effect that can re-run. Accept the query string as an optional prop the way `storage` and
       `fetchImpl` already are, so `App.test.tsx` drives it without touching `window.location`.
-- [ ] **8. Decide and implement the precedence: a saved session outranks a link.** If there is a
+- [x] **8. Decide and implement the precedence: a saved session outranks a link.** If there is a
       resumable session, resume it and ignore the params. Opening an old share link should not silently
       discard a game in progress, and `RESUME` already runs before anything else.
-- [ ] **9. Thread the seed into the deal.** Hold it beside the pending request; the existing deal effect
+- [x] **9. Thread the seed into the deal.** Hold it beside the pending request; the existing deal effect
       passes it as `start`'s third argument. The effect's identity guard on the result object must keep
       working — the seed rides along, it does not become a second trigger.
-- [ ] **10. Leave the address bar alone.** No `pushState`, no `replaceState`. The params staying visible
+- [x] **10. Leave the address bar alone.** No `pushState`, no `replaceState`. The params staying visible
       means a reload re-deals the same deck and the link can be copied again from the bar; stripping
       them would be the app's only history manipulation, for no gain.
-- [ ] **11. Add the copy affordance to the end screen.** Built from `state.playlist.id` and
+- [x] **11. Add the copy affordance to the end screen.** Built from `state.playlist.id` and
       `state.seed` **at click time** — Restart deals a fresh seed, so a link captured earlier would be
       the wrong one.
-  - [ ] `navigator.clipboard.writeText` needs a secure context and can reject. Handle the failure with a
+  - [x] `navigator.clipboard.writeText` needs a secure context and can reject. Handle the failure with a
         visible fallback (the link as selectable text) rather than a silent no-op.
-  - [ ] Confirm the copy in a `role="status"` region. Safe: the link names a playlist and a seed, never
+  - [x] Confirm the copy in a `role="status"` region. Safe: the link names a playlist and a seed, never
         a track.
-  - [ ] **The copy must not promise an identical deck.** "Same playlist, same shuffle" is true; "the same
+  - [x] **The copy must not promise an identical deck.** "Same playlist, same shuffle" is true; "the same
         deck" is not — see decision 4.
 
 ### C. The saved-playlist library
 
-- [ ] **12. Build `src/game/playlist-library.ts` on `persistence.ts`'s pattern.** A `hitster:library:v1`
+- [x] **12. Build `src/game/playlist-library.ts` on `persistence.ts`'s pattern.** A `hitster:library:v1`
       key, an injected `StorageLike`, read/write/remove, validated field by field, and **nothing throws**
       — a read failure is a miss, a write failure is a no-op, both logged.
-  - [ ] Entry shape: playlist id, playlist name, saved-at timestamp. Playlist-level data only; a track
+  - [x] Entry shape: playlist id, playlist name, saved-at timestamp. Playlist-level data only; a track
         title must never enter this store.
-  - [ ] Dedupe by id, most-recent-first, and cap the list. A cap is what stops a quota error from
+  - [x] Dedupe by id, most-recent-first, and cap the list. A cap is what stops a quota error from
         becoming this feature's failure mode.
-  - [ ] Reject the whole store on a malformed entry and clear the key, as `loadSession` does. A
+  - [x] Reject the whole store on a malformed entry and clear the key, as `loadSession` does. A
         half-loaded library is worse than an empty one.
-- [ ] **13. Save explicitly, not automatically.** An affordance on the end screen, so the player saves a
+- [x] **13. Save explicitly, not automatically.** An affordance on the end screen, so the player saves a
       playlist they actually played. Auto-saving every URL anyone pastes turns the landing screen into a
       history log nobody asked for.
-- [ ] **14. Render the library on the landing screen**, above `SUGGESTED_PLAYLISTS` and in the same
+- [x] **14. Render the library on the landing screen**, above `SUGGESTED_PLAYLISTS` and in the same
       button shape, so clicking one submits exactly as a suggestion does. Each row gets a remove control.
-  - [ ] Empty state: render nothing at all rather than a placeholder. A first-time visitor already has
+  - [x] Empty state: render nothing at all rather than a placeholder. A first-time visitor already has
         the suggestions.
-  - [ ] Every interactive element gets `focus-visible:focus-ring` and `touch-target`, and consumes
+  - [x] Every interactive element gets `focus-visible:focus-ring` and `touch-target`, and consumes
         tokens rather than literals.
-- [ ] **15. Note the two-tab hazard rather than solving it.** `plan.md` §6 already carries the open
+- [x] **15. Note the two-tab hazard rather than solving it.** `plan.md` §6 already carries the open
       question for the session key; the library key inherits it. A `storage`-event guard remains the fix
       if it ever bites, and this plan does not build one.
 
 ### D. The printable PDF export
 
-- [ ] **16. Choose the library and add it as a runtime dependency.** It ships to the browser, so it is a
+- [x] **16. Choose the library and add it as a runtime dependency.** It ships to the browser, so it is a
       `dependency`, not a `devDependency`. pnpm only.
-- [ ] **17. Build `src/game/pdf-sheet.ts` as pure geometry.** Page size, margins, card size, the grid,
+- [x] **17. Build `src/game/pdf-sheet.ts` as pure geometry.** Page size, margins, card size, the grid,
       each card's position, and **the duplex column mirror** — the back sheet's columns reverse so front
       and back align when printed double-sided on the long edge. All of it functions over numbers, all of
       it node-tested. Getting the mirror wrong is the defect that wastes a whole ream, and it is exactly
       the kind of arithmetic a unit test pins and a person does not.
-- [ ] **18. Build the binding in `src/hooks/usePdfExport.ts`.** The dynamic `import()`, one QR data URL
+- [x] **18. Build the binding in `src/hooks/usePdfExport.ts`.** The dynamic `import()`, one QR data URL
       per card, the document assembly, the download, and a progress readout.
-  - [ ] Reuse the `qrcode` chunk already split out in Phase 7 rather than importing it statically here.
-  - [ ] Generating a hundred codes is real work. Report progress, and keep the UI responsive — a frozen
+  - [x] Reuse the `qrcode` chunk already split out in Phase 7 rather than importing it statically here.
+  - [x] Generating a hundred codes is real work. Report progress, and keep the UI responsive — a frozen
         tab reads as a crash.
-  - [ ] **Watch the font encoding.** A standard PDF font is WinAnsi-encoded and will throw on a glyph
+  - [x] **Watch the font encoding.** A standard PDF font is WinAnsi-encoded and will throw on a glyph
         outside it. This deck's tracks come from real Spanish, Latin and international playlists, so
         this is a likely failure, not a hypothetical one. Either embed a Unicode-capable font, or
         sanitise unsupported characters and say in the docs that it happens.
-- [ ] **19. Print on a light palette, not the screen's.** Decision 6. A near-black card with a neon ring
+- [x] **19. Print on a light palette, not the screen's.** Decision 6. A near-black card with a neon ring
       is ink-expensive and, more importantly, **a QR scans on dark modules over a light field with a quiet
       zone** — inverting or tinting it is how a printed deck fails at the one job the QR has. Verify a
       printed code against a real phone.
-- [ ] **20. Export only cards with a resolved year, and say how many were left out.** A yearless card is
+- [x] **20. Export only cards with a resolved year, and say how many were left out.** A yearless card is
       already removed from the deck by the reducer, so the only exclusion here is a card the resolver has
       not reached yet. A count is leak-free; a list of titles would not be.
-- [ ] **21. Put the trigger on the end screen only.** Not the landing screen (there is no deck) and not
+- [x] **21. Put the trigger on the end screen only.** Not the landing screen (there is no deck) and not
       the game screen (a progress dialog over a live card is a spoiler risk and an interaction conflict
       with the swipe).
-- [ ] **22. Verify the chunk is absent from the landing screen.** Build, then confirm in the network log
+- [x] **22. Verify the chunk is absent from the landing screen.** Build, then confirm in the network log
       — not only in the build output — that neither the PDF library nor the QR chunk is requested before
       a deck exists. Phase 7 established this check; a new dependency is exactly when it earns its keep.
 
@@ -265,39 +265,39 @@ reachable while the reveal is showing without any UI work.
 
 ## Unit Tests
 
-- [ ] `should not stop audio when the card is flipped` — `src/components/GameScreen.test.tsx`. The
+- [x] `should not stop audio when the card is flipped` — `src/components/GameScreen.test.tsx`. The
       inversion of the existing test, and the one assertion that proves the reversal landed.
-- [ ] `should stop audio when the card changes` — `src/components/GameScreen.test.tsx`. Exists, must keep
+- [x] `should stop audio when the card changes` — `src/components/GameScreen.test.tsx`. Exists, must keep
       passing untouched; it is what covers the swipe.
-- [ ] `should stop audio when exit is confirmed` — `src/components/GameScreen.test.tsx`. Exists, unchanged.
-- [ ] `should parse a link carrying a playlist id and a seed` — `src/game/deck-link.test.ts`, node.
-- [ ] `should reject a link with a malformed playlist id` — `src/game/deck-link.test.ts`.
-- [ ] `should reject a seed outside the generated alphabet or over the length bound` — `src/game/deck-link.test.ts`.
-- [ ] `should return null rather than throwing on a mangled query string` — `src/game/deck-link.test.ts`.
-- [ ] `should build a link that round-trips through the parser` — `src/game/deck-link.test.ts`.
-- [ ] `should deal with the seed from the link` — `src/App.test.tsx`, jsdom, with the query string
+- [x] `should stop audio when exit is confirmed` — `src/components/GameScreen.test.tsx`. Exists, unchanged.
+- [x] `should parse a link carrying a playlist id and a seed` — `src/game/deck-link.test.ts`, node.
+- [x] `should reject a link with a malformed playlist id` — `src/game/deck-link.test.ts`.
+- [x] `should reject a seed outside the generated alphabet or over the length bound` — `src/game/deck-link.test.ts`.
+- [x] `should return null rather than throwing on a mangled query string` — `src/game/deck-link.test.ts`.
+- [x] `should build a link that round-trips through the parser` — `src/game/deck-link.test.ts`.
+- [x] `should deal with the seed from the link` — `src/App.test.tsx`, jsdom, with the query string
       injected as a prop.
-- [ ] `should resume a saved session in preference to a link` — `src/App.test.tsx`. Step 8's precedence,
+- [x] `should resume a saved session in preference to a link` — `src/App.test.tsx`. Step 8's precedence,
       and the one that protects a game in progress.
-- [ ] `should read the link exactly once under StrictMode's double render` — `src/App.test.tsx`.
-- [ ] `should save, list and remove a playlist` — `src/game/playlist-library.test.ts`, node.
-- [ ] `should dedupe by playlist id and keep the most recent first` — `src/game/playlist-library.test.ts`.
-- [ ] `should cap the stored list` — `src/game/playlist-library.test.ts`.
-- [ ] `should return an empty library rather than throwing on a corrupt payload` — `src/game/playlist-library.test.ts`.
-- [ ] `should clear the key after rejecting a corrupt payload` — `src/game/playlist-library.test.ts`.
-- [ ] `should swallow a write failure` — `src/game/playlist-library.test.ts`, with a throwing stub.
-- [ ] `should render saved playlists and submit one on click` — `src/components/LandingScreen.test.tsx`.
-- [ ] `should render nothing when the library is empty` — `src/components/LandingScreen.test.tsx`.
-- [ ] `should remove a saved playlist` — `src/components/LandingScreen.test.tsx`.
-- [ ] `should place every card on the grid within the page margins` — `src/game/pdf-sheet.test.ts`, node.
-- [ ] `should mirror the columns on the back sheet` — `src/game/pdf-sheet.test.ts`. The duplex assertion,
+- [x] `should read the link exactly once under StrictMode's double render` — `src/App.test.tsx`.
+- [x] `should save, list and remove a playlist` — `src/game/playlist-library.test.ts`, node.
+- [x] `should dedupe by playlist id and keep the most recent first` — `src/game/playlist-library.test.ts`.
+- [x] `should cap the stored list` — `src/game/playlist-library.test.ts`.
+- [x] `should return an empty library rather than throwing on a corrupt payload` — `src/game/playlist-library.test.ts`.
+- [x] `should clear the key after rejecting a corrupt payload` — `src/game/playlist-library.test.ts`.
+- [x] `should swallow a write failure` — `src/game/playlist-library.test.ts`, with a throwing stub.
+- [x] `should render saved playlists and submit one on click` — `src/components/LandingScreen.test.tsx`.
+- [x] `should render nothing when the library is empty` — `src/components/LandingScreen.test.tsx`.
+- [x] `should remove a saved playlist` — `src/components/LandingScreen.test.tsx`.
+- [x] `should place every card on the grid within the page margins` — `src/game/pdf-sheet.test.ts`, node.
+- [x] `should mirror the columns on the back sheet` — `src/game/pdf-sheet.test.ts`. The duplex assertion,
       and the most valuable test in this plan.
-- [ ] `should paginate a deck larger than one sheet` — `src/game/pdf-sheet.test.ts`.
-- [ ] `should pair each front position with the matching back position` — `src/game/pdf-sheet.test.ts`.
-- [ ] `should exclude cards whose year is still pending and report the count` — `src/game/pdf-sheet.test.ts`.
-- [ ] `should offer copy, save and export on the end screen` — `src/components/EndScreen.test.tsx`.
-- [ ] `should show the link as selectable text when the clipboard rejects` — `src/components/EndScreen.test.tsx`.
-- [ ] `should build the share link from the current seed` — `src/components/EndScreen.test.tsx`, guarding
+- [x] `should paginate a deck larger than one sheet` — `src/game/pdf-sheet.test.ts`.
+- [x] `should pair each front position with the matching back position` — `src/game/pdf-sheet.test.ts`.
+- [x] `should exclude cards whose year is still pending and report the count` — `src/game/pdf-sheet.test.ts`.
+- [x] `should offer copy, save and export on the end screen` — `src/components/EndScreen.test.tsx`.
+- [x] `should show the link as selectable text when the clipboard rejects` — `src/components/EndScreen.test.tsx`.
+- [x] `should build the share link from the current seed` — `src/components/EndScreen.test.tsx`, guarding
       the Restart-changes-the-seed trap in step 11.
 
 ---
@@ -348,20 +348,20 @@ reachable while the reveal is showing without any UI work.
 
 ## Assumptions & Decisions
 
-| #  | Assumption / Decision                                                                     | Rationale                                                                                                                                                        |
-| -- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1  | Audio survives a flip and stops on a card change                                           | Developer decision, 2026-08-06. Reverses Phase 4. The bleed case the flip rule cited is already covered by the card-change rule, so an effect is deleted, not moved |
-| 2  | The share link is query params, read once, no history manipulation                         | `GameState.seed` already accepts an override on `START` and `App.tsx` commits to entering it that way. Chosen over a hash fragment and an opaque token             |
-| 3  | A saved session outranks a share link                                                      | Opening an old link must not discard a game in progress                                                                                                            |
-| 4  | The link promises "same playlist, same shuffle", never "the same deck"                     | Yearless cards are removed at play time and editorial playlists refresh. The shuffle is exact; the input to it is not. Handled in copy rather than by an encoder    |
-| 5  | The library stores playlists, not sessions                                                 | Chosen over a keyed collection of full decks, which would reopen persistence validation, `RESUME`, quota, and worsen the two-tab hazard                            |
-| 6  | The PDF prints on a light palette regardless of the screen redesign                        | Ink cost, and a QR scans on dark modules over a light field with a quiet zone. This is why plan 1 is a soft dependency rather than a hard one                       |
-| 7  | The PDF library is lazy-loaded and triggered from the end screen only                      | No deck exists on the landing screen, and a progress dialog over a live card conflicts with the swipe                                                              |
-| 8  | Sheet geometry is pure and node-tested; the library call is a thin binding                 | The house split. Duplex mirroring is arithmetic a test pins and a person does not                                                                                  |
-| 9  | Only cards with a resolved year are exported, with a count of the rest                     | A count is leak-free; a list of excluded titles is not                                                                                                             |
-| 10 | Saving is explicit                                                                         | Auto-saving every pasted URL turns the landing screen into a history log                                                                                           |
-| 11 | The two-tab hazard is inherited and documented, not fixed                                  | Already an accepted v1 limitation in `plan.md` §6; the library adds a second key under the same caveat                                                             |
-| 12 | The touch pass rides with this plan                                                        | The audio change is only verifiable on a device, and the same session discharges the swipe, QR and lock-screen checks owed since Phases 4 and 5                    |
+| #   | Assumption / Decision                                                      | Rationale                                                                                                                                                           |
+| --- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Audio survives a flip and stops on a card change                           | Developer decision, 2026-08-06. Reverses Phase 4. The bleed case the flip rule cited is already covered by the card-change rule, so an effect is deleted, not moved |
+| 2   | The share link is query params, read once, no history manipulation         | `GameState.seed` already accepts an override on `START` and `App.tsx` commits to entering it that way. Chosen over a hash fragment and an opaque token              |
+| 3   | A saved session outranks a share link                                      | Opening an old link must not discard a game in progress                                                                                                             |
+| 4   | The link promises "same playlist, same shuffle", never "the same deck"     | Yearless cards are removed at play time and editorial playlists refresh. The shuffle is exact; the input to it is not. Handled in copy rather than by an encoder    |
+| 5   | The library stores playlists, not sessions                                 | Chosen over a keyed collection of full decks, which would reopen persistence validation, `RESUME`, quota, and worsen the two-tab hazard                             |
+| 6   | The PDF prints on a light palette regardless of the screen redesign        | Ink cost, and a QR scans on dark modules over a light field with a quiet zone. This is why plan 1 is a soft dependency rather than a hard one                       |
+| 7   | The PDF library is lazy-loaded and triggered from the end screen only      | No deck exists on the landing screen, and a progress dialog over a live card conflicts with the swipe                                                               |
+| 8   | Sheet geometry is pure and node-tested; the library call is a thin binding | The house split. Duplex mirroring is arithmetic a test pins and a person does not                                                                                   |
+| 9   | Only cards with a resolved year are exported, with a count of the rest     | A count is leak-free; a list of excluded titles is not                                                                                                              |
+| 10  | Saving is explicit                                                         | Auto-saving every pasted URL turns the landing screen into a history log                                                                                            |
+| 11  | The two-tab hazard is inherited and documented, not fixed                  | Already an accepted v1 limitation in `plan.md` §6; the library adds a second key under the same caveat                                                              |
+| 12  | The touch pass rides with this plan                                        | The audio change is only verifiable on a device, and the same session discharges the swipe, QR and lock-screen checks owed since Phases 4 and 5                     |
 
 ---
 

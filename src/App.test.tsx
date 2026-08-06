@@ -19,12 +19,14 @@
  */
 
 import { cleanup, render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { StrictMode } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import App from './App';
 import { fixtureDeck, highConfidenceCard, pendingYearCard } from './components/__fixtures__/cards';
 import { PLAYLIST_ERROR_MESSAGES } from './game/messages';
 import { SESSION_STORAGE_KEY, SESSION_VERSION } from './game/persistence';
+import { LIBRARY_STORAGE_KEY, LIBRARY_VERSION } from './game/playlist-library';
 import type { PlaylistFetch } from './game/playlist-client';
 import type { StorageLike } from './game/persistence';
 import type { PersistedSession } from './game/types';
@@ -198,11 +200,20 @@ describe('App', () => {
    *  the order of the tests below irrelevant. It asserts nothing, and it is not
    *  a substitute for the real check: that the chunk is ABSENT from the landing
    *  screen, which is verified in the build output and the network tab.
+   *
+   *  ITS OWN TIMEOUT IS PART OF THAT, and it was added on 2026-08-06 after this
+   *  hook started timing out: the cost had been moved out of every `waitFor` and
+   *  straight into the DEFAULT 10 s HOOK TIMEOUT, which is not enough under a
+   *  fully parallel run of a suite that had grown to 40 files. When a `beforeAll`
+   *  times out, Vitest SKIPS the whole file -- so the symptom was "27 skipped, 1
+   *  file failed" in a full run while `vitest run src/App.test.tsx` passed on its
+   *  own. 60 s is a ceiling for a cold transform of ~250 `motion` modules, not a
+   *  duration anything normally waits.
    * ===========================================================================
    */
   beforeAll(async () => {
     await import('./components/GameScreen');
-  });
+  }, 60_000);
 
   beforeEach(() => {
     toDataURLMock.mockReset();
@@ -629,6 +640,288 @@ describe('App', () => {
       expect(screen.queryByTestId('hud')).not.toBeNull();
     });
     expect(screen.getByTestId('hud').textContent).toContain('1 card left');
+  });
+
+  describe('the shareable deck link', () => {
+    /**
+     * `?playlist=…&seed=…`, injected as a prop.
+     *
+     * `window.location` is neither writable nor worth stubbing, which is exactly why `App` accepts
+     * the query string the same way it accepts `storage` and `fetchImpl`.
+     */
+    const LINK_SEED = 'a1b2c3d4e5f60718';
+    const LINK_SEARCH = `?playlist=${PLAYLIST.id}&seed=${LINK_SEED}`;
+
+    it('should deal with the seed from the link', async () => {
+      // ===================================================================
+      //  THE WHOLE FEATURE, END TO END: no form, no press, one fetch, and the
+      //  LINK'S seed on the dealt session.
+      //
+      //  The seed is read back out of the saved session rather than out of the
+      //  DOM, because it is deliberately not rendered anywhere -- `state.seed`
+      //  is what `START` shuffled with, and `toPersistedSession` writes it
+      //  verbatim.
+      // ===================================================================
+      stubYearApi();
+      const storage = memoryStorage();
+      const fetchImpl = playlistFetch(200, playlistResult());
+      render(<App storage={storage} fetchImpl={fetchImpl} search={LINK_SEARCH} />);
+
+      // No interaction at all: the deck deals itself.
+      await waitFor(() => {
+        expect(screen.queryByTestId('hud')).not.toBeNull();
+      });
+
+      const saved = JSON.parse(storage.map.get(SESSION_STORAGE_KEY) ?? '{}') as PersistedSession;
+      expect(saved.seed).toBe(LINK_SEED);
+      // And it went through the ordinary playlist fetch -- there is no second entry point.
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+    });
+
+    it('should read the link exactly once under StrictMode double rendering', async () => {
+      // ===================================================================
+      //  ONE DECK, AND THE LINK'S SEED, THROUGH REACT 19'S DOUBLE MOUNT.
+      //
+      //  What "exactly once" can be asserted about is the DEAL, not the parse:
+      //  `parseDeckLink` is pure and runs in a lazy state initialiser, so a
+      //  second call costs a second parse of a short string and is unobservable
+      //  by design.
+      //
+      //  The regression this catches is not a double fetch -- it is the
+      //  OPPOSITE, and it is the bug the first version of the effect had. A
+      //  mount-lifetime "already submitted" ref survives StrictMode's
+      //  simulated unmount, whose cleanup has already aborted the request the
+      //  ref was recording; the second pass then returns early and no deck is
+      //  ever dealt. This test found that, and it is what keeps the guard out.
+      //
+      //  So the assertions are: the deck deals, it deals with the LINK'S seed
+      //  (one deal, not a second one with a fresh seed), and the landing screen
+      //  is gone.
+      // ===================================================================
+      stubYearApi();
+      const storage = memoryStorage();
+      const fetchImpl = playlistFetch(200, playlistResult());
+      render(
+        <StrictMode>
+          <App storage={storage} fetchImpl={fetchImpl} search={LINK_SEARCH} />
+        </StrictMode>,
+      );
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('hud')).not.toBeNull();
+      });
+      expect(screen.queryByLabelText('Playlist link')).toBeNull();
+
+      const saved = JSON.parse(storage.map.get(SESSION_STORAGE_KEY) ?? '{}') as PersistedSession;
+      expect(saved.seed).toBe(LINK_SEED);
+      // Two at most: StrictMode's first pass is aborted by `usePlaylist`'s own cleanup, so the
+      // production count is one. Anything above two means the effect is re-firing.
+      // `vi.mocked` because the helper hands back a `PlaylistFetch`, which is the interface the hook
+      // wants rather than the mock type -- every other assertion here goes through `expect`, which
+      // does not need the cast.
+      expect(vi.mocked(fetchImpl).mock.calls.length).toBeLessThanOrEqual(2);
+    });
+
+    it('should resume a saved session in preference to a link', async () => {
+      // ===================================================================
+      //  STEP 8'S PRECEDENCE, AND THE ONE THAT PROTECTS A GAME IN PROGRESS.
+      //
+      //  Opening an old share link must not discard a live session. The proof
+      //  is that the resumed deck's seed survives AND no playlist request is
+      //  made -- a fetch that fails on call would also fail this test, which
+      //  is why the stub is a 500.
+      // ===================================================================
+      stubYearApi();
+      const storage = memoryStorage();
+      storage.map.set(
+        SESSION_STORAGE_KEY,
+        JSON.stringify({
+          version: SESSION_VERSION,
+          playlist: PLAYLIST,
+          seed: 'resumed-seed',
+          deck: [highConfidenceCard],
+          currentIndex: 0,
+          isFlipped: false,
+          status: 'playing',
+        } satisfies PersistedSession),
+      );
+      const fetchImpl = playlistFetch(500, { code: 'internal-error' });
+
+      render(<App storage={storage} fetchImpl={fetchImpl} search={LINK_SEARCH} />);
+
+      expect(screen.queryByTestId('hud')).not.toBeNull();
+      expect(fetchImpl).not.toHaveBeenCalled();
+
+      const saved = JSON.parse(storage.map.get(SESSION_STORAGE_KEY) ?? '{}') as PersistedSession;
+      expect(saved.seed).toBe('resumed-seed');
+    });
+
+    it('should show the plain landing screen for a malformed link', async () => {
+      // Someone mangling a URL in a chat client is not a failure state worth a red banner (step 6).
+      // The seed here is one character short, which is the likeliest real corruption.
+      stubHangingYearApi();
+      const fetchImpl = playlistFetch(200, playlistResult());
+      render(
+        <App
+          storage={memoryStorage()}
+          fetchImpl={fetchImpl}
+          search={`?playlist=${PLAYLIST.id}&seed=a1b2c3d4e5f607`}
+        />,
+      );
+
+      expect(await screen.findByLabelText('Playlist link')).not.toBeNull();
+      expect(screen.queryByRole('alert')).toBeNull();
+      expect(fetchImpl).not.toHaveBeenCalled();
+    });
+
+    it('should deal a fresh shuffle for a playlist submitted after a link failed', async () => {
+      // The pending seed belongs to the link's playlist, and a link whose fetch failed leaves the
+      // player on the landing screen. Applying that seed to whatever they paste next would deal
+      // their deck in an order somebody else's link chose.
+      stubYearApi();
+      const storage = memoryStorage();
+      let calls = 0;
+      const fetchImpl = vi.fn<PlaylistFetch>(() => {
+        calls += 1;
+
+        return calls === 1
+          ? Promise.resolve({
+              ok: false,
+              status: 404,
+              json: () => Promise.resolve({ code: 'not-found-or-private', message: 'nope' }),
+            })
+          : Promise.resolve({
+              ok: true,
+              status: 200,
+              json: () => Promise.resolve(playlistResult()),
+            });
+      });
+
+      render(<App storage={storage} fetchImpl={fetchImpl} search={LINK_SEARCH} />);
+
+      // The link's fetch failed, so the landing screen is showing with its error.
+      await waitFor(() => {
+        expect(screen.getByRole('alert').textContent).toMatch(/private, deleted/i);
+      });
+
+      startPlaylist();
+      await waitFor(() => {
+        expect(screen.queryByTestId('hud')).not.toBeNull();
+      });
+
+      const saved = JSON.parse(storage.map.get(SESSION_STORAGE_KEY) ?? '{}') as PersistedSession;
+      expect(saved.seed).not.toBe(LINK_SEED);
+    });
+  });
+
+  describe('the saved-playlist library', () => {
+    it('should save a played playlist and offer it on the landing screen', async () => {
+      // ===================================================================
+      //  THE LIBRARY END TO END, WHICH IS WHERE ITS VALUE IS: a press on the
+      //  END screen has to become a row on the LANDING screen, through
+      //  `localStorage`, and the container is the only file that writes it.
+      // ===================================================================
+      stubYearApi();
+      const storage = memoryStorage();
+      // A one-card deck, so one advance finishes it and reaches the end screen.
+      renderApp(playlistFetch(200, playlistResult({ cards: [{ ...pendingYearCard }] })), storage);
+
+      startPlaylist();
+      await waitFor(() => {
+        expect(screen.queryByTestId('hud')).not.toBeNull();
+      });
+      fireEvent.keyDown(window, { key: 'ArrowRight' });
+      await screen.findByText(/deck finished/i);
+
+      fireEvent.click(screen.getByRole('button', { name: /save this playlist/i }));
+
+      // The button confirms immediately, from live state rather than from a re-read.
+      expect(screen.queryByRole('button', { name: /saved to your playlists/i })).not.toBeNull();
+      expect(storage.map.has(LIBRARY_STORAGE_KEY)).toBe(true);
+
+      // And it is on the landing screen, by the playlist's own name.
+      fireEvent.click(screen.getByRole('button', { name: /new playlist/i }));
+      expect(await screen.findByText('Your playlists')).not.toBeNull();
+      expect(screen.queryByRole('button', { name: PLAYLIST.name })).not.toBeNull();
+    });
+
+    it('should offer a playlist saved in an earlier session', async () => {
+      // The library is read once on mount, so a save from a previous visit has to be on the very
+      // first landing screen -- not after an interaction.
+      stubHangingYearApi();
+      const storage = memoryStorage();
+      storage.map.set(
+        LIBRARY_STORAGE_KEY,
+        JSON.stringify({
+          version: LIBRARY_VERSION,
+          entries: [{ id: PLAYLIST.id, name: 'From last time', savedAt: 1 }],
+        }),
+      );
+
+      renderApp(playlistFetch(200, playlistResult()), storage);
+
+      expect(screen.queryByRole('button', { name: 'From last time' })).not.toBeNull();
+    });
+
+    it('should remove a saved playlist from storage and from the screen', async () => {
+      stubHangingYearApi();
+      const storage = memoryStorage();
+      storage.map.set(
+        LIBRARY_STORAGE_KEY,
+        JSON.stringify({
+          version: LIBRARY_VERSION,
+          entries: [{ id: PLAYLIST.id, name: 'Going away', savedAt: 1 }],
+        }),
+      );
+
+      renderApp(playlistFetch(200, playlistResult()), storage);
+
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Remove Going away from your playlists' }),
+      );
+
+      expect(screen.queryByRole('button', { name: 'Going away' })).toBeNull();
+      // Gone from the store too, and the section with it -- the empty state renders nothing.
+      expect(storage.map.get(LIBRARY_STORAGE_KEY)).not.toContain('Going away');
+      expect(screen.queryByText('Your playlists')).toBeNull();
+    });
+
+    it('should deal a saved playlist when it is clicked', async () => {
+      // A saved row must go through the ordinary fetch path, exactly as a suggestion does.
+      stubYearApi();
+      const storage = memoryStorage();
+      storage.map.set(
+        LIBRARY_STORAGE_KEY,
+        JSON.stringify({
+          version: LIBRARY_VERSION,
+          entries: [{ id: PLAYLIST.id, name: 'Playable', savedAt: 1 }],
+        }),
+      );
+      const fetchImpl = playlistFetch(200, playlistResult());
+
+      renderApp(fetchImpl, storage);
+      fireEvent.click(screen.getByRole('button', { name: 'Playable' }));
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('hud')).not.toBeNull();
+      });
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+    });
+
+    it('should ignore a corrupt library rather than failing to render', async () => {
+      // `loadLibrary` never throws, and this is the container's half of that: a hand-edited or
+      // half-written payload must cost the library, not the landing screen.
+      stubHangingYearApi();
+      const storage = memoryStorage();
+      storage.map.set(LIBRARY_STORAGE_KEY, '{ not json');
+
+      renderApp(playlistFetch(200, playlistResult()), storage);
+
+      expect(screen.queryByLabelText('Playlist link')).not.toBeNull();
+      expect(screen.queryByText('Your playlists')).toBeNull();
+      // And the bad payload was cleared on the way past.
+      expect(storage.map.has(LIBRARY_STORAGE_KEY)).toBe(false);
+    });
   });
 
   it('should show the truncation notice on the game screen and keep it dismissed', async () => {

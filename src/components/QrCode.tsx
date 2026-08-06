@@ -66,6 +66,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 
+import { loadQrcode } from '../game/qrcode-loader';
+
 export interface QrCodeProps {
   /** The URL to encode. For a card this is `spotifyTrackUrl(card.id)`. */
   url: string;
@@ -95,36 +97,10 @@ export interface QrCodeProps {
 const DEFAULT_ALT = 'Scan to play in Spotify';
 
 /**
- * The in-flight or settled `import('qrcode')`, shared by every instance and every effect run.
- *
- * ===========================================================================
- *  MEMOIZED, AND IT IS NOT A MICRO-OPTIMISATION.
- *
- *  The effect below re-runs on every card advance, so a bare `import()` in its
- *  body issues a fresh import call per card -- and TWO OF THEM OVERLAP whenever a
- *  card is superseded before its code resolves, which is exactly the fast-advance
- *  race the generation counter exists for. Measured 2026-08-06: with two imports
- *  in flight at once under Vitest's module mocker, the SECOND one's continuation
- *  never ran, so the new card kept the old card's placeholder forever. One shared
- *  promise makes the second card await the first card's already-settled load
- *  instead of starting a second one.
- *
- *  A rejected load stays cached, deliberately. A chunk that failed to fetch will
- *  fail again on the next card, and retrying it per advance would be a request
- *  loop on exactly the flaky connection that broke it. The consequence is that a
- *  session which loses this chunk keeps the placeholder for the rest of the game
- *  -- and stays fully playable, because the reveal and the audio do not go
- *  through this component. It is also why the load-failure case is tested in its
- *  own file: once this promise is settled, nothing in a process can un-settle it.
- * ===========================================================================
+ * The memoized `import('qrcode')` moved to `src/game/qrcode-loader.ts` on 2026-08-06, when the PDF
+ * export became a second consumer of the same chunk. Everything that made it memoized -- including
+ * the overlapping-imports race measured in this component -- is documented there.
  */
-let qrcodeModule: Promise<typeof import('qrcode')> | null = null;
-
-function loadQrcode(): Promise<typeof import('qrcode')> {
-  qrcodeModule ??= import('qrcode');
-
-  return qrcodeModule;
-}
 
 /** Identifies what a generated code was generated FOR, so a stale one can be spotted. */
 function cacheKey(url: string, size: number): string {

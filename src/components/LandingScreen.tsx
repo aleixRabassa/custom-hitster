@@ -40,6 +40,7 @@ import { playlistErrorMessage } from '../game/messages';
 const ERROR_MESSAGE_ID = 'playlist-url-error';
 import { isSpotifyShortLink, parsePlaylistUrl, spotifyPlaylistUrl } from '../../shared/spotify-url';
 import type { StartFailureCode } from '../game/messages';
+import type { SavedPlaylist } from '../game/playlist-library';
 
 /**
  * The nine ready-to-try playlists, so a first-time visitor does not need a playlist of their own
@@ -95,6 +96,16 @@ export interface LandingScreenProps {
    * about what a link means, and a client that normalised a little is how the two drift apart.
    */
   onSubmit: (url: string) => void;
+  /**
+   * The player's saved playlists, most-recent-first, from `playlist-library.ts` via the container.
+   *
+   * Playlist-level data only, which is what makes this section safe on a pre-start surface: an
+   * entry is an id, a name and a timestamp, and the name is the same class of data the suggestions
+   * below already show. Empty renders NOTHING -- see the section itself.
+   */
+  savedPlaylists?: readonly SavedPlaylist[];
+  /** Forget one saved playlist. The container owns the storage write. */
+  onRemoveSaved?: (id: string) => void;
   /** True while a request is in flight. Disables the controls. */
   isLoading: boolean;
   /**
@@ -108,7 +119,13 @@ export interface LandingScreenProps {
   errorCode?: StartFailureCode;
 }
 
-export function LandingScreen({ onSubmit, isLoading, errorCode }: LandingScreenProps) {
+export function LandingScreen({
+  onSubmit,
+  isLoading,
+  errorCode,
+  savedPlaylists = [],
+  onRemoveSaved,
+}: LandingScreenProps) {
   const [value, setValue] = useState('');
   /**
    * A client-side parse failure, kept SEPARATE from `errorCode`.
@@ -246,6 +263,78 @@ export function LandingScreen({ onSubmit, isLoading, errorCode }: LandingScreenP
           {isLoading ? 'Loading…' : 'Start'}
         </button>
       </form>
+
+      {/*
+        ===================================================================
+         THE SAVED LIBRARY, AND THE EMPTY STATE IS *NOTHING AT ALL*.
+
+         Not a placeholder, not "you have no saved playlists yet" (step 14). A
+         first-time visitor already has the form and nine suggestions; a fourth
+         block explaining an empty list is noise on the screen that has to make
+         the app's one job obvious.
+
+         Above the suggestions because these are the player's own, and in the
+         same button shape so a click submits by exactly the path a suggestion
+         does -- `spotifyPlaylistUrl(id)` through `submit`, which fills the input
+         as well. There is no second entry into the session for a saved
+         playlist.
+        ===================================================================
+      */}
+      {savedPlaylists.length === 0 ? null : (
+        <section className="flex w-full max-w-content flex-col gap-2">
+          <h2 className="text-sm text-fg-secondary">Your playlists</h2>
+
+          <ul className="flex flex-col gap-2">
+            {savedPlaylists.map((saved) => (
+              /*
+                Two buttons side by side rather than a remove control INSIDE the play button: a
+                nested button is invalid HTML and, more to the point, a press on the inner one
+                would activate both -- the same class of bug that moved `CardControls` off the
+                card in Phase 5.
+              */
+              <li key={saved.id} className="flex items-stretch gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const url = spotifyPlaylistUrl(saved.id);
+                    setValue(url);
+                    submit(url);
+                  }}
+                  disabled={isLoading}
+                  className="flex flex-1 touch-target items-baseline gap-3 rounded-lg border border-border bg-surface px-3 py-2 text-left hover:border-border-strong focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)"
+                >
+                  {/*
+                    The playlist's own title, and NOTHING beside it. Never a track, an artist or a
+                    year -- and no second line either: a suggestion carries a genre blurb because
+                    someone wrote one, and there is nothing equally safe to say about a saved
+                    playlist. The saved-at timestamp sorts the list and is deliberately not shown.
+
+                    It is also what keeps this button's accessible name exactly the playlist name,
+                    which matters because the remove control beside it names the same playlist --
+                    a badge here made every row's two buttons match one query.
+                  */}
+                  <span className="text-sm">{saved.name}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => onRemoveSaved?.(saved.id)}
+                  disabled={isLoading}
+                  /*
+                    The name carries the playlist, because a screen with four rows of "Remove"
+                    gives a screen-reader user no way to tell which one they are on. The ✕ is
+                    `aria-hidden` decoration -- same split as `NoticeBanner`'s Dismiss.
+                  */
+                  aria-label={`Remove ${saved.name} from your playlists`}
+                  className="touch-target rounded-lg border border-border px-3 text-fg-muted hover:border-border-strong hover:text-fg focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)"
+                >
+                  <span aria-hidden="true">✕</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section className="flex w-full max-w-content flex-col gap-2">
         <h2 className="text-sm text-fg-secondary">Or try one of these</h2>

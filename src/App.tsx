@@ -31,8 +31,11 @@ import { EndScreen } from './components/EndScreen';
 import { LandingScreen } from './components/LandingScreen';
 import { NoticeBanner } from './components/NoticeBanner';
 import { PreparingScreen } from './components/PreparingScreen';
+import { parseDeckLink } from './game/deck-link';
+import { loadLibrary, removePlaylist, savePlaylist } from './game/playlist-library';
 import { useGameSession } from './game/use-game-session';
 import { usePlaylist } from './hooks/usePlaylist';
+import { spotifyPlaylistUrl } from '../shared/spotify-url';
 import type { StartFailureCode } from './game/messages';
 import type { PlaylistFetch } from './game/playlist-client';
 import type { StorageLike } from './game/persistence';
@@ -109,9 +112,28 @@ export interface AppProps {
    */
   storage?: StorageLike;
   fetchImpl?: PlaylistFetch;
+  /**
+   * The shareable deck link's query string -- `location.search`-shaped, `?playlist=…&seed=…`.
+   *
+   * A PROP for the same reason the two above are: it lets `App.test.tsx` drive the link entry path
+   * without touching `window.location`, which is neither writable nor worth stubbing. Undefined in
+   * the real app, where it falls back to `window.location.search` read ONCE (see below).
+   */
+  search?: string;
 }
 
-export default function App({ storage, fetchImpl }: AppProps = {}) {
+/**
+ * Where a shared link points: this app, at this path, with no query and no fragment.
+ *
+ * `origin + pathname` rather than `href`, so building a link from a page that was ITSELF opened
+ * from a link does not append a second `?playlist=` to the first one. A sub-path deployment keeps
+ * working because `pathname` is included.
+ */
+function shareOrigin(): string {
+  return `${window.location.origin}${window.location.pathname}`;
+}
+
+export default function App({ storage, fetchImpl, search }: AppProps = {}) {
   const {
     state,
     currentCard,
@@ -133,6 +155,63 @@ export default function App({ storage, fetchImpl }: AppProps = {}) {
   } = usePlaylist(fetchImpl ? { fetchImpl } : {});
 
   const [endedView, setEndedView] = useState<EndedView>('end-screen');
+
+  /**
+   * The shareable deck link, read ONCE and never again.
+   *
+   * ===========================================================================
+   *  A LAZY STATE INITIALISER, NOT AN EFFECT (step 7).
+   *
+   *  An effect that read `location.search` could re-run, and every re-run would
+   *  be a fresh reason to deal a deck -- so a link would re-deal the game
+   *  mid-session on any dependency change. This runs on the first render and its
+   *  result never changes for the lifetime of the app. `parseDeckLink` is pure, so
+   *  StrictMode's double render costs a second parse of a short string and
+   *  nothing else; the SUBMISSION is what has to be idempotent, and the ref below
+   *  is what makes it so.
+   *
+   *  A SAVED SESSION OUTRANKS A LINK (step 8, decision 3). `useGameSession`'s own
+   *  lazy initialiser has already run by this line, so `state.status` is `idle`
+   *  exactly when there was nothing to resume -- and any other status means a game
+   *  is in progress. Opening an old share link must not silently discard it, so the
+   *  link is not even read in that case. The params stay in the address bar, so a
+   *  player who finishes or exits can reload to use them.
+   * ===========================================================================
+   */
+  const [deckLink] = useState(() =>
+    state.status === 'idle' ? parseDeckLink(search ?? window.location.search) : null,
+  );
+
+  /**
+   * The saved-playlist library, and the container is the only file that writes it.
+   *
+   * ===========================================================================
+   *  READ ONCE INTO STATE, THEN KEPT IN STEP BY THE WRITERS THEMSELVES.
+   *
+   *  `savePlaylist` and `removePlaylist` both RETURN the list they wrote, so a
+   *  mutation needs no re-read -- which matters because a re-read after every
+   *  write is how a swallowed write failure turns into a row that flickers back.
+   *  The list the player sees is the list the app tried to store, and the next
+   *  successful write repairs the store.
+   *
+   *  `localStorage` is reached through the same `storage ?? localStorage` fallback
+   *  `useGameSession` uses, so the tests drive both keys from one in-memory stub.
+   *  Two keys under one storage, both carrying the two-tab hazard `plan.md` §6
+   *  already accepts (step 15) -- this plan documents it rather than fixing it.
+   * ===========================================================================
+   */
+  const libraryStorage = storage ?? localStorage;
+  const [savedPlaylists, setSavedPlaylists] = useState(() => loadLibrary(libraryStorage));
+
+  /**
+   * The seed the next deal should use, or null for a fresh one.
+   *
+   * A REF rather than state, and that is step 9's "the seed rides along, it does not become a
+   * second trigger": the deal effect below is keyed on the fetch RESULT's identity, and a seed in
+   * state would add a second dependency that could fire it again. Consumed and cleared by the deal,
+   * so it applies to exactly the one deck the link asked for.
+   */
+  const pendingSeedRef = useRef<string | null>(null);
 
   /**
    * The notices from the fetch, held here rather than read from `requestState`.
@@ -172,8 +251,77 @@ export default function App({ storage, fetchImpl }: AppProps = {}) {
 
     setNotice({ truncated: result.truncated, skippedCount: result.skippedCount });
     setEndedView('end-screen');
-    start(result.cards, result.playlist);
+
+    // The seed from a share link, if this deal is the one it asked for. Cleared as it is consumed:
+    // a later submission from the landing form gets a fresh shuffle, which is what "New playlist"
+    // means. `start`'s third argument is the whole feature -- `GameState.seed` predicted it, so the
+    // reducer is untouched.
+    const seed = pendingSeedRef.current;
+    pendingSeedRef.current = null;
+
+    if (seed === null) start(result.cards, result.playlist);
+    else start(result.cards, result.playlist, seed);
   }, [requestState, start]);
+
+  /**
+   * Submit a playlist the player asked for by hand.
+   *
+   * Wrapping `request` rather than passing it straight to the landing screen, for one reason: it
+   * DROPS a pending link seed. A link whose fetch failed leaves the seed set, and applying it to
+   * whatever playlist the player pastes next would deal that deck in an order somebody else's link
+   * chose -- harmless, but not what either of them asked for.
+   */
+  const handleSubmit = useCallback(
+    (url: string) => {
+      pendingSeedRef.current = null;
+      request(url);
+    },
+    [request],
+  );
+
+  /**
+   * Deal the link's deck, once.
+   *
+   * It goes through the SAME `request` the landing form uses -- the id is turned back into a full
+   * playlist URL by `spotifyPlaylistUrl` -- so a shared link exercises exactly the fetch path, the
+   * error copy and the notice handling that a paste does. There is no second entry point into the
+   * session for this feature, which is why the whole thing is a caller change.
+   *
+   * THE ADDRESS BAR IS LEFT ALONE (step 10): no `pushState`, no `replaceState`. The params staying
+   * visible is what makes a reload re-deal the same deck and the link copyable from the bar again,
+   * and stripping them would be this app's only history manipulation -- in a container whose header
+   * commits to having none, because a browser Back mid-deck is a transition the reducer never
+   * modelled.
+   *
+   * ===========================================================================
+   *  THERE IS DELIBERATELY NO `hasSubmittedRef` GUARD HERE, AND ADDING ONE
+   *  BREAKS THE FEATURE OUTRIGHT. Measured 2026-08-06.
+   *
+   *  A ref that records "already submitted" survives StrictMode's simulated
+   *  unmount -- but the CLEANUP of that unmount has already aborted the request
+   *  it was recording. `usePlaylist`'s mount effect aborts its controller and
+   *  nulls it, so the in-flight response is then discarded by its own staleness
+   *  guard. The second effect pass then sees the ref, returns early, and NOTHING
+   *  EVER DEALS: a shared link leaves the player on the landing screen forever,
+   *  in development only. That is what the first version of this effect did.
+   *
+   *  It needs no guard, because both dependencies are stable by construction:
+   *  `deckLink` is set once by a lazy initialiser and never updated, and
+   *  `request` is a `useCallback` with an empty dependency list. So the body runs
+   *  exactly once per mount -- once in production, twice under StrictMode with
+   *  the first request aborted, which is the same shape as the year resolver's
+   *  own double-mount behaviour.
+   *
+   *  IF A DEPENDENCY IS EVER ADDED HERE, the guard has to be a reset-in-cleanup
+   *  one rather than a mount-lifetime ref, for the reason above.
+   * ===========================================================================
+   */
+  useEffect(() => {
+    if (deckLink === null) return;
+
+    pendingSeedRef.current = deckLink.seed;
+    request(spotifyPlaylistUrl(deckLink.playlistId));
+  }, [deckLink, request]);
 
   const handleExit = useCallback(() => {
     // Order matters: the destination must be set before the status changes, or the end screen
@@ -194,6 +342,28 @@ export default function App({ storage, fetchImpl }: AppProps = {}) {
     // No seed argument, so `START` generates a new one and the order actually changes.
     if (state.playlist) start(state.deck, state.playlist);
   }, [start, state.deck, state.playlist]);
+
+  const handleSavePlaylist = useCallback(() => {
+    // Guarded rather than assumed: `state.playlist` is nullable for the whole `idle` status, and the
+    // end screen is the only caller -- but a null id would write an entry no click could ever use.
+    if (!state.playlist) return;
+
+    setSavedPlaylists(
+      savePlaylist(libraryStorage, {
+        id: state.playlist.id,
+        name: state.playlist.name,
+        // Stamped at the press. The library sorts on it, and it is never rendered as a date.
+        savedAt: Date.now(),
+      }),
+    );
+  }, [libraryStorage, state.playlist]);
+
+  const handleRemoveSaved = useCallback(
+    (id: string) => {
+      setSavedPlaylists(removePlaylist(libraryStorage, id));
+    },
+    [libraryStorage],
+  );
 
   const handleNewPlaylist = useCallback(() => {
     setEndedView('landing');
@@ -255,9 +425,11 @@ export default function App({ storage, fetchImpl }: AppProps = {}) {
 
   const landing = (
     <LandingScreen
-      onSubmit={request}
+      onSubmit={handleSubmit}
       isLoading={requestState.status === 'loading'}
       {...(startFailureCode ? { errorCode: startFailureCode } : {})}
+      savedPlaylists={savedPlaylists}
+      onRemoveSaved={handleRemoveSaved}
     />
   );
 
@@ -304,6 +476,21 @@ export default function App({ storage, fetchImpl }: AppProps = {}) {
         playlistName={state.playlist?.name ?? ''}
         onRestart={handleRestart}
         onNewPlaylist={handleNewPlaylist}
+        /*
+          The share link's two ingredients, straight from live state rather than remembered: a
+          Restart deals a FRESH seed, and the end screen unmounts and remounts around it, so these
+          props can never describe a deck other than the one just played.
+        */
+        playlistId={state.playlist?.id ?? ''}
+        seed={state.seed}
+        shareOrigin={shareOrigin()}
+        // The deck, for the PDF export and for nothing else. This screen renders no track data --
+        // its own leak test asserts that -- and the cards go into a file the player asked for.
+        deck={state.deck}
+        onSavePlaylist={handleSavePlaylist}
+        // Derived from the live library, so the button reads "Saved" immediately after the press and
+        // also on an end screen reached for a playlist saved in an earlier session.
+        isPlaylistSaved={savedPlaylists.some((saved) => saved.id === state.playlist?.id)}
       />
     );
   }

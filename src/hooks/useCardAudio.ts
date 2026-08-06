@@ -46,7 +46,11 @@ export interface CardAudioControls {
   pause: () => void;
   /** Seek to 0 and play. Never advances the card -- that is what Next is for. */
   restart: () => void;
-  /** Pause and reset to 0. Called on flip, on card change, and on Exit. */
+  /**
+   * Pause and reset to 0. Called on card change and on a confirmed Exit -- NOT on a flip any
+   * more (2026-08-06): the preview deliberately survives the reveal, because hearing the song
+   * while reading the year is the point of it. `GameScreen`'s header block has the reversal.
+   */
   stop: () => void;
 }
 
