@@ -33,6 +33,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { QrCode } from './QrCode';
 import { highConfidenceCard } from './__fixtures__/cards';
+import { clearQrCache } from '../game/qr-cache';
 
 const { toDataURLMock } = vi.hoisted(() => ({
   // `vi.hoisted` is required: `vi.mock`'s factory is hoisted above ordinary `const`
@@ -51,6 +52,21 @@ describe('QrCode', () => {
   beforeEach(() => {
     toDataURLMock.mockReset();
     toDataURLMock.mockImplementation((text) => Promise.resolve(fakeDataUrl(text)));
+    /*
+      ===================================================================
+       AS REQUIRED AS THE `cleanup` BELOW, AND FOR THE SAME KIND OF
+       REASON.
+
+       Generated codes are cached at MODULE level in `src/game/qr-cache.ts`
+       so the deck's preloaded code survives the element that generated it.
+       Vitest isolates modules per FILE, not per test, so that cache
+       outlives a test -- and four tests in this file render
+       `.../track/x` at size 160 and assert on a PLACEHOLDER. Warm, they
+       would each find a finished image instead, and the failure would read
+       as the component painting too eagerly rather than as shared state.
+      ===================================================================
+    */
+    clearQrCache();
   });
 
   /**
@@ -130,6 +146,56 @@ describe('QrCode', () => {
     });
 
     expect(toDataURLMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('should paint a cached code on the first render, with no placeholder and no regeneration', async () => {
+    // ===================================================================
+    //  THIS IS WHAT MAKES THE DECK'S PRELOAD WORTH ANYTHING.
+    //
+    //  `CardStack` renders the next card's hidden face behind the current
+    //  one, so its code is generated early -- but that element is NOT the
+    //  element that becomes the front card. The back is a plain div in
+    //  `CardStack`; the front card is a `Card` inside an `AnimatePresence`
+    //  keyed on card id, and the advance unmounts one and mounts the other.
+    //  With per-element state only, the preloaded code is thrown away at
+    //  exactly the moment it was preloaded for.
+    //
+    //  The two halves asserted here are what a player sees: NO PLACEHOLDER
+    //  on the first render (a cache read in an effect would still paint one
+    //  frame of it, because `useEffect` runs after paint), and no second
+    //  `toDataURL` for a code that already exists.
+    // ===================================================================
+    const url = 'https://open.spotify.com/track/preloadpreloadpreloadp';
+
+    const first = render(<QrCode url={url} size={160} />);
+    expect(await screen.findByRole('img')).not.toBeNull();
+    // A different element entirely, exactly as the advance from back to front card is.
+    first.unmount();
+
+    render(<QrCode url={url} size={160} />);
+
+    // Synchronously, on the very first render -- not awaited.
+    expect(screen.getByRole('img').getAttribute('src')).toBe(fakeDataUrl(url));
+    expect(document.querySelector('[data-motion="qr-placeholder"]')).toBeNull();
+    expect(toDataURLMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('should key the cache on the bitmap size, so a different size still generates', async () => {
+    // The cache key is `size|url` and `displaySize` is deliberately not in it -- the two sizes
+    // were one prop until Phase 7, and a key that conflated them again would serve a 160px
+    // bitmap to a card asking for 224px. A QR scaled UP blurs the module edges a camera reads.
+    const url = 'https://open.spotify.com/track/twosizestwosizestwosi';
+
+    const first = render(<QrCode url={url} size={160} />);
+    expect(await screen.findByRole('img')).not.toBeNull();
+    first.unmount();
+
+    render(<QrCode url={url} size={224} />);
+
+    await waitFor(() => {
+      expect(toDataURLMock).toHaveBeenCalledTimes(2);
+    });
+    expect(toDataURLMock).toHaveBeenLastCalledWith(url, expect.objectContaining({ width: 224 }));
   });
 
   it('should ignore a resolved code for a superseded url', async () => {

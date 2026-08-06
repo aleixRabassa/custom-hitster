@@ -271,9 +271,14 @@ What was never checked:
 | iOS Safari: no accidental text selection and no long-press context menu on the card                      | Open question — `select-none` was **not** added pre-emptively, pending this check                                |
 | iOS Safari: audio still starts from the **first** tap                                                    | iOS is strictest about the user-gesture requirement, and the gesture layer now sits between the tap and `play()` |
 | iOS Safari: the layout does not shift as the toolbar shows/hides                                         | The card is viewport-sized and `dvh` behaves differently there                                                   |
-| By eye: is 2 backs right, or 3?                                                                          | `VISIBLE_BACKS` in `CardStack.tsx`; `plan.md` says "2–3 cards peeking"                                           |
+| ~~By eye: is 2 backs right, or 3?~~ **Closed 2026-08-06 — the answer is one, and it is the next card**   | `VISIBLE_BACKS` is gone; see the three rows below                                                                |
+| Sliding the card aside uncovers the next card **aligned**, not a smaller rectangle inside it             | The old centre-origin `scale()` inset every edge; the back is now `inset-0` with no transform at all             |
+| The next card's **QR is already there** when it is uncovered — no pulsing placeholder, mid-drag or after | The point of the preload, and of `src/game/qr-cache.ts` carrying the code across the advance                     |
+| At rest the back is **completely invisible**, and the ring's glow is no brighter than before             | Two identical blooms would composite; `card-ring-quiet` suppresses the back's. Compare against a Phase 8 capture |
 
-If any of this turns out to be wrong in the field, **the five constants in `src/game/gestures.ts` are the first place to look** — they are named, documented, and designed to be retuned by someone who did not write them. Changing them requires no change to the hook or to Motion. Note that `CardStack.test.tsx` asserts "up to two backs", so raising `VISIBLE_BACKS` means updating two test expectations as well.
+If any of this turns out to be wrong in the field, **the five constants in `src/game/gestures.ts` are the first place to look** — they are named, documented, and designed to be retuned by someone who did not write them. Changing them requires no change to the hook or to Motion.
+
+The three back rows are jsdom-proof in the usual way: it computes no layout, so `CardStack.test.tsx` can pin the class names and the **absence** of a transform and nothing more. One drag in a browser is the whole check.
 
 ### Playing a real game, and the progressive-loading verification
 
@@ -333,20 +338,35 @@ The last row is the regression `MotionConfig reducedMotion="user"` could plausib
 is the one worth checking first: if the drag is dead under the preference, the game is unplayable by
 touch for exactly the users who asked for less motion.
 
+**Phase 8's ring adds no row here, and that is the point of it not animating.** A pulsing bloom or a
+rotating conic gradient was the reference aesthetic and was rejected precisely so this table would not
+grow a seventh row and the media query would not grow a fourth rule. The ring is static, so this pass
+covers exactly what it covered before — it is **not** invalidated by the redesign.
+
 **Three widths.** 320px, a tablet, and a wide desktop, across every screen.
 
-| Check                                                                             | Status  |
-| --------------------------------------------------------------------------------- | ------- |
-| At 320px the card **and** its control bar both fit, with the HUD still on screen  | Pending |
-| The peeking backs stay aligned with the card at all three widths                  | Pending |
-| `BACK_OFFSET_PX` (10px) still reads as depth on the smallest card                 | Pending |
-| The HUD and the notice banner line up with the card's width when wide             | Pending |
-| A long user-created playlist name truncates without pushing the count off the row | Pending |
-| The landing screen's nine suggestions are usable at 320px                         | Pending |
-| A phone in **landscape**: the card fits the short viewport                        | Pending |
+| Check                                                                             | Status                                      |
+| --------------------------------------------------------------------------------- | ------------------------------------------- |
+| At 320px the card **and** its control bar both fit, with the HUD still on screen  | Pending                                     |
+| The back stays exactly aligned with the card at all three widths                  | Pending — **rebuilt 2026-08-06**, see below |
+| The HUD and the notice banner line up with the card's width when wide             | Pending                                     |
+| A long user-created playlist name truncates without pushing the count off the row | Pending                                     |
+| The landing screen's nine suggestions are usable at 320px                         | Pending                                     |
+| A phone in **landscape**: the card fits the short viewport                        | Pending                                     |
 
 The landscape row is what the `62dvh` term in `--card-height` exists for; without it a landscape
 phone gets a 448px card in a 375px viewport ([`architecture.md`](./architecture.md) §3).
+
+> **The backs row was a measured failure and the geometry has now been replaced rather than retuned.**
+> At the card's 448px ceiling the two peeking backs peeked by **1.04px** and **2.08px** at the bottom and
+> were inset on every other side: `scale()` is centre-origin and lifted the bottom edge by
+> `(H / 2) × BACK_SCALE_STEP` (8.96px) while `translateY` pushed it down only 10px. That inset is also
+> what a player saw as "two cards, one inside the other" when they slid the top card aside.
+>
+> Since 2026-08-06 there is **one back, at `inset-0`, with no transform of any kind**, holding the next
+> card's hidden face with its QR preloaded — so there is no peek to tune and no depth cue at rest. The
+> row above is therefore about **exact alignment**, and the interesting widths are the ends of the
+> card's clamp. Written up in [`agent_findings.md`](./agent_findings.md); the two constants are gone.
 
 **Keyboard only.** No mouse, no touch — Tab, Space and →.
 
@@ -375,6 +395,17 @@ because Phase 7 added the app's only live region and the whole point of it is au
 A live region that mounts already-populated is the known soft spot: screen readers differ on whether
 they announce content present at insertion versus content changed afterwards. If the flip turns out
 silent in practice, that is the mechanism to look at — not the role.
+
+> **Phase 8 plan 1 carried this pass and did NOT discharge it — every row above is still Pending, and
+> no reader has been named.** The plan listed it as its own step 16 on the grounds that it is the
+> highest-value outstanding check in the phase and that the card was being rebuilt around the very
+> component it tests. The rebuild happened and the pass did not.
+>
+> What the redesign did do is leave it testing exactly what it was written for: `CardRevealSide` still
+> mounts **only while the card is flipped**, its `role="status"` is untouched, and the single edit to that
+> component was the year's colour. So nothing above needs rewording — it needs running, with the reader
+> and platform recorded. "It worked" without naming NVDA, VoiceOver or Narrator is not a result anyone
+> can build on.
 
 #### The before/after screenshot comparison
 
@@ -445,6 +476,38 @@ runtime, not the QR encoder.** Rolldown named the shared vendor chunk after `src
 `html2canvas-*.js`, `purify.es-*.js` and `index.es-*.js`. Preloaded bytes went from 12.58 kB to
 12.90 kB. **Read the network log, not the build output — the build output cannot tell an emitted chunk
 from a preloaded one.**
+
+### Phase 8 the card's look and the installable shell — all of it Pending
+
+Seven checks from [`plan.phase-8-look-and-shell.md`](./plans/plan.phase-8-look-and-shell.md). The unit
+tests cover the token names, the ring utilities' presence at every call site and the manifest's
+installability fields. **What they cannot cover is whether anything paints, whether the browser agrees
+the app is installable, and what a redeploy does to a running tab.**
+
+For anything needing a real deck, use `npx vercel dev` (§4). Rows 1–4 need a **deployment**, because a
+service worker needs HTTPS or `localhost` and installability is judged against a served manifest.
+
+| #   | Check                                                                                                                                                                                                                                                                                                                                                                                                            | Status                                                                                                                                                                                                                       |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **Install it on a real phone.** Check the home-screen icon, the splash screen, and that `theme_color` matches the page so there is no seam at the status bar. Confirm the **maskable crop** on a round-icon launcher — nothing of the wordmark may be cut.                                                                                                                                                       | Pending                                                                                                                                                                                                                      |
+| 2   | **Airplane mode, three outcomes.** The shell loads; a **saved session resumes and is playable** without audio; pressing Start shows Phase 7's `offline` copy rather than hanging. If all three hold this closes with no code change.                                                                                                                                                                             | Pending                                                                                                                                                                                                                      |
+| 3   | **Redeploy with a game in progress, then reload.** The old worker must keep serving until every tab is closed, and **the next card must not be a missing-chunk error**. This is the whole reason the update strategy waits instead of calling `skipWaiting`.                                                                                                                                                     | Pending                                                                                                                                                                                                                      |
+| 4   | **Confirm no worker is registered in development.** `pnpm dev` and `npx vercel dev` both: Application → Service Workers must be empty. `devOptions` is deliberately absent.                                                                                                                                                                                                                                      | Pending                                                                                                                                                                                                                      |
+| 5   | **Lighthouse on the landing screen, production build, all four categories.** The number to protect is **Performance 99 / LCP 1.6 s**. Aim it at **paint**, not layout: the ring adds no layout (a `border-box` border plus a `box-shadow`, card still 288 × 448), so the new risk is two blooms and a masked pseudo-element on a 3D-transformed element. Record beside Phase 7's so the comparison is one table. | Pending — Lighthouse is not installed in the repo                                                                                                                                                                            |
+| 6   | **The ring at three widths**, and once with the OS reduced-motion preference set. See the note under the Phase 7 three-widths table — one of its rows is now known to fail.                                                                                                                                                                                                                                      | Pending                                                                                                                                                                                                                      |
+| 7   | **The ring paints at all**: a gradient border following the corners on both faces, a visible bloom, and the year in neon green.                                                                                                                                                                                                                                                                                  | **Done 2026-08-06 — partially.** Verified in Chrome against a throwaway static page reproducing `Card`'s and `CardStack`'s exact class strings, since jsdom renders none of it. One viewport, one browser, no OS preferences |
+
+**Row 7 is why the glow's values are what they are.** At the first pair (`0.3` alpha, `1.25rem` blur)
+the bloom was barely perceptible against the near-black page, so `--color-ring-glow` went to `0.45`
+and `--ring-glow-blur` to `1.75rem`. It is the one value in the ring's token set set by looking rather
+than by measuring — and the only kind of value that should be.
+
+**Row 7 also found a defect it was not looking for, and it is recorded rather than fixed:** the two
+peeking backs do not render at all on a full-height card. Measured with `getBoundingClientRect`, back 1
+peeks **1.04px** below the card and back 2 **2.08px**, both inset on every other side, and the card's
+own 2px ring covers even that. `scale()` is centre-origin, so it lifts the bottom edge by
+`(H / 2) × 0.04` = 8.96px at H = 448 while `translateY` only pushes it down 10px. It is pre-existing
+from Phase 5 — see §8 and [`agent_findings.md`](./agent_findings.md).
 
 ### The real-device pass — RUN 2026-08-06, and it found one defect
 
@@ -559,4 +622,48 @@ Mostly carried forward from the Phase 0 research; measurements and reasoning in 
 - **The printed sheet assumes LONG-EDGE duplex, and nothing can detect otherwise.** `pdf-sheet.ts` mirrors the back sheet's columns because long-edge duplex flips the paper about its vertical centre line; short-edge binding would mirror the rows instead, and a sheet printed that way pairs every card with the wrong answer. The app cannot read a printer setting, so the end screen and §5 name the setting rather than the code guessing at it. The arithmetic itself is pinned by `pdf-sheet.test.ts` as a reflection identity, which is the part a person cannot check without printing and cutting.
 - **Nothing about the export has been verified on paper.** The geometry, the pagination and the mirror are unit-tested; the printer, the cut and a phone camera against a printed code are not. Six sharing/printing checks and a printed-QR scan are scoped in §5, all Pending.
 - **Audio pauses when the document is hidden, and that rule exists because a real phone found it missing.** Verified on Android 2026-08-06: a playing preview survived the screen lock and went on playing, with a media notification in the shade. `useCardAudio` now pauses on `visibilitychange`. Two consequences worth knowing rather than rediscovering: **there is no auto-resume** — unlocking leaves the preview paused where it was, and the player presses Play — and **switching tabs or apps pauses too**, which is deliberate rather than a side effect. The leak rule itself was never breached: `navigator.mediaSession.metadata` has never been set, so the panel could not name the track.
+- **Offline covers the SHELL and a saved session, and deliberately not the API.** The service worker
+  precaches the build output only — `runtimeCaching` is empty, and that is a decision rather than an
+  unfinished corner. Caching `/api/playlist` would deal a deck that no longer matches the real playlist,
+  because an editorial playlist has its tracks refreshed by Spotify; and `/api/year`'s freshness story is
+  the shared Upstash cache on the server, so a second unmanaged copy in one browser is a hole in that
+  design rather than an extension of it. **What works offline:** the app loads, and a saved session
+  resumes and stays fully playable — the QR is a data URL, the flip and the swipe are local, and resolved
+  years travel with the cards. **What does not:** audio previews, year lookups for unresolved cards, and
+  starting a new deck (which produces Phase 7's `offline` copy immediately rather than hanging). This is
+  the same graceful degradation as the mid-game-disconnect bullet above, now also true with the network
+  off entirely. **None of the three has been observed** — it is what the configuration implies; see §5.
+- **An update lands only after every tab of the app is closed, and that delay is deliberate.** The worker
+  uses the waiting default rather than `skipWaiting`, so a redeploy does not take effect in a running
+  tab. The reason is specific: the app code-splits `GameScreen`, the QR encoder and the PDF chunks, so a
+  worker that activated mid-game would leave the open tab requesting a chunk hash that no longer exists —
+  the player advances one card and the app breaks. **The trade is a stale tab against a session that
+  cannot break underneath itself**, and for a game played in one sitting the stale tab costs nothing.
+  There is no update prompt: `registerType: 'prompt'` with no prompt UI wired up is exactly "wait
+  quietly". Verified only by reading the generated worker — the redeploy check in §5 is Pending.
+- **The deck's two peeking backs do not render at all on a full-height card.** Measured 2026-08-06 with
+  `getBoundingClientRect` at the 448px ceiling: back 1 peeks **1.04px** below the card, back 2 **2.08px**,
+  and both are inset on every other side — so the depth cue that tells a player there is more deck is
+  invisible, and the card's own 2px ring covers even that. `scale()` is centre-origin, so it lifts the
+  bottom edge by `(H / 2) × BACK_SCALE_STEP` (8.96px at H = 448) while `translateY` pushes it down only
+  10px. **It gets worse as the card grows:** at the 288px floor the inset is 5.76px, so back 1 peeks by a
+  marginal 4.24px. Pre-existing from Phase 5 and found only when the stack was first rendered in a
+  browser, while verifying the Phase 8 ring. **Not fixed**, because the remedy is a deck-feel decision
+  with real options — raise `BACK_OFFSET_PX`, drop `BACK_SCALE_STEP` to zero, or make the offset
+  proportional to `--card-height` — rather than a mechanical correction, and Phase 7 open question 2
+  explicitly resolved to keep the offset absolute. One consequence to know: `card-ring-dim`, which took
+  the backs from 1.31:1 to 4.23:1 against the page, is **currently inert at desktop card sizes**. The
+  colour correction is right; the geometry is a separate decision. Arithmetic in
+  [`agent_findings.md`](./agent_findings.md).
+- **Nothing about Phase 8's card redesign has been verified beyond one browser render, and Lighthouse has
+  not been re-run since it landed.** The ring's tokens and both `@utility` composites are pinned by the
+  canary, and every call site has a class-name assertion — but jsdom evaluates no `mask-composite`,
+  computes no layout and paints nothing, so that is the automated ceiling. What _was_ done is one Chrome
+  screenshot of a throwaway static page reproducing `Card`'s and `CardStack`'s exact class strings, which
+  confirmed the gradient, the bloom and the neon year and produced the backs finding above. **It is one
+  viewport, one browser, no OS preferences and no assistive technology.** The post-redesign Lighthouse
+  re-measure is owed and should be aimed at **paint rather than layout**: the ring is a `border-box`
+  border plus a `box-shadow`, so the card's measured box is unchanged at 288 × 448 and CLS should not
+  move, while two blooms and a masked pseudo-element on a 3D-transformed element are new work for the
+  compositor. The number to protect is **Performance 99 / LCP 1.6 s**. Checklist in §5.
 - **Touch gestures were verified on ONE Android device (2026-08-06) and on no iPhone. The thresholds are no longer unvalidated, but they are validated by one thumb.** The pass reported "gestures work fine" with **no retune**, so the five constants in `src/game/gestures.ts` stand as measured-acceptable rather than as guesses — including `SWIPE_COMMIT_DISTANCE_PX` at **52% of the card's width at its floor**, which the arithmetic below predicted might feel long and evidently does not. What is still open is the entire iOS column of §5's Phase 5 checklist: tap-versus-swipe under Safari's stricter gesture handling, whether pull-to-refresh is genuinely suppressed, whether the card needs `select-none`, and whether audio still starts from the first tap. **If touch misbehaves on an iPhone, those five constants remain the first place to look** — not the hook, and not Motion. Historical note, kept because the reasoning is still the right shape: `SWIPE_COMMIT_DISTANCE_PX` (96px) was chosen as a third of a fixed 288px card; the card is now fluid and 288px is only its ceiling, so at the floor the same 96px is **52%** of the card's width and a commit takes a visibly longer drag on a small screen. It is deliberately not retuned — a second number chosen by eye is not an improvement on the first, and the velocity half of the commit rule (500px/s, card-size-independent) still catches the flick most phone gestures actually are. The comment in `src/game/gestures.ts` records the arithmetic so whoever runs the device pass knows which end of the range to test at. Decided 2026-08-05: the Phase 5 real-device pass was scoped and then waived. `plan.md` names touch as the place this breaks, and jsdom cannot substitute — Motion's drag reads geometry it does not compute. What _is_ covered is every threshold decision, exhaustively, in `src/game/gestures.test.ts` (node), plus the keyboard path in jsdom; what is not is whether those numbers feel right under a thumb, whether pull-to-refresh is genuinely suppressed, and whether iOS needs `select-none` on the card. The five constants in `src/game/gestures.ts` are the retuning surface. Full checklist in §5.

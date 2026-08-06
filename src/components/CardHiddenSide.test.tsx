@@ -15,6 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CardHiddenSide } from './CardHiddenSide';
 import { highConfidenceCard, noPreviewCard } from './__fixtures__/cards';
+import { clearQrCache } from '../game/qr-cache';
 
 const { toDataURLMock } = vi.hoisted(() => ({
   toDataURLMock: vi.fn<(text: string, options?: unknown) => Promise<string>>(),
@@ -28,6 +29,10 @@ describe('CardHiddenSide', () => {
     toDataURLMock.mockImplementation((text) =>
       Promise.resolve(`data:image/png;base64,QR(${text})`),
     );
+    // Generated codes are cached at module level (`src/game/qr-cache.ts`) so the deck's preload
+    // survives a card advance. Vitest isolates modules per FILE, so every test here would
+    // otherwise render against whatever the previous one generated. Same reason as `cleanup`.
+    clearQrCache();
   });
 
   afterEach(cleanup);

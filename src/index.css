@@ -213,18 +213,18 @@
   --color-ring-to: oklch(65% 0.25 310); /* magenta */
 
   /*
-   * The backs of the stack, and it REPLACES `border-border` there -- which was
-   * `oklch(26.9%)` on the page at **1.31:1**, a depth cue that was very nearly
-   * not visible at all. 4.23:1 on the page.
+   * `--color-ring-dim` USED TO BE HERE, and it was removed on 2026-08-06 with its
+   * `card-ring-dim` utility.
    *
-   * A darkened version of the middle stop rather than the gradient itself, and
-   * that is the one place this plan deliberately diverges from `card-ring`: a
-   * back is scaled to 96% and 92% and offset 10px, so what shows of it is a
-   * sliver a few pixels tall. There is no room across it for hue travel to read
-   * as anything but noise, and a flat border needs no pseudo-element on an
-   * element whose whole job is to be empty.
+   * It was a flat, darkened cyan for the stack's backs, on the reasoning that a
+   * back was a sliver a few pixels tall with no room for hue travel. The backs
+   * are not slivers any more: there is ONE back, it is the full size of the card,
+   * exactly behind it, and it holds the next card's real hidden face -- so it
+   * takes the same `card-ring` as the faces do. See `CardStack.tsx`.
+   *
+   * Do not reintroduce it without a call site. A `@theme static` token nothing
+   * references is a value that looks decided and is not.
    */
-  --color-ring-dim: oklch(55% 0.08 205);
 
   /*
    * The bloom, sitting between the green and cyan stops. The ALPHA lives in the
@@ -487,8 +487,13 @@
    * an element's own `box-shadow` is NOT clipped by its own `overflow: hidden` --
    * and both faces are `overflow-hidden` so the QR cannot escape the rounded
    * corner. A glow on the `::before` would be clipped away to nothing.
+   *
+   * The colour is read through an INDIRECTION with a fallback, which is what lets
+   * `card-ring-quiet` below turn the bloom off without touching this rule. The
+   * default is the token, so a bare `card-ring` is unchanged.
    */
-  box-shadow: 0 0 var(--ring-glow-blur) var(--ring-glow-spread) var(--color-ring-glow);
+  box-shadow: 0 0 var(--ring-glow-blur) var(--ring-glow-spread)
+    var(--ring-glow-color, var(--color-ring-glow));
 
   /*
    * The gradient border, as a masked pseudo-element.
@@ -529,20 +534,43 @@
 }
 
 /*
- * The dimmed variant, for `CardStack`'s two peeking backs.
+ * ===========================================================================
+ *  THE RING WITHOUT THE BLOOM, FOR THE CARD BEHIND THE CURRENT ONE. It
+ *  REPLACED `card-ring-dim`, a flat dark border, on 2026-08-06.
  *
- * A FLAT border rather than a dimmed copy of the gradient, and that divergence is
- * the point: a back is scaled to 96% / 92% and offset 10px, so what shows of it is
- * a sliver a few pixels tall with no room for hue travel to read as anything but
- * noise. It also keeps the backs what they must stay -- EMPTY elements. No
- * pseudo-element, no glow, nothing to render.
+ *  `CardStack`'s back is now the next card's real hidden face at the exact size
+ *  and position of the card in front of it, so it needs the same gradient band
+ *  as a face -- a dimmed flat border would read as a wrong-looking card the
+ *  moment a swipe uncovered it.
  *
- * What it replaces was `border border-border`, which measured **1.31:1** against
- * the page: the depth cue that tells a player there is more deck was very nearly
- * invisible. This is 4.23:1.
+ *  What it must NOT have is the glow. A `box-shadow` paints OUTSIDE the element,
+ *  and at rest this element's box is pixel-for-pixel the front card's, so two
+ *  identical blooms would composite (0.45 over 0.45 ~ 0.70 alpha) into a halo
+ *  half again as bright as the one the ring was tuned for -- visible on every
+ *  card of every game, to fix a card nobody can see.
+ *
+ *  ===========================================================================
+ *   IT IS A CUSTOM-PROPERTY OVERRIDE, NOT A COMPETING `box-shadow`, AND THAT
+ *   IS THE WHOLE DESIGN OF IT.
+ *
+ *   `box-shadow: none` here, or a `shadow-none` beside `card-ring` in the
+ *   markup, would be two rules declaring the SAME property at the same
+ *   specificity in the same cascade layer -- so which one won would depend on
+ *   the order Tailwind happened to emit them in. That is the identical hazard
+ *   the header above refuses `position: relative` for.
+ *
+ *   Declaring a variable the other utility READS sidesteps it completely: the
+ *   two rules touch different properties, custom properties resolve at
+ *   computed-value time on the element, and the outcome is the same whichever
+ *   order they are emitted in.
+ *  ===========================================================================
+ *
+ *  Always used TOGETHER with `card-ring` -- it is a modifier, not a variant, and
+ *  on its own it declares a variable nothing reads and paints nothing at all.
+ * ===========================================================================
  */
-@utility card-ring-dim {
-  border: var(--ring-width) solid var(--color-ring-dim);
+@utility card-ring-quiet {
+  --ring-glow-color: transparent;
 }
 
 /*

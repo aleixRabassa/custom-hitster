@@ -241,7 +241,7 @@ Browser (SPA)                          Serverless (Vercel Functions)
 
 - [x] Swipe-to-next with velocity/offset threshold + snap-back below threshold
 - [x] Tap-to-flip, reliably distinguished from drag
-- [x] Stacked-deck visual (2–3 cards peeking) and exit animation — 2 backs, rendered as **empty divs** with no content, no QR and no id
+- [x] ~~Stacked-deck visual (2–3 cards peeking)~~ and exit animation — **replaced 2026-08-06.** The "2–3 cards peeking" shape shipped as 2 empty divs and never peeked: `scale()` is centre-origin, so both were inset on every edge and a drag uncovered concentric rectangles rather than a deck. It is now **one back, the next card's hidden face**, at the card's exact size and position with its QR preloaded — no depth cue at rest, the next card revealed complete while sliding. The leak rule holds: hidden face only, no title/artist/year. See `AGENTS.md` and `agent_findings.md` (2026-08-06)
 - [x] Keyboard controls (Space = flip, → = next) for laptop/tablet play
 - [ ] ~~Verified on real iOS Safari + Android Chrome (touch is where this breaks)~~ — **waived 2026-08-05, deliberately not performed.** Left unticked because it was not done, not because it is still queued
 
@@ -472,7 +472,30 @@ half of the instruction needed no work: it already warned and never left the lan
 first), the real-device touch pass, the Android lock-screen check, and the preview-deployment
 verification — which this plan **added** the game-screen Lighthouse audit to rather than discharging.
 
-### Phase 8 — Nice-to-haves (explicitly out of v1)
+### Phase 8 — Nice-to-haves (code complete; every remaining item is manual verification)
+
+**All six items are resolved, across three plans, all on 2026-08-06.** Two shipped as features
+([`plan.phase-8-features.md`](./plan.phase-8-features.md): the share link, the saved-playlist library,
+the PDF export, plus the audio-across-the-flip reversal), two more as the look and the shell
+([`plan.phase-8-look-and-shell.md`](./plan.phase-8-look-and-shell.md): the neon ring and the PWA), one
+was resolved **won't-build** with no code ([`plan.phase-8-added-by.md`](./plan.phase-8-added-by.md)),
+and one — prerendering — was **retired by a favicon fix** rather than built. Nothing in the phase is
+still waiting on a decision.
+
+**What Phase 7 bought is now measurable.** Its bet was that a token layer would make the card redesign
+a change of values rather than a hunt across nine components. The redesign cost **ten tokens, two
+`@utility` composites and four class-string edits**, no component gained logic, and no surface value
+moved — so Phase 7's contrast table survived for every pair not involving a new token.
+
+**Two things about the phase's shape are worth carrying forward.** First, **its plans depended on each
+other only softly and did not wait**: plan 2 shipped before plan 1, so the PDF export deliberately owns
+its own light print palette and will not change when the screen is redesigned. Second, **the phase's
+verification debt is now the largest single gap in the project.** Everything automatable is automated
+and the automated ceiling is genuinely low here — jsdom paints nothing, evaluates no media query, and
+has no accessibility tree — so what remains needs a deployment, a printer, a phone and a screen reader.
+It is scoped row by row in [`../development.md`](../development.md) §5, and **the screen-reader pass
+over one flip is the one to run first**: it is the only check on the app's only live region, which is
+what makes the game's payoff audible at all.
 
 - [x] **"Added by" attribution on the revealed side — RESOLVED 2026-08-06 as won't-build, not
       deferred a third time.** Show who added that track to the playlist, alongside
@@ -517,7 +540,39 @@ verification — which this plan **added** the game-screen Lighthouse audit to r
     and whether any **non-Spotify attribution source** exists — not obviously, since nothing in
     MusicBrainz knows who added a track to somebody's playlist, and no third source has been looked
     for.
-- [ ] Card visual design (take cues from the reference repo's neon-ring aesthetic)
+- [x] **Card visual design (take cues from the reference repo's neon-ring aesthetic)** — built
+      2026-08-06, [`plan.phase-8-look-and-shell.md`](./plan.phase-8-look-and-shell.md) steps 1–8. The
+      reference turned out to be **in the repo already**: `docs/plans/custom-hitster-mockup.png`, a
+      green → cyan → magenta gradient ring with a soft bloom on near-black faces. **Phase 7's bet paid
+      off** — the redesign cost ten tokens, two `@utility` composites and **four class-string edits
+      across three components**, with no component gaining logic and **no surface value moving at all**.
+  - **Tokens plus utilities, no new component** (decision 1). A `NeonRing` component would have put a
+    decorative `aria-hidden` node inside the one subtree where "leak nothing" is a hard rule, and given
+    `prefers-reduced-motion` a second place to be taught about. The gradient lives in the utility's own
+    masked `::before`; nothing was added to the card's DOM.
+  - **The ring does NOT animate**, and that is recorded in the CSS because it is the obvious thing to
+    re-add. A pulse or a rotating conic gradient would be a fourth animation surface, a fourth rule in
+    the media query, and a continuously compositing paint behind the one element a player holds a camera
+    over. So the reduced-motion block still covers exactly three surfaces and the manual pass covering
+    it is **not invalidated**.
+  - **A second accent family is now a stated decision.** Emerald stays the _action_ colour; the ring is
+    decoration that never conveys state. If it is ever made to indicate something it needs a contrast
+    budget.
+  - **The year is the one text colour that changed** — flat neon green at 11.30:1, deliberately **not**
+    the gradient the mockup draws: a gradient has no single contrast ratio, and `background-clip: text`
+    needs `color: transparent`, so one that fails to paint renders the year _invisible_.
+  - **Contrast was recomputed for every pair, not only the changed ones, and the table in
+    [`../agent_findings.md`](../agent_findings.md) REPLACED Phase 7's.** It found a pair nothing had ever
+    measured — the focus ring on the filled danger button at 2.65:1, which postdates Phase 7's audit and
+    is exempt because `outline-offset: 2px` puts the outline on the panel behind the button. The
+    calculator was validated against all 16 of Phase 7's ratios first, which is how a
+    gamma-versus-linear alpha-compositing error was caught.
+  - **`--color-page` did not move**, so `index.html`'s `theme-color` needed no edit — checked by
+    converting `oklch(14.5% 0 none)` to `#0a0a0a` rather than assumed.
+  - **Verified in a browser, once, because jsdom paints nothing** — and that render turned up a
+    pre-existing Phase 5 defect: the deck's two peeking backs do not render at all at the card's full
+    height, because centre-origin `scale()` cancels the 10px offset. **Not fixed** (a deck-feel
+    decision); recorded in [`../development.md`](../development.md) §8 and the findings.
 - [x] **Shareable deck URL** (playlist id + shuffle seed) — built 2026-08-06,
       [`plan.phase-8-features.md`](./plan.phase-8-features.md) steps 6–11. `?playlist=&seed=`, read
       once in a lazy initialiser, submitted through the same `request` the landing form uses, and the
@@ -529,7 +584,40 @@ verification — which this plan **added** the game-screen Lighthouse audit to r
       so; pinning the card set would need a versioned opaque token, which is out of scope (decision
       4). A saved session **outranks** a link, so opening an old one cannot discard a game in
       progress, and a malformed link is the plain landing screen with no error.
-- [ ] PWA / offline via `vite-plugin-pwa`
+- [x] **PWA / offline via `vite-plugin-pwa`** — built 2026-08-06, same plan, steps 9–12.
+      `generateSW` mode, a manifest as a **typed module** (`src/pwa/manifest.ts`) so the fields whose
+      absence makes an install prompt silently never appear are assertable in a node test, and a
+      four-file icon set. `vercel.json` needed no change — its rewrite's `[^.]*` term cannot match a path
+      containing a dot, checked against the actual pattern.
+  - **The precache is the build output and NOTHING else** (decision 5). `runtimeCaching` is empty on
+    purpose: a cached `/api/playlist` deals a deck that no longer matches the real playlist, and
+    `/api/year`'s freshness story is the shared Upstash cache, so a second unmanaged copy in one browser
+    is a hole in that design. **Offline therefore means the shell loads and a saved session stays
+    playable**, minus audio and further lookups — which composes with Phase 7's `offline` code rather
+    than needing anything new.
+  - **The update strategy WAITS rather than `skipWaiting`** (decision 6), and this one is a real
+    failure avoided rather than a preference: the app code-splits `GameScreen`, the QR encoder and the
+    PDF chunks, so a worker activating mid-game after a redeploy leaves the tab asking for a chunk hash
+    that no longer exists. The cost is an update that lands only once every tab is closed.
+  - **The icon set comes from the pre-`5e178f6` `logo.png`** — and step 10's premise was **wrong**:
+    that file and `logo.webp` are _different artwork_, swapped in one commit, which nothing had recorded.
+    Escalated rather than guessed. The developer chose **one identity everywhere**, so `logo.webp` was
+    regenerated from the same 1254px source (and came out _smaller_, 10,376 vs 20,610 bytes) and the app
+    is now **"Playlist Hitster"**. The maskable icon is its own file at 84% of the canvas, sized by
+    measuring the artwork's content radius rather than by a guessed padding.
+  - **Nothing about installability, offline or the update behaviour has been observed** — all four need a
+    deployment or a phone. Checklist in [`../development.md`](../development.md) §5.
+- **Prerendering / a static HTML shell was RETIRED, not built, and this is worth reading before it is
+  re-proposed.** It was never a Phase 8 item in its own right; it arrived as the fix for
+  `Performance 75 / LCP 7.8 s` on the landing screen, diagnosed as "the LCP element is the tagline, it
+  cannot paint until React mounts, so the fix is prerendering". **That diagnosis was wrong.** The cause
+  was `public/logo.png` — 1.26 MB served as the favicon, 6× the entire JS payload — saturating the
+  throttled link and delaying the paint of everything behind it. Replacing it with a 20 kB WebP, **no
+  code touched**, took the same page to `Performance 99 / LCP 1.6 s`. So there is no prerender
+  toolchain, no static shell, and nothing owed here. **"LCP is gated on React mounting" is a conclusion
+  that sounds right for any SPA**, which is exactly why it was accepted without checking the network log
+  — and why the next person who reads `Performance 75` in an old note will reach it again. Read the
+  network log before blaming the architecture.
 - [x] **Multiple decks / saved playlists** — built 2026-08-06, steps 12–15. **It saves PLAYLISTS, not
       sessions** (decision 5): `hitster:library:v1` holds id + name + timestamp, deduped and capped at
       20, on `persistence.ts`'s pattern. Playing a saved entry re-fetches normally, so there is still

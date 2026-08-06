@@ -66,6 +66,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 
+import { qrCacheKey, readQrCache, writeQrCache } from '../game/qr-cache';
 import { loadQrcode } from '../game/qrcode-loader';
 
 export interface QrCodeProps {
@@ -102,10 +103,27 @@ const DEFAULT_ALT = 'Scan to play in Spotify';
  * the overlapping-imports race measured in this component -- is documented there.
  */
 
-/** Identifies what a generated code was generated FOR, so a stale one can be spotted. */
-function cacheKey(url: string, size: number): string {
-  return `${size}|${url}`;
-}
+/**
+ * ## A generated code outlives the element that generated it (2026-08-06)
+ *
+ * ===========================================================================
+ *  THE MODULE-LEVEL CACHE IN `src/game/qr-cache.ts` IS WHAT MAKES THE DECK'S
+ *  PRELOAD WORTH ANYTHING, AND IT HAS TO BE READ DURING RENDER.
+ *
+ *  `CardStack` now renders the next card's hidden face behind the current one,
+ *  so its code is generated early. But the back and the front card are DIFFERENT
+ *  elements -- a plain div in `CardStack` versus a `Card` inside an
+ *  `AnimatePresence` keyed on card id -- and an advance unmounts one and mounts
+ *  the other. Per-element state therefore throws the preloaded code away at
+ *  exactly the moment it was preloaded for.
+ *
+ *  Reading the shared cache in an EFFECT would not fix it either: `useEffect`
+ *  runs after paint, so the new front card would still paint the pulsing
+ *  placeholder for one frame. The read below is a pure lookup of a write-once
+ *  map, which is the standard resource-cache shape and is safe to do while
+ *  rendering.
+ * ===========================================================================
+ */
 
 export function QrCode({ url, size, displaySize, alt = DEFAULT_ALT }: QrCodeProps) {
   const renderedSize = displaySize ?? `${size}px`;
@@ -134,7 +152,17 @@ export function QrCode({ url, size, displaySize, alt = DEFAULT_ALT }: QrCodeProp
 
   useEffect(() => {
     const generation = ++generationRef.current;
-    const key = cacheKey(url, size);
+    const key = qrCacheKey(url, size);
+
+    /*
+      Already generated -- by the card behind this one, or by this card before a remount. The
+      render below reads the same cache, so there is nothing to set and nothing to await.
+
+      The counter is bumped FIRST, before the early return: a slower generation for a previous
+      url may still be in flight on this element, and bailing without claiming a generation
+      would let it resolve and store its result over a card that has already moved on.
+    */
+    if (readQrCache(key) !== null) return;
 
     /*
       The library and the code it generates are awaited as ONE chain, so the generation counter
@@ -158,6 +186,14 @@ export function QrCode({ url, size, displaySize, alt = DEFAULT_ALT }: QrCodeProp
         }),
       )
       .then((dataUrl) => {
+        /*
+          Cached BEFORE the staleness check, and deliberately. A superseded generation produced a
+          perfectly good code for the url it was asked about -- it is only wrong for the element
+          that is now showing something else. Throwing it away would mean regenerating it when
+          that card comes round, which on a fast advance is the common case.
+        */
+        writeQrCache(key, dataUrl);
+
         if (generationRef.current !== generation) return;
         setGenerated({ key, dataUrl });
       })
@@ -175,8 +211,16 @@ export function QrCode({ url, size, displaySize, alt = DEFAULT_ALT }: QrCodeProp
       });
   }, [url, size]);
 
-  // Derived, not stored: a code generated for a different URL or size is not this card's.
-  const dataUrl = generated?.key === cacheKey(url, size) ? generated.dataUrl : null;
+  /*
+    Derived, not stored: a code generated for a different URL or size is not this card's.
+
+    The cache is the second source, and it is what removes the placeholder frame on a card
+    advance -- this element may be mounting for the first time onto a url whose code another
+    element already generated. Own state first, because it is the fresher of two writers to the
+    same key.
+  */
+  const key = qrCacheKey(url, size);
+  const dataUrl = generated?.key === key ? generated.dataUrl : readQrCache(key);
 
   if (dataUrl === null) {
     return (

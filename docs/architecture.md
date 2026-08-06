@@ -188,6 +188,8 @@ src/game/
                       COLUMN MIRROR, and the printable-card selection
   pdf-text.ts         WinAnsi sanitising for a standard PDF font, plus the filename
   qrcode-loader.ts    The one memoized import('qrcode'), shared by QrCode and the export
+  qr-cache.ts         Generated codes by size+url, so the deck's preloaded QR survives the
+                      element that generated it. Read during RENDER, not in an effect
 ```
 
 Three properties of that split are load-bearing:
@@ -212,7 +214,8 @@ src/components/
                         presentational: it takes callbacks and
                         does NOT call useGameSession(). Takes `deck` + `currentIndex`,
                         matching GameState's own shape
-  CardStack.tsx         The current card over 2 EMPTY backs. Owns AnimatePresence and
+  CardStack.tsx         The current card over ONE back, which is the next card's HIDDEN
+                        face at the same size, exactly behind. Owns AnimatePresence and
                         the keying; calls useCardGestures
   Card.tsx              The 3D flip shell, and the draggable element. Owns no state;
                         both faces live here. NOTHING INTERACTIVE may go inside it
@@ -260,7 +263,8 @@ Four things about this are load-bearing:
 
 - **A tap and a drag begin with the identical pointer event, and both misreadings are destructive.** A tap misread as a swipe skips a card _irrecoverably_ — the deck is one-directional and there is no previous card. A swipe misread as a tap reveals the answer the player was mid-guess on. This is why `isTap` requires four independent signals to agree, and why the tap radius and the commit distance are asserted not to overlap.
 - **The drag transform and the flip transform are on different elements, and must stay that way.** Both are CSS transforms on the same box if they share an element: Motion writes `translateX` from the drag while Tailwind's `rotate-y-180` writes its own, and the last writer wins. Drag on the outer element, rotation on the inner face wrapper.
-- **The stacked backs are empty divs — no content, no QR, no id, no `aria-label`.** Both a leak decision (a card behind the top one has no reason for its data to be in the document; the next card is supposed to be a mystery) and a cost decision (each QR is an async `toDataURL()`, and Phase 7 lazy-loads it precisely because it is not free). `CardStack.test.tsx` asserts against the "just reuse `Card` for the backs" refactor.
+- **The back is ONE card, the next one, and it renders its HIDDEN face and nothing else — reversed 2026-08-06.** It used to be two empty divs, centre-scaled to 96% / 92% and offset 10px, and that produced "two cards, one inside the other" the moment a drag uncovered them: a centre-origin `scale()` insets every edge, so what showed was two concentric rectangles smaller than the card. It is now `absolute inset-0` with **no transform** — covered pixel for pixel at rest, and revealed complete, with its QR already generated, the instant the top card moves. **The leak rule is unchanged and still asserted:** the back mounts `CardHiddenSide`, `CardStack` does not import `CardRevealSide`, and no title, artist or year reaches the document a card early in text or in any attribute. The track **id** does, because the QR encodes it — accepted deliberately: 22 opaque characters, on a face that is a mystery by construction, for the card the player is in the act of dealing themselves. The cost is one extra `toDataURL()` per advance, which is the feature. `CardStack.test.tsx` still asserts against the "just reuse `Card` for the back" refactor, because `Card` mounts a reveal face.
+- **A generated QR outlives the element that generated it (`src/game/qr-cache.ts`).** Without it the preload buys nothing: the back is a plain div in `CardStack` and the front card is a `Card` inside `AnimatePresence`, so an advance unmounts the element holding the code and mounts a new one. The cache is read **during render** rather than in an effect, because `useEffect` runs after paint and would still show one frame of the placeholder. Test consequence: every DOM test file that renders a card calls `clearQrCache()` in `beforeEach` — Vitest isolates modules per file, not per test.
 - **`AnimatePresence` keys are card id _plus_ deck index.** A playlist may legitimately hold the same track twice — Phase 3's reducer handles duplicate ids explicitly for that reason — so two adjacent cards can share an id, and a bare-id key makes React reuse one element for both.
 
 **Keyboard controls are a window-level handler in `GameScreen`, not a handler on a focused card.** The card is not a control and nobody's hands are on it; a focus-dependent handler would be dead most of the time, and "the keyboard works only after you click the card first" is indistinguishable from broken. The cost is that the handler sees keystrokes meant for other things, hence four guards — auto-repeat, text-entry focus, `isPlayable`, and **Space while focus is on a button**, which would otherwise make one press both activate Play/Pause and flip the card.
@@ -435,19 +439,25 @@ Phase 7's first half gave the app a design surface. Before it, every colour, dim
 in `src/` was an inline Tailwind utility, and the card's size was a literal pair written out twice.
 
 ```
-src/index.css           THE design surface. One `@theme static` block, two
+src/index.css           THE design surface. One `@theme static` block, four
                         `@utility` composites, one prefers-reduced-motion block
 src/main.tsx            <MotionConfig reducedMotion="user"> — the JS half of
                         the motion strategy
-src/index.css.test.ts   The reduced-motion canary. A `node` test over the
+src/index.css.test.ts   The reduced-motion canary, the token canary and the
+                        ring-utility canary. A `node` test over the
                         stylesheet's TEXT
 ```
 
 **A v3 reader looking for `tailwind.config.js` should read the `@theme` block instead.** There is no
 config file and one should not be added; the block is where colours, card geometry, the content
 column, the year type scale, motion durations and the interaction minimums are named. Components
-consume tokens and do not invent literals. Phase 8's card redesign is meant to be a change of values
-_there_, not a hunt across nine components.
+consume tokens and do not invent literals.
+
+**Phase 8's card redesign proved that out.** It was meant to be a change of values _there_ rather than
+a hunt across nine components, and it was: the neon ring cost ten new tokens, two new `@utility`
+composites, and **four class-string edits across three components** — three `rounded-2xl` → `rounded-card`,
+one `border border-border` → `card-ring-dim`, plus `card-ring` on the two faces and one text colour on
+the year. No component grew logic, and no surface value moved at all.
 
 Five things about it are load-bearing:
 
@@ -466,10 +476,12 @@ Five things about it are load-bearing:
   `fg*`, `accent*`, `on-accent`, `warning*`, `danger*`, `focus-ring`. Phase 8 changes hues without
   renaming anything. `fg-` rather than `text-` for the foreground family only because
   `--color-text-muted` would yield the utility `text-text-muted`.
-- **`focus-ring` and `touch-target` are `@utility` composites, not repeated utilities.** Thirteen
-  interactive elements need an outline and a 44px minimum; declaring them once means one place to
-  change in Phase 8 and one class name for a test to assert. Written as `@utility` rather than a
-  plain class so Tailwind's variants still compose — components write `focus-visible:focus-ring`.
+- **`focus-ring`, `touch-target`, `card-ring` and `card-ring-dim` are `@utility` composites, not
+  repeated utilities.** Thirteen interactive elements need an outline and a 44px minimum; declaring
+  them once means one place to change and one class name for a test to assert. Written as `@utility`
+  rather than a plain class so Tailwind's variants still compose — components write
+  `focus-visible:focus-ring`. The two ring utilities are Phase 8's and have a subsection of their own
+  below.
 - **Two tokens cap a column, and which one a component takes is a real decision.**
   `--container-content` (24rem) is a reading measure for the landing, end and preparing screens.
   `--card-width` caps `Hud` and `NoticeBanner`, because those two sit directly above the card and are
@@ -565,8 +577,114 @@ Four defects, all found by reading Phase 6's components rather than by a tool:
 
 Contrast was computed rather than eyeballed, and four pairs failed 1.4.3 — including `text-white` on
 the primary action at 3.67:1, which the plan had not listed. All four are fixed by token value, so no
-call site carries a corrected literal. The full table is in
-[`agent_findings.md`](./agent_findings.md).
+call site carries a corrected literal. **The table has since been recomputed for Phase 8 and
+replaced** — see the ring subsection below and [`agent_findings.md`](./agent_findings.md).
+
+### The neon ring (Phase 8) — built, and it is utilities rather than a component
+
+The card's visual design, drawn from `docs/plans/custom-hitster-mockup.png`: a green → cyan → magenta
+gradient border with a soft outer bloom, on the near-black faces. Ten tokens and two `@utility`
+composites in `src/index.css`, applied as class names.
+
+| Utility         | Where                                    | What it is                                                       |
+| --------------- | ---------------------------------------- | ---------------------------------------------------------------- |
+| `card-ring`     | Both faces in `Card.tsx`                 | Masked gradient `::before` + a `box-shadow` bloom on the element |
+| `card-ring-dim` | The two peeking backs in `CardStack.tsx` | A flat `--color-ring-dim` border. No pseudo-element, no glow     |
+
+**No new component, and that was the decision rather than the lazy option.** A `NeonRing`/`CardFrame`
+component buys expressive range this design does not need and costs three things: a component plus its
+tests, a decorative `aria-hidden` **node inside the one subtree where "leak nothing" is a hard rule**,
+and a fourth animation surface `prefers-reduced-motion` would have to be taught about in a second
+place. The gradient therefore lives in the utility's own `::before`; nothing was added to the card's
+DOM.
+
+**A second accent family is now deliberate.** `--color-accent` (emerald) stays the **action** colour —
+Start, Play again, the Play control — and the ring is **decoration that never conveys state**. That is
+the condition making two families acceptable rather than confusing. If the ring is ever made to
+indicate something, it needs a contrast budget and a row in the 1.4.11 list.
+
+Four things about it are load-bearing:
+
+- **The ring does not animate.** A slow pulse or rotating conic gradient is the reference aesthetic and
+  was rejected: it would be a fourth animation surface, a fourth `prefers-reduced-motion` rule, and a
+  continuously compositing paint behind the one element a player is holding a phone camera over. So the
+  reduced-motion block still covers exactly three surfaces.
+- **Neither utility sets `position`, and adding it would break the card.** The gradient band is a
+  `position: absolute` `::before`, so the reflex is `position: relative` on the utility — but both call
+  sites are already `absolute inset-0`, the declarations would collide in one cascade layer, and if
+  `relative` won, both faces would drop out of absolute positioning and stack in flow. The contract is
+  **the caller is positioned**, pinned at both ends: `index.css.test.ts` asserts neither utility
+  declares a `position`, and the component tests assert `absolute` beside the ring class.
+- **The ring is on the FACES, not on the card's outer element.** The outer element is the perspective
+  container and does not rotate, so a ring there would sit still while the card turned inside it.
+- **It adds no layout.** `--ring-width` is a border inside a `border-box` element and the bloom is a
+  `box-shadow`, so the card's measured box is 288 × 448 exactly as before — the redesign is a paint
+  change, not a layout one.
+
+**Contrast was recomputed for every pair in the app, not only the changed ones, and the table in
+[`agent_findings.md`](./agent_findings.md) REPLACED Phase 7's** rather than sitting beside it. It found
+one pair nothing had ever measured — the focus ring on the filled danger button at 2.65:1, which
+postdates Phase 7's audit and is exempt because `outline-offset: 2px` puts the whole outline on the
+panel surface behind the button. It also improved one nobody had asked about: the stack's backs were
+`border-border` at **1.31:1**, and `--color-ring-dim` is 4.23:1.
+
+**One caveat is recorded rather than fixed:** the two peeking backs turn out not to render at all at
+the card's full height — `scale()` is centre-origin and cancels the 10px offset — so `card-ring-dim` is
+currently inert on a desktop-sized card. Pre-existing from Phase 5, measured, and written up in
+[`agent_findings.md`](./agent_findings.md); the geometry is a deck-feel decision, not a mechanical fix.
+
+### The installable shell (Phase 8) — built
+
+The app is a PWA. `vite-plugin-pwa` in **`generateSW`** mode, so workbox writes the whole worker and
+there is no custom worker source to maintain.
+
+```
+src/pwa/manifest.ts        The manifest, as a typed module. Imported by
+                           vite.config.ts and by nothing in the app
+src/pwa/manifest.test.ts   A `node` test over the installability-critical fields
+vite.config.ts             VitePWA(...) — workbox options and the update strategy
+public/pwa-*.png           192, 512 and a separate 512 maskable
+public/apple-touch-icon.png  180. iOS ignores the manifest's icons entirely
+```
+
+**The manifest is a module, not a literal in the plugin call**, for the same reason as every other
+split in this repo: the fields whose absence makes an install prompt silently never appear are a fact
+worth asserting, and a literal buried in a config cannot be imported. It lives in `src/` but is
+imported only by `vite.config.ts`, so it is not in the client bundle.
+
+Four decisions carry the design:
+
+- **The precache is the build output and NOTHING else.** `runtimeCaching` is empty, and that is a
+  decision rather than an omission: a cached `/api/playlist` response deals a deck that no longer
+  matches the real playlist (editorial playlists refresh their tracks), and `/api/year`'s freshness
+  story is the shared Upstash cache on the server — a second unmanaged copy in one browser is a hole in
+  that design, not an extension of it. **Offline therefore means the shell loads and a saved session
+  stays playable**, minus audio and minus further year lookups; pressing Start produces Phase 7's
+  `offline` copy, which already refuses a request that cannot succeed.
+- **The update strategy WAITS rather than `skipWaiting`.** `registerType: 'prompt'` with no prompt UI
+  wired up is exactly "wait quietly". The app code-splits `GameScreen`, `qrcode` and the PDF chunks, so
+  a worker activating mid-game after a redeploy would leave a running tab asking for a chunk hash that
+  no longer exists — the player advances one card and the app breaks. The cost is a delayed update; the
+  benefit is a session that cannot break underneath itself.
+- **A navigation-fallback denylist covers `^/api/`.** Without it an offline or failed `/api/year` would
+  resolve with `index.html` and a 200, and the year client would try to parse a page of HTML as JSON —
+  surfacing as `unexpected-payload`, the same code `pnpm dev` produces for an entirely different
+  reason.
+- **`devOptions` is absent**, so neither `pnpm dev` nor `npx vercel dev` registers a worker. A service
+  worker in development is a caching-bug generator, and this repo's dev story (§5) is delicate enough.
+
+**The icon set comes from the pre-`5e178f6` `logo.png`**, the 1254 × 1254 card-stack wordmark, which is
+also the mark the design mockup draws in its header. `logo.webp` was regenerated from the same source
+so the browser tab and the home screen are one identity; it came out at 10,376 bytes, **smaller** than
+the 20,610 it replaced. The four PNGs add 278 kB and none is fetched before first paint. **The maskable
+variant is its own file**, with the artwork at 84% of the canvas so its content radius (204.9px) sits
+inside the 80% safe circle (204.8px) — a full-bleed 512 relabelled `maskable` validates cleanly and
+gets cropped on every round-icon launcher. Provenance and byte counts are in
+[`agent_findings.md`](./agent_findings.md); **never restore a large icon to the favicon slot.**
+
+`vercel.json` needed no change: the SPA rewrite's `[^.]*` term cannot match a path containing a dot, so
+`/sw.js`, `/manifest.webmanifest`, `/registerSW.js` and the icons all serve as files. That was checked
+against the actual pattern rather than assumed.
 
 ## 4. External dependencies
 

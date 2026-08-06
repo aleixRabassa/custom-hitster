@@ -326,28 +326,49 @@ worth asserting in a node test, and a literal buried in a plugin call cannot be 
 
 ## Documentation Updates
 
-- [ ] `docs/architecture.md` §3 — the ring utilities and why they are utilities rather than a
+- [x] `docs/architecture.md` §3 — the ring utilities and why they are utilities rather than a
       component; the icon set and where its source came from; the service worker's position, its
-      precache scope, and the two things it deliberately does not cache.
-- [ ] `docs/development.md` §5 — new manual rows: the installability check, the offline resume, the
+      precache scope, and the two things it deliberately does not cache. — **Two new subsections
+      ("The neon ring" and "The installable shell"), plus the token-layer intro corrected: it said
+      "two `@utility` composites" and there are now four.**
+- [x] `docs/development.md` §5 — new manual rows: the installability check, the offline resume, the
       update-on-redeploy check, and the post-redesign Lighthouse re-measure. Mark the screen-reader
-      row Done with the reader named, or leave it Pending and say so.
-- [ ] `docs/development.md` §8 — what offline does and does not cover, and the waiting-update delay
-      as a deliberate limitation rather than a bug.
-- [ ] `docs/agent_findings.md` — the re-audited contrast table replacing Phase 7's; the icon
+      row Done with the reader named, or leave it Pending and say so. — **A seven-row Phase 8
+      look-and-shell table. The screen-reader row is left PENDING and says so explicitly, in a
+      callout, with the reason it was carried and not run.** Two Phase 7 rows were also corrected
+      rather than silently invalidated: the reduced-motion pass gains a note that the ring does not
+      animate, and the peeking-backs row now reads **FAILS** with the measurement.
+- [x] `docs/development.md` §8 — what offline does and does not cover, and the waiting-update delay
+      as a deliberate limitation rather than a bug. — **Four new bullets: offline coverage, the
+      waiting-update delay, the peeking-backs defect, and the fact that the redesign has been seen in
+      exactly one browser render.**
+- [x] `docs/agent_findings.md` — the re-audited contrast table replacing Phase 7's; the icon
       provenance and total added bytes; the post-redesign Lighthouse scores; anything the PWA work
-      turns up. Date every entry, and tell the developer they were added.
-- [ ] `docs/plans/plan.md` §5 — tick the card-design and PWA boxes; add a Phase 8 completion note in
+      turns up. Date every entry, and tell the developer they were added. — **Six entries, all dated,
+      and the developer was told. The contrast table REPLACED Phase 7's rather than sitting beside
+      it. The Lighthouse scores are the one item not recorded, because step 15 did not run.**
+- [x] `docs/plans/plan.md` §5 — tick the card-design and PWA boxes; add a Phase 8 completion note in
       the style of Phases 3–7; record explicitly that the prerendering item was **retired by the
       favicon fix** rather than built, because "LCP is gated on React mounting" is a conclusion that
-      will be re-reached by the next person who reads Performance 75 in an old note.
-- [ ] `AGENTS.md` — current-phase line; the service worker as a structural fact, including that it
-      does not cache the API and that development never registers one.
-- [ ] `README.md` — that the app is installable, what offline covers, and that an update lands after
-      every tab is closed.
-- [ ] `index.html` — the icon links, and the `theme-color` comment updated if the value moved.
+      will be re-reached by the next person who reads Performance 75 in an old note. — **Both boxes
+      ticked with their sub-bullets, a completion note added, the heading changed to "code complete;
+      every remaining item is manual verification", and prerendering written up as its own bullet
+      ending "read the network log before blaming the architecture".**
+- [x] `AGENTS.md` — current-phase line; the service worker as a structural fact, including that it
+      does not cache the API and that development never registers one. — **Current phase is now "8,
+      CODE COMPLETE" with the remaining work named as manual. Three new structural facts: the service
+      worker's two deliberate omissions, the ring's no-`position` rule, and the three Phase 8 findings
+      (two that read as bugs and are not, one that is).**
+- [x] `README.md` — that the app is installable, what offline covers, and that an update lands after
+      every tab is closed. — **A new "Install it on your phone" section in the README's own
+      plain-language register, plus four new Known limitations. The title and status line now say
+      "Playlist Hitster" and Phases 0–8.**
+- [x] `index.html` — the icon links, and the `theme-color` comment updated if the value moved.
       Comments here are shipped bytes: keep the reasoning in `architecture.md` and the constraint
-      in the file.
+      in the file. — **The `apple-touch-icon` link added with a one-line reason (iOS ignores the
+      manifest's icons). `theme-color` did not move, so its comment stands unchanged; the favicon
+      comment's byte count was corrected 20 kB → 10 kB. The manifest link is injected by the plugin,
+      so it is not hand-written here.**
 
 ---
 
@@ -610,6 +631,17 @@ for touch problems, so changing them is a deck-feel decision rather than a bug f
 is that `card-ring-dim` — added by step 4 to take the backs from 1.31:1 to 4.23:1 — **is currently
 inert on a desktop-sized card**, because there is nothing of the backs to see. The colour fix is
 correct and the geometry has to be decided separately.
+
+> **RESOLVED 2026-08-06, outside this plan, and not by retuning either constant.** A player described
+> the same defect from the other side — sliding the top card aside showed "two cards, one inside the
+> other", which is what an inset back looks like when it is finally uncovered. The deck-feel decision
+> was made: **one back, `absolute inset-0`, no transform, holding the next card's hidden face with its
+> QR preloaded.** `BACK_OFFSET_PX` and `BACK_SCALE_STEP` are deleted, and so are `card-ring-dim` and
+> `--color-ring-dim` — a flat dim border was right for a two-pixel sliver and wrong for a full-size
+> card face, which now takes `card-ring` plus the new `card-ring-quiet` (glow suppressed via a custom
+> property, because the back's box is pixel-for-pixel the front card's and two blooms composite). This
+> plan's step 4 scope line, "the two peeking backs get a dimmer ring variant, they stay empty divs", is
+> therefore superseded. See [`agent_findings.md`](../agent_findings.md) (2026-08-06).
 
 ### 10. `vercel.json` needs no change, and that was checked rather than assumed
 

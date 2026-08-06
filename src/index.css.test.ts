@@ -113,7 +113,7 @@ function reducedMotionBlock(css: string): string | null {
  *
  * `card-ring` nests an `&::before` rule, so a lazy `\{([^}]*)\}` would stop at that inner closing
  * brace and every assertion over the tail would pass on a fragment. The name is anchored with `\s`
- * for a second reason: `card-ring` is a prefix of `card-ring-dim`, and a bare `indexOf` would find
+ * for a second reason: `card-ring` is a prefix of `card-ring-quiet`, and a bare `indexOf` would find
  * the wrong block for whichever of the two happens to be defined first.
  */
 function utilityBlock(css: string, name: string): string | null {
@@ -185,7 +185,10 @@ describe('src/index.css', () => {
       '--color-ring-from',
       '--color-ring-via',
       '--color-ring-to',
-      '--color-ring-dim',
+      // `--color-ring-dim` was here until 2026-08-06 and is deliberately not any more: the
+      // stack's back is a full-size card face now and takes the same `card-ring` as the faces,
+      // so the flat dimmed border it coloured has no call site. A `@theme static` token nothing
+      // references is a value that looks decided and is not.
       '--color-ring-glow',
       '--ring-width',
       '--ring-glow-blur',
@@ -197,9 +200,9 @@ describe('src/index.css', () => {
     }
   });
 
-  it('should define the ring utility and its dimmed variant', () => {
+  it('should define the ring utility and its quiet variant', () => {
     expect(stylesheet).toMatch(/@utility\s+card-ring\s*\{/);
-    expect(stylesheet).toMatch(/@utility\s+card-ring-dim\s*\{/);
+    expect(stylesheet).toMatch(/@utility\s+card-ring-quiet\s*\{/);
 
     // The gradient border is a masked pseudo-element rather than a DOM node -- decision 1, and the
     // reason is that a decorative node would land inside the one subtree where "leak nothing" is a
@@ -214,6 +217,37 @@ describe('src/index.css', () => {
     expect(ringBlock).toContain('var(--color-ring-from)');
     expect(ringBlock).toContain('var(--color-ring-glow)');
     expect(ringBlock).not.toMatch(/oklch\(/);
+  });
+
+  it('should suppress the bloom by variable rather than by a second box-shadow', () => {
+    // ===================================================================
+    //  THE SAME CASCADE HAZARD AS `position: relative` BELOW, ONE
+    //  PROPERTY OVER, AND THE REASON `card-ring-quiet` IS SHAPED THE WAY
+    //  IT IS.
+    //
+    //  `CardStack`'s back carries `card-ring card-ring-quiet` together, so
+    //  a `box-shadow: none` in the quiet utility would be two rules
+    //  declaring the SAME property at the same specificity in the same
+    //  cascade layer -- and which one won would depend on the order
+    //  Tailwind happened to emit two custom utilities in. Declaring a
+    //  custom property that `card-ring` READS is order-independent, because
+    //  the two rules touch different properties.
+    //
+    //  It matters visually rather than theoretically: the back sits pixel
+    //  for pixel behind the front card, so if the bloom survived, two
+    //  identical glows would composite into a halo half again as bright as
+    //  the tuned one, on every card of every game.
+    // ===================================================================
+    const quiet = utilityBlock(stylesheet, 'card-ring-quiet') ?? '';
+
+    expect(quiet).toContain('--ring-glow-color:');
+    expect(quiet).not.toContain('box-shadow');
+
+    // And the ring has to actually READ the override, with the token as its fallback -- otherwise
+    // the variable is set and nothing consumes it, which is a silent no-op of the usual kind.
+    expect(utilityBlock(stylesheet, 'card-ring') ?? '').toContain(
+      'var(--ring-glow-color, var(--color-ring-glow))',
+    );
   });
 
   it('should not set position in either ring utility', () => {
@@ -234,7 +268,7 @@ describe('src/index.css', () => {
     //  stylesheet end of it. `Card.test.tsx` and `CardStack.test.tsx` hold
     //  the component end by asserting `absolute` sits beside the ring class.
     // ===================================================================
-    for (const utility of ['card-ring', 'card-ring-dim']) {
+    for (const utility of ['card-ring', 'card-ring-quiet']) {
       const block = utilityBlock(stylesheet, utility);
       expect(block).not.toBeNull();
       expect(block ?? '').not.toMatch(

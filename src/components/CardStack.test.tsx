@@ -22,6 +22,7 @@ import {
   lowConfidenceCard,
   noYearCard,
 } from './__fixtures__/cards';
+import { clearQrCache } from '../game/qr-cache';
 import type { Card } from '../../shared/types';
 
 const { toDataURLMock } = vi.hoisted(() => ({
@@ -50,6 +51,13 @@ describe('CardStack', () => {
     toDataURLMock.mockImplementation((text) =>
       Promise.resolve(`data:image/png;base64,QR(${text})`),
     );
+    /*
+      Generated codes are cached at MODULE level (`src/game/qr-cache.ts`), which is what carries
+      the back's preloaded code across an advance. Vitest isolates modules per FILE, not per test,
+      so without this every test after the first renders the fixture deck against a warm cache --
+      the generation counts below would read 0 and the placeholder would never appear.
+    */
+    clearQrCache();
   });
 
   // Testing Library does NOT auto-clean up here: its `afterEach(cleanup)` only registers when
@@ -67,7 +75,12 @@ describe('CardStack', () => {
     const image = await screen.findByRole('img');
     expect(image.getAttribute('src')).toContain(noYearCard.id);
 
-    // Exactly one card has a face: the backs are empty divs, so there is one QR, not three.
+    /*
+      ONE image in the accessibility tree, though there are two in the DOM: the back is
+      `aria-hidden`, and a role query skips an aria-hidden subtree. That is the assertion worth
+      making -- the back exists for the eye during a swipe, and a screen reader must not be read
+      the same generic "Scan to play in Spotify" twice per card.
+    */
     expect(screen.getAllByRole('img')).toHaveLength(1);
     // And no interactive element anywhere in the stack -- the controls live outside the
     // draggable surface, because a pointer-up on a button inside it reads as a tap and flips
@@ -75,78 +88,136 @@ describe('CardStack', () => {
     expect(screen.queryAllByRole('button')).toEqual([]);
   });
 
-  it('should render up to two backs behind the current card', () => {
-    const { container } = renderStack(fixtureDeck, 0);
+  it('should render exactly one back, however much deck is left', () => {
+    // One, not two and not seven. Two was the Phase 5 shape and it is what produced the
+    // "two cards, one inside the other" look once the top card was dragged aside: each back
+    // was scaled from its CENTRE, so both were inset on every side rather than peeking.
+    // With the back at the card's exact size there is nothing for a second one to add.
+    expect(
+      renderStack(fixtureDeck, 0).container.querySelectorAll('[data-testid="card-back"]'),
+    ).toHaveLength(1);
 
-    // Two, not seven: the stack is a depth cue, so it caps regardless of how much deck is
-    // left. A 100-card playlist must not mount 100 divs.
-    expect(container.querySelectorAll('[data-testid="card-back"]')).toHaveLength(2);
+    cleanup();
+
+    // And the same one card from the other end of the deck.
+    expect(
+      renderStack(fixtureDeck, fixtureDeck.length - 2).container.querySelectorAll(
+        '[data-testid="card-back"]',
+      ),
+    ).toHaveLength(1);
   });
 
-  it('should render no backs on the last card', async () => {
+  it('should render no back on the last card', async () => {
     // The tail of the deck. A phantom back for a card that does not exist would be a promise
     // of another card at the exact moment the game is about to end.
     const { container } = renderStack(fixtureDeck, fixtureDeck.length - 1);
 
     expect(container.querySelectorAll('[data-testid="card-back"]')).toHaveLength(0);
-    // And the current card is still there -- "no backs" must not mean "nothing rendered".
+    // And the current card is still there -- "no back" must not mean "nothing rendered".
     expect(await screen.findByRole('img')).not.toBeNull();
   });
 
-  it('should render exactly one back with one card left behind the current one', () => {
-    // The other end of the `slice`: one remaining card is one back, not two and not zero.
-    const { container } = renderStack(fixtureDeck, fixtureDeck.length - 2);
-
-    expect(container.querySelectorAll('[data-testid="card-back"]')).toHaveLength(1);
-  });
-
-  it('should not render title, artist, year, or a QR code for the backs', async () => {
+  it('should preload the next card on the back, with its QR', async () => {
     // ===================================================================
-    //  THE LEAK-AND-COST ASSERTION, and the one that stops a later
-    //  "just reuse Card for the backs" refactor.
+    //  THE POINT OF THE BACK, and a reversal of what this file asserted
+    //  until 2026-08-06 (it used to pin `toHaveBeenCalledTimes(1)`).
     //
-    //  LEAK: the whole game rests on the next card being a mystery.
-    //  `backface-visibility` does not remove text from the DOM, so the
-    //  only safe version of a card peeking out from behind is one with
-    //  nothing to read -- in devtools, in Ctrl+F, or in the a11y tree.
-    //
-    //  COST: every QR is an async `toDataURL()` render. Reusing `Card`
-    //  would triple that work per advance for two faces nobody can see.
+    //  An empty div is not what a player is looking for when they slide a
+    //  card away -- they are looking for the next card, and it used to
+    //  arrive blank because its QR could not begin generating until the
+    //  advance had already happened. Generating it one card early is the
+    //  cost this deliberately pays, and it pays it off the critical path.
     // ===================================================================
     const { container } = renderStack([highConfidenceCard, lowConfidenceCard, noYearCard], 0);
 
-    const backs = [...container.querySelectorAll('[data-testid="card-back"]')];
-    expect(backs).toHaveLength(2);
-
-    // Nothing at all inside a back -- not text, not an element.
-    for (const back of backs) {
-      expect(back.textContent).toBe('');
-      expect(back.children).toHaveLength(0);
-    }
-
-    // And nothing about the upcoming cards anywhere in the tree, including in attributes --
-    // `outerHTML` catches an `aria-label` or a `data-*` that `textContent` would miss.
-    const html = container.innerHTML;
-    for (const upcoming of [lowConfidenceCard, noYearCard]) {
-      expect(html).not.toContain(upcoming.title);
-      expect(html).not.toContain(upcoming.artist);
-      expect(html).not.toContain(String(upcoming.year));
-      // Not even the id: it is what the QR encodes, and a scannable next card is a leak.
-      expect(html).not.toContain(upcoming.id);
-    }
-
-    /*
-      The QR was generated once, for the current card only.
-
-      AWAITED, which it did not have to be before Phase 7: `QrCode` now reaches `qrcode` through a
-      dynamic `import()`, so generation no longer starts synchronously inside the effect and a
-      same-tick `toHaveBeenCalledTimes(1)` reads 0. The assertion being made is still "once, for the
-      front card" -- `waitFor` only moves it to after the import resolves.
-    */
     await waitFor(() => {
-      expect(toDataURLMock).toHaveBeenCalledTimes(1);
+      expect(toDataURLMock).toHaveBeenCalledTimes(2);
     });
-    expect(toDataURLMock.mock.calls[0]?.[0]).toContain(highConfidenceCard.id);
+
+    const encoded = toDataURLMock.mock.calls.map(([text]) => text);
+    expect(encoded.some((text) => text.includes(highConfidenceCard.id))).toBe(true);
+    expect(encoded.some((text) => text.includes(lowConfidenceCard.id))).toBe(true);
+    // TWO cards ahead is not preloaded. The back caps the cost at one extra code per advance.
+    expect(encoded.some((text) => text.includes(noYearCard.id))).toBe(false);
+
+    // The back's code is really in the back, painted and ready before any swipe happens.
+    const back = container.querySelector('[data-testid="card-back"]');
+    await waitFor(() => {
+      expect(back?.querySelector('img')?.getAttribute('src')).toContain(lowConfidenceCard.id);
+    });
+  });
+
+  it('should never render an answer on the back, or a card two ahead', async () => {
+    // ===================================================================
+    //  THE LEAK ASSERTION. It survived the back becoming a real card face
+    //  unchanged in the part that matters, and it is the one that stops a
+    //  later "reuse `Card` for the back so the flip is smoother" refactor.
+    //
+    //  The whole game rests on a card being a mystery until it is flipped,
+    //  and `backface-visibility` does not remove text from the DOM. So the
+    //  back may render `CardHiddenSide` and nothing else: no title, no
+    //  artist, no year, in body text or in any attribute, in devtools, in
+    //  Ctrl+F or in the a11y tree.
+    //
+    //  The track ID is the one thing that IS now in the document a card
+    //  early, because the QR encodes it -- 22 opaque characters, on a face
+    //  that is a mystery by construction, for the card the player is in the
+    //  act of dealing themselves. That was weighed and accepted; the answer
+    //  was not.
+    // ===================================================================
+    const { container } = renderStack([highConfidenceCard, lowConfidenceCard, noYearCard], 0);
+
+    const back = container.querySelector('[data-testid="card-back"]');
+    expect(back).not.toBeNull();
+
+    // Wait for the code so the assertion runs against the FULL back, not a placeholder.
+    await waitFor(() => {
+      expect(back?.querySelector('img')).not.toBeNull();
+    });
+
+    // `outerHTML` rather than `textContent`: an `aria-label`, a `title` or a `data-*` is a leak
+    // surface exactly as body text is, and only the markup catches those.
+    const backHtml = back?.outerHTML ?? '';
+    expect(backHtml).not.toContain(lowConfidenceCard.title);
+    expect(backHtml).not.toContain(lowConfidenceCard.artist);
+    expect(backHtml).not.toContain(String(lowConfidenceCard.year));
+    // No reveal face at all, mounted or empty. `CardStack` does not import `CardRevealSide`,
+    // and this is the assertion that keeps it that way.
+    expect(back?.querySelector('[data-testid="card-reveal-face"]')).toBeNull();
+    expect(back?.querySelector('[role="status"]')).toBeNull();
+
+    // And the card AFTER the back is not in the document in any form -- not its answer, not
+    // even its id. The preload is one card deep.
+    const html = container.innerHTML;
+    expect(html).not.toContain(noYearCard.title);
+    expect(html).not.toContain(noYearCard.artist);
+    expect(html).not.toContain(String(noYearCard.year));
+    expect(html).not.toContain(noYearCard.id);
+  });
+
+  it("should place the back at the card's exact size and position, with no transform", () => {
+    // ===================================================================
+    //  THE FIX FOR "TWO CARDS, ONE INSIDE THE OTHER".
+    //
+    //  The backs used to carry `translateY(10px) scale(0.96)`. `scale()` is
+    //  CENTRE-origin, so it pulled the bottom edge UP by (H / 2) x step --
+    //  8.96px at the card's 448px ceiling -- against a 10px push down. The
+    //  net was a 1px peek at the bottom and an INSET on every other side,
+    //  so what a swipe uncovered was a smaller concentric rectangle rather
+    //  than the next card. Measured in `docs/agent_findings.md`.
+    //
+    //  `inset-0` with no transform is the whole fix: the back is the card's
+    //  box exactly, hidden at rest and aligned the instant the top card
+    //  moves. jsdom computes no layout, so this pins the DECLARATIONS --
+    //  the geometry itself is a browser check.
+    // ===================================================================
+    const { container } = renderStack(fixtureDeck, 0);
+
+    const back = container.querySelector('[data-testid="card-back"]') as HTMLElement;
+    expect(back.className).toContain('inset-0');
+    expect(back.style.transform).toBe('');
+    // No Tailwind transform utility sneaking the same thing back in through a class.
+    expect(back.className).not.toMatch(/(?:^|\s)(?:scale|translate)-/);
   });
 
   it('should size the stack wrapper from the same token as the card', () => {
@@ -182,38 +253,42 @@ describe('CardStack', () => {
     expect(sizeClasses(cardOuter)).toBe(sizeClasses(wrapper));
   });
 
-  it('should apply the dimmed ring variant to each back, and no full ring', () => {
+  it('should give the back the full ring with the bloom suppressed', () => {
     // ===================================================================
-    //  The silent-no-op guard for the backs, and one assertion beyond it.
+    //  The silent-no-op guard for the back, and the bloom decision beside
+    //  it. Both classes REPLACED `card-ring-dim` on 2026-08-06.
     //
-    //  `card-ring-dim` REPLACED `border border-border`, which measured
-    //  1.31:1 against the page -- the cue that tells a player there is more
-    //  deck was very nearly invisible. An unknown utility emits no rule at
-    //  all, so losing the replacement would put it back to invisible with
-    //  every check green.
+    //  `card-ring`, because the back is a real card face now and has to
+    //  look like one the moment a swipe uncovers it -- the old flat dimmed
+    //  border was chosen when a back was a two-pixel sliver.
     //
-    //  It must NOT be the full `card-ring`. That one carries a masked
-    //  `::before` and an outer bloom, and two blooms stacked behind the
-    //  live card would read as a halo around the deck rather than an edge
-    //  on a card. The flat border is the decision; see `src/index.css`.
+    //  `card-ring-quiet`, because a `box-shadow` paints OUTSIDE the element
+    //  and this element's box is pixel-for-pixel the front card's: two
+    //  identical blooms composite to a halo half again as bright as the one
+    //  the design was tuned for, on every card of every game. It suppresses
+    //  the glow through a custom property rather than a second `box-shadow`
+    //  declaration, so the two utilities cannot race in the cascade.
+    //
+    //  An unknown Tailwind utility emits NO RULE AT ALL and fails every
+    //  check silently, which is why the class names are pinned here and the
+    //  utilities themselves in `src/index.css.test.ts`.
     //
     //  `absolute` is asserted for the same reason as on the faces: neither
     //  ring utility sets `position`, by design.
     // ===================================================================
     const { container } = renderStack(fixtureDeck, 0);
 
-    const backs = [...container.querySelectorAll('[data-testid="card-back"]')];
-    expect(backs).toHaveLength(2);
+    const back = container.querySelector('[data-testid="card-back"]') as HTMLElement;
 
-    for (const back of backs) {
-      expect(back.className).toContain('card-ring-dim');
-      expect(back.className).toContain('absolute');
-      expect(back.className).toContain('rounded-card');
-      // `card-ring-dim` contains the substring `card-ring`, so this has to be a word-boundary
-      // match rather than a `toContain` -- which would pass on the dimmed class alone.
-      expect(back.className).not.toMatch(/(?:^|\s)card-ring(?:\s|$)/);
-      expect(back.className).not.toContain('border-border');
-    }
+    // Word-boundary matches: `card-ring` is a prefix of `card-ring-quiet`, so a `toContain`
+    // for the first would pass on the second alone and vice versa.
+    expect(back.className).toMatch(/(?:^|\s)card-ring(?:\s|$)/);
+    expect(back.className).toMatch(/(?:^|\s)card-ring-quiet(?:\s|$)/);
+    expect(back.className).toContain('absolute');
+    expect(back.className).toContain('rounded-card');
+    // The removed utility, so a revert has to be deliberate rather than a merge artefact.
+    expect(back.className).not.toContain('card-ring-dim');
+    expect(back.className).not.toContain('border-border');
   });
 
   it('should give adjacent duplicate-id cards distinct keys', () => {

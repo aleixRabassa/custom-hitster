@@ -1,10 +1,10 @@
-# Custom Hitster
+# Playlist Hitster
 
 Turn any public Spotify playlist link into a playable digital [Hitster](https://hitstergame.com/) deck. Paste a playlist URL, press Start, and get a shuffled deck of cards you play in the browser: each card shows only a QR code, and you tap to reveal the title, artist, and — the part the game is actually about — the song's **original** release year. Release years come from MusicBrainz rather than Spotify, because Spotify reports the _album edition's_ date, which turns a 2011 remaster of Bohemian Rhapsody into a 2011 song.
 
 Built with **Vite 8 + React 19 + TypeScript + Tailwind CSS v4**, with a thin **Vercel Functions** backend that exists only to do what a browser can't: reach a CORS-blocked endpoint, set a custom `User-Agent`, and hold a cache shared across users.
 
-> **Status: playable end to end. Phases 0–7 complete, and three of Phase 8's five items built** — 579 tests across 40 files. Paste a link or pick one of nine suggested playlists, and you get a shuffled deck you can flip, swipe, scan and play audio from, with a HUD, an exit confirmation and an end screen. The deck resumes across a reload. Phase 8 added **a shareable deck link, a saved-playlist library and a printable PDF export** (2026-08-06); the **card visual redesign and the PWA are still open** — see [`docs/plans/plan.md`](./docs/plans/plan.md).
+> **Status: playable end to end. Phases 0–8 code complete** — 588 tests across 41 files. Paste a link or pick one of nine suggested playlists, and you get a shuffled deck you can flip, swipe, scan and play audio from, with a HUD, an exit confirmation and an end screen. The deck resumes across a reload. Phase 8 added **a shareable deck link, a saved-playlist library, a printable PDF export, the neon-ring card design and an installable offline shell** (all 2026-08-06). What remains is **manual verification** — a printer, a phone, a deployment and a screen reader — scoped in [`docs/development.md`](./docs/development.md) §5. See [`docs/plans/plan.md`](./docs/plans/plan.md).
 >
 > **You must run it under `vercel dev`, not `pnpm dev`** — see [Quickstart](#quickstart). Under `pnpm dev` the app loads but Start always fails, and it fails in a way that looks like an app bug.
 
@@ -70,6 +70,30 @@ Cards whose year has not arrived yet are left out and counted, never listed. Tit
 
 ---
 
+## Install it on your phone
+
+The app is installable — "Add to Home Screen" on iOS, or the install prompt in Chrome. It then opens
+without browser chrome, with its own icon and splash screen.
+
+**What works with no connection:** the app loads, and **a game you already started resumes and stays
+fully playable.** The QR codes are embedded in the page rather than fetched, flipping and swiping are
+local, and the years already found travel with the cards. So a deck dealt on wifi keeps working on the
+underground.
+
+**What needs a connection:** song previews, the release-year lookup for cards that have not resolved
+yet, and **dealing a new deck** — pressing Start offline tells you so immediately rather than hanging.
+
+This is deliberate rather than unfinished: **playlist and year responses are never cached.** Spotify
+refreshes its own editorial playlists, so a cached playlist would hand you a deck that no longer
+matches the real one — and being told to reconnect is better than being quietly given the wrong deck.
+
+> **An update arrives after you close every tab of the app.** A new version installs in the background
+> and waits, instead of switching over while you are mid-game. That is on purpose: parts of the app are
+> loaded on demand, and swapping versions underneath a running deck would break the next card. Close it
+> and reopen it to get the new version.
+
+---
+
 ## Environment variables
 
 Full reference, including exactly how the app behaves when each is missing, in [`docs/api.md`](./docs/api.md) §"Environment variables".
@@ -123,7 +147,10 @@ Summarised; the full list with measurements is [`docs/development.md`](./docs/de
 - **Saved playlists and the resumable game share one browser's storage, and two tabs will clobber each other.** Last write wins. A saved playlist is only an id, a name and a date, so the cost is a row you re-save.
 - **A playlist whose tracks MusicBrainz cannot place deals no game at all.** Cards without a year are removed from the deck, so an obscure or very new playlist can empty it entirely; the app warns and returns you to the start screen rather than pretending you finished a deck.
 - **Progressive loading has never been verified against a real deployment** with Upstash configured, and neither has the game screen's Lighthouse score. The landing screen scores **Performance 99 · Accessibility 100 · Best Practices 100 · SEO 100** (2026-08-06, production build, LCP 1.6 s); Accessibility 100 is an automated floor, not a result.
-- **None of Phase 7's reduced-motion, responsive, keyboard or screen-reader behaviour has been verified**, and no test in this repo can verify it — jsdom has no media queries, no `matchMedia`, no layout and no accessibility tree, so both ends of each contract are asserted and nothing in between. The screen-reader pass is the one to prioritise.
+- **None of Phase 7's reduced-motion, responsive, keyboard or screen-reader behaviour has been verified**, and no test in this repo can verify it — jsdom has no media queries, no `matchMedia`, no layout and no accessibility tree, so both ends of each contract are asserted and nothing in between. The screen-reader pass is the one to prioritise, and it is the only check on the app's only live region — the card's reveal, which is what makes the year audible at all.
+- **The installable app has never been installed.** The manifest's fields, the precache list and the update strategy are all verified by reading the build output; whether a phone actually offers to install it, what the icon and splash screen look like, whether the maskable icon crops cleanly, and what a redeploy does to an open tab are all unchecked. So is the offline behaviour described above — it is what the configuration implies rather than what anyone has seen.
+- **The card's neon ring has been looked at once, in one browser, at one size.** Its tokens and utilities are pinned by tests, but jsdom paints nothing, so the visual check was a single Chrome screenshot of a static page reproducing the card's markup. Lighthouse has not been re-run since the redesign; the ring adds no layout, so the thing to watch is paint rather than CLS.
+- **The deck's two "cards behind" do not actually show on a large screen.** They are scaled down slightly and offset downwards, and at a full-size card the scaling cancels the offset almost exactly — so they peek out by one or two pixels and the card's own border covers even that. A pre-existing bug found by measurement (2026-08-06) and deliberately left alone, because fixing it means choosing how the deck should look rather than correcting arithmetic.
 
 ---
 

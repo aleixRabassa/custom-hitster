@@ -2344,3 +2344,68 @@ treating a single named failure in `App.test.tsx` as a regression, re-run the fi
 suite. Both passing means the clock, not the code, and a different test name on a second occurrence
 confirms it. This does not weaken the two entries above; it adds a case where their "a real regression
 names an assertion and a line" test gives a false positive under parallel load.
+
+---
+
+## 2026-08-06 — The deck's back is now the next card, preloaded; two documented rules reversed
+
+**A player reported the deck "showing two cards, one inside the other" while sliding the current card
+away.** That is the geometry measured in the 2026-08-06 entry above ("The two peeking backs of the deck
+do not render at all on a full-height card") seen from the other side: the backs were centre-scaled to
+96% and 92%, so they were inset on every edge, and the only moment they were visible at all was while
+the top card was off to one side — where two concentric smaller rectangles is exactly what an inset
+back looks like. **That entry's open geometry decision is now closed**, and not by retuning the two
+constants: both were deleted.
+
+**The new shape is ONE back, at `inset-0` with no transform, holding the next card's real hidden face.**
+At rest it is covered pixel for pixel by the card in front. During a drag it is revealed already
+complete, QR included.
+
+**Two things that were written down as rules were reversed, so they are recorded here rather than
+quietly changed:**
+
+**1. The backs are no longer empty divs.** `CardStack.tsx`, `architecture.md` §3 and
+`plan.phase-8-look-and-shell.md` all said no content, no QR, no id. The **leak** half of that
+justification survives intact and is still asserted: the back renders `CardHiddenSide` and this file
+does not import `CardRevealSide`, so no title, artist or year can reach the document a card early, in
+text or in an attribute. What is now in the document one card ahead is the **track id**, because the QR
+encodes it — 22 opaque characters on a face that is a mystery by construction, for the card the player
+is in the act of dealing themselves. The **cost** half was the actual trade: one extra `toDataURL()`
+per advance, which is the point rather than a side effect, because that work has moved off the moment
+the card changes.
+
+**2. `card-ring-dim` and `--color-ring-dim` are gone.** A flat dark border was the right call for a
+two-pixel sliver and the wrong one for a full-size card face. The back takes the same `card-ring` as the
+faces, plus a new `card-ring-quiet`.
+
+**`card-ring-quiet` sets a custom property; it does not declare `box-shadow`.** The glow is a
+`box-shadow`, which paints OUTSIDE the element — and the back's box is now pixel-for-pixel the front
+card's, so two identical blooms would composite (0.45 over 0.45 ≈ 0.70 alpha) into a halo half again as
+bright as the tuned one, on every card of every game. Suppressing it with `box-shadow: none` beside
+`card-ring` on the same element would be **two rules declaring the same property at the same
+specificity in the same layer**, which is the identical cascade-order hazard the entry above records
+for `position: relative`. `card-ring` therefore reads
+`var(--ring-glow-color, var(--color-ring-glow))` and the quiet utility declares only that variable: two
+different properties, order-independent.
+
+**The preload needed a module-level cache to be worth anything, and the cache has to be read during
+render.** `src/game/qr-cache.ts` is new. The back and the front card are **different elements** — a
+plain div in `CardStack` versus a `Card` inside an `AnimatePresence` keyed on card id — so an advance
+unmounts the element holding the preloaded code and mounts a fresh one. Per-element state throws the
+code away at exactly the moment it was preloaded for. Reading the shared cache in an **effect** does not
+fix it either: `useEffect` runs after paint, so the new front card still paints one frame of the pulsing
+placeholder. `QrCode` reads the cache in its render body, which is the standard write-once resource-cache
+shape.
+
+**The consequence for tests: every DOM test file that renders a card now needs `clearQrCache()` in its
+`beforeEach`.** Vitest isolates modules per **file**, not per test, so the cache outlives a test — and
+four tests in `QrCode.test.tsx` render the same url and size and assert on a **placeholder**. Warm, they
+find a finished image instead, and the failure reads as the component painting too eagerly rather than
+as shared module state. This is the same class of trap as the missing `afterEach(cleanup)` recorded
+earlier in this file, and it now applies to six files: `QrCode`, `Card`, `CardHiddenSide`, `CardStack`,
+`GameScreen`, `App`.
+
+**Still unverified, and no local check reaches it:** jsdom computes no layout, so nothing here can prove
+the back is actually aligned, actually covered at rest, or that the QR is really painted before the
+swipe rather than during it. The class names and the absence of a transform are pinned; the geometry is
+one drag in a browser. Added to `docs/development.md` §5.

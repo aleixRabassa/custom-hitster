@@ -1,67 +1,59 @@
 /**
- * The deck as the player sees it: the current card, draggable, over 2 static backs that make
- * it look like there is more to come.
+ * The deck as the player sees it: the current card, draggable, directly over the next card --
+ * which is the same size, exactly behind, and therefore invisible until the top card moves.
  *
  * Owns two things and nothing else -- WHEN a card leaves (presence and keying) and the
  * gesture wiring it needs. How a card looks and how its own element moves stay in `Card`.
  *
  * ===========================================================================
- *  THE BACKS RENDER NO CARD DATA. NOT THE TITLE, NOT THE YEAR, NOT A QR CODE,
- *  NOT AN `id`, NOT AN `aria-label`. THEY ARE EMPTY DIVS.
+ *  THE BACK IS THE NEXT CARD'S HIDDEN FACE, AND THAT REVERSES WHAT THIS FILE
+ *  SAID UNTIL 2026-08-06. READ THIS BEFORE "RESTORING" THE EMPTY DIVS.
  *
- *  Two independent reasons, either of which alone would be enough:
+ *  Through Phase 8 the stack rendered TWO backs as empty divs, each scaled down
+ *  4% and pushed 10px further down than the one above. Two things were wrong
+ *  with that in a real browser:
  *
- *  LEAK. A card behind the top one has no reason for its data to be in the
- *  document at all. The whole game rests on the next card being a mystery, and
- *  `backface-visibility` does not remove text from the DOM -- so the only safe
- *  version of "a card peeking out from behind" is one that has nothing to read.
- *  A devtools search on a live game must find ONE card's worth of data.
+ *  1. Centre-origin `scale()` pulls a card's bottom edge UP by (H / 2) x step --
+ *     8.96px at the 448px ceiling -- against a 10px push down. So the backs
+ *     peeked by 1px and 2px at the bottom and were INSET on every other side. As
+ *     soon as the top card was dragged aside, what appeared behind it was two
+ *     concentric rectangles smaller than the card: "two cards, one inside the
+ *     other". The geometry is measured in `docs/agent_findings.md` (2026-08-06).
  *
- *  COST. Every QR code is an asynchronous `qrcode.toDataURL()` render. Reusing
- *  `Card` for the backs would triple that work per advance, for two cards nobody
- *  can see the face of -- and `plan.md` lazy-loads QR generation in Phase 7
- *  precisely because it is not free.
+ *  2. An empty div is not what a player is looking for when they slide a card
+ *     away. They are looking for the next card, and it arrived blank -- its QR
+ *     could not begin generating until the advance had already happened.
  *
- *  So: do not "just reuse `Card`" for the backs. `CardStack.test.tsx` asserts
- *  against exactly that refactor.
+ *  So there is now ONE back, at `inset-0` with NO transform of any kind, holding
+ *  the real next card's hidden face. At rest it is covered pixel for pixel by the
+ *  card in front of it. During a drag it is revealed already complete, with its
+ *  code generated; `src/game/qr-cache.ts` is what carries that code across the
+ *  advance, when the back unmounts and a `Card` mounts in its place.
+ *
+ *  ===========================================================================
+ *   WHAT DID NOT CHANGE IS THE PART THAT MATTERS: THE BACK CANNOT SHOW AN
+ *   ANSWER. It renders `CardHiddenSide` and NOTHING ELSE -- this file does not
+ *   import `CardRevealSide` and must not. No title, no artist, no year, no
+ *   `aria-label`, in the DOM or in an attribute; a devtools search for the
+ *   answer to any card still finds nothing, and `CardStack.test.tsx` asserts it
+ *   over the back's `outerHTML`.
+ *
+ *   What IS now in the document for one card ahead is the track ID, because the
+ *   QR encodes it. That was weighed and accepted when this changed: the id is 22
+ *   opaque characters, the hidden face is a mystery BY CONSTRUCTION, and the
+ *   card it belongs to is the one the player is in the act of dealing themselves.
+ *   The cost is one extra `toDataURL()` per advance, one card ahead -- which is
+ *   the whole point, since that work is what has moved off the critical path.
+ *  ===========================================================================
  * ===========================================================================
  */
 
 import { AnimatePresence } from 'motion/react';
 
 import { Card } from './Card';
+import { CardHiddenSide } from './CardHiddenSide';
 import { useCardGestures } from '../hooks/useCardGestures';
 import type { Card as CardData } from '../../shared/types';
-
-/**
- * How many backs peek out behind the current card.
- *
- * `plan.md` says "2-3 cards peeking" and leaves the choice to the eye during real-device
- * verification. 2 is the starting value: at 3 the offsets below either grow the stack's
- * footprint on a phone or compress until the third back is indistinguishable from the second.
- */
-const VISIBLE_BACKS = 2;
-
-/**
- * Vertical offset per back, in CSS pixels. Each back sits slightly lower than the one above.
- *
- * DELIBERATELY STILL ABSOLUTE after Phase 7 made the card fluid, which was an open question
- * (plan 1, question 2). A fixed 10px is a larger proportion of a 288px-tall card than of a
- * 448px one -- but the offset's job is to be PERCEPTIBLE, and 10px is close to the minimum
- * that reads as "there is another card behind this one" at all. Scaling it down to ~6px on the
- * smallest card would make the depth cue faintest exactly where the stack is already tightest,
- * which is the wrong direction. Like every other number in this file it was chosen by eye and
- * has never been seen on a phone.
- */
-const BACK_OFFSET_PX = 10;
-
-/**
- * Scale reduction per back. Small: the backs suggest depth, they do not perform it.
- *
- * This one needed no Phase 7 decision -- `scale()` is proportional by construction, so 4% of a
- * smaller card is already a smaller absolute inset.
- */
-const BACK_SCALE_STEP = 0.04;
 
 export interface CardStackProps {
   /** The shuffled deck, straight from `GameState.deck`. */
@@ -90,62 +82,84 @@ export function CardStack({
   const currentCard = deck[currentIndex];
 
   /**
-   * The cards behind. `slice` is what makes the tail of the deck correct for free: on the last
-   * card it returns `[]`, so there are no backs and no phantom back for a card that does not
-   * exist. Reading `deck[currentIndex + 1]` instead would hand `noUncheckedIndexedAccess` an
-   * `undefined` to guard at every use site.
+   * The card behind, or `undefined` on the last card of the deck.
+   *
+   * `noUncheckedIndexedAccess` makes that `undefined` explicit, which is exactly right here: a
+   * back rendered for a card that does not exist would promise another card at the moment the
+   * game is about to end. One `?` at the single use site below is the whole guard.
    */
-  const backs = deck.slice(currentIndex + 1, currentIndex + 1 + VISIBLE_BACKS);
+  const nextCard = deck[currentIndex + 1];
 
-  // `noUncheckedIndexedAccess` makes this genuinely possibly-undefined. The reducer clamps
-  // `currentIndex`, so it should not happen -- but rendering nothing beats throwing.
+  // Possibly-undefined for the same reason. The reducer clamps `currentIndex`, so it should not
+  // happen -- but rendering nothing beats throwing.
   if (!currentCard) return null;
 
   return (
     /*
-      `isolate` creates a stacking context so the backs' `-z-10` stays behind the current card
-      without escaping to sit behind the screen's own background. Without it the backs are
-      positioned elements and would paint OVER the in-flow card.
+      `isolate` creates a stacking context so the back's `-z-10` stays behind the current card
+      without escaping to sit behind the screen's own background. Without it the back is a
+      positioned element and would paint OVER the in-flow card.
+
+      That negative index is also what orders the three cards correctly during an exit: the back
+      paints below in-flow content, the INCOMING card is in flow, and the outgoing card has been
+      absolutised by `popLayout` and so paints above both. The card sliding away therefore
+      uncovers the card that is replacing it, not the preload behind it.
 
       The size tokens are THE SAME PAIR `Card` uses, and that is the point of them: this wrapper
-      and the card it holds carried `h-[28rem] w-72` separately until Phase 7, and the backs are
-      `absolute inset-0` on this element -- so the two literals had to agree or the peeking backs
-      misaligned, with nothing enforcing it. `CardStack.test.tsx` asserts the class strings match.
+      and the card it holds carried `h-[28rem] w-72` separately until Phase 7, and the back is
+      `absolute inset-0` on this element -- so the two literals had to agree or it would not line
+      up with the card, with nothing enforcing it. `CardStack.test.tsx` asserts the classes match.
     */
     <div className="relative isolate h-(--card-height) w-(--card-width)">
-      {backs.map((back, offset) => (
+      {nextCard ? (
         <div
-          /*
-            Keyed on id PLUS deck index. A playlist may legitimately contain the same track
-            twice -- Phase 3's reducer handles duplicate ids explicitly for exactly that
-            reason -- and a bare-id key collides between two adjacent copies, which React
-            resolves by reusing one element for both. The index is what disambiguates.
-          */
-          key={`${back.id}:${currentIndex + 1 + offset}`}
           data-testid="card-back"
           /*
-            Hidden from assistive technology as well as empty of data: a back is a visual
-            depth cue, and announcing two blank groups before every card is noise.
+            DELIBERATELY UNKEYED. React reuses this one element as `nextCard` changes, so the
+            `QrCode` inside keeps its state across an advance instead of remounting -- one fewer
+            thing depending on the cache. Adjacent duplicate ids, which the `AnimatePresence` key
+            below has to disambiguate, are a non-issue here for the same reason: there is no list
+            and nothing to reconcile by identity.
+          */
+
+          /*
+            Hidden from assistive technology, which is not a leak decision but a duplication one:
+            this face carries the same generic "Scan to play the full song" line as the card in
+            front of it, and announcing it twice per card says nothing about either. Sighted
+            players get the preload; nobody gets a second copy of the same sentence.
           */
           aria-hidden="true"
           /*
-            `card-ring-dim` is Phase 8's dimmed ring, and it REPLACED `border border-border` --
-            which measured 1.31:1 against the page, so the cue telling a player there is more deck
-            was very nearly invisible. It is a flat border rather than a dimmed gradient because a
-            back is a sliver a few pixels tall once it is scaled and offset; see `src/index.css`.
+            NO TRANSFORM AND NO OFFSET. `inset-0` on a wrapper sized from the same two tokens as
+            the card means this is exactly the card's box -- which is the requirement: covered
+            completely at rest, fully aligned the moment the top card starts to move. The 4%
+            scale and 10px translate that used to be here are what produced the nested-rectangle
+            look; see the header.
 
-            IT IS STILL A CLASS ON AN EMPTY ELEMENT. The ring must not become a reason to render
-            anything in here -- no content, no QR, no id, no `aria-label`. Two assertions in
-            `CardStack.test.tsx` cover that, and the header block above says why.
+            `card-ring` (the full gradient band, not the old flat `card-ring-dim`) because this
+            is now a real card face and must look like one when it is uncovered.
+            `card-ring-quiet` suppresses ONLY the bloom: the glow is a `box-shadow` painted
+            outside the element, so at rest this element's bloom would sit exactly on top of the
+            front card's and composite to a brighter halo than the design was tuned for. The two
+            utilities declare different properties and therefore do not race in the cascade --
+            see the long note in `src/index.css`.
+
+            `pointer-events-none` because a back is never a target: the drag belongs to the card
+            in front, and the QR image inside here must not be able to start a native image drag
+            of its own once a swipe has exposed it.
           */
-          className="card-ring-dim absolute inset-0 -z-10 rounded-card bg-surface"
-          style={{
-            transform: `translateY(${(offset + 1) * BACK_OFFSET_PX}px) scale(${
-              1 - (offset + 1) * BACK_SCALE_STEP
-            })`,
-          }}
-        />
-      ))}
+          className="card-ring card-ring-quiet pointer-events-none absolute inset-0 -z-10 overflow-hidden rounded-card bg-surface"
+        >
+          {/*
+            `CardHiddenSide`, and never `Card`. Not for the cost -- the whole point of this
+            element is to pay the QR cost early -- but because `Card` mounts a reveal FACE, and
+            a reveal face behind the current card is one `isFlipped` bug away from the answer
+            being in the document. This subtree cannot show a year, because nothing that renders
+            one is imported into this file.
+          */}
+          <CardHiddenSide card={nextCard} />
+        </div>
+      ) : null}
 
       {/*
         `initial={false}` so the first card of a session does not animate IN from nowhere --

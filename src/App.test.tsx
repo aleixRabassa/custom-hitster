@@ -25,6 +25,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import App from './App';
 import { fixtureDeck, highConfidenceCard, pendingYearCard } from './components/__fixtures__/cards';
 import { PLAYLIST_ERROR_MESSAGES } from './game/messages';
+import { clearQrCache } from './game/qr-cache';
 import { SESSION_STORAGE_KEY, SESSION_VERSION } from './game/persistence';
 import { LIBRARY_STORAGE_KEY, LIBRARY_VERSION } from './game/playlist-library';
 import type { PlaylistFetch } from './game/playlist-client';
@@ -220,6 +221,10 @@ describe('App', () => {
     toDataURLMock.mockImplementation((text) =>
       Promise.resolve(`data:image/png;base64,QR(${text})`),
     );
+    // Generated codes are cached at module level (`src/game/qr-cache.ts`) so the deck's preload
+    // survives a card advance. Vitest isolates modules per FILE, so every test here would
+    // otherwise render against whatever the previous one generated. Same reason as `cleanup`.
+    clearQrCache();
 
     vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(() => Promise.resolve());
     vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
