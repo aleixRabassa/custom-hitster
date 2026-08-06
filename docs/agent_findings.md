@@ -1192,31 +1192,103 @@ designed; the ranking is a separate question and belongs with the year-resolutio
 
 ---
 
-## 2026-08-05 — Measured contrast ratios for every colour pair in the app, and the four that failed
+## 2026-08-06 — Measured contrast ratios for every colour pair in the app (re-audited for the Phase 8 ring)
 
-Computed for Phase 7 plan 1 step 9 by converting Tailwind v4's `oklch()` palette values to sRGB and
-applying the WCAG 2.x relative-luminance formula — not eyeballed, and not read off a devtools panel.
-Recorded here so a Phase 8 palette change has a baseline to beat rather than a fresh argument.
+**This table REPLACES the one Phase 7 recorded on 2026-08-05, and replacing it rather than appending
+a second one is deliberate** (Phase 8 plan 1, step 6): two tables describing different builds is
+worse than one, because the reader cannot tell which build they are looking at. The Phase 7
+narrative below the table survives intact, because **not one token Phase 7 introduced changed value**
+— what changed is that there are now more of them.
 
-| Foreground                     | Background                        | Ratio    | Verdict                            |
-| ------------------------------ | --------------------------------- | -------- | ---------------------------------- |
-| `neutral-600` (placeholder)    | `neutral-900` (URL input)         | **2.30** | **FAIL** — worst in the app        |
-| `white`                        | `emerald-600` (Start, Play again) | **3.67** | **FAIL** — the primary action      |
-| `neutral-100` at `opacity-40`  | `neutral-800` (disabled controls) | **3.46** | **FAIL** — dimmest text in the app |
-| `neutral-500`                  | `neutral-950` (HUD and 3 others)  | **4.18** | **FAIL** — and used at `text-xs`   |
-| `neutral-600` (`····` glyph)   | `neutral-800`                     | 1.94     | exempt — `aria-hidden` decoration  |
-| `neutral-400`                  | `neutral-950`                     | 7.63     | pass                               |
-| `neutral-300` ("Year unknown") | `neutral-800`                     | 10.20    | pass                               |
-| `amber-300` (unconfirmed year) | `neutral-800`                     | 10.45    | pass                               |
-| `amber-200` (notice copy)      | `amber-950/40` over `neutral-950` | 14.71    | pass                               |
-| `red-400` (landing error)      | `neutral-950`                     | 6.84     | pass                               |
+Computed by converting the `oklch()` token values to sRGB and applying the WCAG 2.x
+relative-luminance formula — not eyeballed, and not read off a devtools panel. The calculator was
+validated by reproducing **all 16** of Phase 7's independently-computed ratios to the last recorded
+digit before any new value was measured with it.
 
-**Two of the four failures were not on the plan's list.** The plan named the placeholder, the
-`neutral-500` muted text and the disabled opacity. `white` on `emerald-600` — the label of the app's
-primary action, at 16px, on two screens — turned up only because the audit computed everything rather
-than the enumerated four. That is the argument for computing everything.
+> **One thing about the method is worth writing down, because getting it wrong is optimistic rather
+> than merely wrong.** Alpha compositing — `--opacity-disabled` on text, `warning-surface/40` on the
+> notice — must be done on **gamma-encoded sRGB** channel values, which is what CSS does. Compositing
+> in linear light instead put `--color-fg` at `--opacity-disabled` over `--color-surface-raised` at
+> **8.72:1** against the true **5.94:1**. That is a two-and-a-half-stop error in the direction that
+> makes a failure look like a pass, and Phase 7's recorded numbers are what caught it.
 
-**The replacements, and why each is the value it is:**
+| Foreground                              | Background                        | Ratio    | Verdict                                  |
+| --------------------------------------- | --------------------------------- | -------- | ---------------------------------------- |
+| _1.4.3 — text on the page_              |                                   |          |                                          |
+| `--color-fg`                            | `--color-page`                    | 18.15    | pass                                     |
+| `--color-fg-secondary`                  | `--color-page`                    | 7.63     | pass                                     |
+| `--color-fg-muted` (HUD, hints)         | `--color-page`                    | 6.12     | pass                                     |
+| `--color-danger` (landing error)        | `--color-page`                    | 6.84     | pass                                     |
+| _1.4.3 — text on a control surface_     |                                   |          |                                          |
+| `--color-fg` (input, buttons)           | `--color-surface`                 | 16.42    | pass                                     |
+| `--color-fg-muted` (placeholder)        | `--color-surface`                 | 5.54     | pass                                     |
+| `--color-fg` at `--opacity-disabled`    | `--color-surface`                 | 6.54     | pass                                     |
+| `--color-fg` at `--opacity-disabled`    | `--color-surface-raised`          | 5.94     | pass                                     |
+| _1.4.3 — the HIDDEN card face_          |                                   |          |                                          |
+| `--color-fg` ("Scan to play…")          | `--color-surface`                 | 16.42    | pass                                     |
+| _1.4.3 — the REVEAL card face_          |                                   |          |                                          |
+| **`--color-fg-year` (the year, 60px)**  | `--color-surface-raised`          | 11.30    | pass — **new**, needs 3:1 (large)        |
+| `--color-fg` (title, 20px semibold)     | `--color-surface-raised`          | 13.86    | pass                                     |
+| `--color-fg-secondary` (artist, 16px)   | `--color-surface-raised`          | 5.83     | pass                                     |
+| `--color-fg-heading` ("Year unknown")   | `--color-surface-raised`          | 10.20    | pass                                     |
+| `--color-warning` ("Unconfirmed year")  | `--color-surface-raised`          | 10.45    | pass                                     |
+| `--color-fg-decorative` (`····`)        | `--color-surface-raised`          | 1.94     | **exempt** — `aria-hidden` decoration     |
+| _1.4.3 — filled controls_               |                                   |          |                                          |
+| `--color-on-accent`                     | `--color-accent`                  | 5.40     | pass                                     |
+| `--color-on-accent`                     | `--color-accent-hover`            | 8.03     | pass                                     |
+| `--color-on-danger`                     | `--color-danger`                  | 6.84     | pass                                     |
+| `--color-on-danger`                     | `--color-danger-hover`            | 10.30    | pass                                     |
+| `--color-danger` (exit glyph)           | `--color-surface-raised`          | 5.23     | pass                                     |
+| _1.4.3 — the notice banner_             |                                   |          |                                          |
+| `--color-warning-text`                  | `warning-surface/40` over page    | 14.71    | pass                                     |
+| `--color-warning-glyph` (Dismiss ✕)     | `warning-surface/40` over page    | 10.68    | pass                                     |
+| _1.4.11 — the focus ring, needs 3:1_    |                                   |          |                                          |
+| `--color-focus-ring`                    | `--color-page`                    | 18.15    | pass                                     |
+| `--color-focus-ring`                    | `--color-surface`                 | 16.42    | pass                                     |
+| `--color-focus-ring`                    | `--color-surface-raised`          | 13.86    | pass                                     |
+| `--color-focus-ring`                    | `--color-border-strong`           | 9.53     | pass                                     |
+| `--color-focus-ring`                    | `--color-accent`                  | 3.36     | pass — narrowly                          |
+| `--color-focus-ring`                    | `--color-danger` (End game)       | **2.65** | **exempt** — see below. Newly surfaced   |
+| _1.4.11 — the neon ring, decoration_    |                                   |          |                                          |
+| `--color-ring-from` (green)             | `--color-surface`                 | 13.39    | pass                                     |
+| `--color-ring-via` (cyan)               | `--color-surface`                 | 11.84    | pass                                     |
+| `--color-ring-to` (magenta)             | `--color-surface`                 | 4.90     | pass                                     |
+| `--color-ring-from` (green)             | `--color-surface-raised`          | 11.30    | pass                                     |
+| `--color-ring-via` (cyan)               | `--color-surface-raised`          | 9.99     | pass                                     |
+| `--color-ring-to` (magenta)             | `--color-surface-raised`          | 4.13     | pass — the worst of the three stops      |
+| `--color-ring-dim` (the backs)          | `--color-page`                    | 4.23     | pass — was **1.31**, see below           |
+
+**The audit found one pair nobody had measured, and it is the same lesson Phase 7 recorded.** Phase 7
+wrote "two of the four failures were not on the plan's list… that is the argument for computing
+everything". This time the pair is **`--color-focus-ring` on `--color-danger` at 2.65:1** — the
+focused state of `ExitConfirmDialog`'s filled **End game** button. It is not a Phase 8 regression: the
+filled danger button landed with the exit-confirmation work on **2026-08-05**, _after_ Phase 7's table
+was computed, so nothing had ever measured it. Recomputing every pair rather than only the changed
+ones is what surfaced it.
+
+**Why it is exempt rather than fixed.** `focus-ring` is `outline: 2px solid …` with
+`outline-offset: 2px`, so the outline is painted **entirely in the 2px gap outside the button's border
+box** — and that gap shows the dialog panel's `--color-surface`, against which the ring is 16.42:1.
+The danger fill is not adjacent to the outline; a 2px band of the panel colour separates them, which
+is what WCAG 1.4.11 asks for. The 2.65:1 figure is a pair that **is never rendered adjacently**. The
+same reasoning is what Phase 7 already noted for the 3.36:1 accent row, which passed anyway.
+**This is worth stating rather than leaving implicit, because the obvious "fix" is wrong:** the ring
+is one colour app-wide by decision, and no single colour can clear 3:1 against both a near-black page
+and a light red fill — darkening it to pass on danger would fail it on all three surfaces, which is
+where the ring actually spends its time.
+
+**`--color-fg-decorative` re-confirmed at 1.94:1.** Step 6 required re-checking the exemption under
+the new palette rather than assuming it. It holds, and trivially: the exemption depends on
+`--color-surface-raised`, which did not move, so the ratio is unchanged to the digit. It remains the
+`····` pending glyph only, `aria-hidden`, beside a text line that carries the whole meaning.
+
+**One row IMPROVED without being a listed target.** The stack's peeking backs were
+`border border-border` — `oklch(26.9%)` on the page, **1.31:1**. The cue telling a player there is
+more deck to come was very nearly invisible, and it had never been measured because a decorative
+border is not something 1.4.3 covers and 1.4.11 does not reach either. `--color-ring-dim` puts it at
+4.23:1. Nothing required this; the audit simply made it visible.
+
+**The Phase 7 narrative, still accurate, on why three of these values are what they are:**
 
 - **`--color-fg-muted: oklch(65% 0 none)`** replaces both `neutral-500` and the `neutral-600`
   placeholder. One token, because the two roles share the binding constraint: it has to clear 4.5:1 on
@@ -1233,15 +1305,14 @@ than the enumerated four. That is the argument for computing everything.
 - **`--opacity-disabled: 0.6`** replaces `disabled:opacity-40`: 5.94:1. `0.5` also passes (4.59) but with
   no margin.
 
-**The one left failing deliberately:** the `····` pending glyph at 1.94:1. It is `aria-hidden` decoration
-beside a text line carrying the whole meaning, so WCAG 1.4.3 exempts it, and raising it would be a visual
-change Phase 8 owns.
-
 **The focus ring** is one colour for the whole app, `oklch(97% 0 none)`, picked against the lightest
-surface it must clear: 13.86:1 on `neutral-800`, 16.42 on `neutral-900`, 18.15 on the page. On the emerald
-primary button it is 3.36:1, which clears the 3:1 WCAG 1.4.11 asks of a non-text indicator — and the 2px
-outline offset puts most of the ring on the page background there anyway. An emerald ring was the obvious
-alternative and is wrong for exactly one reason: it would be nearly invisible on the emerald button.
+surface it must clear. An emerald ring was the obvious alternative and is wrong for exactly one
+reason: it would be nearly invisible on the emerald button.
+
+**The four values Phase 7 corrected, for the record**, since the failing ratios no longer appear
+above: the placeholder was `neutral-600` on `neutral-900` at **2.30:1** (the worst in the app),
+`white` on `emerald-600` was **3.67:1** on the primary action, `neutral-100` at `opacity-40` on
+`neutral-800` was **3.46:1**, and `neutral-500` on `neutral-950` was **4.18:1** at `text-xs`.
 
 ---
 
@@ -2035,3 +2106,53 @@ Fixed by giving the hook an explicit `60_000` budget — a ceiling, not a durati
 **Two summary shapes now mean "not a real failure", and they are different:** `Errors` with zero
 failed tests means the jsdom workers never started (re-run; see the 2026-08-05 entry), and `N skipped`
 in one file means a hook timed out.
+
+## 2026-08-06 — The real-device pass, finally run: gestures/audio/QR fine, and one defect on the lock screen
+
+The pass Phase 5 scoped then waived and Phase 7 left outstanding was run on **Android** on 2026-08-06
+(`plan.phase-8-features.md` step 23). Results, verbatim where they were reported that way:
+
+- **"Gestures work fine."** No retune. So the five constants in `src/game/gestures.ts` — including
+  `SWIPE_COMMIT_DISTANCE_PX` at 96px, which is **52% of the card's width at its floor** since the card
+  went fluid — are now _validated on one device_ rather than documented guesses. The arithmetic warning
+  in that file stands as a warning; the numbers are evidently acceptable.
+- **"Audio sounds good."** The 2026-08-06 stop-on-flip reversal is confirmed on hardware, which was the
+  only place it could be: the unit test proves no `pause()` is called, not that sound continues.
+- **"QR scans right."** The 14/18 on-screen size at ~144px is closed. The **printed** scan is separate
+  and still owed, since nothing has been printed yet.
+- **The Android lock-screen check found a real defect:** the preview **kept playing while the phone was
+  locked**.
+
+**The defect and the fix.** Android keeps a playing `<audio>` element alive across a screen lock, so
+the song continued to a locked phone with a media notification in the shade — for a game whose entire
+premise is that the phone reveals nothing about the current card. Note precisely what was and was not
+wrong: `navigator.mediaSession.metadata` has never been set, so the panel **could not name the track**
+and the Phase 0 leak rule held. What was wrong was playing at all.
+
+`useCardAudio` now pauses on `visibilitychange` when `document.hidden` — which also covers switching
+apps and switching tabs, deliberately. Three choices inside that, each with a reason:
+
+- **`visibilitychange`, not `blur` or `pagehide`.** `blur` fires when focus merely leaves the window, so
+  a click into devtools would pause the game; `pagehide` is about unloading. `document.hidden` is
+  exactly "not on screen".
+- **Pause, not stop.** `currentTime` survives, so unlocking and pressing Play continues rather than
+  restarting from 0:00.
+- **No auto-resume on becoming visible.** A page that starts making noise as a phone unlocks is worse
+  than one that waits to be asked, and the autoplay grant from the original tap is long gone anyway.
+
+**It lives in the HOOK, not in `GameScreen`**, which owns the other pause rules. The distinction is
+that this one is a property of the DOCUMENT rather than of the card: no card changed and the session is
+exactly where the player left it.
+
+**A latent test-file bug fell out of writing the test for it.** `useCardAudio.test.ts` had **no
+`afterEach(cleanup)`** — the repo-wide gotcha AGENTS.md warns about, since Testing Library's automatic
+cleanup only registers when Vitest `globals` are on. Every earlier test's `<audio>` element was still
+mounted, each with its own `visibilitychange` listener, so one dispatched event paused a dozen elements
+and the call log held a dozen entries. Every test before it acted on its own element through the
+harness box and so never noticed: **a document-level listener is the first thing in that file capable
+of exposing a missing cleanup.** Worth remembering as a general property — a missing `cleanup()` is
+invisible until a test observes something global.
+
+Still owed from the same session: the **devtools DOM search on an unflipped card** (not reported), the
+**printed-QR scan**, one **re-check of the lock screen** now that the fix is in, and the whole **iOS**
+column of the Phase 5 checklist — this pass was Android only.

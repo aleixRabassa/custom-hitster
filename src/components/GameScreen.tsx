@@ -40,6 +40,12 @@
  *  here, and `GameScreen.test.tsx` asserts the NON-stop.
  * ===========================================================================
  *
+ * There is a THIRD pause rule and it deliberately does not live here: `useCardAudio` pauses when
+ * `document.hidden` becomes true -- a locked phone, a switched app, a switched tab. It belongs to
+ * the hook rather than to this screen because it is a property of the DOCUMENT rather than of the
+ * card: no card changed, and the session is exactly where the player left it. Found on a real
+ * device on 2026-08-06, when a locked phone went on playing the preview.
+ *
  * ## Exit goes through a confirmation, and this file owns whether it is showing
  *
  * `CardControls`' Exit button now REQUESTS an exit; `ExitConfirmDialog` asks; only a confirmed

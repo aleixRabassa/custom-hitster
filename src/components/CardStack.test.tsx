@@ -182,6 +182,40 @@ describe('CardStack', () => {
     expect(sizeClasses(cardOuter)).toBe(sizeClasses(wrapper));
   });
 
+  it('should apply the dimmed ring variant to each back, and no full ring', () => {
+    // ===================================================================
+    //  The silent-no-op guard for the backs, and one assertion beyond it.
+    //
+    //  `card-ring-dim` REPLACED `border border-border`, which measured
+    //  1.31:1 against the page -- the cue that tells a player there is more
+    //  deck was very nearly invisible. An unknown utility emits no rule at
+    //  all, so losing the replacement would put it back to invisible with
+    //  every check green.
+    //
+    //  It must NOT be the full `card-ring`. That one carries a masked
+    //  `::before` and an outer bloom, and two blooms stacked behind the
+    //  live card would read as a halo around the deck rather than an edge
+    //  on a card. The flat border is the decision; see `src/index.css`.
+    //
+    //  `absolute` is asserted for the same reason as on the faces: neither
+    //  ring utility sets `position`, by design.
+    // ===================================================================
+    const { container } = renderStack(fixtureDeck, 0);
+
+    const backs = [...container.querySelectorAll('[data-testid="card-back"]')];
+    expect(backs).toHaveLength(2);
+
+    for (const back of backs) {
+      expect(back.className).toContain('card-ring-dim');
+      expect(back.className).toContain('absolute');
+      expect(back.className).toContain('rounded-card');
+      // `card-ring-dim` contains the substring `card-ring`, so this has to be a word-boundary
+      // match rather than a `toContain` -- which would pass on the dimmed class alone.
+      expect(back.className).not.toMatch(/(?:^|\s)card-ring(?:\s|$)/);
+      expect(back.className).not.toContain('border-border');
+    }
+  });
+
   it('should give adjacent duplicate-id cards distinct keys', () => {
     // ===================================================================
     //  A playlist may legitimately contain the same track twice, and

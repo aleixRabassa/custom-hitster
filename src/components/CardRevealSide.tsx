@@ -135,7 +135,18 @@ function YearSlot({ card, isYearPending }: CardRevealSideProps) {
 
   return (
     <div className="flex flex-col items-center gap-2">
-      <p className="text-year font-bold tracking-tight text-fg-strong">{card.year}</p>
+      {/*
+        `text-fg-year` is the one text colour Phase 8 changed, and it is the ring's green rather
+        than the near-white `--color-fg-strong` it replaced: the year is the payoff of the game and
+        the mockup gives it the same neon as the card's edge. 11.30:1 on this face, against a 3:1
+        large-text floor.
+
+        FLAT, not the ring's gradient, and that is the audit's decision rather than a shortcut --
+        `background-clip: text` needs `color: transparent`, so a gradient that fails to paint
+        renders the year invisible, and a gradient has no single ratio to record either way. The
+        token's own comment in `src/index.css` carries the full argument.
+      */}
+      <p className="text-year font-bold tracking-tight text-fg-year">{card.year}</p>
       {isUnconfirmed ? <p className="text-sm text-warning">Unconfirmed year</p> : null}
     </div>
   );

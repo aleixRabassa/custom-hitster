@@ -128,7 +128,17 @@ export function CardStack({
             depth cue, and announcing two blank groups before every card is noise.
           */
           aria-hidden="true"
-          className="absolute inset-0 -z-10 rounded-2xl border border-border bg-surface"
+          /*
+            `card-ring-dim` is Phase 8's dimmed ring, and it REPLACED `border border-border` --
+            which measured 1.31:1 against the page, so the cue telling a player there is more deck
+            was very nearly invisible. It is a flat border rather than a dimmed gradient because a
+            back is a sliver a few pixels tall once it is scaled and offset; see `src/index.css`.
+
+            IT IS STILL A CLASS ON AN EMPTY ELEMENT. The ring must not become a reason to render
+            anything in here -- no content, no QR, no id, no `aria-label`. Two assertions in
+            `CardStack.test.tsx` cover that, and the header block above says why.
+          */
+          className="card-ring-dim absolute inset-0 -z-10 rounded-card bg-surface"
           style={{
             transform: `translateY(${(offset + 1) * BACK_OFFSET_PX}px) scale(${
               1 - (offset + 1) * BACK_SCALE_STEP

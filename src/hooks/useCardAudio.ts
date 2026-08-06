@@ -94,6 +94,53 @@ export function useCardAudio(previewUrl: string | undefined): UseCardAudioResult
   }, [previewUrl, canPlay]);
 
   /**
+   * Pause when the document goes hidden -- a locked phone, a switched app, a switched tab.
+   *
+   * ===========================================================================
+   *  FOUND ON A REAL DEVICE, 2026-08-06, AND IT IS THE ONLY THING THE DEVICE PASS
+   *  FOUND WRONG.
+   *
+   *  Android keeps a playing `<audio>` element alive when the screen locks, so the
+   *  preview went on playing to a locked phone. Three reasons that is wrong, and
+   *  the third is this app's own rule:
+   *
+   *  1. Nobody is listening. The player locked the phone.
+   *  2. It is a background media session, so the OS puts a notification in the
+   *     shade with transport controls -- for a game whose entire premise is that
+   *     the phone reveals nothing about the current card. Nothing here sets
+   *     `navigator.mediaSession.metadata`, so the panel cannot name the track,
+   *     but the honest fix is not to be playing at all.
+   *  3. The 30-second preview would run out while locked, so unlocking would
+   *     show a Play button and a card the player thought was mid-preview.
+   *
+   *  PAUSE, NOT STOP: the position is kept, so unlocking and pressing Play
+   *  continues rather than restarting. And deliberately NO AUTO-RESUME on becoming
+   *  visible again -- a page that starts making noise as a phone unlocks is worse
+   *  than one that waits to be asked, and the autoplay grant from the original tap
+   *  is long gone by then anyway.
+   *
+   *  `visibilitychange` rather than `blur`/`pagehide`: `blur` fires when focus
+   *  merely leaves the window (a devtools click would pause the game), and
+   *  `pagehide` is about unloading. `document.hidden` is exactly "not on screen".
+   * ===========================================================================
+   */
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (!document.hidden) return;
+
+      const element = audioRef.current;
+      if (!element) return;
+
+      element.pause();
+      setIsPlaying(false);
+    };
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, []);
+
+  /**
    * Playback runs to its natural end -- no auto-stop timer and no auto-advance (decided
    * 2026-08-04). The `ended` event is tracked for one reason only: to put the button back to
    * "Play" when the 30 seconds are up.

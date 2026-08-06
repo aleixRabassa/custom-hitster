@@ -192,17 +192,29 @@ export function Card({
           isFlipped ? 'rotate-y-180' : ''
         }`}
       >
-        {/* The hidden face stays mounted throughout -- a 3D flip needs both faces to exist. */}
+        {/*
+          The hidden face stays mounted throughout -- a 3D flip needs both faces to exist.
+
+          `card-ring` is Phase 8's neon ring and it goes on EACH FACE rather than on the outer
+          element, which is the only place it can go: the outer element is the perspective
+          container and does not rotate, so a ring there would sit still while the card turned
+          inside it. On the faces it is `backface-hidden` like everything else, so the bloom flips
+          with the card and only the front face's glow is ever visible.
+
+          `absolute` is load-bearing for the ring, not just for the layout. `card-ring` sets no
+          `position` on purpose -- see the long note in `src/index.css` -- so its `::before` needs
+          this element to be the positioned ancestor. `Card.test.tsx` asserts the pair together.
+        */}
         <div
           data-testid="card-hidden-face"
-          className="absolute inset-0 overflow-hidden rounded-2xl bg-surface backface-hidden"
+          className="card-ring absolute inset-0 overflow-hidden rounded-card bg-surface backface-hidden"
         >
           <CardHiddenSide card={card} />
         </div>
 
         <div
           data-testid="card-reveal-face"
-          className="absolute inset-0 overflow-hidden rounded-2xl bg-surface-raised backface-hidden rotate-y-180"
+          className="card-ring absolute inset-0 overflow-hidden rounded-card bg-surface-raised backface-hidden rotate-y-180"
         >
           {isFlipped ? <CardRevealSide card={card} isYearPending={isYearPending} /> : null}
         </div>

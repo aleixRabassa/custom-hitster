@@ -108,6 +108,32 @@ function reducedMotionBlock(css: string): string | null {
   return null;
 }
 
+/**
+ * An `@utility <name>` body, by the same brace counting as `reducedMotionBlock`.
+ *
+ * `card-ring` nests an `&::before` rule, so a lazy `\{([^}]*)\}` would stop at that inner closing
+ * brace and every assertion over the tail would pass on a fragment. The name is anchored with `\s`
+ * for a second reason: `card-ring` is a prefix of `card-ring-dim`, and a bare `indexOf` would find
+ * the wrong block for whichever of the two happens to be defined first.
+ */
+function utilityBlock(css: string, name: string): string | null {
+  const start = css.search(new RegExp(`@utility\\s+${name}\\s*\\{`));
+  if (start === -1) return null;
+
+  const open = css.indexOf('{', start);
+  let depth = 0;
+
+  for (let index = open; index < css.length; index += 1) {
+    if (css[index] === '{') depth += 1;
+    else if (css[index] === '}') {
+      depth -= 1;
+      if (depth === 0) return css.slice(open + 1, index);
+    }
+  }
+
+  return null;
+}
+
 describe('src/index.css', () => {
   it('should declare a prefers-reduced-motion block covering the flip, the spinner and the placeholder', () => {
     const block = reducedMotionBlock(stylesheet);
@@ -139,6 +165,80 @@ describe('src/index.css', () => {
 
     expect(body).not.toMatch(/^\s*\*\s*[,{]/m);
     expect(body).not.toMatch(/\*\s*\{[^}]*transition/);
+  });
+
+  it('should name every ring and glow token in the theme block', () => {
+    // ===================================================================
+    //  A CANARY, LIKE THE REST OF THIS FILE, and for these tokens it is
+    //  the ONLY automated coverage there can be.
+    //
+    //  These are the first tokens in the app consumed exclusively by an
+    //  `@utility` body. Tailwind does not count that as a use, so a bare
+    //  `@theme` would TREE-SHAKE every one of them and the ring would
+    //  resolve to nothing -- no border, no glow, no error, and all four
+    //  local checks green. `@theme static` is what prevents it, and the
+    //  assertion on `static` below is the load-bearing half of this test.
+    // ===================================================================
+    expect(stylesheet).toMatch(/@theme\s+static\s*\{/);
+
+    for (const token of [
+      '--color-ring-from',
+      '--color-ring-via',
+      '--color-ring-to',
+      '--color-ring-dim',
+      '--color-ring-glow',
+      '--ring-width',
+      '--ring-glow-blur',
+      '--ring-glow-spread',
+      '--radius-card',
+      '--color-fg-year',
+    ]) {
+      expect(stylesheet).toContain(`${token}:`);
+    }
+  });
+
+  it('should define the ring utility and its dimmed variant', () => {
+    expect(stylesheet).toMatch(/@utility\s+card-ring\s*\{/);
+    expect(stylesheet).toMatch(/@utility\s+card-ring-dim\s*\{/);
+
+    // The gradient border is a masked pseudo-element rather than a DOM node -- decision 1, and the
+    // reason is that a decorative node would land inside the one subtree where "leak nothing" is a
+    // hard rule.
+    expect(stylesheet).toMatch(/&::before/);
+    expect(stylesheet).toMatch(/mask-composite:\s*exclude/);
+
+    // Every value comes from a token. `#000` is the mask's alpha channel, not a colour, and is the
+    // only literal the block is allowed.
+    const ringBlock = utilityBlock(stylesheet, 'card-ring') ?? '';
+    expect(ringBlock).toContain('var(--ring-width)');
+    expect(ringBlock).toContain('var(--color-ring-from)');
+    expect(ringBlock).toContain('var(--color-ring-glow)');
+    expect(ringBlock).not.toMatch(/oklch\(/);
+  });
+
+  it('should not set position in either ring utility', () => {
+    // ===================================================================
+    //  THE ONE WAY THIS UTILITY COULD BREAK THE CARD, and it is the
+    //  reflex fix rather than an exotic mistake.
+    //
+    //  `card-ring`'s `::before` is `position: absolute`, so it needs a
+    //  positioned ancestor -- and the obvious way to guarantee one is
+    //  `position: relative` on the utility itself. Both call sites are
+    //  ALREADY `absolute inset-0` (the two faces, the backs), so that
+    //  declaration would collide with Tailwind's own `absolute` in the same
+    //  cascade layer, and which one won would depend on the order two
+    //  custom utilities happened to be emitted in. If `relative` won, both
+    //  card faces would drop out of absolute positioning and stack in flow.
+    //
+    //  So the contract is that the CALLER is positioned, and this is the
+    //  stylesheet end of it. `Card.test.tsx` and `CardStack.test.tsx` hold
+    //  the component end by asserting `absolute` sits beside the ring class.
+    // ===================================================================
+    for (const utility of ['card-ring', 'card-ring-dim']) {
+      const block = utilityBlock(stylesheet, utility);
+      expect(block).not.toBeNull();
+      expect(block ?? '').not.toMatch(/(?:^|[;{\s])position\s*:\s*(?:relative|static|fixed|sticky)/);
+    }
   });
 
   it('should define the card geometry as one derived pair rather than two independent clamps', () => {

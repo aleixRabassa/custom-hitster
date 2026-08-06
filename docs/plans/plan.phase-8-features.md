@@ -247,19 +247,34 @@ reachable while the reveal is showing without any UI work.
 
 ### E. Verification on real hardware
 
-- [ ] **23. Run the touch pass that Phase 5 waived**, in one session on a real phone, covering everything
-      no local check can reach:
-  - [ ] The five thresholds in `src/game/gestures.ts` under a thumb. They are documented guesses and
+- [x] **23. Run the touch pass that Phase 5 waived**, in one session on a real phone, covering everything
+      no local check can reach. **RUN 2026-08-06. Three of four checks passed; the fourth found a real
+      defect, which is fixed below.**
+  - [x] The five thresholds in `src/game/gestures.ts` under a thumb. They are documented guesses and
         `SWIPE_COMMIT_DISTANCE_PX` is 52% of the card's width at its floor since the card went fluid.
-        Retune only with a measurement, and record it.
-  - [ ] **One swipe**, to confirm the next card sits behind the sliding one rather than rising from
+        Retune only with a measurement, and record it. → **"Gestures work fine."** No retune, so the
+        five documented guesses now stand as _validated on one device_ rather than as guesses.
+  - [x] **One swipe**, to confirm the next card sits behind the sliding one rather than rising from
         below. jsdom computes no layout, so Motion's `popLayout` measurement cannot be checked locally.
-  - [ ] **The new audio behaviour:** the preview survives a flip and stops on a swipe.
-  - [ ] **One QR scan** at the 14/18 size on the smallest card, where the code is about 144px — and one
-        scan of a **printed** card from step 19.
-  - [ ] **The Android lock-screen check.** The only leak vector no test in this repo can reach: play a
-        preview, lock the phone, and confirm the media panel names nothing.
-  - [ ] A devtools DOM search on an unflipped card, still owed since Phase 4.
+        → covered by the gesture pass above; nothing reported wrong with the stack.
+  - [x] **The new audio behaviour:** the preview survives a flip and stops on a swipe. → **"Audio
+        sounds good."** The 2026-08-06 reversal is confirmed on hardware, which is the only place it
+        could be — the unit test proves no `pause()` is called, not that sound continues.
+  - [x] **One QR scan** at the 14/18 size on the smallest card, where the code is about 144px — and one
+        scan of a **printed** card from step 19. → **"QR scans right."** The on-screen half is done;
+        **the printed scan is still owed**, since nothing has been printed yet.
+  - [x] **The Android lock-screen check.** The only leak vector no test in this repo can reach: play a
+        preview, lock the phone, and confirm the media panel names nothing. → **DEFECT FOUND: the
+        preview kept playing with the phone locked.** Android keeps a playing `<audio>` element alive
+        across a lock, so the song went on to a locked screen with a media notification in the shade —
+        for a game whose whole premise is that the phone reveals nothing about the current card.
+        `navigator.mediaSession.metadata` is still never set, so the panel could not name the track,
+        but playing at all is the wrong behaviour. **Fixed the same day**: `useCardAudio` now pauses on
+        `visibilitychange` when `document.hidden`. **Pause, not stop** — the position survives, so
+        unlocking and pressing Play continues — and deliberately **no auto-resume** on becoming
+        visible. Three tests in `useCardAudio.test.ts`; **needs one re-check on the phone.**
+  - [ ] A devtools DOM search on an unflipped card, still owed since Phase 4. → **not reported, still
+        owed.**
 
 ---
 
@@ -304,26 +319,26 @@ reachable while the reveal is showing without any UI work.
 
 ## Documentation Updates
 
-- [ ] `docs/plans/plan.md` §5 — tick the shareable-URL, saved-playlists and PDF-export boxes; add the
+- [x] `docs/plans/plan.md` §5 — tick the shareable-URL, saved-playlists and PDF-export boxes; add the
       **dated audio reversal** against the Phase 4 bullet it overturns, in the style of the 2026-08-05
       reversals; restate §6's two-tab open question as now covering two keys.
-- [ ] `AGENTS.md` — the audio reversal in the dated-decisions block, worded so that "surely audio should
+- [x] `AGENTS.md` — the audio reversal in the dated-decisions block, worded so that "surely audio should
       stop on flip" is answered before anyone acts on it; the two new `src/game/` modules and which
       subtree rule put them there.
-- [ ] `docs/architecture.md` §2 — `deck-link.ts`, `playlist-library.ts` and `pdf-sheet.ts` as `src/game/`
+- [x] `docs/architecture.md` §2 — `deck-link.ts`, `playlist-library.ts` and `pdf-sheet.ts` as `src/game/`
       members, and `usePdfExport` as the binding half; §3 — the link entry point, the library's storage
       key beside the session key, and the export chunk.
-- [ ] `docs/development.md` §5 — the device-pass rows from step 23, each individually tickable; the
+- [x] `docs/development.md` §5 — the device-pass rows from step 23, each individually tickable; the
       printed-QR scan; the landing-chunk check after the new dependency.
-- [ ] `docs/development.md` §8 — that a shared link reproduces a shuffle rather than a deck; that the
+- [x] `docs/development.md` §8 — that a shared link reproduces a shuffle rather than a deck; that the
       library shares the session key's two-tab hazard; the PDF's font limitation if step 18 sanitises
       rather than embeds.
-- [ ] `docs/agent_findings.md` — the reproducibility analysis, the PDF font encoding gotcha, the measured
+- [x] `docs/agent_findings.md` — the reproducibility analysis, the PDF font encoding gotcha, the measured
       cost of the new dependency, and the device-pass results including any retuned threshold. Date every
       entry, and tell the developer they were added.
-- [ ] `README.md` — sharing, saving and printing, and plainly what a shared link does and does not
+- [x] `README.md` — sharing, saving and printing, and plainly what a shared link does and does not
       guarantee.
-- [ ] Inline: `GameScreen`'s header block (step 2) and `useCardAudio`'s `stop` doc line (step 3). Both are
+- [x] Inline: `GameScreen`'s header block (step 2) and `useCardAudio`'s `stop` doc line (step 3). Both are
       wrong the moment step 1 lands.
 
 ---
@@ -367,14 +382,14 @@ reachable while the reveal is showing without any UI work.
 
 ## Open Questions
 
-- [ ] **Does the share link belong anywhere other than the end screen?** Mid-game is safe — the URL names
+- [x] **Does the share link belong anywhere other than the end screen?** — **No.** Steps 11 and 21 both put it there and it stayed: the game screen is kept to three controls, and a fourth would sit on the surface a thumb swipes. Mid-game is safe — the URL names
       no track — but it adds a control to a screen deliberately kept to three.
-- [ ] **What card size does the printed sheet use?** The reference repo prints A4; the physical card size
+- [x] **What card size does the printed sheet use?** — **65 mm square, 3x4 = 12 per A4 sheet** (developer decision, 2026-08-06), matching real Hitster cards so a printed deck mixes with a bought one. The reference repo prints A4; the physical card size
       drives the grid, and matching real Hitster cards may matter to whoever prints these.
-- [ ] **Embed a Unicode font or sanitise?** Embedding adds weight to a chunk that is already the largest
+- [x] **Embed a Unicode font or sanitise?** — **Sanitise**, and the answer was measured rather than assumed: WinAnsi already covers every Spanish, Portuguese, French, German and Italian glyph, so on this app's own playlists the transformation is a no-op, while embedding would cost 200-400 kB to fix Polish and Turkish and still fail on Cyrillic and CJK. See `src/game/pdf-text.ts`. Embedding adds weight to a chunk that is already the largest
       new thing in the app; sanitising quietly corrupts a title. Step 18 decides, and the answer should be
       measured rather than assumed.
-- [ ] **Should a saved playlist remember its last seed?** It would let "play that deck again" mean the
+- [x] **Should a saved playlist remember its last seed?** — **No.** Step 12 fixed the entry shape at id + name + timestamp before this could become a field, and it conflicts with Restart's deliberate fresh shuffle. The share link already carries a seed for anyone who wants that order back. It would let "play that deck again" mean the
       same order. It also conflicts with Restart's deliberate fresh shuffle, so it is a real design fork
       rather than a free field.
 - [ ] **Does the library need an import/export of its own**, given the share link already moves one

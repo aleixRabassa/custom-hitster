@@ -20,7 +20,7 @@
  * every control would be a no-op that trivially "passes".
  */
 
-import { act, render } from '@testing-library/react';
+import { act, cleanup, render } from '@testing-library/react';
 import { createElement, useEffect } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -78,6 +78,17 @@ function controls(box: Harness): CardAudioControls {
 }
 
 /**
+ * Set `document.hidden`, which jsdom exposes as a read-only getter.
+ *
+ * Redefined rather than assigned — `document.hidden = true` is silently ignored — and
+ * `configurable` so successive calls in one test can flip it back. jsdom fires no
+ * `visibilitychange` of its own, so the event is dispatched by hand beside this.
+ */
+function hide(hidden: boolean): void {
+  Object.defineProperty(document, 'hidden', { value: hidden, configurable: true });
+}
+
+/**
  * Invoke a control inside `act()`.
  *
  * Required, and the failure mode is confusing without it: every control sets state, and
@@ -109,6 +120,25 @@ describe('useCardAudio', () => {
   });
 
   afterEach(() => {
+    /*
+      ===========================================================================
+       `cleanup()` WAS MISSING FROM THIS FILE UNTIL 2026-08-06, AND THE
+       VISIBILITY TEST IS WHAT EXPOSED IT.
+
+       Testing Library's auto-`afterEach(cleanup)` only registers when Vitest
+       `globals` are on, and this repo imports `describe`/`it`/`expect`
+       explicitly -- so every DOM test file needs its own (AGENTS.md says so).
+       Without it, every `<audio>` element rendered by an earlier test stays
+       mounted, and every one of those hooks keeps its own
+       `visibilitychange` listener. One dispatched event therefore paused a
+       dozen elements and `calls` held a dozen entries.
+
+       The tests that came before it all act on their OWN element through the
+       harness box, so they never noticed. A document-level listener is the
+       first thing here that could.
+      ===========================================================================
+    */
+    cleanup();
     vi.restoreAllMocks();
   });
 
@@ -204,6 +234,68 @@ describe('useCardAudio', () => {
     expect(calls).toEqual([`pause:${highConfidenceCard.previewUrl}`]);
     expect(box.element.currentTime).toBe(0);
     expect(controls(box).isPlaying).toBe(false);
+  });
+
+  it('should pause when the document becomes hidden', () => {
+    // ===================================================================
+    //  THE ONLY DEFECT THE REAL-DEVICE PASS FOUND (2026-08-06).
+    //
+    //  Android keeps a playing element alive when the screen locks, so the
+    //  preview went on playing to a locked phone -- with a media
+    //  notification in the shade, for a game whose whole premise is that
+    //  the phone reveals nothing about the current card.
+    //
+    //  PAUSE, not stop: `currentTime` survives, so unlocking and pressing
+    //  Play continues instead of restarting.
+    // ===================================================================
+    const { box } = renderAudioHook(highConfidenceCard.previewUrl);
+    run(() => controls(box).play());
+    box.element.currentTime = 8;
+    calls = [];
+
+    hide(true);
+    run(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    expect(calls).toEqual([`pause:${highConfidenceCard.previewUrl}`]);
+    expect(controls(box).isPlaying).toBe(false);
+    // The position is kept, which is the difference between this and `stop()`.
+    expect(box.element.currentTime).toBe(8);
+  });
+
+  it('should not resume when the document becomes visible again', () => {
+    // Deliberately no auto-resume: a page that starts making noise as a phone unlocks is worse
+    // than one that waits to be asked, and the autoplay grant from the original tap is gone.
+    const { box } = renderAudioHook(highConfidenceCard.previewUrl);
+    run(() => controls(box).play());
+
+    hide(true);
+    run(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    calls = [];
+
+    hide(false);
+    run(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    expect(calls).toEqual([]);
+    expect(controls(box).isPlaying).toBe(false);
+  });
+
+  it('should ignore a visibility change that makes the document visible', () => {
+    // The event fires in both directions, and the handler must do nothing on the way back --
+    // pausing an element the player just started would be a race with their own tap.
+    const { box } = renderAudioHook(highConfidenceCard.previewUrl);
+    hide(false);
+    run(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    run(() => controls(box).play());
+    expect(controls(box).isPlaying).toBe(true);
   });
 
   it('should clear isPlaying when the element emits ended', () => {

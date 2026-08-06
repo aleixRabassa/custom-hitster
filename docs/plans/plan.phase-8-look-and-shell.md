@@ -121,54 +121,74 @@ worth asserting in a node test, and a literal buried in a plugin call cannot be 
 
 ## Implementation Steps
 
-- [ ] **1. Write the target palette down before touching CSS.** A table of every token that changes,
+- [x] **1. Write the target palette down before touching CSS.** A table of every token that changes,
       its current value and its intended one. Doing this first is what makes step 6 an audit rather
-      than a rediscovery.
-  - [ ] Decide whether `--color-page` and `--color-surface` move at all. Staying near-black is the
+      than a rediscovery. — **Execution note 1.**
+  - [x] Decide whether `--color-page` and `--color-surface` move at all. Staying near-black is the
         conservative answer and has three independent reasons: the existing contrast table survives
         largely intact, an OLED phone is the target device, and a neon ring reads as neon only
-        against something dark.
-  - [ ] Decide the ring's hue relationship to `--color-accent`. One accent family is a design
-        choice; two is a decision that needs stating.
-- [ ] **2. Add the ring and glow tokens to `@theme static`.** Ring width, ring colour, glow colour,
+        against something dark. — **Neither moves, and neither does `--color-surface-raised`.**
+  - [x] Decide the ring's hue relationship to `--color-accent`. One accent family is a design
+        choice; two is a decision that needs stating. — **Two, stated in note 1: emerald stays the
+        action colour, the ring is decoration that never conveys state.**
+- [x] **2. Add the ring and glow tokens to `@theme static`.** Ring width, ring colour, glow colour,
       glow blur, glow spread, and the dimmed variants the stack's backs need. `static`, as the whole
       block already is — a bare `@theme` would tree-shake any token only an `@utility` references,
-      which is precisely what these are.
-- [ ] **3. Add the ring utilities to `src/index.css`.** One for the live card, one dimmer variant for
-      the backs. Both composed from step 2's tokens, no literals.
-  - [ ] If a gradient border is used, keep it in the utility's own `::before` rather than adding a
-        node to the card's DOM.
-- [ ] **4. Apply the utilities and remove the literals they replace.** `Card`, `CardHiddenSide`,
+      which is precisely what these are. — **Ten tokens; the `static` hazard is spelled out in the
+      block's own header, because these are the first tokens in the app consumed ONLY by an
+      `@utility`.**
+- [x] **3. Add the ring utilities to `src/index.css`.** One for the live card, one dimmer variant for
+      the backs. Both composed from step 2's tokens, no literals. — **`card-ring` and
+      `card-ring-dim`. See execution note 3 for the one thing neither of them sets.**
+  - [x] If a gradient border is used, keep it in the utility's own `::before` rather than adding a
+        node to the card's DOM. — **A masked `::before`; no DOM node was added anywhere.**
+- [x] **4. Apply the utilities and remove the literals they replace.** `Card`, `CardHiddenSide`,
       `CardRevealSide`, `CardStack`. Every border, radius or shadow still written inline in those
-      files either becomes a token or is deleted.
-  - [ ] `CardStack`'s backs stay **empty divs** — no content, no QR, no id. The dimmer ring is a
+      files either becomes a token or is deleted. — **Three `rounded-2xl` became `rounded-card`;
+      `border border-border` on the backs became `card-ring-dim`. `CardHiddenSide` needed no
+      change — see open question 2 on the QR's surround.**
+  - [x] `CardStack`'s backs stay **empty divs** — no content, no QR, no id. The dimmer ring is a
         class on an empty element, and it must not become a reason to render anything inside one.
-  - [ ] Nothing interactive goes inside `Card`. Two existing tests assert this; do not weaken them.
-- [ ] **5. Decide whether the ring animates, and record the answer either way.**
-  - [ ] If it does: add a fourth `data-motion` hook, a fourth rule in the `prefers-reduced-motion`
-        block, and a line in the canary test. Four surfaces, still two declarations plus one.
-  - [ ] If it does not: say so in the CSS comment, because "why is the ring the only static thing"
-        is otherwise a question the next session re-answers from scratch.
-- [ ] **6. Re-audit contrast against the new values, computed and not eyeballed.** Every
+  - [x] Nothing interactive goes inside `Card`. Two existing tests assert this; do not weaken them.
+        — **Both still pass unmodified.**
+- [x] **5. Decide whether the ring animates, and record the answer either way.** — **It does not.**
+  - [x] ~~If it does: add a fourth `data-motion` hook, a fourth rule in the
+        `prefers-reduced-motion` block, and a line in the canary test.~~ Not taken.
+  - [x] If it does not: say so in the CSS comment, because "why is the ring the only static thing"
+        is otherwise a question the next session re-answers from scratch. — **Said, in the ring
+        token block's header, with the three reasons.**
+- [x] **6. Re-audit contrast against the new values, computed and not eyeballed.** Every
       foreground/background pair in the app, not only the ones that changed — a new surface value
-      moves ratios for text that was never touched.
-  - [ ] WCAG 1.4.3 for text: 4.5:1 normal, 3:1 large. The year, the muted lines, the placeholder,
+      moves ratios for text that was never touched. — **38 pairs. The calculator was validated
+      against all 16 of Phase 7's numbers before being trusted with a new one; see execution
+      note 5.**
+  - [x] WCAG 1.4.3 for text: 4.5:1 normal, 3:1 large. The year, the muted lines, the placeholder,
         the disabled controls and the on-accent and on-danger labels are the pairs Phase 7 found
-        problems in and are the ones most likely to break again.
-  - [ ] WCAG 1.4.11 for non-text: the focus ring against every surface it can land on, at 3:1. If
-        the ring itself ever conveys state rather than decoration, it joins this list.
-  - [ ] `--color-fg-decorative` is deliberately failing at 1.94:1 today because it is `aria-hidden`
-        decoration. Re-confirm that exemption still holds under the new palette or fix it.
-  - [ ] Replace the table in `agent_findings.md` rather than appending a second one. Two contrast
-        tables describing different builds is worse than one.
-- [ ] **7. Update `theme-color` in `index.html` by hand if `--color-page` moved.** A `meta` content
+        problems in and are the ones most likely to break again. — **All pass. No surface moved, so
+        every pair not involving a new token is unchanged to the digit.**
+  - [x] WCAG 1.4.11 for non-text: the focus ring against every surface it can land on, at 3:1. If
+        the ring itself ever conveys state rather than decoration, it joins this list. — **Six focus
+        pairs, and the audit found one at 2.65:1 that nothing had ever measured. Exempt, with the
+        reason recorded; it is not a Phase 8 regression. The neon ring is decoration and is
+        measured anyway — all six stop/face pairs clear 3:1.**
+  - [x] `--color-fg-decorative` is deliberately failing at 1.94:1 today because it is `aria-hidden`
+        decoration. Re-confirm that exemption still holds under the new palette or fix it. —
+        **Re-confirmed, unchanged at 1.94:1: the exemption depends on `--color-surface-raised`,
+        which did not move.**
+  - [x] Replace the table in `agent_findings.md` rather than appending a second one. Two contrast
+        tables describing different builds is worse than one. — **Replaced. The Phase 7 narrative
+        was kept because no token it introduced changed value, and the four ratios it corrected are
+        preserved in one closing paragraph so the record is not lost.**
+- [x] **7. Update `theme-color` in `index.html` by hand if `--color-page` moved.** A `meta` content
       attribute cannot hold a `var()`, so this is the one duplicated colour in the app and the file's
       own comment says it must be updated by hand. Getting it wrong puts a mismatched bar above the
-      app on every phone.
-- [ ] **8. Grep the built CSS for every new utility.** Build, then search `dist/assets/*.css` for
+      app on every phone. — **No-op, and CHECKED rather than assumed:** `--color-page` did not move,
+      and `oklch(14.5% 0 none)` converts to exactly `#0a0a0a`, which is what the tag already holds.
+- [x] **8. Grep the built CSS for every new utility.** Build, then search `dist/assets/*.css` for
       each new class and each new custom property. This is not belt and braces: an unknown Tailwind
       colour utility is a **silent no-op** and all four local checks pass either way. It has shipped
-      once in this repo, and the symptom was near-black text on a near-black card.
+      once in this repo, and the symptom was near-black text on a near-black card. — **All 14 new
+      names emit; see execution note 4 for what the grep turned up about the mask.**
 - [ ] **9. Add `vite-plugin-pwa` as a devDependency and register it in `vite.config.ts`.** pnpm only.
       `devOptions` stays off, so neither `pnpm dev` nor `npx vercel dev` starts serving a worker —
       a service worker in development is a caching bug generator, and this repo's dev story is
@@ -310,18 +330,31 @@ worth asserting in a node test, and a literal buried in a plugin call cannot be 
 
 ## Open Questions
 
-- [ ] **Does the ring animate?** A slow pulse or a rotating gradient is the reference aesthetic, and
-      it is also a fourth animation surface plus a fourth reduced-motion rule. Step 5 decides;
-      recording the answer matters more than which way it goes.
-- [ ] **Does the QR's surround change?** A QR scans on contrast and a quiet zone. If the redesign
-      puts a glow or a coloured field behind the code, that is the one contrast decision in this plan
-      that is about a camera rather than an eye, and it must be tested against a real phone — Phase 4
-      already owes a scan check.
-- [ ] **Does `--color-page` move, and if so how many places copy it?** Two today: the token and
-      `index.html`'s `theme-color`. Three after the manifest. Worth deciding whether one of them can
-      derive rather than duplicate.
-- [ ] **Orientation lock in the manifest?** The game is a portrait card on a phone but is played on
-      laptops too. Locking is a real usability call and not obviously right.
+_All four resolved by the developer on 2026-08-06, before any CSS was written. Execution note 1
+carries the values that follow from them._
+
+- [x] **Does the ring animate?** **No.** It is a static gradient border plus a static outer bloom.
+      Three animation surfaces stay three, the `prefers-reduced-motion` block keeps its two
+      declarations plus one, and the canary gains no motion assertion. The CSS says so out loud, per
+      step 5's second bullet — "why is the ring the only static thing" must not be re-answered from
+      scratch next session. It also keeps step 15 honest: a pulsing bloom is the one version of this
+      change that could give back Performance 99.
+- [x] **Does the QR's surround change?** **No, and that is the point.** The mockup draws the code as
+      a white field on the dark face, which is exactly what ships today — `QrCode` renders
+      `bg-white` with `margin: 1` module of quiet zone. The ring is 2px at the card's edge and the
+      face keeps its `p-6`, so at the 288px ceiling there are 24px of dark padding plus the quiet
+      zone between the code and the nearest coloured pixel. **No glow, no coloured field and no
+      gradient goes behind the code**, so this plan adds nothing to the scan check Phase 4 already
+      owes and does not turn it into a blocker.
+- [x] **Does `--color-page` move, and if so how many places copy it?** **It does not move.**
+      Assumption 10 holds for `--color-surface` and `--color-surface-raised` too. Consequences:
+      step 7 is a **no-op** (`index.html`'s `theme-color` stays `#0a0a0a`), Phase 7's contrast table
+      survives for every pair that does not involve a new token, and the manifest is the third copy
+      of the colour but the only one a unit test can hold — which is why one exists.
+- [x] **Orientation lock in the manifest?** **No lock**; the field is omitted. Phase 7's
+      `clamp(18rem, min(62dvh, 124vw), 28rem)` already exists so that a short wide viewport gets a
+      smaller card rather than an overflowing one, so landscape is a supported layout rather than a
+      tolerated one, and `display: standalone` on a laptop has no orientation to lock anyway.
 
 ---
 
@@ -341,3 +374,53 @@ worth asserting in a node test, and a literal buried in a plugin call cannot be 
   owed, still needs a deployment with Upstash configured, and this plan does not discharge either.
 - **Retuning the five gesture thresholds.** They remain documented guesses, and a second guess is
   not an improvement on the first.
+
+---
+
+## Execution Notes
+
+### 1. The target palette, written before any CSS (step 1)
+
+The reference the redesign is drawn from is **`docs/plans/custom-hitster-mockup.png`**, which was
+already in the repo — a green → cyan → magenta gradient ring on a near-black card, on a near-black
+page. Reading it is what turned "take cues from the reference repo's neon-ring aesthetic" into the
+value table below.
+
+**Nothing that already exists changes value.** That is the whole of the surface decision and it is
+worth stating as a result rather than as a default: every token Phase 7 named keeps its `oklch()`,
+including all three surfaces, so **the only rows this plan adds to the contrast table are rows for
+tokens that did not exist**, and every pair Phase 7 measured is still that ratio. Open question 3
+above is why.
+
+| Token                 | Value                        | From the mockup    | Notes                                                                     |
+| --------------------- | ---------------------------- | ------------------ | ------------------------------------------------------------------------- |
+| `--color-ring-from`   | `oklch(88% 0.2 152)`         | the green stop     | The ring's first stop, and the value `--color-fg-year` copies              |
+| `--color-ring-via`    | `oklch(85% 0.13 205)`        | the cyan stop      | The middle stop, and what `--color-ring-dim` is a darkened version of      |
+| `--color-ring-to`     | `oklch(65% 0.25 310)`        | the magenta stop   | The darkest of the three at 4.13:1 on the reveal face — still over 3:1     |
+| `--color-ring-dim`    | `oklch(55% 0.08 205)`        | the stack's edges  | Replaces `border-border` on the backs, which was **1.31:1** — invisible    |
+| `--color-ring-glow`   | `oklch(85% 0.16 175 / 0.3)`  | the outer bloom    | Between the green and cyan stops. Alpha is in the token, not at the call site |
+| `--color-fg-year`     | `oklch(88% 0.2 152)`         | the year, in green | **New**, and the one text colour this plan changes. See note 2            |
+| `--ring-width`        | `2px`                        | —                  | 2px at the 288px ceiling and at the 185px floor alike; it must stay crisp  |
+| `--ring-glow-blur`    | `1.25rem`                    | —                  | 20px of bloom                                                             |
+| `--ring-glow-spread`  | `-0.25rem`                   | —                  | Negative, so the bloom hugs the ring instead of washing the page           |
+| `--radius-card`       | `1rem`                       | —                  | Exactly the `rounded-2xl` it replaces in three places. Nothing moves       |
+
+**A second accent family is now a stated decision rather than an accident.** `--color-accent`
+(emerald) remains the **action** colour — Start, Play again, the Play control — and the ring is
+**decoration that never conveys state**. The two therefore never compete for meaning, which is the
+condition that makes two families acceptable; if the ring ever indicates something, it needs a
+contrast budget and a place in the 1.4.11 list.
+
+### 2. The year is the one text colour that changes, and it is flat on purpose (steps 1, 4, 6)
+
+The mockup renders the year in the ring's gradient. It ships as a **flat** `--color-fg-year`
+instead, at the gradient's green stop, and the reason is step 6 rather than taste: **a gradient has
+no single contrast ratio**, so `background-clip: text` on the largest and most important text in the
+app would put the phase's headline element outside the one audit this plan is required to compute.
+The failure mode is worse than the missing polish, too — `background-clip: text` needs
+`color: transparent`, so a gradient that does not paint renders the year **invisible**, and that is
+the same silent-failure shape as the unknown-colour-utility bug this repo already shipped once.
+
+A flat bright green measures **11.30:1** on the reveal face, is one number a future session can
+re-check, and cannot fail to a blank slot. `--color-fg-strong` (14.48:1) is what it replaces, so the
+year gets more colour and keeps well over its 3:1 large-text floor.

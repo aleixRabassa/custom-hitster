@@ -518,10 +518,35 @@ verification — which this plan **added** the game-screen Lighthouse audit to r
     MusicBrainz knows who added a track to somebody's playlist, and no third source has been looked
     for.
 - [ ] Card visual design (take cues from the reference repo's neon-ring aesthetic)
-- [ ] Shareable deck URL (playlist id + shuffle seed = whole deck)
+- [x] **Shareable deck URL** (playlist id + shuffle seed) — built 2026-08-06,
+      [`plan.phase-8-features.md`](./plan.phase-8-features.md) steps 6–11. `?playlist=&seed=`, read
+      once in a lazy initialiser, submitted through the same `request` the landing form uses, and the
+      seed handed to `start`'s third argument — so **the reducer is untouched**, exactly as
+      `GameState.seed`'s own comment predicted. **The heading above is wrong in one word and it
+      matters: a seed is not "the whole deck".** A card whose year lookup finds nothing is removed at
+      play time and an editorial playlist refreshes its tracks, so the shuffle is exact while its
+      input is not. The link therefore promises "same playlist, same shuffle" and the end screen says
+      so; pinning the card set would need a versioned opaque token, which is out of scope (decision
+      4). A saved session **outranks** a link, so opening an old one cannot discard a game in
+      progress, and a malformed link is the plain landing screen with no error.
 - [ ] PWA / offline via `vite-plugin-pwa`
-- [ ] Multiple decks / saved playlists
-- [ ] Printable PDF export (the reference repo's actual purpose)
+- [x] **Multiple decks / saved playlists** — built 2026-08-06, steps 12–15. **It saves PLAYLISTS, not
+      sessions** (decision 5): `hitster:library:v1` holds id + name + timestamp, deduped and capped at
+      20, on `persistence.ts`'s pattern. Playing a saved entry re-fetches normally, so there is still
+      exactly **one resumable game** — generalising the session key into a keyed collection of full
+      mid-game decks would have reopened persistence validation, `RESUME` and the quota. Saving is
+      **explicit**, from the end screen, so the landing screen does not become a history log of every
+      URL anyone pasted.
+- [x] **Printable PDF export** — built 2026-08-06, steps 16–22. jsPDF, lazy-loaded, triggered from the
+      end screen only. **65 mm square cards, 3 × 4 = 12 per A4 sheet**, which is the real Hitster card
+      size. The geometry is pure and node-tested in `src/game/pdf-sheet.ts` because **the duplex
+      column mirror is the defect that wastes a ream**: long-edge duplex flips the paper about its
+      vertical centre line, and a back sheet in reading order pairs every card with the wrong answer.
+      Prints on a **light** palette regardless of the screen's, because a QR scans as dark modules on
+      a light field. Only cards with a resolved year are exported and the rest are reported as a
+      **count, never a list**. Titles are sanitised for WinAnsi rather than a font embedded — measured:
+      WinAnsi already covers every Spanish and Latin glyph, so it is a no-op on this app's own
+      playlists. **Nothing about it has been verified on paper** ([`../development.md`](../development.md) §5).
 
 ---
 
@@ -587,9 +612,14 @@ verification — which this plan **added** the game-screen Lighthouse audit to r
       live request). It is matched by the predicate and the allow-list anyway, deliberately: a legacy
       link genuinely _is_ a Spotify playlist link, so `upstream-unavailable` ("Spotify could not be
       reached") is a more honest answer for it than "that does not look like a Spotify link".
-- [ ] **Two tabs share one `localStorage` key and the last write wins**, silently clobbering the other
-      game. Accepted for v1 — Phase 3's call, re-confirmed in Phase 6. A `storage`-event guard is the
-      fix if it ever bites.
+- [ ] **Two tabs share the `localStorage` keys and the last write wins**, silently clobbering the other
+      tab. Accepted for v1 — Phase 3's call, re-confirmed in Phase 6, and **now covering two keys
+      rather than one**: Phase 8 added `hitster:library:v1` beside `hitster:session:v1`
+      (2026-08-06, `plan.phase-8-features.md` step 15). The library inherits the hazard rather than
+      adding a new one, and inherits it cheaply — an entry is an id, a name and a timestamp, so a
+      clobber costs a row somebody re-saves, where the session key's costs a game. A single
+      `storage`-event guard would fix both and remains the fix if it ever bites; neither Phase 8 plan
+      builds one.
 
 ---
 

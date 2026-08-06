@@ -116,6 +116,29 @@
   --color-warning-surface: oklch(27.9% 0.077 45.635); /* was amber-950, used at /40 */
   --color-warning-border: oklch(41.4% 0.112 45.904); /* was amber-900, used at /60 */
 
+  /*
+   * CONTRAST FIX 4 of 4's companion, and the one text colour Phase 8 changes:
+   * THE YEAR, in the ring's green rather than in near-white.
+   *
+   * It replaces `--color-fg-strong` on `CardRevealSide`'s resolved year, which
+   * is the largest thing in the app and the payoff of the whole game. 11.30:1 on
+   * `--color-surface-raised`, against a 3:1 large-text floor.
+   *
+   * FLAT, although the mockup draws the year in the ring's full gradient, and the
+   * reason is the audit rather than taste: a gradient has no single contrast
+   * ratio, so `background-clip: text` would put the phase's headline element
+   * outside the one measurement this work is required to compute. It also fails
+   * badly -- `background-clip: text` needs `color: transparent`, so a gradient
+   * that does not paint renders the year INVISIBLE, which is the same silent
+   * shape as the unknown-colour-utility bug this repo already shipped once.
+   *
+   * A separate token from `--color-ring-from` despite sharing its value, for the
+   * reason every other coincident pair here is separate: the year's legibility
+   * and the ring's hue are two decisions, and one must be tunable without the
+   * other.
+   */
+  --color-fg-year: oklch(88% 0.2 152);
+
   --color-danger: oklch(70.4% 0.191 22.216); /* was red-400 — the landing error (6.84:1, passes) */
 
   /*
@@ -144,6 +167,103 @@
    * ring on the page background there anyway.
    */
   --color-focus-ring: oklch(97% 0 none);
+
+  /* --- The neon ring (Phase 8 plan 1) ------------------------------------ */
+
+  /*
+   * ===========================================================================
+   *  THE PHASE 8 REDESIGN, AND IT IS A SECOND ACCENT FAMILY ON PURPOSE.
+   *
+   *  Drawn from `docs/plans/custom-hitster-mockup.png`: a green -> cyan ->
+   *  magenta gradient border on a near-black card, with a soft bloom outside it.
+   *  Consumed ONLY by the `card-ring` and `card-ring-dim` utilities at the bottom
+   *  of this file -- which is exactly why the block this sits in has to stay
+   *  `@theme static`. A bare `@theme` tree-shakes any token no GENERATED utility
+   *  references, and Tailwind does not count an `@utility` body as a use, so
+   *  every variable below would vanish and the ring would silently be nothing.
+   *
+   *  `--color-accent` (emerald) is unaffected and stays the ACTION colour: Start,
+   *  Play again, the Play control. The ring is DECORATION and never conveys
+   *  state. That is the condition that makes two accent families acceptable
+   *  rather than confusing -- the two never compete for meaning. If the ring is
+   *  ever made to indicate something, it needs a contrast budget and a row in the
+   *  WCAG 1.4.11 list in `docs/agent_findings.md`, and this comment is wrong.
+   *
+   *  THE RING DOES NOT ANIMATE. Decided 2026-08-06, open question 1, and recorded
+   *  here because "why is the ring the only static thing in the app" is otherwise
+   *  a question the next session re-answers from scratch. A slow pulse or a
+   *  rotating conic gradient is the reference aesthetic and it would be a FOURTH
+   *  animation surface, a fourth rule in the `prefers-reduced-motion` block at the
+   *  bottom of this file, and a continuously compositing paint behind the one
+   *  element a player is trying to hold a phone camera steady over. The bloom is
+   *  static; the neon comes from the colour, not from movement.
+   * ===========================================================================
+   */
+
+  /*
+   * The three gradient stops, measured off the mockup. Ratios below are against
+   * `--color-surface-raised`, the LIGHTEST face the ring sits on and therefore
+   * the worst case: 11.30:1, 9.99:1 and 4.13:1. All three clear the 3:1 that
+   * WCAG 1.4.11 asks of a non-text indicator even though a purely decorative
+   * border is not held to it -- the margin is what makes the ring survive a
+   * future surface change.
+   */
+  --color-ring-from: oklch(88% 0.2 152); /* green   */
+  --color-ring-via: oklch(85% 0.13 205); /* cyan    */
+  --color-ring-to: oklch(65% 0.25 310); /* magenta */
+
+  /*
+   * The backs of the stack, and it REPLACES `border-border` there -- which was
+   * `oklch(26.9%)` on the page at **1.31:1**, a depth cue that was very nearly
+   * not visible at all. 4.23:1 on the page.
+   *
+   * A darkened version of the middle stop rather than the gradient itself, and
+   * that is the one place this plan deliberately diverges from `card-ring`: a
+   * back is scaled to 96% and 92% and offset 10px, so what shows of it is a
+   * sliver a few pixels tall. There is no room across it for hue travel to read
+   * as anything but noise, and a flat border needs no pseudo-element on an
+   * element whose whole job is to be empty.
+   */
+  --color-ring-dim: oklch(55% 0.08 205);
+
+  /*
+   * The bloom, sitting between the green and cyan stops. The ALPHA lives in the
+   * token rather than at the call site (`/30` on a utility) so that the glow's
+   * strength is tunable from this block like everything else -- a `box-shadow`
+   * colour cannot take a Tailwind opacity modifier anyway.
+   */
+  --color-ring-glow: oklch(85% 0.16 175 / 0.3);
+
+  /*
+   * Ring width, and it is one value for the live card and the backs both.
+   *
+   * 2px, which has to stay CRISP at both ends of the card's clamp -- 288px wide
+   * at the ceiling and 185px at the floor. A ring derived from the card's width
+   * would be sub-pixel on the small card and would blur into the bloom, which is
+   * the opposite of a neon edge.
+   */
+  --ring-width: 2px;
+
+  /*
+   * The bloom's blur and spread. Spread is NEGATIVE so the glow hugs the ring
+   * instead of washing the page behind the card: at 20px of blur pulled in by
+   * 4px, the halo reads as light coming off the edge rather than as a drop
+   * shadow under the whole card.
+   */
+  --ring-glow-blur: 1.25rem;
+  --ring-glow-spread: -0.25rem;
+
+  /*
+   * The card's corner radius, in Tailwind's `--radius-*` namespace so it emits a
+   * `rounded-card` utility.
+   *
+   * Exactly the `1rem` of the `rounded-2xl` it replaces in three places (both
+   * faces and the backs), so NOTHING MOVES -- it is named for the same reason the
+   * size pair is: those three literals were required to agree, because the ring's
+   * `::before` inherits the radius and a face rounded differently from its ring
+   * shows the gradient cutting a corner.
+   */
+  --radius-card: 1rem;
 
   /* --- Card geometry ----------------------------------------------------- */
 
@@ -322,6 +442,107 @@
 @utility touch-target {
   min-height: var(--size-touch-target);
   min-width: var(--size-touch-target);
+}
+
+/*
+ * ===========================================================================
+ *  THE NEON RING, AS TWO UTILITIES AND NO NEW COMPONENT. Phase 8 plan 1,
+ *  decision 1.
+ *
+ *  A `NeonRing`/`CardFrame` component was the obvious alternative and costs three
+ *  things a utility does not: a component and its tests, a decorative
+ *  `aria-hidden` NODE inside the one subtree where "leak nothing" is a hard rule,
+ *  and a fourth place `prefers-reduced-motion` would have to be taught about. A
+ *  values-only recolour was the other alternative and delivers no ring at all.
+ *
+ *  ===========================================================================
+ *   NEITHER UTILITY SETS `position`, AND THAT IS DELIBERATE RATHER THAN AN
+ *   OMISSION.
+ *
+ *   `card-ring`'s `::before` is `position: absolute`, so it needs a positioned
+ *   ancestor -- and the reflex is to put `position: relative` in the utility
+ *   itself. That would be a real bug here: BOTH call sites are already
+ *   `absolute inset-0` (the two faces in `Card.tsx`, the backs in
+ *   `CardStack.tsx`), the two declarations would collide in the same cascade
+ *   layer, and which one won would depend on the order Tailwind happened to emit
+ *   two custom utilities in. If `relative` won, both faces would drop out of
+ *   absolute positioning and stack in flow -- the card would come apart.
+ *
+ *   So the contract is: THE ELEMENT CARRYING `card-ring` MUST ALREADY BE
+ *   POSITIONED. Both ends of that are asserted, in the house style for anything
+ *   whose middle is untestable -- `Card.test.tsx` and `CardStack.test.tsx` check
+ *   that the ringed element also carries `absolute`, and `index.css.test.ts`
+ *   checks that this file does not reintroduce a `position` here.
+ *  ===========================================================================
+ *
+ *  Every value comes from the `@theme static` block above; there are no literals
+ *  below except the mask's own `#000`, which is an opacity channel rather than a
+ *  colour -- a mask reads alpha, and any opaque colour does the same job.
+ * ===========================================================================
+ */
+
+@utility card-ring {
+  /*
+   * The bloom. On the element itself rather than on the pseudo-element, because
+   * an element's own `box-shadow` is NOT clipped by its own `overflow: hidden` --
+   * and both faces are `overflow-hidden` so the QR cannot escape the rounded
+   * corner. A glow on the `::before` would be clipped away to nothing.
+   */
+  box-shadow: 0 0 var(--ring-glow-blur) var(--ring-glow-spread) var(--color-ring-glow);
+
+  /*
+   * The gradient border, as a masked pseudo-element.
+   *
+   * A gradient cannot be a `border-color`, so the border band is painted as a
+   * full-size gradient and then everything INSIDE the band is masked out: the
+   * first mask layer covers the content box, the second covers the whole box, and
+   * `exclude` subtracts the first from the second, leaving exactly the
+   * `padding: var(--ring-width)` ring. `border-radius: inherit` is what keeps the
+   * band following the card's corners -- it is the reason `--radius-card` exists
+   * as a token rather than as `rounded-2xl` written out three times.
+   */
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    /*
+     * Above the face's background and its content. The band is 2px at the extreme
+     * edge and both faces are `p-6`, so nothing is actually covered -- this only
+     * guarantees the ring is never painted over by something added later.
+     */
+    z-index: 1;
+    border-radius: inherit;
+    padding: var(--ring-width);
+    background: linear-gradient(
+      135deg,
+      var(--color-ring-from),
+      var(--color-ring-via),
+      var(--color-ring-to)
+    );
+    mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    mask-composite: exclude;
+    /* The card is a swipe surface and this sits on top of all of it. */
+    pointer-events: none;
+  }
+}
+
+/*
+ * The dimmed variant, for `CardStack`'s two peeking backs.
+ *
+ * A FLAT border rather than a dimmed copy of the gradient, and that divergence is
+ * the point: a back is scaled to 96% / 92% and offset 10px, so what shows of it is
+ * a sliver a few pixels tall with no room for hue travel to read as anything but
+ * noise. It also keeps the backs what they must stay -- EMPTY elements. No
+ * pseudo-element, no glow, nothing to render.
+ *
+ * What it replaces was `border border-border`, which measured **1.31:1** against
+ * the page: the depth cue that tells a player there is more deck was very nearly
+ * invisible. This is 4.23:1.
+ */
+@utility card-ring-dim {
+  border: var(--ring-width) solid var(--color-ring-dim);
 }
 
 /*

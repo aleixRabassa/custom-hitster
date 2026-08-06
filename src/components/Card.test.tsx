@@ -160,6 +160,45 @@ describe('Card', () => {
     expect(outer?.className).not.toMatch(/\bh-\[|\bw-\d/);
   });
 
+  it('should apply the ring utility to both faces, beside the positioning it depends on', () => {
+    // ===================================================================
+    //  THE SILENT-NO-OP GUARD for Phase 8's ring, plus the component end
+    //  of a contract whose middle jsdom cannot reach.
+    //
+    //  TWO separate things are asserted here and they fail for different
+    //  reasons:
+    //
+    //  1. `card-ring` is present. An unknown Tailwind utility emits NO
+    //     RULE AT ALL -- silently, with typecheck, lint, test and build all
+    //     green. That has shipped once in this repo (`text-text-muted` on
+    //     this very card) and the symptom was near-black text on a
+    //     near-black face. `CardHiddenSide.test.tsx` has the original.
+    //
+    //  2. `absolute` is present ON THE SAME ELEMENT. `card-ring` sets no
+    //     `position`, deliberately -- putting `position: relative` in the
+    //     utility would collide with this `absolute` in the same cascade
+    //     layer, and if `relative` won, both faces would leave absolute
+    //     positioning and the card would come apart. So the utility's
+    //     `::before` depends on the CALLER being positioned, and this is
+    //     that half of it. `index.css.test.ts` holds the stylesheet half.
+    //
+    //  Whether the ring then PAINTS is not reachable: jsdom computes no
+    //  layout and evaluates no `mask-composite`. A class-name assertion is
+    //  the ceiling, and the visual check is manual.
+    // ===================================================================
+    renderCard(false);
+
+    for (const testId of ['card-hidden-face', 'card-reveal-face']) {
+      const face = screen.getByTestId(testId);
+      expect(face.className).toContain('card-ring');
+      expect(face.className).toContain('absolute');
+      // The radius is a token too, because the ring's `::before` inherits it: a face rounded
+      // differently from its ring shows the gradient cutting a corner.
+      expect(face.className).toContain('rounded-card');
+      expect(face.className).not.toContain('rounded-2xl');
+    }
+  });
+
   it('should take the flip duration from the token and expose the reduced-motion hook', () => {
     // Two halves of one contract with `src/index.css`. The duration must come from
     // `--duration-flip`, and `data-motion="flip"` is the selector the

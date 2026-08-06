@@ -180,6 +180,14 @@ src/game/
                       Framework-free — lookup, sleep and callbacks are all injected
   persistence.ts      The localStorage format, behind an injectable StorageLike
   use-game-session.ts The ONLY React file. Effect wiring, no game logic
+  ── Phase 8 (2026-08-06) ─────────────────────────────────────────────────────
+  deck-link.ts        Parse/build for the share URL. Strings in, strings out — no
+                      window, no location, no history
+  playlist-library.ts The saved-playlist store. persistence.ts's pattern, second key
+  pdf-sheet.ts        Printable-sheet geometry: the grid, the margins, the DUPLEX
+                      COLUMN MIRROR, and the printable-card selection
+  pdf-text.ts         WinAnsi sanitising for a standard PDF font, plus the filename
+  qrcode-loader.ts    The one memoized import('qrcode'), shared by QrCode and the export
 ```
 
 Three properties of that split are load-bearing:
@@ -187,6 +195,8 @@ Three properties of that split are load-bearing:
 - **The reducer is pure and the resolver is framework-free**, so both are tested as plain functions with no DOM and no timers of their own. `use-game-session.ts` is deliberately thin enough to go untested — and the rule that keeps that honest is written at the top of the file: any logic accumulating there belongs in the reducer or the resolver instead.
 - **`YEAR_RESOLVED` matches by card id, never by index.** The priority jump makes the resolver's order and the deck's order diverge routinely, and a duplicated track (legal in a playlist) must have **every** copy updated, not the first match.
 - **`src/game/` is browser code.** It may use DOM APIs and the `@/` alias; nothing under `api/` may ever import it, and `GameState` must not migrate into `shared/types.ts` — see §2.
+
+**Phase 8's four new modules are here rather than in a component or a hook for one reason each, and the reason is always "what could not otherwise be tested".** `deck-link.ts` takes a query STRING instead of reading `location`, so its rejection cases are node tests rather than jsdom ones. `playlist-library.ts` takes an injected `StorageLike`, exactly as `persistence.ts` does, so a corrupt-payload test is a three-line stub. `pdf-sheet.ts` holds every millimetre as arithmetic over numbers because **getting the duplex mirror wrong pairs every card with the wrong answer and is discoverable only by printing and cutting** — the same decision/binding split as `gestures.ts` and `resolver.ts`, applied a third time. `pdf-text.ts` is string rules, and string rules in a hook are string rules nothing covers. The binding halves are `App.tsx` (the link), `EndScreen.tsx` (the two buttons) and `src/hooks/usePdfExport.ts` (the imports, the QR loop, the download).
 
 **The card-1 gate is an invariant of the app, not an implementation detail.** `START` waits for **one** year lookup to _complete_ — where a `null` year is a completed lookup — and never for the deck. Cards 2..n filling in during play is normal, not a loading state. This is the single most likely thing to be "simplified" into a wait-for-everything by someone who only ever tested a playlist whose years were all cached, because a warm deck resolves fast enough to hide the difference. Measured on a real 42-card cold deck (2026-08-05): the gate cleared in **6.06 s**, the full crawl took **153.0 s**. Those two numbers are the whole argument.
 
@@ -197,8 +207,9 @@ Phase 4's shape is **presentational components driven entirely by props, with th
 ```
 src/components/
   GameScreen.tsx        The integration seam. Owns THE session <audio> element, the
-                        stop-on-flip / stop-on-card-change rules, and the window-level
-                        keyboard handler. Still presentational: it takes callbacks and
+                        stop-on-card-change rule (the ONLY one since 2026-08-06 — see
+                        below), and the window-level keyboard handler. Still
+                        presentational: it takes callbacks and
                         does NOT call useGameSession(). Takes `deck` + `currentIndex`,
                         matching GameState's own shape
   CardStack.tsx         The current card over 2 EMPTY backs. Owns AnimatePresence and
@@ -219,6 +230,8 @@ src/hooks/
 **The three controls are outside the card, and that placement is a bug fix rather than a layout preference.** They were on the hidden face through Phase 4. Phase 5 then made the card tap-to-flip with `gestureProps.onPointerUp` bound to the card's **outer** element — and a pointer-up on a button inside the card bubbles into that handler, where `isTap()` sees exactly what a genuine tap looks like: a few pixels of movement over a couple of hundred milliseconds with no drag recognised. So **pressing Play both started the audio and revealed the answer.** This is the pointer twin of the Space-on-a-focused-button double-action Phase 5 already guarded against for the keyboard, and it was missed because the two halves shipped in different phases: the buttons were harmless until the card became tappable.
 
 It could have been patched with a `closest('button')` check inside the gesture hook. Moving the controls out is the structural fix instead: **there is no interactive element inside the draggable surface at all**, so the class of bug is gone rather than guarded. `CardHiddenSide.test.tsx` and `CardStack.test.tsx` both assert that nothing clickable is in there. The card's face is now the QR code and one line of generic text, which is also the honest shape — the QR is the only part of a hidden card a player is meant to touch, and they touch it with a phone camera.
+
+**Audio survives the flip, and stops on exactly two things: the card changing, and a confirmed Exit** (reversal of a Phase 4 decision, 2026-08-06). Phase 4 also stopped it on the flip — "once the answer is on screen the preview has no job left" — and playing the game disagreed: **hearing the song while reading the year is the point of the reveal.** The bleed case that rule also cited was already covered by the card-change effect, which keys on `currentCard.id` (so a duplicated track in the deck is covered too) and fires before the new `src` is set — and which is also what makes a swipe stop the audio, so `useCardGestures` still knows nothing about audio. The effect was therefore **deleted with nothing put in its place**; `CardControls` is outside the card, so Play/Pause stays reachable during the reveal for a player who does want silence. `GameScreen.test.tsx` asserts the **non**-stop, because "surely it should stop on flip" is the obvious thing to re-add.
 
 **One `<audio>` element per session, not per card.** It lives in `GameScreen` and its `src` swaps as the card changes. The rule it enforces — a track never bleeds into the next card and never doubles up on itself — is then structurally impossible to violate rather than a guard that has to be maintained. Phase 5's `CardStack` now renders 3 cards simultaneously, which is precisely the window where per-card elements would overlap and play together — and briefly 4 during an exit animation, since `AnimatePresence` keeps the outgoing card mounted while it leaves.
 
@@ -263,16 +276,20 @@ src/App.tsx             THE container. The only caller of useGameSession(). Swit
                         on state.status; holds the ended-destination flag and the
                         notice-dismissal state. No router
 src/components/
-  LandingScreen.tsx     URL input, inline validation, 9 suggested playlists
+  LandingScreen.tsx     URL input, inline validation, 9 suggested playlists, and
+                        "Your playlists" — the saved library, above the suggestions
   PreparingScreen.tsx   The card-1 gate. COUNT-ONLY
   Hud.tsx               Cards remaining + playlist name. Counts only, no Exit
   NoticeBanner.tsx      truncated / skippedCount / yearLookupsUnavailable
-  EndScreen.tsx         Cards played, Play again, New playlist
+  EndScreen.tsx         Cards played, Play again, New playlist — plus the three things
+                        a finished deck can become: a link, a saved playlist, a PDF
 src/game/
   playlist-client.ts    /api/playlist client. Injected fetch, never throws
   messages.ts           One error-code → copy map. The server's `message` is unused
 src/hooks/
   usePlaylist.ts        Thin request state over the client; aborts in flight
+  usePdfExport.ts       The export's binding half: import('jspdf'), the QR loop,
+                        progress, the download
 ```
 
 **The playlist client mirrors `year-client.ts` exactly** — a plain async function with an injected `fetch`, an injected abort signal, and a discriminated result that never throws — with a thin `usePlaylist` hook over it. That is what lets every status branch be a unit test in the **node** environment with no jsdom and no network, which is the same trade `year-client.ts` made for its own sixteen. Anything that accumulates in the hook instead belongs in the client.
@@ -324,6 +341,50 @@ Browser (SPA)                          Serverless (Vercel Functions)
 
 ---
 
+### Sharing, saving and printing (Phase 8) — built
+
+Three features that add to the app without changing how a game is played, and all three are **caller changes**: the reducer, `GameState` and the persistence format are untouched.
+
+```
+                    ?playlist=<id>&seed=<16 hex>
+                                │  read ONCE, in a lazy state initialiser
+                                ▼
+  ┌───────────────────────────────────────────────────────────────┐
+  │ App.tsx                                                        │
+  │  · a saved session OUTRANKS a link → resume, ignore params     │
+  │  · otherwise: request(spotifyPlaylistUrl(id)) — the SAME       │
+  │    fetch path the landing form uses                            │
+  │  · the seed rides in a REF into start(cards, playlist, seed)    │
+  │  · the address bar is never touched: no pushState              │
+  └───────────────────────────────────────────────────────────────┘
+
+  hitster:session:v1   one resumable game        (persistence.ts)
+  hitster:library:v1   ≤20 saved playlists       (playlist-library.ts)
+                       id + name + savedAt only
+```
+
+**The link is (playlist id + seed) and nothing more, which `GameState.seed`'s own comment predicted:** the seed is accepted as an override on `START`, so this is a caller change rather than a reducer change. Query params rather than a hash fragment — a hash is marginally more private but is mangled by some chat clients, and this is a link people paste into WhatsApp.
+
+**It promises "same playlist, same shuffle", never "the same deck", and that is a copy decision standing in for an encoder.** The seeded shuffle is exact; its INPUT is not, for two independent reasons — a card whose year lookup finds nothing is removed from the deck, and which cards those are depends on what MusicBrainz answers at play time; and an editorial playlist has its tracks refreshed by Spotify. The only encoding that could pin the card set is a versioned opaque token carrying every id, at the cost of an unreadable link. The end screen's caption says so, and `EndScreen.test.tsx` asserts that the phrase "same deck" is absent.
+
+**A saved session outranks a link**, because opening an old link must not silently discard a game in progress. `useGameSession`'s own lazy initialiser has already run when `App` reads the params, so `state.status === 'idle'` is exactly "there was nothing to resume".
+
+**A malformed link is `null`, and `null` is the plain landing screen with no error.** Someone whose chat client ate half a URL is a visitor, not a failure state. The playlist id is validated through `shared/spotify-url.ts` — reuse, so a link is judged by the same code the form and `api/playlist.ts` use — and the seed is bounded to `generateSeed`'s own 16-hex alphabet, because an accepted seed is hashed and then **persisted**.
+
+**The library stores playlists, not sessions** (id, name, timestamp; deduped, capped at 20). The alternative — generalising the session key into a keyed collection of full mid-game decks — reopens persistence validation, `RESUME` and the localStorage quota, and makes the known two-tab clobber materially worse. There is still exactly one resumable game. The store is read on the **landing screen**, which is a pre-start surface, so it is rebuilt field by field on the **write** as well as on the read: `SavedPlaylist` is a structural interface and TypeScript's excess-property check does not fire for a spread, so a caller passing something larger would otherwise put track data one devtools panel away from a player who has not started.
+
+**Both keys share the two-tab hazard `plan.md` §6 already accepts.** Last write wins; a `storage`-event guard remains the fix if it ever bites, and v1 does not build one.
+
+**The PDF prints on a light palette regardless of the screen's**, which is the one place the print path deliberately ignores the `@theme` layer. Two reasons, and the second is the real one: ink cost, and **a QR scans as dark modules on a light field with a quiet zone** — inverting or tinting it is how a printed deck fails at the one job the QR has. The geometry is in millimetres and answers to A4 and a pair of scissors, so nothing in CSS could consume it either: **65 mm square cards, 3 × 4 = 12 per sheet**, which is the real Hitster card size, so a printed deck shuffles into a bought one.
+
+**Front and back sheets are interleaved and the BACK's columns are mirrored.** Long-edge duplex flips the paper about its vertical centre line, so a back sheet laid out in reading order pairs every card with the wrong answer — twelve cards wrong per sheet, discoverable only after printing and cutting. Because the grid is centred, the correction is exactly a reflection (`xFront + xBack === PAGE_WIDTH_MM - CARD_SIZE_MM`), which is what `pdf-sheet.test.ts` asserts rather than three literal positions. **Short-edge binding would mirror the rows instead and is not supported**: the app cannot read a printer setting, so the docs and the end screen name the setting instead of the code guessing at it.
+
+**Only cards with a resolved year are exported, and the count of the rest is reported — never a list.** The end screen is one press from re-dealing the same deck, so naming an excluded title would spoil the rematch. In practice the only exclusion is a card the resolver has not reached yet.
+
+**A standard PDF font is WinAnsi-encoded, so titles are sanitised rather than a font embedded.** Measured before deciding: WinAnsi already covers every Spanish, Portuguese, French, German and Italian glyph, and four of the nine suggested playlists are Spanish or Latin — so the transformation is a no-op on the decks this app is built for. The gap is Cyrillic, Greek, CJK and a few Latin extras, and embedding a Latin-Extended font would cost 200–400 kB in the export chunk to fix Polish and Turkish while still failing on the rest. A Cyrillic or CJK title prints as `?` placeholders; **the year and the QR are unaffected**, so the card still plays and still scans. Listed in [`development.md`](./development.md) §8.
+
+---
+
 ### The error boundary and the chunk layout — built
 
 ```
@@ -342,18 +403,23 @@ It is the **only class component in the app**, by necessity: `componentDidCatch`
 
 **Two recovery actions, and they are not the same button.** Reload preserves the saved session, for a transient failure. **Start over clears it first** — a corrupt or unexpected persisted session is the most plausible cause of a crash that recurs on _every_ reload, and without that button the state is inescapable except through devtools. Clearing goes through `persistence.ts`'s own `clearSession`, which owns the key and already swallows a storage that throws. Both `storage` and `reload` are injectable, the latter because jsdom implements no navigation.
 
-#### The bundle is split at two boundaries, both measured
+#### The bundle is split at three boundaries, all measured
 
 The landing screen was downloading the entire game. Attribution by decoding the build's own source map (2026-08-06) put **`motion` at 125.16 kB of a 373.39 kB single chunk — 33.7%** — and `qrcode` at 23.28 kB. Both are needed only once a deck has been dealt.
 
-| Boundary                                                 | How                                    | Why that mechanism                                                                                                                                                                                                                                                                                                                           |
-| -------------------------------------------------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GameScreen` (and with it `motion`, `Card`, `CardStack`) | `React.lazy` in `App.tsx`              | `motion` is used as JSX by two components, which cannot be awaited in place, so it needs a boundary. **The `Suspense` fallback is the preparing screen** — `playing` is only ever entered from `preparing`, so a chunk in flight leaves the player on the screen they are already looking at, notice and all. No loading state was invented. |
-| `qrcode`                                                 | dynamic `import()` inside `QrCode.tsx` | A loading state **already existed**: generation was always async and a same-size placeholder always covered it, so the import joins an await already there. `React.lazy` here would have stacked a `Suspense` fallback on a placeholder inside one 176px square.                                                                             |
+| Boundary                                                 | How                                                | Why that mechanism                                                                                                                                                                                                                                                                                                                           |
+| -------------------------------------------------------- | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GameScreen` (and with it `motion`, `Card`, `CardStack`) | `React.lazy` in `App.tsx`                          | `motion` is used as JSX by two components, which cannot be awaited in place, so it needs a boundary. **The `Suspense` fallback is the preparing screen** — `playing` is only ever entered from `preparing`, so a chunk in flight leaves the player on the screen they are already looking at, notice and all. No loading state was invented. |
+| `qrcode`                                                 | dynamic `import()` via `src/game/qrcode-loader.ts` | A loading state **already existed**: generation was always async and a same-size placeholder always covered it, so the import joins an await already there. `React.lazy` here would have stacked a `Suspense` fallback on a placeholder inside one 176px square.                                                                             |
+| `jspdf` (and with it `html2canvas`, `purify`)            | dynamic `import()` inside `usePdfExport.ts`        | 399.95 kB / 129.95 kB gzip — **larger than the entire rest of the app**, for a button most players never press. Its optional dependencies split out again and stay unfetched unless jsPDF's own HTML path is used, which this app never calls. The awaited progress readout is the loading state, so no fallback was invented here either.   |
 
 **Result: the landing screen went from 373.39 kB / 119.92 kB gzip of JavaScript to 218.52 kB / 70.27 kB — 41% less gzipped.** Verified in Lighthouse's own network log, not only in the build output: the entry HTML preloads the runtime and one shared helper, and neither deferred chunk is requested.
 
-**`QrCode.tsx` memoizes its import at module scope, and that is a bug fix rather than tidiness.** The effect re-runs per card, so a bare `import()` in its body issues a fresh call per advance and two overlap whenever a card is superseded before its code resolves — the exact fast-advance race the generation counter exists for. Measured: with two imports in flight, the second one's continuation never ran and the new card kept the old card's placeholder forever. A rejected load stays cached deliberately, so a broken chunk is not re-fetched on every advance. There is **no audio code to lazy-load** despite the phase checkbox saying "QR/audio": `useCardAudio` wraps a native element that already carries `preload="none"`.
+**Re-verified after adding jsPDF (2026-08-06), in Chrome against `vite preview`.** The landing screen makes exactly **six** requests: the document, `index-*.js`, `rolldown-runtime-*.js`, `preload-helper-*.js`, `qrcode-loader-*.js` and the CSS. Absent: `jspdf.es.min-*.js`, `html2canvas-*.js`, `purify.es-*.js`, `index.es-*.js`, `browser-*.js` (the QR encoder) and `GameScreen-*.js`. **Do this check in a network log rather than in the build output after any new dependency — the build output cannot distinguish an emitted chunk from a preloaded one.**
+
+**One trap in the output, because the name says the opposite of the truth: `dist/assets/qrcode-loader-*.js` is React's JSX runtime, not the QR encoder.** Rolldown names a shared chunk after one of its modules, and `qrcode-loader.ts` — six lines — is now shared between the entry chunk (via `usePdfExport`) and the `GameScreen` chunk (via `QrCode`). So a chunk called "qrcode-loader" is `modulepreload`ed on the landing screen; it contains no `toDataURL` and no encoder, and it is what used to be emitted as `preload-helper-*.js`. Preloaded bytes before the change: 12.58 kB. After: 12.90 kB.
+
+**That loader memoizes the import at module scope, and it is a bug fix rather than tidiness.** `QrCode`'s effect re-runs per card, so a bare `import()` in its body issues a fresh call per advance and two overlap whenever a card is superseded before its code resolves — the exact fast-advance race the generation counter exists for. Measured: with two imports in flight, the second one's continuation never ran and the new card kept the old card's placeholder forever. A rejected load stays cached deliberately, so a broken chunk is not re-fetched on every advance. **It moved out of `QrCode.tsx` into `src/game/qrcode-loader.ts` when the PDF export became a second consumer** — two files each holding their own `let module: Promise | null` would load the chunk twice and make "a rejected load stays rejected" true per file rather than per app. There is **no audio code to lazy-load** despite the phase checkbox saying "QR/audio": `useCardAudio` wraps a native element that already carries `preload="none"`.
 
 #### `index.html` carries three tags and one rule about itself
 
