@@ -160,7 +160,7 @@ export function LandingScreen({
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center gap-8 bg-page p-6 text-fg">
       <div className="flex flex-col items-center gap-2 text-center">
-        <h1 className="text-3xl font-semibold">Custom Hitster</h1>
+        <h1 className="text-3xl font-semibold">Playlist Hitster</h1>
         <p className="max-w-content text-sm text-fg-secondary">
           Paste a public Spotify playlist link to deal a deck. Scan a card to hear the song, then
           guess the year.

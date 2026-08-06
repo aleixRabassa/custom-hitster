@@ -14,9 +14,11 @@
     />
     <!-- Must track `--color-page` in `src/index.css` by hand; a meta attribute cannot hold a var(). -->
     <meta name="theme-color" content="#0a0a0a" />
-    <!-- 240x240 WebP, 20 kB. Never restore a large icon here: see architecture.md §3. -->
+    <!-- 240x240 WebP, 10 kB. Never restore a large icon here: see architecture.md §3. -->
     <link rel="icon" type="image/webp" href="/logo.webp" />
-    <title>Custom Hitster</title>
+    <!-- iOS ignores the manifest's icons entirely and uses only this. 180x180 PNG, 23 kB. -->
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <title>Playlist Hitster</title>
   </head>
   <body>
     <div id="root"></div>

@@ -189,33 +189,47 @@ worth asserting in a node test, and a literal buried in a plugin call cannot be 
       colour utility is a **silent no-op** and all four local checks pass either way. It has shipped
       once in this repo, and the symptom was near-black text on a near-black card. — **All 14 new
       names emit; see execution note 4 for what the grep turned up about the mask.**
-- [ ] **9. Add `vite-plugin-pwa` as a devDependency and register it in `vite.config.ts`.** pnpm only.
+- [x] **9. Add `vite-plugin-pwa` as a devDependency and register it in `vite.config.ts`.** pnpm only.
       `devOptions` stays off, so neither `pnpm dev` nor `npx vercel dev` starts serving a worker —
       a service worker in development is a caching bug generator, and this repo's dev story is
-      already delicate enough.
-- [ ] **10. Generate the icon set.** 192×192, 512×512, a 512×512 **maskable** variant, and a 180×180
+      already delicate enough. — **`vite-plugin-pwa@1.3.0`, `generateSW`, `registerType: 'prompt'`.
+      `devOptions` absent.**
+- [x] **10. Generate the icon set.** 192×192, 512×512, a 512×512 **maskable** variant, and a 180×180
       apple-touch-icon. PNG, because manifest icon support for WebP is not universal and iOS ignores
       the manifest's icons entirely in favour of the apple-touch link.
-  - [ ] Recover the original 1254×1254 source from git history rather than upscaling `logo.webp`.
-        Record the commit it came from in `agent_findings.md`.
-  - [ ] **Do not re-add a large PNG to `public/`.** The favicon stays `logo.webp`. Each generated
+  - [x] Recover the original 1254×1254 source from git history rather than upscaling `logo.webp`.
+        Record the commit it came from in `agent_findings.md`. — **Recovered from `667b974`
+        (2026-08-03), deleted in `5e178f6`. It turned out NOT to be the same artwork as
+        `logo.webp` — see execution note 6, which is where this step's premise broke.**
+  - [x] **Do not re-add a large PNG to `public/`.** The favicon stays `logo.webp`. Each generated
         icon is only as large as its own dimensions require, and the total added weight goes in the
-        findings entry — the 1.26 MB lesson is two weeks old.
-  - [ ] The maskable variant needs its own safe-zone padding. A maskable icon that is just the 512
-        renamed gets its edges cropped on Android.
-- [ ] **11. Write the manifest as a typed module and import it into the plugin config.** Name,
+        findings entry — the 1.26 MB lesson is two weeks old. — **278.0 kB across the four icons,
+        none of them on the critical path, all palette-quantised. `logo.webp` was regenerated from
+        the same source and came out at 10,376 bytes, BELOW the 20,610 it replaced.**
+  - [x] The maskable variant needs its own safe-zone padding. A maskable icon that is just the 512
+        renamed gets its edges cropped on Android. — **Its own file. The artwork's content radius
+        was measured (95.1% of the source's half-width), so it is drawn at 84% of the canvas,
+        putting content at a 204.9px radius against the 204.8px safe radius.**
+- [x] **11. Write the manifest as a typed module and import it into the plugin config.** Name,
       short name, description, `start_url`, `display: standalone`, `background_color`, `theme_color`
-      matching `--color-page` after step 1, the icon set, and an orientation decision.
-  - [ ] `theme_color` here and the `meta` tag in `index.html` are now a **third** copy of the page
-        colour. Note it beside the existing warning, or derive both from one place.
-- [ ] **12. Configure workbox to precache the build output and nothing else.**
-  - [ ] A navigation-fallback denylist covering `^/api/`, so the shell is never served in place of
-        a function response.
-  - [ ] No runtime caching rule for `/api/playlist` or `/api/year`. This is a decision, not an
-        omission — write it in the config comment.
-  - [ ] Confirm the code-split chunks (`GameScreen`, the `qrcode` chunk) are in the precache
+      matching `--color-page` after step 1, the icon set, and an orientation decision. —
+      **`src/pwa/manifest.ts`, typed `Partial<ManifestOptions>`. No `orientation` field.**
+  - [x] `theme_color` here and the `meta` tag in `index.html` are now a **third** copy of the page
+        colour. Note it beside the existing warning, or derive both from one place. — **Noted in the
+        module's header, and PINNED: `manifest.test.ts` reads `src/index.css` and asserts
+        `--color-page`'s literal, so a token change fails a test rather than drifting silently.
+        None of the three can derive from another; that is stated rather than worked around.**
+- [x] **12. Configure workbox to precache the build output and nothing else.**
+  - [x] A navigation-fallback denylist covering `^/api/`, so the shell is never served in place of
+        a function response. — **Present in the generated worker.**
+  - [x] No runtime caching rule for `/api/playlist` or `/api/year`. This is a decision, not an
+        omission — write it in the config comment. — **`runtimeCaching: []` with the reasoning
+        beside it. The worker's one `registerRoute` call is the navigation fallback, not a cache.**
+  - [x] Confirm the code-split chunks (`GameScreen`, the `qrcode` chunk) are in the precache
         manifest. They are hashed build output, so they should be, but a chunk that is fetched
-        lazily and precached eagerly is worth verifying rather than assuming.
+        lazily and precached eagerly is worth verifying rather than assuming. — **Verified against
+        the emitted `dist/sw.js`, not assumed: all seven lazy chunks are listed. The check also
+        found five DUPLICATE entries, which is execution note 7.**
 - [ ] **13. Keep the waiting update strategy and verify what a user sees.** Deploy, load, deploy
       again, reload. The old worker should keep serving until the tab closes. Confirm that a
       mid-game reload does not produce a missing-chunk error.
@@ -243,24 +257,38 @@ worth asserting in a node test, and a literal buried in a plugin call cannot be 
 
 ## Unit Tests
 
-- [ ] `should name every new ring and glow token` — the `@theme static` block, in
+- [x] `should name every new ring and glow token` — the `@theme static` block, in
       `src/index.css.test.ts`. Text-level canary, same as the existing block, and labelled as one.
-- [ ] `should define the ring utility and its dimmed variant` — `src/index.css.test.ts`.
-- [ ] `should name the ring in the reduced-motion block` — `src/index.css.test.ts`, **only if step 5
-      decides the ring animates.** A test asserting a rule that should not exist is worse than none.
-- [ ] `should apply the ring utility to the card` — `src/components/Card.test.tsx`, a class-name
+      — Landed as `should name every ring and glow token in the theme block`, and it asserts
+      **`@theme static`** as well as the ten tokens: these are the first tokens in the app reachable
+      only from an `@utility`, so `static` is the thing actually holding them alive.
+- [x] `should define the ring utility and its dimmed variant` — `src/index.css.test.ts`. — Plus a
+      `not.toMatch(/oklch\(/)` over the utility body, so a literal cannot creep back in.
+- [x] ~~`should name the ring in the reduced-motion block`~~ — **not written, because step 5 decided
+      the ring does NOT animate.** The plan's own instruction: a test asserting a rule that should not
+      exist is worse than none.
+- [x] `should apply the ring utility to the card` — `src/components/Card.test.tsx`, a class-name
       assertion. This is the silent-no-op guard, and `CardHiddenSide.test.tsx` already has one to
-      copy the shape from.
-- [ ] `should apply the dimmed ring variant to each back` — `src/components/CardStack.test.tsx`.
-- [ ] `should render each back with no content, no QR and no id` — `src/components/CardStack.test.tsx`.
+      copy the shape from. — Landed covering **both faces**, and it asserts `absolute` alongside
+      `card-ring`: the utility sets no `position`, so the caller being positioned is a real contract.
+- [x] `should apply the dimmed ring variant to each back` — `src/components/CardStack.test.tsx`. —
+      Also asserts the full `card-ring` is **absent**, with a word-boundary match, since
+      `card-ring-dim` contains it as a substring and a `toContain` would pass on the dimmed class.
+- [x] `should render each back with no content, no QR and no id` — `src/components/CardStack.test.tsx`.
       Exists; re-run rather than rewrite, and do not let the ring class become an excuse to relax it.
-- [ ] `should render no live region on the hidden face` — `src/components/CardHiddenSide.test.tsx`.
-      Exists. It is the assertion the redesign is most likely to break by accident.
-- [ ] `should declare the fields an installability check requires` — `src/pwa/manifest.test.ts`,
+      — **Re-run unmodified, passing.**
+- [x] `should render no live region on the hidden face` — `src/components/CardHiddenSide.test.tsx`.
+      Exists. It is the assertion the redesign is most likely to break by accident. — **Re-run
+      unmodified, passing.**
+- [x] `should declare the fields an installability check requires` — `src/pwa/manifest.test.ts`,
       node environment. Name, short name, `start_url`, `display`, and at least a 192 and a 512 icon.
-- [ ] `should declare a maskable icon with its own purpose` — `src/pwa/manifest.test.ts`.
-- [ ] `should point theme_color at the same value as the page token` — `src/pwa/manifest.test.ts`.
-      The manifest is now the third copy of that colour; this is the only one a test can hold.
+- [x] `should declare a maskable icon with its own purpose` — `src/pwa/manifest.test.ts`. — Landed as
+      `should declare a maskable icon that is a separate file from the full-bleed 512`, which is the
+      failure worth catching: `purpose: 'any maskable'` on one file validates and crops.
+- [x] `should point theme_color at the same value as the page token` — `src/pwa/manifest.test.ts`.
+      The manifest is now the third copy of that colour; this is the only one a test can hold. —
+      **Two tests.** The second reads `src/index.css` and pins `--color-page`'s literal, because
+      asserting `theme_color === PAGE_COLOR` alone would only prove the module agrees with itself.
 
 ---
 
