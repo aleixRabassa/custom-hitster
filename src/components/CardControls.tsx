@@ -1,6 +1,6 @@
 /**
- * The three session controls -- Exit, Play/Pause, Restart -- as a bar BESIDE the card rather
- * than on its face.
+ * The four session controls -- Exit, Play/Pause, Restart, Keep this deck -- as a bar BESIDE the
+ * card rather than on its face.
  *
  * ===========================================================================
  *  THEY LIVE OUTSIDE THE CARD BECAUSE A BUTTON PRESS IS A TAP, AND A TAP IS A
@@ -41,8 +41,8 @@
  *
  * The same rule `CardHiddenSide` documents applies, for the same reason: this bar sits next to
  * an unflipped card. No label, `aria-label`, `title` or `data-*` attribute may derive from
- * `title`, `artist`, `year` or `durationMs`. All three names below are generic and asserted to
- * be exactly so.
+ * `title`, `artist`, `year` or `durationMs`. All four names below are generic and asserted to
+ * be exactly so -- including "Keep this deck", which names the DECK rather than the card.
  */
 
 import type { ReactNode } from 'react';
@@ -83,12 +83,12 @@ const AUDIO_BUTTON_CLASSES = `${BUTTON_CLASSES} text-fg`;
 const EXIT_BUTTON_CLASSES = `${BUTTON_CLASSES} text-danger`;
 
 /**
- * The one `<svg>` wrapper all four icons share.
+ * The one `<svg>` wrapper all five icons share.
  *
  * ===========================================================================
  *  ICONS, NOT TEXT GLYPHS -- AND THAT IS WHAT MAKES THEM MATCH.
  *
- *  The four controls were ■ ▶ ❙❙ ↺, and a codepoint's rendered size, stroke
+ *  The controls were ■ ▶ ❙❙ ↺, and a codepoint's rendered size, stroke
  *  weight and baseline are decided by whichever font the OS resolves it in.
  *  ▶ (U+25B6) is emoji-capable, so on a machine whose fallback chain reaches an
  *  emoji font first it renders coloured and oversized; even when it does not, it
@@ -97,7 +97,7 @@ const EXIT_BUTTON_CLASSES = `${BUTTON_CLASSES} text-danger`;
  *  because there is nothing common to size.
  *
  *  One viewBox, one length (`--size-control-icon`), one stroke width, and the
- *  four icons are the same size and weight on every platform.
+ *  icons are the same size and weight on every platform.
  * ===========================================================================
  *
  * `aria-hidden` on every one of them, and that is not decoration-by-default: each button already
@@ -171,9 +171,36 @@ function RestartIcon() {
   );
 }
 
+/**
+ * Share / save / print, drawn as the standard "out of a box, upwards" export arrow.
+ *
+ * Not a cluster of cards and not a three-dot overflow menu: what the button opens is the three ways
+ * a deck LEAVES this session -- a link, the library, a sheet of paper -- and the export arrow is
+ * the one pictogram every platform already spends that meaning on. The tray below the arrow is
+ * open-topped for the same reason the exit door is: the shape has to read at 20px.
+ */
+function KeepDeckIcon() {
+  return (
+    <ControlIcon>
+      <path d="M12 3.5v11" />
+      <path d="m8.25 7.25 3.75-3.75 3.75 3.75" />
+      <path d="M5.5 13.5v5A1.5 1.5 0 0 0 7 20h10a1.5 1.5 0 0 0 1.5-1.5v-5" />
+    </ControlIcon>
+  );
+}
+
 export interface CardControlsProps {
   /** From `useCardAudio`, owned by `GameScreen`. This component never touches the element. */
   audio: CardAudioControls;
+  /**
+   * Open the deck actions -- the share link, the save, the PDF.
+   *
+   * Like `onExit` this only ASKS: `GameScreen` opens `DeckActionsDialog` on it, and nothing happens
+   * to the deck or the session either way. It is here rather than on the end screen alone because
+   * reaching the end screen means ENDING THE GAME, which is irreversible -- so before 2026-08-06
+   * the price of copying a share link was the deck (see `DeckActions`).
+   */
+  onKeepDeck: () => void;
   /**
    * ASKS to end the session. It does not end it.
    *
@@ -185,7 +212,7 @@ export interface CardControlsProps {
   onExit: () => void;
 }
 
-export function CardControls({ audio, onExit }: CardControlsProps) {
+export function CardControls({ audio, onExit, onKeepDeck }: CardControlsProps) {
   const { canPlay, isPlaying, play, pause, restart } = audio;
 
   return (
@@ -228,6 +255,21 @@ export function CardControls({ audio, onExit }: CardControlsProps) {
           className={AUDIO_BUTTON_CLASSES}
         >
           <RestartIcon />
+        </button>
+
+        {/*
+          Last in the row, and never disabled: it depends on the DECK rather than on this card, so a
+          card with no preview -- which disables the two buttons before it -- has no bearing on it.
+          Furthest from Exit as well, which is the position a button a player presses on purpose
+          should have when the one that destroys the session is at the other end.
+        */}
+        <button
+          type="button"
+          onClick={onKeepDeck}
+          aria-label="Keep this deck"
+          className={AUDIO_BUTTON_CLASSES}
+        >
+          <KeepDeckIcon />
         </button>
       </div>
 

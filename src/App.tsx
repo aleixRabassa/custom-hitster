@@ -91,11 +91,16 @@ const GameScreen = lazy(() =>
  *
  *  It is phrased as a DESTINATION rather than as the plan's `'exited' |
  *  'finished' | null` reason, because the reason turned out to have a third
- *  case it could not express: "New playlist" from the end screen also has to
- *  reach the landing screen, and the reducer has no action that returns
- *  `ended` to `idle` -- deliberately, since there is nothing to un-end. Naming
- *  the destination instead makes all three paths one concept: Exit and New
- *  playlist both mean `landing`, and only a deck that ran out means `end-screen`.
+ *  case it could not express: "Home" from the end screen also has to reach the
+ *  landing screen, and the reducer has no action that returns `ended` to `idle`
+ *  -- deliberately, since there is nothing to un-end. Naming the destination
+ *  instead makes all three paths one concept: Exit and Home both mean
+ *  `landing`, and only a deck that ran out means `end-screen`.
+ *
+ *  That phrasing is also why renaming the end screen's button from "New
+ *  playlist" to "Home" on 2026-08-06 touched no state at all: the flag was
+ *  already named after where the press GOES rather than after what the player
+ *  was assumed to want next.
  *
  *  Ephemeral by design either way. `END` already clears the saved session, so
  *  after a refresh there is nothing to resume and the landing screen is correct
@@ -253,9 +258,9 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
     setEndedView('end-screen');
 
     // The seed from a share link, if this deal is the one it asked for. Cleared as it is consumed:
-    // a later submission from the landing form gets a fresh shuffle, which is what "New playlist"
-    // means. `start`'s third argument is the whole feature -- `GameState.seed` predicted it, so the
-    // reducer is untouched.
+    // a later submission from the landing form gets a fresh shuffle, which is what asking for
+    // another playlist means. `start`'s third argument is the whole feature -- `GameState.seed`
+    // predicted it, so the reducer is untouched.
     const seed = pendingSeedRef.current;
     pendingSeedRef.current = null;
 
@@ -365,7 +370,7 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
     [libraryStorage],
   );
 
-  const handleNewPlaylist = useCallback(() => {
+  const handleHome = useCallback(() => {
     setEndedView('landing');
     setNotice(null);
     // The session is already `ended` and its save already cleared by `END`, so clearing the request
@@ -405,6 +410,17 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
    * ===========================================================================
    */
   const deckCollapsed = state.status === 'ended' && state.deck.length === 0;
+
+  /**
+   * Is the playlist on screen already in the library?
+   *
+   * Derived from the live library rather than from a save's return value, so the button reads
+   * "Saved" immediately after the press AND on a deck whose playlist was saved in an earlier
+   * session. Hoisted out of the end screen's props on 2026-08-06 because the game screen's
+   * deck-actions dialog needs the same answer -- one derivation, two consumers, no chance of the
+   * two disagreeing about whether a press already happened.
+   */
+  const isPlaylistSaved = savedPlaylists.some((saved) => saved.id === state.playlist?.id);
 
   /**
    * The landing screen, shared by the states that show it: a fresh session, a session that has ended
@@ -465,7 +481,7 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
     // show "Deck finished" for a game that never began. See `deckCollapsed`.
     if (deckCollapsed) return landing;
 
-    // Exit and "New playlist" both mean `landing`; only a deck that ran out gets the end screen.
+    // Exit and "Home" both mean `landing`; only a deck that ran out gets the end screen.
     if (endedView === 'landing') return landing;
 
     return (
@@ -475,7 +491,7 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
         cardsPlayed={state.deck.length}
         playlistName={state.playlist?.name ?? ''}
         onRestart={handleRestart}
-        onNewPlaylist={handleNewPlaylist}
+        onHome={handleHome}
         /*
           The share link's two ingredients, straight from live state rather than remembered: a
           Restart deals a FRESH seed, and the end screen unmounts and remounts around it, so these
@@ -488,9 +504,7 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
         // its own leak test asserts that -- and the cards go into a file the player asked for.
         deck={state.deck}
         onSavePlaylist={handleSavePlaylist}
-        // Derived from the live library, so the button reads "Saved" immediately after the press and
-        // also on an end screen reached for a playlist saved in an earlier session.
-        isPlaylistSaved={savedPlaylists.some((saved) => saved.id === state.playlist?.id)}
+        isPlaylistSaved={isPlaylistSaved}
       />
     );
   }
@@ -525,6 +539,19 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
         isPlayable
         cardsRemaining={cardsRemaining}
         playlistName={state.playlist?.name ?? ''}
+        /*
+          The deck actions, mid-game (2026-08-06). The SAME five values the end screen gets, from
+          the same live state -- which is what makes the share link correct here too: it is built at
+          click time from the seed this deck was actually dealt with.
+
+          Not one of them derives from a card, so the game screen's leak story is unchanged by the
+          whole feature. The deck itself is already a prop of this screen.
+        */
+        playlistId={state.playlist?.id ?? ''}
+        seed={state.seed}
+        shareOrigin={shareOrigin()}
+        onSavePlaylist={handleSavePlaylist}
+        isPlaylistSaved={isPlaylistSaved}
         notice={noticeBanner}
       />
     </Suspense>

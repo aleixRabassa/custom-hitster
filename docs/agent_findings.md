@@ -2409,3 +2409,66 @@ earlier in this file, and it now applies to six files: `QrCode`, `Card`, `CardHi
 the back is actually aligned, actually covered at rest, or that the QR is really painted before the
 swipe rather than during it. The class names and the absence of a transform are pinned; the geometry is
 one drag in a browser. Added to `docs/development.md` §5.
+
+## 2026-08-06 — The deck actions moved to the game screen; plan 2's decision 7 is half reversed
+
+Two user-requested changes, one trivial and one that overturns a written decision.
+
+**The rename.** The end screen's second button is now **"Home"** rather than "New playlist". The
+landing screen is also where the saved-playlist library lives and where a shared link is pasted, so
+the old label named one of three reasons to press it — and it was the only one the button does not
+actually do. It cost nothing in state, and _why_ it cost nothing is worth recording: `App.tsx`'s
+`EndedView` was already phrased as the **destination** (`'end-screen' | 'landing'`) rather than as
+the plan's `'exited' | 'finished' | null` **reason**, precisely because a reason could not express
+"the player wants to go back". A flag named after where a press goes survives the press being
+renamed. The prop went `onNewPlaylist` → `onHome` with it, and `EndScreen.test.tsx` asserts the old
+label is gone.
+
+**The reversal.** The share link, the save and the PDF export are now reachable **mid-game**, from a
+fourth `CardControls` button that opens `DeckActionsDialog`. Plan 2's decision 7 had put them on the
+end screen and _nowhere else_, with two stated reasons — "a progress dialog over a live card is a
+spoiler risk" and "an interaction conflict with the swipe" — and both were sound. What the decision
+never weighed is the **cost of the only route to them**: reaching the end screen means ending the
+game, `END` clears the saved session, and nothing in the app can bring the deck back. So the price
+of copying a share link was the deck. That is the argument that reverses it, and it is worth
+separating from "it would be convenient" — the feature was not missing, it was _behind an
+irreversible action_.
+
+Both objections are answered rather than waived, and each answer is pinned by a test:
+
+- **Spoiler.** `DeckActions` holds the whole deck (the PDF needs it) and renders only counts. The
+  export's messages are `completed/total` and an excluded **count**; the sheet line is a count; the
+  share link is a playlist id and a seed. `DeckActions.test.tsx` asserts no fixture title or artist
+  reaches the text _or any attribute_; `DeckActionsDialog.test.tsx` and `GameScreen.test.tsx` assert
+  the same thing through the real screen with the panel open.
+- **Swipe.** It mounts in a modal whose backdrop takes the pointer, and `GameScreen`'s **guard 4**
+  now suspends the window key handler for _either_ dialog. That guard is an OR over two flags now,
+  and a third dialog has to be added to it. Nothing interactive went inside `Card`, so the Phase 5
+  tap-is-a-flip bug stays structurally impossible rather than newly guarded.
+
+**Three things a future session should know before editing any of it.**
+
+1. **`DeckActions` is shared by both screens**, so a copy change lands in two places at once. Its
+   behaviour is tested once, in `DeckActions.test.tsx`; `EndScreen.test.tsx` keeps only a presence
+   check, because a second copy of those assertions would prove only that the copy still exists.
+2. **The dialog focuses the first ACTION, not the close button** — deliberately different from
+   `ExitConfirmDialog`, which focuses Cancel. That dialog asks an irreversible question, so every
+   ambiguous input must resolve to "keep the game"; this one offers three harmless actions, so
+   focusing Close would just make a keyboard player Tab past it. Its focus trap is a real **cycle**
+   rather than the exit dialog's two-element swap, and the focusable list is queried **at Tab time**
+   because the copy fallback mounts an input only after a copy has failed and the save button
+   disables itself the moment it is pressed.
+3. **The bundle cost is real and was measured**: `index` 216.41 kB → 209.98 kB, plus a new shared
+   `DeckActions` chunk of 17.28 kB, so **+4.8 kB gzip on the initial path** (68.24 → 73.06 kB gzip).
+   The chunk is shared because `EndScreen` is imported eagerly while `GameScreen` is lazy. No code is
+   duplicated across chunks — checked by grepping the built assets for the sheet-count copy, which
+   appears exactly once. If this ever needs recovering, the lever is making `EndScreen` lazy too,
+   which would take both it and `DeckActions` off the landing path entirely; that was not done here
+   because it needs its own Suspense-fallback decision.
+
+**Unverified, and it needs the same manual pass everything else on this screen does.** Nothing local
+can tell whether a modal panel over a live card is _usable_ on a phone — whether the panel fits at
+360px with the copy fallback's input showing, whether the backdrop's `bg-page/80` leaves the card
+legible enough to be reassuring rather than distracting, and whether the fourth control button
+crowds the bar's touch targets on the surface a thumb swipes. jsdom computes no layout, so all four
+are class-name assertions here. Add them to the iOS/Android checklist in `docs/development.md` §5.

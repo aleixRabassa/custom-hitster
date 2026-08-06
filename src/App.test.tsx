@@ -333,7 +333,7 @@ describe('App', () => {
 
   it('should let the player start a different playlist after a collapsed deck', async () => {
     // The warning is only useful if the screen it appears on still works. A dead end here would be
-    // worse than the end screen it replaced, because the end screen at least had "New playlist".
+    // worse than the end screen it replaced, because the end screen at least had a way home.
     stubDroppingYearApi();
     const fetchImpl = vi.fn<PlaylistFetch>(() =>
       Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(playlistResult()) }),
@@ -558,8 +558,9 @@ describe('App', () => {
   });
 
   it('should return to the landing screen from the end screen', async () => {
-    // "New playlist" has to reach `idle`'s screen even though the reducer has no action that
-    // un-ends a session -- which is why the container's flag is a DESTINATION rather than a reason.
+    // "Home" has to reach `idle`'s screen even though the reducer has no action that un-ends a
+    // session -- which is why the container's flag is a DESTINATION rather than a reason. Renaming
+    // the button on 2026-08-06 changed no state for exactly that reason.
     stubYearApi();
     renderApp(playlistFetch(200, playlistResult({ cards: [{ ...pendingYearCard }] })));
 
@@ -570,7 +571,7 @@ describe('App', () => {
     fireEvent.keyDown(window, { key: 'ArrowRight' });
     await screen.findByText(/deck finished/i);
 
-    fireEvent.click(screen.getByRole('button', { name: /new playlist/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^home$/i }));
 
     expect(await screen.findByLabelText('Playlist link')).not.toBeNull();
   });
@@ -845,7 +846,7 @@ describe('App', () => {
       expect(storage.map.has(LIBRARY_STORAGE_KEY)).toBe(true);
 
       // And it is on the landing screen, by the playlist's own name.
-      fireEvent.click(screen.getByRole('button', { name: /new playlist/i }));
+      fireEvent.click(screen.getByRole('button', { name: /^home$/i }));
       expect(await screen.findByText('Your playlists')).not.toBeNull();
       expect(screen.queryByRole('button', { name: PLAYLIST.name })).not.toBeNull();
     });

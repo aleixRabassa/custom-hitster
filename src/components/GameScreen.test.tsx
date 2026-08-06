@@ -37,6 +37,7 @@ function renderScreen(props: {
   onExit?: () => void;
   onFlip?: () => void;
   onNext?: () => void;
+  onSavePlaylist?: () => void;
   isPlayable?: boolean;
 }) {
   const element = (
@@ -53,6 +54,13 @@ function renderScreen(props: {
       // key handler, and the HUD is covered on its own in `Hud.test.tsx`.
       cardsRemaining={0}
       playlistName="Test Playlist"
+      // The deck-actions props. Arbitrary too -- what they DO is `DeckActions.test.tsx`'s job, and
+      // what this file cares about is that opening the panel suspends the game's own controls.
+      playlistId="37i9dQZF1DXcBWIGoYBM5M"
+      seed="a1b2c3d4e5f60718"
+      shareOrigin="https://hitster.example/"
+      onSavePlaylist={props.onSavePlaylist ?? vi.fn()}
+      isPlaylistSaved={false}
     />
   );
 
@@ -243,6 +251,90 @@ describe('GameScreen', () => {
     fireEvent.keyDown(window, { key: 'ArrowRight' });
 
     expect(onNext).toHaveBeenCalledTimes(1);
+  });
+
+  it('should open the deck actions without touching the game', () => {
+    // ===================================================================
+    //  THE 2026-08-06 REVERSAL OF HALF OF PLAN 2'S DECISION 7.
+    //
+    //  The share link, the save and the PDF used to be reachable only by
+    //  ENDING THE GAME -- which is irreversible, so the price of copying a
+    //  link was the deck. They are on the control bar now, behind a modal
+    //  panel, and the panel is what answers the decision's own objection
+    //  that this would conflict with the swipe.
+    //
+    //  Opening it must change NOTHING: no audio event, no flip, no advance.
+    // ===================================================================
+    const onFlip = vi.fn();
+    const onNext = vi.fn();
+    render(renderScreen({ onFlip, onNext }));
+
+    screen.getByRole('button', { name: 'Play' }).click();
+    calls = [];
+
+    fireEvent.click(screen.getByRole('button', { name: 'Keep this deck' }));
+
+    expect(screen.queryByRole('dialog')).not.toBeNull();
+    expect(screen.queryByRole('button', { name: /copy share link/i })).not.toBeNull();
+    // The preview keeps playing: the player is sharing a deck, not leaving the game.
+    expect(calls).toEqual([]);
+    expect(onFlip).not.toHaveBeenCalled();
+    expect(onNext).not.toHaveBeenCalled();
+  });
+
+  it('should ignore the game keys while the deck actions are open', () => {
+    // Guard 4 again, and it covers BOTH dialogs. Without it a → pressed while the panel is up would
+    // deal the next card behind the backdrop -- a player pressing Print and losing a card in the
+    // same keystroke, where they cannot see it happen.
+    const onFlip = vi.fn();
+    const onNext = vi.fn();
+    render(renderScreen({ onFlip, onNext }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Keep this deck' }));
+
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    fireEvent.keyDown(window, { key: ' ' });
+
+    expect(onNext).not.toHaveBeenCalled();
+    expect(onFlip).not.toHaveBeenCalled();
+
+    // And they work again once it is closed -- the guard is a suspension, not a teardown.
+    fireEvent.click(screen.getByRole('button', { name: /back to the game/i }));
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+
+    expect(onNext).toHaveBeenCalledTimes(1);
+  });
+
+  it('should close the deck actions on Escape and leave the game playable', () => {
+    render(renderScreen({}));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Keep this deck' }));
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Play' })).not.toBeNull();
+  });
+
+  it('should not leak the current card through the deck actions', () => {
+    // ===================================================================
+    //  THE PANEL HOLDS THE WHOLE DECK, FOR THE PDF, AND MOUNTS OVER AN
+    //  UNFLIPPED CARD. That combination is the one plan 2 called a spoiler
+    //  risk, and this is the assertion that answers it end to end rather
+    //  than component by component: the real screen, the real card, the
+    //  panel open.
+    // ===================================================================
+    const { container } = render(renderScreen({}));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Keep this deck' }));
+
+    const text = container.textContent ?? '';
+    for (const value of [
+      highConfidenceCard.title,
+      highConfidenceCard.artist,
+      String(highConfidenceCard.year),
+    ]) {
+      expect(text).not.toContain(value);
+    }
   });
 
   it('should leave the audio element sourceless for a card with no preview', () => {

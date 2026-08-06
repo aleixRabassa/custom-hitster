@@ -453,9 +453,11 @@ playlist obscure enough that MusicBrainz places none of its tracks, which cannot
 
 ### Phase 8 sharing, saving and printing
 
-Nine checks from [`plan.phase-8-features.md`](./plans/plan.phase-8-features.md). The unit tests cover
-every branch of the link parser, the library's storage validation and the sheet geometry; what they
-cannot cover is a clipboard, a `localStorage` shared between tabs, a printer, and a phone camera.
+Nine checks from [`plan.phase-8-features.md`](./plans/plan.phase-8-features.md), plus three added on
+2026-08-06 when the same three actions became reachable mid-game. The unit tests cover every branch
+of the link parser, the library's storage validation and the sheet geometry; what they cannot cover
+is a clipboard, a `localStorage` shared between tabs, a printer, a phone camera — and, for rows
+10-12, a laid-out modal on a real screen.
 
 | #   | Check                                                                                                                                                                                                                                                                | Status                                                                                                                                                                                                                  |
 | --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -468,6 +470,10 @@ cannot cover is a clipboard, a `localStorage` shared between tabs, a printer, an
 | 7   | **Export a deck with a Cyrillic or CJK title** and confirm the `?` placeholders are the only damage — the year and the QR must be intact. This is the documented cost of sanitising instead of embedding a font (§8).                                                | Pending                                                                                                                                                                                                                 |
 | 8   | **Export a 100-card deck** and watch the progress count climb rather than the tab freezing. Nine sheets, ~1200 QR modules per card.                                                                                                                                  | Pending                                                                                                                                                                                                                 |
 | 9   | **Neither the PDF library nor the QR encoder is fetched before a deck exists.**                                                                                                                                                                                      | **Done 2026-08-06.** Chrome against `vite preview`, hard reload of the landing screen: exactly six requests — the document, `index-*.js`, `rolldown-runtime-*.js`, `preload-helper-*.js`, `qrcode-loader-*.js`, the CSS |
+
+| 10 | **The deck-actions panel fits a 360px screen** — open it mid-game on a phone, then force the copy fallback (an insecure origin will do it) so the share-link input is showing too. Nothing local computes layout, so this is the only check on the panel's height. | Pending |
+| 11 | **The backdrop leaves the card legible.** `bg-page/80` is meant to reassure the player the game is still there. If the card behind it reads as a spoiler risk or as visual noise, the fill is the thing to change — not the panel. | Pending |
+| 12 | **Four control buttons still clear 44px each and do not crowd the swipe.** The bar gained a fourth target on the surface a thumb swipes; `touch-target` is asserted at class-name level only, and jsdom measures nothing. | Pending |
 
 **Row 9 comes with a trap worth knowing before you run it again: `qrcode-loader-*.js` is React's JSX
 runtime, not the QR encoder.** Rolldown named the shared vendor chunk after `src/game/qrcode-loader.ts`

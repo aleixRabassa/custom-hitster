@@ -53,6 +53,16 @@
  * audio, and it belongs here rather than in the container for the same reason the flip's stop rule
  * does: it is a property of this screen being on screen. It also gates the key handler below, which
  * is the non-obvious half -- see guard 4.
+ *
+ * ## The deck actions are reachable mid-game as of 2026-08-06
+ *
+ * `CardControls` has a fourth button that opens `DeckActionsDialog` -- the share link, the save and
+ * the PDF export, the same `DeckActions` the end screen renders. It reverses half of plan 2's
+ * decision 7, which had put them on the end screen and nowhere else; the reason it reversed is that
+ * REACHING the end screen means ending the game, and ending the game is irreversible, so copying a
+ * link cost the player their deck. Both of that decision's objections are answered rather than
+ * dropped -- `DeckActions` for the spoiler half, the dialog's backdrop plus guard 4 below for the
+ * swipe half. Nothing interactive was added inside `Card`.
  */
 
 import { useEffect, useState } from 'react';
@@ -60,6 +70,7 @@ import type { ReactNode } from 'react';
 
 import { CardControls } from './CardControls';
 import { CardStack } from './CardStack';
+import { DeckActionsDialog } from './DeckActionsDialog';
 import { ExitConfirmDialog } from './ExitConfirmDialog';
 import { Hud } from './Hud';
 import { useCardAudio } from '../hooks/useCardAudio';
@@ -94,6 +105,22 @@ export interface GameScreenProps {
   cardsRemaining: number;
   /** The playlist's name, from `state.playlist`. Playlist-level only — never track data. */
   playlistName: string;
+  /**
+   * The playlist's Spotify id, from `state.playlist`. One half of the share link.
+   *
+   * These five are the deck-actions props, straight through to `DeckActionsDialog` and used for
+   * nothing else here. They are playlist-level and seed-level -- not one of them derives from a
+   * card, which is what keeps this screen's leak story unchanged by the whole feature.
+   */
+  playlistId: string;
+  /** The seed this deck was dealt with, from `state.seed`. The other half of the link. */
+  seed: string;
+  /** Where a shared link should point -- `origin + pathname`, supplied by the container. */
+  shareOrigin: string;
+  /** Save this playlist to the landing screen's library. */
+  onSavePlaylist: () => void;
+  /** True once this playlist is in the library. Turns the save button into its own confirmation. */
+  isPlaylistSaved: boolean;
   /**
    * The notice banner, or null.
    *
@@ -132,6 +159,11 @@ export function GameScreen({
   isPlayable,
   cardsRemaining,
   playlistName,
+  playlistId,
+  seed,
+  shareOrigin,
+  onSavePlaylist,
+  isPlaylistSaved,
   notice,
 }: GameScreenProps) {
   const currentCard = deck[currentIndex];
@@ -147,6 +179,16 @@ export function GameScreen({
    * it always got.
    */
   const [isExitConfirmOpen, setIsExitConfirmOpen] = useState(false);
+
+  /**
+   * Whether the deck-actions panel is showing. Screen state for the same reason the flag above is:
+   * nothing about the game changes while it is open, and the reducer has no action for it.
+   *
+   * It gates the key handler exactly as the exit flag does -- see guard 4. That gate is what makes
+   * a modal panel a safe answer to plan 2's "interaction conflict with the swipe" objection: while
+   * this is open the screen has no keyboard interface and its backdrop has the pointer.
+   */
+  const [isDeckActionsOpen, setIsDeckActionsOpen] = useState(false);
 
   /**
    * Stop on card change. The only stop rule -- see the header block for the one that was deleted.
@@ -187,16 +229,18 @@ export function GameScreen({
    *     button is activated, so one press would BOTH toggle audio and
    *     flip the card -- revealing the answer as a side effect of
    *     pressing play.
-   *  4. THE EXIT DIALOG. Not a guard inside the handler but the effect's
-   *     own condition, below: while the confirmation is open the card is
-   *     behind a backdrop, and a → that dealt the next card under it would
-   *     mean answering a modal and losing a card in the same keystroke.
+   *  4. EITHER MODAL. Not a guard inside the handler but the effect's
+   *     own condition, below: while a dialog is open the card is behind a
+   *     backdrop, and a → that dealt the next card under it would mean
+   *     answering a modal and losing a card in the same keystroke.
    *     Guard 3 covers Space (focus is on a dialog button) but nothing
-   *     covers → , and Escape belongs to the dialog alone.
+   *     covers → , and Escape belongs to the dialog alone. It covers BOTH
+   *     dialogs -- the exit confirmation and the deck-actions panel -- and
+   *     a third one added later must be added to this condition too.
    * ===================================================================
    */
   useEffect(() => {
-    if (!isPlayable || isExitConfirmOpen) return;
+    if (!isPlayable || isExitConfirmOpen || isDeckActionsOpen) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
       // Guard 1. Held keys.
@@ -237,7 +281,7 @@ export function GameScreen({
     window.addEventListener('keydown', handleKeyDown);
 
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isPlayable, isExitConfirmOpen, onFlip, onNext]);
+  }, [isPlayable, isExitConfirmOpen, isDeckActionsOpen, onFlip, onNext]);
 
   /**
    * The Exit button ASKS. It no longer ends the game.
@@ -299,15 +343,41 @@ export function GameScreen({
         handler and flipped the card -- so pressing Play revealed the answer. `CardControls`
         documents it in full.
       */}
-      <CardControls audio={audio} onExit={handleExitRequest} />
+      <CardControls
+        audio={audio}
+        onExit={handleExitRequest}
+        onKeepDeck={() => {
+          setIsDeckActionsOpen(true);
+        }}
+      />
 
       {/*
-        Last in the DOM, so it is last in the tab order and paints over everything above it without
-        needing a stacking context of its own. Mounted only while open: an always-present dialog
+        Last in the DOM, so they are last in the tab order and paint over everything above without
+        needing a stacking context of their own. Mounted only while open: an always-present dialog
         hidden with CSS is one `display` rule away from being reachable by Tab while invisible.
+
+        The two are mutually exclusive in practice -- each one's backdrop covers the button that
+        opens the other -- so neither has to know the other exists.
       */}
       {isExitConfirmOpen ? (
         <ExitConfirmDialog onConfirm={handleExitConfirmed} onCancel={handleExitCancelled} />
+      ) : null}
+
+      {isDeckActionsOpen ? (
+        <DeckActionsDialog
+          playlistId={playlistId}
+          playlistName={playlistName}
+          seed={seed}
+          shareOrigin={shareOrigin}
+          onSavePlaylist={onSavePlaylist}
+          isPlaylistSaved={isPlaylistSaved}
+          // The live deck, so the sheet count and the export both reflect the years that have
+          // arrived by the time the player presses. Nothing from it is rendered -- see `DeckActions`.
+          deck={deck}
+          onClose={() => {
+            setIsDeckActionsOpen(false);
+          }}
+        />
       ) : null}
     </main>
   );

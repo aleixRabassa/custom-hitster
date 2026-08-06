@@ -59,7 +59,30 @@ Several decisions in this repo look like mistakes and are not. If something seem
 
 **The app is only playable under `npx vercel dev`, never `pnpm dev`.** Vite serves `api/playlist.ts` as transpiled source with status 200, so pressing Start under `pnpm dev` shows the `unexpected-payload` error copy ("Spotify returned something we could not read"). That is the client behaving exactly as designed, not a bug — see [`docs/development.md`](./docs/development.md) §4.
 
-**The three controls are NOT on the card** (`src/components/CardControls.tsx`, rendered by `GameScreen` beside the stack), and putting them back would reintroduce a real bug: `gestureProps.onPointerUp` is bound to the card's outer element, so a pointer-up on a button inside the card is read as a tap and flips it — pressing Play revealed the answer. **Nothing interactive may be rendered inside `Card`.** Two tests assert the absence.
+**The four controls are NOT on the card** (`src/components/CardControls.tsx`, rendered by `GameScreen` beside the stack), and putting them back would reintroduce a real bug: `gestureProps.onPointerUp` is bound to the card's outer element, so a pointer-up on a button inside the card is read as a tap and flips it — pressing Play revealed the answer. **Nothing interactive may be rendered inside `Card`.** Two tests assert the absence.
+
+**An eighth decision landed on 2026-08-06 and it reverses half of plan 2's decision 7: the share
+link, the save and the PDF export are reachable MID-GAME.** They were on the end screen and
+**nowhere else**, and the objection that reversed it is that reaching the end screen means **ending
+the game**, which is irreversible — so the price of copying a share link was the deck. Decision 7's
+two reasons for keeping them off the game screen are _answered_, not waived: the spoiler half by
+`DeckActions` rendering **only counts** (asserted against the whole fixture deck, attributes
+included), and the swipe half by mounting it in `DeckActionsDialog` — a modal whose backdrop takes
+the pointer while **guard 4 in `GameScreen` suspends the window key handler**, exactly as
+`ExitConfirmDialog` already did. Three things to know before editing any of it: **`DeckActions` is
+shared by both screens**, so a change to the copy or the buttons lands in two places at once and its
+tests live once, in `DeckActions.test.tsx`; **guard 4 is now an OR over two flags** and a third
+dialog must be added to it; and **`CardControls` has a fourth button**, which is why its
+`aria-label` list is asserted exactly (`['Exit game', 'Play', 'Restart', 'Keep this deck']`) — the
+bar is a leak surface beside an unflipped card, and "Keep this deck" is safe because it names the
+deck rather than the card. The cost is measured: **+4.8 kB gzip on the initial path**, because
+`DeckActions` becomes a shared chunk instead of living inside `index`.
+
+**The end screen's second button says "Home", not "New playlist"** (renamed 2026-08-06). The landing
+screen is also where the saved-playlist library is and where a shared link is pasted, so the old
+label named one of three reasons to press it — and the only one the button does _not_ do. It touched
+no state, because `EndedView` was already phrased as the **destination** `'landing'` rather than as
+a reason; `EndScreen.test.tsx` asserts the old label is absent.
 
 **A sixth developer decision landed on 2026-08-06, and it reverses a Phase 4 checkbox: the song
 keeps playing when the card is FLIPPED.** Audio now stops on exactly two things — the card
