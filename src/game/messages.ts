@@ -20,14 +20,35 @@
  *  explanation; it is just not what the UI shows.
  * ===========================================================================
  *
- * `Record<PlaylistClientErrorCode, string>` is the type on purpose rather than a lookup with a
- * fallback: a new code added to the union then FAILS THE TYPECHECK here, instead of rendering an
- * empty string in the one place a player is already having a bad time.
+ * `Record<StartFailureCode, string>` is the type on purpose rather than a lookup with a fallback: a
+ * new code added to the union then FAILS THE TYPECHECK here, instead of rendering an empty string in
+ * the one place a player is already having a bad time.
  */
 
 import type { PlaylistClientErrorCode } from './playlist-client';
 
-export const PLAYLIST_ERROR_MESSAGES: Record<PlaylistClientErrorCode, string> = {
+/**
+ * Every reason a player can end up on the landing screen unable to play, as one union.
+ *
+ * ===========================================================================
+ *  WIDER THAN `PlaylistClientErrorCode`, AND THE EXTRA CODE IS NOT A FETCH FAILURE.
+ *
+ *  `no-years-found` is produced by the SESSION, not by the HTTP client: the
+ *  playlist fetched perfectly, and then every card in it turned out to have no
+ *  resolvable release year, so the deck emptied and there is no game to play.
+ *  `fetchPlaylist` cannot return it and never will.
+ *
+ *  It is deliberately NOT added to `PlaylistClientErrorCode`. That union is the
+ *  set of things the client returns, its tests enumerate exactly that, and
+ *  widening it would make the client's own type claim a code it cannot produce.
+ *  Widening the COPY map instead is the honest direction: this file owns every
+ *  sentence the player reads, and "why you cannot play this playlist" is one
+ *  question with one answer slot on the landing screen -- not two.
+ * ===========================================================================
+ */
+export type StartFailureCode = PlaylistClientErrorCode | 'no-years-found';
+
+export const PLAYLIST_ERROR_MESSAGES: Record<StartFailureCode, string> = {
   'invalid-url':
     'That does not look like a Spotify playlist link. Paste the link from Spotify’s Share menu.',
 
@@ -54,6 +75,46 @@ export const PLAYLIST_ERROR_MESSAGES: Record<PlaylistClientErrorCode, string> = 
   'unexpected-payload':
     'Spotify returned something we could not read. This is a problem on our side, not with your link.',
 
+  /**
+   * A playlist that parsed, loaded, and turned out to have nothing to play.
+   *
+   * Two situations reach this and the copy has to fit both: a genuinely empty playlist, and one
+   * whose every track was unplayable and therefore skipped (`skippedCount` reaching the raw track
+   * count). Hence "no tracks this app can play" rather than "is empty" -- the second case's
+   * playlist is not empty, and telling that player it is would send them to check a link that is
+   * fine. Until Phase 7 both of these got `unexpected-payload`, i.e. "this is a problem on our
+   * side", which was a confidently wrong diagnosis of a readable answer.
+   */
+  'empty-playlist':
+    'That playlist has no tracks this app can play — it may be empty, or every track in it may be unavailable. Try another playlist.',
+
+  /**
+   * The deck was dealt, every year lookup came back empty, and the deck emptied.
+   *
+   * A card whose lookup finds nothing is REMOVED (`gameReducer`, `YEAR_RESOLVED`), because a Hitster
+   * card is placed on a timeline by its year and there is nothing to play without one. When that
+   * happens to every card there is no game, so the player is returned here rather than shown an end
+   * screen reading "Deck finished — 0 cards", which is what they got before and which reads as a
+   * completed game they never played.
+   *
+   * The copy says the years could not be found rather than that the playlist is bad, because the
+   * playlist is usually fine — MusicBrainz simply does not know these recordings, and a very obscure
+   * or very new playlist is the ordinary way to get here. It names the mainstream-music workaround,
+   * since that is genuinely what fixes it.
+   */
+  'no-years-found':
+    'No release years could be found for any track in that playlist, so there was nothing to play. This usually means the songs are too obscure or too new for the music database. Try a playlist with more widely released tracks.',
+
+  /**
+   * The browser knows there is no connection, so nothing was sent.
+   *
+   * DELIBERATELY NOT THE SAME SENTENCE AS `network`, and the difference is not cosmetic: here the
+   * app is certain, so it says so and asks for one thing. `network` is a guess about why a real
+   * request failed, so it hedges. `messages.test.ts` asserts the two are not identical, because
+   * copy-pasting one into the other is the failure mode of adding a code.
+   */
+  offline: 'You appear to be offline. Reconnect and press Start again.',
+
   network: 'Could not reach the server. Check your connection and try again.',
 
   /** Deliberately promises nothing: this code exists precisely for failures we cannot name. */
@@ -68,6 +129,6 @@ export const PLAYLIST_ERROR_MESSAGES: Record<PlaylistClientErrorCode, string> = 
  * exhaustive by type, so this fallback is unreachable through any typed path, and that is the
  * intent: it is a runtime backstop, not a substitute for exhaustiveness.
  */
-export function playlistErrorMessage(code: PlaylistClientErrorCode): string {
+export function playlistErrorMessage(code: StartFailureCode): string {
   return PLAYLIST_ERROR_MESSAGES[code] ?? PLAYLIST_ERROR_MESSAGES['unknown-error'];
 }

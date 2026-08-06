@@ -125,6 +125,45 @@ describe('LandingScreen', () => {
     );
   });
 
+  it('should render the new offline and empty-playlist copy in the same alert slot', () => {
+    // ===================================================================
+    //  THE POINT OF PHASE 7's ERROR WORK: two new failures, NO NEW SCREEN.
+    //
+    //  `offline` and `empty-playlist` are codes on the existing union, so
+    //  they flow through `messages.ts` into the slot that was already here.
+    //  One test covers both because the slot is shared -- what it guards is
+    //  that neither code renders blank, which is what a code with no copy
+    //  would do at the exact moment the player needs telling something.
+    //
+    //  `App.tsx` needs no case for either, and that is the design: a fifth
+    //  view outside its four-status model would be the second source of
+    //  truth its header block exists to prevent.
+    // ===================================================================
+    renderLanding({ errorCode: 'offline' });
+    expect(screen.getByRole('alert').textContent).toBe(PLAYLIST_ERROR_MESSAGES['offline']);
+
+    cleanup();
+
+    renderLanding({ errorCode: 'empty-playlist' });
+    expect(screen.getByRole('alert').textContent).toBe(PLAYLIST_ERROR_MESSAGES['empty-playlist']);
+    // The regression this code exists for: an empty playlist used to render the
+    // `unexpected-payload` apology, which blamed our parser for a perfectly readable answer.
+    expect(screen.getByRole('alert').textContent).not.toContain('our side');
+
+    cleanup();
+
+    /*
+      And the one code in the union that is NOT a fetch failure. `no-years-found` comes from the
+      session — the playlist loaded, then every card's year lookup came back empty and the deck
+      emptied — and `App.tsx` sends the player back here rather than to an end screen reading
+      "Deck finished" over a count of zero. Same slot, same copy source, no extra prop: that this
+      screen cannot tell the difference is the point of widening the union rather than adding a
+      second channel.
+    */
+    renderLanding({ errorCode: 'no-years-found' });
+    expect(screen.getByRole('alert').textContent).toBe(PLAYLIST_ERROR_MESSAGES['no-years-found']);
+  });
+
   it('should let a client-side error replace a server error', () => {
     // Two error sources, one slot. A stale server error must not sit underneath a fresh "that is
     // not a playlist link" about what is currently in the box.
@@ -166,11 +205,11 @@ describe('LandingScreen', () => {
     }
   });
 
-  it('should render eight suggested playlists', () => {
-    // Eight, so a first-time visitor with no playlist of their own can still see the app work.
+  it('should render nine suggested playlists', () => {
+    // Nine, so a first-time visitor with no playlist of their own can still see the app work.
     renderLanding();
 
-    expect(SUGGESTED_PLAYLISTS).toHaveLength(8);
+    expect(SUGGESTED_PLAYLISTS).toHaveLength(9);
     for (const playlist of SUGGESTED_PLAYLISTS) {
       expect(screen.queryByText(playlist.label)).not.toBeNull();
     }
@@ -268,7 +307,7 @@ describe('LandingScreen', () => {
     //  without one. Before Phase 7 all eleven interactive elements in the
     //  app fell back to the browser default over a near-black page.
     //
-    //  `focus-visible`, not `focus`: the eight suggestion buttons submit and
+    //  `focus-visible`, not `focus`: the suggestion buttons submit and
     //  replace the screen, so a `focus:` ring would be the last thing a
     //  mouse user saw of the landing screen.
     // ===================================================================

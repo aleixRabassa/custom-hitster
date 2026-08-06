@@ -1486,7 +1486,7 @@ The fix is one prop: `Card` accepts `ref?: Ref<HTMLDivElement>` and puts it on t
 `motion.div`. React 19 passes `ref` to function components as an ordinary prop, so no `forwardRef`
 is involved. It also restores the **paint order** the animation needs for free: once popped, the
 outgoing card is a positioned element and so paints in a later layer than the in-flow card beneath
-it, which is what puts the next card *behind* the one sliding away rather than over it. No z-index
+it, which is what puts the next card _behind_ the one sliding away rather than over it. No z-index
 needed.
 
 **Testability.** `Card.test.tsx` now pins the necessary half — the ref reaches the OUTER element,
@@ -1527,7 +1527,7 @@ finds no year is now REMOVED from the deck rather than played without one. The r
 contained; the consequences were not, and they are worth knowing before touching this again.
 
 **1. The card-1 gate had to be rephrased.** It opened on "the resolved card WAS `deck[0]`". With
-drops that condition opens the gate onto a *brand new* first card whose lookup has not been
+drops that condition opens the gate onto a _brand new_ first card whose lookup has not been
 dispatched, so the player lands on the pending `····` slot. It is now a property of the deck —
 `deck[0]?.year !== undefined`, evaluated against the NEXT deck — which also self-heals the
 already-resolved-first-card hang that `START` needed its own guard for.
@@ -1550,8 +1550,323 @@ the player backwards onto a card they have already played.
 
 **4. A shared test stub turned one decision into eight failures.** `App.test.tsx`'s `stubYearApi()`
 answered every lookup with `year: null` — chosen originally as "the minimum response that opens the
-gate without inventing years". Post-reversal that stub *deletes the deck*: the session went straight
+gate without inventing years". Post-reversal that stub _deletes the deck_: the session went straight
 to `ended` and every test that only wanted to reach the game screen found the end screen. The stub
 now returns a real year, with `stubDroppingYearApi` beside it for the drop path. When a decision
 changes what a value MEANS, grep the test doubles for that value before assuming the failures are
 regressions.
+
+---
+
+## 2026-08-06 — A suggested-playlist label with a bracket in it breaks a test that renders fine
+
+`LandingScreen.test.tsx` queried each suggestion with `new RegExp(playlist.label, 'i')`. That was
+safe for exactly as long as every label was alphanumeric. The replacement set added **"This is Duki
+(all songs)"**, and the parentheses became a capture group: the pattern matched `This is Duki all
+songs`, which appears nowhere, so `getByRole` threw on a button that renders perfectly. The failure
+reads as a missing button and is not one.
+
+A plain string is not the fix — the accessible name of a suggestion is the label **and** the blurb
+concatenated, so an exact-string `name` never matches either. The test now escapes the label before
+building the pattern, via a `suggestionButton()` helper. Any test that builds a `RegExp` out of
+**content** rather than out of a literal has this bug latent in it; the labels are the only content
+in this repo a user is likely to change.
+
+## 2026-08-06 — Re-verifying a playlist id needs `entity.name`, and four of the nine hit the track cap
+
+The nine ids now in `SUGGESTED_PLAYLISTS` were verified against
+`https://open.spotify.com/embed/playlist/{id}` by parsing `__NEXT_DATA__` and reading
+`props.pageProps.state.data.entity` — `uri` and `name`, per the discipline `plan.md` §5 sets. All
+nine resolve to the intended playlist. Two things worth recording:
+
+**1. Four of the nine return exactly `MAX_EMBED_TRACKS`.** Éxitos Verano, Radio BrianPer, Electro
+Latino and This is Duki all come back with 100 tracks, so four of the suggestions raise the
+truncation notice by design — up from three under the Phase 0 set. Counts in list order: 100, 40,
+100, 100, 50, 100, 50, 50, 50.
+
+**2. Preview coverage is worse than the Phase 0 sample.** Electro Latino is missing
+`audioPreview.url` on 2 of 100 and This is Duki on 8 of 100 — 10 preview-less tracks across the set
+against Phase 0's 2 in 400. The `noPreviewCard` path is a card a player will now actually meet
+rather than a 0.5% edge case.
+
+The one-off script is not kept: it is twenty lines against a documented shape, and a stale copy in
+the repo would be re-run against a payload it no longer matches.
+
+## 2026-08-06 — An empty playlist told the player it was our bug, and no layer upstream owned the case
+
+`src/game/playlist-client.ts` rejected an empty `cards` array in the same branch as a malformed one:
+`if (!Array.isArray(rawCards) || rawCards.length === 0) return undefined`, which became
+`unexpected-payload` — _"Spotify returned something we could not read. This is a problem on our side,
+not with your link."_ The payload was perfectly readable and said, correctly, that there is nothing to
+play. A confidently wrong diagnosis, which is worse than a vague one.
+
+**It is reachable in production, and this is the part worth recording**, because the tempting
+assumption is that the server would have caught it. It does not.
+`api/_lib/spotify-embed.ts:168` requires only that `entity.trackList` be an **array** — an empty one
+passes — and then builds `cards` by filtering it, so `cards: []` with `ok: true` is a legitimate
+adapter result. `api/playlist.ts` copies the adapter's four fields into a 200 with no length check.
+Two real inputs land there: a genuinely empty public playlist, and one whose every track was
+unplayable, since `skippedCount` reaching the raw track count leaves `cards` empty too. **The client
+owns the case, and it is the only layer that does.**
+
+Fixed by splitting the branch and giving the empty case its own code (`empty-playlist`). The copy has
+to fit both inputs, so it says "no tracks this app can play" rather than "is empty" — telling the
+second player their playlist is empty sends them to check a link that is fine.
+
+## 2026-08-06 — `motion` was a third of the bundle, and the landing screen downloaded all of it
+
+Attribution method, since the repo has no bundle analyser and adding one was not worth a dependency:
+build with `--sourcemap`, decode the VLQ `mappings`, and charge the generated bytes between one
+segment and the next to the source the first segment names. Aggregating by package gives a
+module-level breakdown out of the build's own output.
+
+The single 373.39 kB chunk, measured before any change:
+
+| bucket                                                         |         kB |     share |
+| -------------------------------------------------------------- | ---------: | --------: |
+| `react-dom`                                                    |     178.16 |     48.0% |
+| **`motion-dom` + `framer-motion` + `motion-utils` + `motion`** | **125.16** | **33.7%** |
+| **`qrcode` + `dijkstrajs`**                                    |  **23.28** |  **6.3%** |
+| `src/components/`                                              |      15.49 |      4.2% |
+| `src/game/`                                                    |      12.57 |      3.4% |
+| `react` + `scheduler`                                          |      11.38 |      3.0% |
+| `src/hooks/`, `src/` root, `shared/`                           |       5.30 |      1.4% |
+
+`motion` is imported by exactly two files, `Card.tsx` and `CardStack.tsx`, both below `GameScreen` —
+so a third of the JavaScript on the landing screen was an animation library for cards that had not
+been dealt. Split at `GameScreen` with `React.lazy`, fallback = the preparing screen (`playing` is
+only ever entered from `preparing`, so a chunk in flight leaves the player on the screen they are
+already looking at). `qrcode` went behind a dynamic `import()` inside `QrCode.tsx`'s existing effect,
+which needed no `Suspense` because the same-size placeholder already covered an async window.
+
+**Landing screen: 373.39 kB → 218.52 kB raw, 119.92 → 70.27 kB gzip (−41.4%).** Verified in
+Lighthouse's own network log that neither the `GameScreen` chunk nor the qrcode chunk is requested on
+the landing screen — the entry HTML preloads only the runtime and a shared helper.
+
+Note that `MotionConfig` in `main.tsx` keeps a handful of framer-motion **context** modules eager
+(they are most of the 11.68 kB `preload-helper` chunk), but the 177-module `motion-dom` animation
+engine moved. Verified per chunk from the source maps rather than inferred from the totals — so do
+not "finish the job" by moving `MotionConfig` into `GameScreen`; there is almost nothing left to win
+and plan 1 put it around the whole tree deliberately.
+
+**There is no audio code to lazy-load**, despite the checkbox reading "lazy-load QR/audio code".
+`useCardAudio` is a hook over a native `<audio>` element with no dependency behind it, and the
+element already carries `preload="none"`. Recorded because the wording will send the next reader
+looking for the audio half.
+
+## 2026-08-06 — Two concurrent `import()` calls for the same module: the second continuation never runs
+
+Found while moving `qrcode` behind a dynamic import. `QrCode.tsx`'s effect re-runs per card, so a
+bare `import('qrcode')` in its body issues a fresh import call per advance — and two overlap whenever
+a card is superseded before its code resolves, which is exactly the fast-advance race the component's
+generation counter exists for.
+
+With two imports in flight at once, **the second one's `.then` never ran.** Symptom: the new card
+kept the previous card's placeholder forever. The existing staleness test failed in a way that looked
+nothing like the cause — it rendered a **real** QR PNG from an unmocked `qrcode`, while every other
+test in the same file got the mock. Reduced to a minimal probe: two renders, one
+`mockImplementationOnce` returning a pending promise, and `toDataURL` was called **once**, for the
+first URL only.
+
+Fixed by memoizing the import at module scope (`loadQrcode()`), which is better production code
+regardless: one shared promise for every card instead of one call per advance. A rejected load stays
+cached deliberately — a chunk that failed to fetch will fail again, and retrying per advance would be
+a request loop on the flaky connection that broke it.
+
+**The consequence for tests:** a settled promise cannot be un-settled, so the library-fails-to-load
+case cannot live in a file whose other tests load the library successfully. Flipping a flag plus
+`vi.resetModules()` **silently asserts against a working library** — the mocker hands back the module
+it already built, the import succeeds, and the test passes for the wrong reason. It now has its own
+file, `QrCode.load-failure.test.tsx`, whose mock factory always throws.
+
+Separately: `vi.mock` intercepts by specifier rather than by import **form**, so the existing module
+doubles needed no restructure for the move to `import()`. Only timing changed — generation no longer
+begins synchronously inside the effect, so `CardStack.test.tsx` had to await a
+`toHaveBeenCalledTimes(1)` that used to read correctly on the same tick.
+
+## 2026-08-06 — A `React.lazy` boundary can turn Vite's first-time transform cost into a test flake
+
+`App.test.tsx` failed on exactly one of sixteen tests after `GameScreen` went behind `React.lazy` —
+the **first** one to reach `playing`. The fifteen after it passed. The failure was a `waitFor` timeout
+on the HUD, which reads as a broken game screen and is not one: that first test pays Vite's
+first-time transform of ~250 `motion` modules **inside** a `waitFor` whose default timeout is one
+second, and every later test runs against the now-warm module cache.
+
+Two things make this worth recording. It is **order-dependent** — it would have moved to whichever
+test happened to run first — and the suite's own timings show why the margin is thin: `import` time
+across a full run is measured in the **hundreds of seconds** (104–113 s observed this session), and
+environment setup has been seen to vary from 56 s to 345 s.
+
+Fix: `beforeAll(async () => { await import('./components/GameScreen') })`. It moves the cost outside
+every timeout, asserts nothing, and is not a substitute for the real check — that the chunk is
+**absent** from the landing screen, which is verified in the build output and in Lighthouse's network
+log. Any future `lazy` boundary above a heavy dependency needs the same warm-up in whichever suite
+drives it.
+
+## 2026-08-06 — First Lighthouse pass, and a 1.26 MB favicon nobody was looking for
+
+Landing screen, production build under `vite preview`, Lighthouse 12.8.2, headless Chrome:
+**Performance 75 · Accessibility 100 · Best Practices 100 · SEO 100.** FCP 1.5 s, LCP 7.8 s, TBT
+0 ms, CLS 0. The game screen was **not** audited and cannot be locally — `vite preview` serves no
+`/api`, so Start fails with `unexpected-payload` and the screen is unreachable.
+
+Three conclusions:
+
+**1. SEO was 91 for a finding that was a `vite preview` artifact.** "robots.txt is not valid", with
+the parser choking on `<!doctype html>`: the preview server answers every unmatched path with the SPA
+shell at 200 `text/html`, including `/robots.txt`. Production would not have — `vercel.json`'s
+rewrite is `/((?!api/|@)[^.]*)` and the `[^.]*` excludes any dotted path, so production 404s it,
+which is valid to a crawler. Added `public/robots.txt` anyway, since it makes the two environments
+agree and lets `/api/` be disallowed (a crawler hitting `/api/year` spends MusicBrainz budget shared
+by every user of the app). **The general lesson: do not treat `vite preview` as production for
+anything served outside `/assets/`.**
+
+**2. Performance 75 is entirely LCP.** TBT is 0 ms and CLS is 0. The LCP element is the landing
+tagline, which cannot paint until React mounts, so under simulated slow 4G it is gated on the entry
+chunk. Prerendering or an inline static shell is the fix and both are Phase 8.
+
+**3. `public/logo.png` is 1,262,175 bytes at 1254×1254, served as the favicon on every visit.** That
+is **6× the entire JS payload** of the landing screen and **50× the saving** from the qrcode chunk
+split. **No audit fails on it**, because a favicon is not render-blocking — which is precisely why it
+survived seven phases unnoticed, and why the bundle work above looks more significant than it is next
+to one unoptimised image.
+
+> **CORRECTION, same day — and the correction matters more than the finding.** Point 2 above was
+> **wrong**, and it was wrong in a way worth studying: it concluded that LCP 7.8 s was architectural
+> (the tagline cannot paint until React mounts, so prerendering, so Phase 8) and recorded the favicon
+> separately as a Phase 8 asset item. The two were the same problem. On developer instruction the PNG
+> was replaced with a **240×240 WebP of 20,610 bytes** — a 98.4% reduction, **no code touched** — and
+> the same page went from **Performance 75 / LCP 7.8 s** to **Performance 99 / LCP 1.6 s**, with total
+> transfer down from ~1.36 MB to **98.7 kB**. The 1.26 MB favicon had been saturating the simulated
+> slow-4G link and delaying every paint behind it, LCP element included.
+>
+> **The transferable lesson: "LCP is gated on React mounting" is a conclusion that sounds correct for
+> any client-rendered SPA**, which is exactly what made it easy to accept without reading the rest of
+> the network log. The log was already in hand — the favicon is in the request list quoted above,
+> 1,262,446 bytes, right there next to the JS. Read what is on the wire before blaming the
+> architecture. Prerendering and a static shell are Phase 8 ideas again, not owed fixes.
+>
+> The icon is now `public/logo.webp` with `type="image/webp"` and **no PNG fallback**: every browser
+> that can run this app reads a WebP favicon, and a second `<link>` would add a request whose only
+> purpose is a tab icon elsewhere. If one is ever needed, add a _small_ PNG.
+
+## 2026-08-06 — A yearless deck showed "Deck finished" over a count of zero
+
+Developer instruction, after Phase 7 plan 2 closed: an empty playlist **or** a playlist where no card's
+year could be found must warn and return to the landing screen.
+
+The empty-playlist half needed nothing — `empty-playlist` is a fetch failure, so the session never
+starts and the landing screen renders the warning in its existing slot. The other half was a real
+defect. A card whose year lookup finds nothing is **removed** from the deck (the 2026-08-05 reversal),
+so a playlist MusicBrainz cannot place drains to zero and `YEAR_RESOLVED` moves the session to `ended`.
+That was correct. What was wrong is that `ended` meant the **end screen**, which rendered
+**"Deck finished"** over `cardsPlayed={state.deck.length}` — i.e. **0**. A completed game announced to
+somebody who never saw a single card, with no hint as to why.
+
+Fixed in the container, not the reducer: `deckCollapsed = status === 'ended' && deck.length === 0`.
+
+**The condition is exact rather than heuristic, which is what makes it safe:** every other route to
+`ended` leaves the played cards in the deck — natural exhaustion stops **on** the last card and Exit
+does not empty anything — so an empty deck at `ended` can only mean there was never anything to play.
+It is checked **before** `endedView`, which is still `'end-screen'` from the `START` that dealt the deck
+and is not a destination the player chose. All three of the reducer's empty-deck exits land there:
+`YEAR_RESOLVED`, `START` with nothing dealable, and `RESUME` of a pre-reversal save.
+
+**The type decision is the part to preserve.** The warning needed a code, and `no-years-found` is
+produced by the **session**, not by `fetchPlaylist`. It is deliberately **not** added to
+`PlaylistClientErrorCode`: that union is the set of things the HTTP client returns and
+`playlist-client.test.ts` enumerates exactly that, so widening it would make the client's own type
+claim a code it cannot produce. Instead `messages.ts` — which already owns every sentence — owns
+**`StartFailureCode = PlaylistClientErrorCode | 'no-years-found'`**, and the landing screen's one slot
+takes that. One question ("why can't I play this playlist"), one answer slot, one copy map, no second
+notice channel and no fifth view in `App.tsx`.
+
+Two test notes. `App.test.tsx`'s existing case asserted `/deck finished/i` for exactly this scenario,
+so **the old behaviour was pinned** — the test was rewritten, not added to. And both new container
+tests must await the **alert**, not the landing input: the landing screen is already mounted at `idle`,
+so `findByLabelText('Playlist link')` resolves on frame one and every assertion after it passes against
+the pre-Start screen for the wrong reason. That cost one debugging cycle.
+
+## 2026-08-06 — Re-spike: the embed payload still has no attribution field, two months on
+
+Closing out `plan.md` §5's "Added by" bullet, which was blocked on data availability. Method as the
+Phase 0 spike: fetch `https://open.spotify.com/embed/playlist/{id}`, parse `__NEXT_DATA__`, and
+enumerate the **complete** field union across every `trackList` entry rather than reading the first
+one. Identity confirmed by `entity.uri` **and** `entity.name`, not by a 200.
+
+Playlists: `37i9dQZF1DX0XUsuxWHRQd` (RapCaviar, editorial, 50 tracks) and `2wJx2AIytvpaSJLsc2wy3V`
+(Radio Brianper, user-owned, 100 tracks) — deliberately one of each, since an editorial playlist has
+no meaningful "added by" and a user-owned one would.
+
+**Track-level union is 15 fields and identical across both:** `uid`, `uri`, `title`, `subtitle`,
+`duration`, `isExplicit`, `isPlayable`, `isNineteenPlus`, `playabilityReason`, `entityType`,
+`contentRatings{labels}`, `audioPreview{url,format}`. **No attribution field of any shape**, and the
+raw payload string contains none of `added_by`, `addedBy`, `addedAt`, `added_at`. Playlist level has
+18 fields whose only attribution-shaped one is **`authors`, and it is `null` on both**.
+
+So Phase 0's inventory holds. The bullet moved to Phase 8 with this evidence attached; **no UI was
+built**, because building it requires a new auth path and that re-opens §2's no-credentials decision
+— a product question about the audience, not a UI task.
+
+Incidental: `SUGGESTED_PLAYLISTS` labels that playlist **"Radio BrianPer"** while Spotify's
+`entity.name` is **"Radio Brianper"**. Capitalisation in a label, not a functional problem, but noted
+so the next re-verification does not read it as a mismatch.
+
+## 2026-08-06 — The suite flake IS real and it reproduced: 15 files error, zero tests fail
+
+Plan 2 recorded a red `pnpm test` run on 2026-08-05 — 13 errors with only 19 of 32 files completing —
+then clean on two re-runs, and asked whether it was reproducible. **It is.** It happened once during
+this session's step 13, and the shape matches almost exactly.
+
+**The observed failure, and the signature to recognise it by:**
+
+| Run                  | Files        | Tests                | Errors | `environment` time | `import` time |
+| -------------------- | ------------ | -------------------- | -----: | -----------------: | ------------: |
+| Bad run (2026-08-06) | 21 of 36 ran | 339 passed, 0 failed | **15** |         **12.2 s** |        13.6 s |
+| Healthy runs (×6)    | 36 of 36     | 497 passed           |      0 |          337–378 s |     104–113 s |
+| Bad run (2026-08-05) | 19 of 32 ran | (not recorded)       | **13** |                  — |             — |
+
+**Two things identify it unambiguously, and both matter because the console output is alarming:**
+
+1. **Zero tests FAIL.** The count is "errors", not failures — the files never ran, so nothing in them
+   was asserted. A real regression names an assertion and a line; this names neither.
+2. **`environment` time COLLAPSES** — 12 s against a healthy 340 s, roughly 28× lower. The jsdom
+   environments did not run slowly and time out; they never initialised at all. That is why it looks
+   catastrophic and takes 74 s instead of 45 s.
+
+There are **17 jsdom files and 19 node-only files** of the 36. The 15 errors are most-but-not-all of
+the jsdom set, and every completed file in the bad run was consistent with the node ones plus a
+couple of jsdom stragglers — so it is a **per-file jsdom environment initialisation failure**, not a
+resource ceiling hit at a fixed point, and not anything to do with the tests' content.
+
+**It happened TWICE on 2026-08-06**, hours apart, with near-identical numbers — 21 of 36 files and 15
+errors both times, 339 then 340 tests passing, zero failing on either. So the 19/32-and-13 shape from
+2026-08-05 was not a one-off, and the ratio is stable: it is always the same ~15 files.
+
+**Two hypotheses were tested and neither reproduced it**, which is worth recording so nobody repeats
+the experiments:
+
+- **CPU load.** Six concurrent `pnpm build` runs alongside a full `pnpm test`: clean, 36/36.
+- **A cold transform cache.** The first occurrence came immediately after Prettier rewrote ten source
+  files, which made "first run after a mass rewrite" the obvious suspect. Touching every `.ts`/`.tsx`
+  under `src/` to invalidate the cache and running: clean, 36/36.
+
+**One correlation survives both occurrences and is offered as a lead, not a cause:** each happened in a
+shell invocation that ran `pnpm test` **chained with `pnpm build`** in the same command block, while ten
+consecutive runs of `pnpm test` on its own — including four immediately after each failure — were clean.
+That is consistent with build tooling and vitest's environment setup contending for something
+process-wide, and it is _not_ the same thing as the CPU-load test above, which ran the builds as a
+detached background job rather than in the same invocation. **Nobody should treat this as established
+from two samples**; it is where to look next.
+
+So the trigger is still unidentified, and the practical guidance is what it was — but now with real
+evidence behind it rather than a single anecdote:
+
+> **A red `pnpm test` whose summary shows `Errors` and zero failed tests is probably not real.
+> Re-run before investigating.** Check the `environment` figure: if it is seconds rather than
+> minutes, the jsdom files never started and nothing was actually tested.
+
+The corollary is the uncomfortable one: **a green run does not prove the jsdom half ran.** It does
+here, because the file and test counts are checked (36 and 497), but a `pnpm test` glanced at for its
+exit code alone would have passed 339 tests and skipped every component test in the repo. The counts
+are the thing to read.

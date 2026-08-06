@@ -25,18 +25,52 @@
  * fifth action, the reducer is the place to add it, with its tests.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 
 import { EndScreen } from './components/EndScreen';
-import { GameScreen } from './components/GameScreen';
 import { LandingScreen } from './components/LandingScreen';
 import { NoticeBanner } from './components/NoticeBanner';
 import { PreparingScreen } from './components/PreparingScreen';
 import { useGameSession } from './game/use-game-session';
 import { usePlaylist } from './hooks/usePlaylist';
+import type { StartFailureCode } from './game/messages';
 import type { PlaylistFetch } from './game/playlist-client';
 import type { StorageLike } from './game/persistence';
 import type { PlaylistResult } from '../shared/types';
+
+/**
+ * The game screen, and everything only it needs, in a separate chunk.
+ *
+ * ===========================================================================
+ *  THIS SPLIT WAS MEASURED, NOT ASSUMED (Phase 7, step 8).
+ *
+ *  `motion` is 125.16 kB of the pre-split 373.39 kB bundle -- 33.7%, across
+ *  `motion-dom`, `framer-motion` and `motion-utils` -- attributed by decoding the
+ *  build's own source map on 2026-08-06. It is imported by exactly two files,
+ *  `Card.tsx` and `CardStack.tsx`, and both live below this screen. So a third of
+ *  the JavaScript on the landing screen was an animation library for cards that
+ *  had not been dealt.
+ *
+ *  `lazy` on the SCREEN rather than a dynamic import inside it, which is the
+ *  opposite of the call made for `qrcode` in `QrCode.tsx` -- and the difference is
+ *  whether a loading state already exists. The QR had one (a same-size
+ *  placeholder), so an import could join an await already there. `motion` is used
+ *  as JSX by two components, which cannot be awaited in place at all; it needs a
+ *  boundary, and this is the boundary where the card tree becomes necessary.
+ *
+ *  THE FALLBACK IS THE PREPARING SCREEN, which is the reason this costs nothing
+ *  visible: the transition into `playing` is always FROM `preparing`, so a chunk
+ *  still in flight leaves the screen the player is already looking at exactly
+ *  where it is, notice and all. No spinner was invented for this.
+ * ===========================================================================
+ *
+ * `.then` unwrapping the named export because `lazy` requires a module whose `default` is the
+ * component, and this repo's components are all named exports -- there is no default anywhere under
+ * `src/components/`.
+ */
+const GameScreen = lazy(() =>
+  import('./components/GameScreen').then((module) => ({ default: module.GameScreen })),
+);
 
 /**
  * Which screen the `ended` status should render.
@@ -170,15 +204,60 @@ export default function App({ storage, fetchImpl }: AppProps = {}) {
   }, [resetRequest]);
 
   /**
-   * The landing screen, shared by the two states that show it: a fresh session, and a session that
-   * has ended with the player heading back. Extracted so the loading and error props cannot drift
-   * between the two -- the exit path submits playlists too.
+   * A deck that ended with nothing in it, which is not a game that finished.
+   *
+   * ===========================================================================
+   *  THE PLAYER GETS THE LANDING SCREEN AND A WARNING, NOT THE END SCREEN.
+   *
+   *  A card whose year lookup finds nothing is REMOVED from the deck
+   *  (`gameReducer`, `YEAR_RESOLVED`). When that happens to every card the deck
+   *  empties and the reducer moves to `ended` -- correctly, since there is
+   *  nothing left to play -- but `ended` previously meant the end screen, which
+   *  then read **"Deck finished"** over `cardsPlayed={0}`. That announces a
+   *  completed game to somebody who never saw a single card, and it says nothing
+   *  about why.
+   *
+   *  `state.deck.length === 0` is the whole condition and it is exact: every
+   *  other route to `ended` leaves the cards that were played in the deck --
+   *  natural exhaustion stops on the last card, and Exit does not empty it. So
+   *  an empty deck at `ended` can only mean "there was never anything to play".
+   *
+   *  Derived here rather than added to `GameState` as an `endReason`, for the
+   *  same reason `endedView` is a container flag (decision 2): which screen an
+   *  ended session shows is a presentation question, and Phase 3's reducer, its
+   *  types, its persistence format and its passing tests do not get reopened to
+   *  answer one. The reducer already carries the fact; this reads it.
+   *
+   *  All three of the reducer's empty-deck exits land here, which is what makes
+   *  it worth deriving rather than special-casing: `YEAR_RESOLVED` (the common
+   *  one), `START` with nothing dealable, and `RESUME` of a pre-reversal save
+   *  whose every card was yearless.
+   * ===========================================================================
    */
+  const deckCollapsed = state.status === 'ended' && state.deck.length === 0;
+
+  /**
+   * The landing screen, shared by the states that show it: a fresh session, a session that has ended
+   * with the player heading back, and a deck that collapsed. Extracted so the loading and error
+   * props cannot drift between them -- the exit path submits playlists too.
+   *
+   * The three error sources are mutually exclusive in practice and ordered anyway. A fetch error
+   * wins, because it describes the request the player just made; `no-years-found` describes the one
+   * before it. And both are suppressed while a new request is in flight, so a warning about the last
+   * playlist does not sit over a spinner for the next one.
+   */
+  const startFailureCode: StartFailureCode | undefined =
+    requestState.status === 'error'
+      ? requestState.code
+      : deckCollapsed && requestState.status !== 'loading'
+        ? 'no-years-found'
+        : undefined;
+
   const landing = (
     <LandingScreen
       onSubmit={request}
       isLoading={requestState.status === 'loading'}
-      {...(requestState.status === 'error' ? { errorCode: requestState.code } : {})}
+      {...(startFailureCode ? { errorCode: startFailureCode } : {})}
     />
   );
 
@@ -209,6 +288,11 @@ export default function App({ storage, fetchImpl }: AppProps = {}) {
   if (state.status === 'idle') return landing;
 
   if (state.status === 'ended') {
+    // Checked BEFORE `endedView`, because a collapsed deck is not a destination the player chose --
+    // `endedView` is still `end-screen` from the `START` that dealt it, and honouring that would
+    // show "Deck finished" for a game that never began. See `deckCollapsed`.
+    if (deckCollapsed) return landing;
+
     // Exit and "New playlist" both mean `landing`; only a deck that ran out gets the end screen.
     if (endedView === 'landing') return landing;
 
@@ -234,20 +318,28 @@ export default function App({ storage, fetchImpl }: AppProps = {}) {
   if (!currentCard) return landing;
 
   return (
-    <GameScreen
-      deck={state.deck}
-      currentIndex={state.currentIndex}
-      isFlipped={state.isFlipped}
-      isYearPending={isCurrentYearPending}
-      onFlip={flip}
-      onNext={next}
-      onExit={handleExit}
-      // `status === 'playing'` is the whole condition, and reaching this line is that condition.
-      // Derived here because `GameScreen` deliberately knows nothing about `GameStatus`.
-      isPlayable
-      cardsRemaining={cardsRemaining}
-      playlistName={state.playlist?.name ?? ''}
-      notice={noticeBanner}
-    />
+    /*
+      The fallback is the screen the player is ALREADY on: `playing` is only ever entered from
+      `preparing`, so a game chunk still in flight simply leaves the preparing screen up -- same
+      notice, same spinner, no flash of anything new. In practice the chunk is usually already
+      warm, because the card-1 gate gives it the whole year lookup to arrive in.
+    */
+    <Suspense fallback={<PreparingScreen notice={noticeBanner} />}>
+      <GameScreen
+        deck={state.deck}
+        currentIndex={state.currentIndex}
+        isFlipped={state.isFlipped}
+        isYearPending={isCurrentYearPending}
+        onFlip={flip}
+        onNext={next}
+        onExit={handleExit}
+        // `status === 'playing'` is the whole condition, and reaching this line is that condition.
+        // Derived here because `GameScreen` deliberately knows nothing about `GameStatus`.
+        isPlayable
+        cardsRemaining={cardsRemaining}
+        playlistName={state.playlist?.name ?? ''}
+        notice={noticeBanner}
+      />
+    </Suspense>
   );
 }

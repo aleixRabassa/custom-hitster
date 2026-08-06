@@ -11,7 +11,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { PLAYLIST_ERROR_MESSAGES, playlistErrorMessage } from './messages';
-import type { PlaylistClientErrorCode } from './playlist-client';
+import type { StartFailureCode } from './messages';
 
 /**
  * Every code, written out by hand.
@@ -20,14 +20,19 @@ import type { PlaylistClientErrorCode } from './playlist-client';
  * map to itself and pass for any map at all. The annotation is what makes a new code a
  * COMPILE error here, and this list is what makes a removed one a test failure.
  */
-const ALL_CODES: PlaylistClientErrorCode[] = [
+const ALL_CODES: StartFailureCode[] = [
   'invalid-url',
   'unsupported-entity',
   'not-found-or-private',
   'upstream-unavailable',
   'unexpected-payload',
+  'empty-playlist',
   'network',
+  'offline',
   'unknown-error',
+  // Not a fetch failure and not producible by `fetchPlaylist` -- the session produces it when every
+  // card's year lookup comes back empty. See `StartFailureCode`.
+  'no-years-found',
 ];
 
 describe('PLAYLIST_ERROR_MESSAGES', () => {
@@ -66,6 +71,48 @@ describe('PLAYLIST_ERROR_MESSAGES', () => {
     expect(message).toContain('deleted');
   });
 
+  it('should not give offline and network the same sentence', () => {
+    // ===================================================================
+    //  THE FAILURE MODE OF ADDING A CODE IS COPY-PASTING ITS COPY.
+    //
+    //  The two describe genuinely different situations -- `offline` means the
+    //  browser is certain there is no connection and nothing was sent;
+    //  `network` means a request was made and did not complete, which
+    //  includes a captive portal that reports itself as online. Identical
+    //  copy would make the new code pointless while still passing the
+    //  exhaustiveness tests above, since both would be non-empty strings.
+    // ===================================================================
+    expect(PLAYLIST_ERROR_MESSAGES['offline']).not.toBe(PLAYLIST_ERROR_MESSAGES['network']);
+    // And the offline sentence has to actually say so, rather than hedging like `network` does.
+    expect(PLAYLIST_ERROR_MESSAGES['offline'].toLowerCase()).toContain('offline');
+  });
+
+  it('should blame neither the link nor us for empty-playlist', () => {
+    // Two situations reach this code -- an empty playlist, and one whose every track was skipped --
+    // so the copy has to fit both. "That playlist is empty" is the tempting short version and it is
+    // wrong for the second: a player whose tracks were all unplayable would go and check a link
+    // that is perfectly fine. It also must not be the `unexpected-payload` apology, which is what
+    // this case USED to render.
+    const message = PLAYLIST_ERROR_MESSAGES['empty-playlist'].toLowerCase();
+
+    expect(message).toContain('no tracks');
+    expect(message).not.toContain('our side');
+  });
+
+  it('should not blame the playlist for no-years-found', () => {
+    // The playlist is usually fine here — MusicBrainz simply does not know the recordings, and an
+    // obscure or very new playlist is the ordinary way to get here. So the copy has to name the
+    // database rather than imply a bad link, and it must not be confusable with `empty-playlist`,
+    // which is a genuinely unplayable playlist.
+    const message = PLAYLIST_ERROR_MESSAGES['no-years-found'];
+
+    expect(message.toLowerCase()).toContain('years');
+    expect(message).not.toBe(PLAYLIST_ERROR_MESSAGES['empty-playlist']);
+    // And it explains rather than only reporting: without a suggestion the player has nothing to do
+    // differently, and the app looks broken instead of limited.
+    expect(message.toLowerCase()).toContain('try a playlist');
+  });
+
   it('should tell the player it is our fault for unexpected-payload', () => {
     // The one code that is a bug on our side rather than a problem with their link -- including
     // the `pnpm dev` case. Sending them off to check their link would waste their time.
@@ -81,7 +128,7 @@ describe('playlistErrorMessage', () => {
   it('should fall back rather than return undefined for an unknown code', () => {
     // Unreachable through any typed path -- the map is exhaustive by type -- but a code can
     // arrive from a response body, and `undefined` rendered into the DOM is a blank error box.
-    const rogue = 'teapot' as PlaylistClientErrorCode;
+    const rogue = 'teapot' as StartFailureCode;
 
     expect(playlistErrorMessage(rogue)).toBe(PLAYLIST_ERROR_MESSAGES['unknown-error']);
   });

@@ -1,0 +1,24 @@
+# Custom Hitster is a single public page with nothing behind a login, so crawling is allowed in
+# full. `/api/` is excluded because those routes answer only to a `url` query parameter and have
+# nothing to index -- a crawler hitting `/api/playlist` with no parameters gets an error body, and
+# `/api/year` spends a request against a MusicBrainz budget shared by every user of the app.
+#
+# ---------------------------------------------------------------------------
+# THIS FILE ALSO SETTLES A LIGHTHOUSE FINDING THAT WAS AN ARTIFACT (2026-08-06).
+#
+# The audit reported "robots.txt is not valid", with the parser choking on
+# `<!doctype html>`. That was `vite preview`, which answers EVERY unmatched path
+# with the SPA shell -- including this one -- at status 200 with `text/html`.
+# Production would not have done it: `vercel.json`'s rewrite is
+# `/((?!api/|@)[^.]*)`, and the `[^.]*` excludes any path containing a dot, so
+# `/robots.txt` was a 404 there rather than HTML. A 404 is valid to a crawler
+# ("no restrictions"), so the finding was local-only.
+#
+# Adding the file makes the two environments agree and the audit pass in both,
+# which is worth three lines. Do not conclude from the finding's history that the
+# preview server models production for anything served outside `/assets/`.
+# ---------------------------------------------------------------------------
+
+User-agent: *
+Allow: /
+Disallow: /api/

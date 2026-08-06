@@ -6,9 +6,9 @@
  * a rendered screen, because a discriminated result is cheap to assert and a screen is not.
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { fetchPlaylist } from './playlist-client';
+import { fetchPlaylist, isBrowserOnline } from './playlist-client';
 import type { PlaylistFetch, PlaylistFetchResponse } from './playlist-client';
 import type { Card, PlaylistErrorCode, PlaylistResult } from '../../shared/types';
 
@@ -229,10 +229,9 @@ describe('fetchPlaylist', () => {
       { playlist: RESULT.playlist, truncated: false, skippedCount: 0 },
       // Missing `playlist`.
       { cards: [CARD], truncated: false, skippedCount: 0 },
-      // `cards` not an array.
+      // `cards` not an array. An EMPTY array is deliberately NOT in this list any more -- it is a
+      // well-formed payload and gets `empty-playlist`; see the two tests below.
       { ...RESULT, cards: { 0: CARD } },
-      // An EMPTY deck: not a game, and `currentCard` would be undefined on the first frame.
-      { ...RESULT, cards: [] },
       // A malformed card. Rejected wholesale rather than skipped, because a silently shrinking
       // deck breaks the reproducibility the shuffle seed exists for.
       { ...RESULT, cards: [{ id: 'x', title: 'y' }] },
@@ -252,6 +251,87 @@ describe('fetchPlaylist', () => {
         await fetchPlaylist(PLAYLIST_URL, { fetchImpl: fetchReturning(response(200, body)) }),
       ).toEqual({ ok: false, code: 'unexpected-payload' });
     }
+  });
+
+  it('should report empty-playlist for a well-formed response with zero cards', async () => {
+    // ===================================================================
+    //  THE REGRESSION IS `unexpected-payload`, WHICH IS WHAT THIS RETURNED
+    //  THROUGH PHASE 6 -- i.e. "Spotify returned something we could not read.
+    //  This is a problem on our side, not with your link." The payload was
+    //  perfectly readable and said, correctly, that there is nothing to play.
+    //
+    //  Reachable in production, not only through this stub: the embed adapter
+    //  accepts an empty `trackList` and `api/playlist.ts` forwards it as a 200.
+    // ===================================================================
+    const outcome = await fetchPlaylist(PLAYLIST_URL, {
+      fetchImpl: fetchReturning(response(200, { ...RESULT, cards: [] })),
+    });
+
+    expect(outcome).toEqual({ ok: false, code: 'empty-playlist' });
+  });
+
+  it('should still report unexpected-payload when cards is not an array', async () => {
+    // The other half of the split. One branch became two, and this is the case that gets lost when
+    // that happens: everything non-array must keep landing on the malformed code, including the
+    // values that are falsy or that look empty.
+    for (const cards of [undefined, null, 0, '', 'none', {}, { 0: CARD }, { length: 0 }]) {
+      expect(
+        await fetchPlaylist(PLAYLIST_URL, {
+          fetchImpl: fetchReturning(response(200, { ...RESULT, cards })),
+        }),
+      ).toEqual({ ok: false, code: 'unexpected-payload' });
+    }
+  });
+
+  it('should report offline without attempting a fetch when the predicate says so', async () => {
+    // ===================================================================
+    //  THE IMPORTANT HALF IS THAT THE FETCH DOUBLE IS NEVER CALLED.
+    //
+    //  A code returned AFTER a pointless request is not the behaviour being
+    //  built: the player would still watch "Loading…" until the browser gave
+    //  up, and only then be told about a connection the browser already knew
+    //  was missing. The answer is available synchronously.
+    // ===================================================================
+    const fetchImpl = fetchReturning(response(200, RESULT));
+
+    const outcome = await fetchPlaylist(PLAYLIST_URL, { fetchImpl, isOnline: () => false });
+
+    expect(outcome).toEqual({ ok: false, code: 'offline' });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('should default to online when no predicate is injected', async () => {
+    // Guards the REAL app path, which passes nothing: a default that resolved to offline would make
+    // every Start fail with no request, and no other test here would notice because they all inject.
+    const outcome = await fetchPlaylist(PLAYLIST_URL, {
+      fetchImpl: fetchReturning(response(200, RESULT)),
+    });
+
+    expect(outcome).toEqual({ ok: true, result: RESULT });
+  });
+
+  it('should proceed when the injected predicate says online', async () => {
+    // The other direction, so the short-circuit cannot become unconditional.
+    const fetchImpl = fetchReturning(response(200, RESULT));
+
+    expect(await fetchPlaylist(PLAYLIST_URL, { fetchImpl, isOnline: () => true })).toEqual({
+      ok: true,
+      result: RESULT,
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('should report network for a request that fails while the browser thinks it is online', async () => {
+    // WHY BOTH CODES EXIST. `navigator.onLine` reports a network INTERFACE, not reachability, so a
+    // captive portal -- hotel Wi-Fi, a train -- reports online and fails every request. If this
+    // ever returned `offline`, the fallback would have been merged away and one of the two
+    // sentences would be a lie.
+    const fetchImpl = vi.fn<PlaylistFetch>(() => Promise.reject(new TypeError('Failed to fetch')));
+
+    expect(await fetchPlaylist(PLAYLIST_URL, { fetchImpl, isOnline: () => true })).toEqual({
+      ok: false,
+      code: 'network',
+    });
   });
 
   it('should report network when the fetch rejects', async () => {
@@ -299,6 +379,58 @@ describe('fetchPlaylist', () => {
       await expect(
         fetchPlaylist(PLAYLIST_URL, { fetchImpl: fetchReturning(scripted) }),
       ).resolves.toBeDefined();
+    }
+  });
+});
+
+describe('isBrowserOnline', () => {
+  /**
+   * Restored after every case: `navigator` is a real global in this environment, and a test that
+   * left it stubbed would change what the DEFAULT-predicate tests above are measuring.
+   */
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('should treat an absent navigator as online', () => {
+    // ===================================================================
+    //  THIS IS THE NODE ENVIRONMENT'S OWN CASE, so the test runs in the
+    //  situation it describes rather than simulating a distant one.
+    //
+    //  Every test in this file runs with no jsdom -- that is the property the
+    //  injected `fetch` exists to preserve -- so there is no DOM `navigator`
+    //  here. Refusing to fetch because a DOM global is missing would be a
+    //  false negative in the one environment that cannot be offline, and it
+    //  would fail every other test in this file at once.
+    // ===================================================================
+    vi.stubGlobal('navigator', undefined);
+
+    expect(isBrowserOnline()).toBe(true);
+  });
+
+  it('should treat a navigator without onLine as online', () => {
+    // What node ACTUALLY gives you, as of node 25: a `navigator` with `userAgent`, `platform` and
+    // `hardwareConcurrency` and no `onLine` key at all. "Cannot tell" has to resolve to online, and
+    // the read has to be a `typeof === 'boolean'` check rather than a truthiness test to get there.
+    vi.stubGlobal('navigator', { userAgent: 'node' });
+
+    expect(isBrowserOnline()).toBe(true);
+  });
+
+  it('should report the browser value when navigator.onLine is a boolean', () => {
+    vi.stubGlobal('navigator', { onLine: false });
+    expect(isBrowserOnline()).toBe(false);
+
+    vi.stubGlobal('navigator', { onLine: true });
+    expect(isBrowserOnline()).toBe(true);
+  });
+
+  it('should ignore a non-boolean onLine rather than coerce it', () => {
+    // A truthiness check would read `''` or `0` as offline and refuse to make a request that would
+    // have worked. Only a real boolean is an answer.
+    for (const onLine of ['', 0, null, 'yes', undefined]) {
+      vi.stubGlobal('navigator', { onLine });
+      expect(isBrowserOnline()).toBe(true);
     }
   });
 });

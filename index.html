@@ -1,9 +1,21 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <!--
+      COMMENTS HERE ARE SHIPPED BYTES, unlike the ones in `src/`. This document is the blocking
+      request on the critical path and nothing strips it, so the reasoning behind each tag below
+      lives in `docs/architecture.md` §3 and only the load-bearing constraint is repeated here.
+    -->
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="icon" type="image/png" href="/logo.png" />
+    <meta
+      name="description"
+      content="Deal a deck of cards from any public Spotify playlist, scan a card to hear the song, then guess the year it came out."
+    />
+    <!-- Must track `--color-page` in `src/index.css` by hand; a meta attribute cannot hold a var(). -->
+    <meta name="theme-color" content="#0a0a0a" />
+    <!-- 240x240 WebP, 20 kB. Never restore a large icon here: see architecture.md §3. -->
+    <link rel="icon" type="image/webp" href="/logo.webp" />
     <title>Custom Hitster</title>
   </head>
   <body>

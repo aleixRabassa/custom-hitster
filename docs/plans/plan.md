@@ -301,29 +301,18 @@ this phase, because nothing could deal a pre-resolved deck.
 [plan.phase-4-6-screens.md](./plan.phase-4-6-screens.md), carried over from Phase 3), including the
 50-track cold-deck wall clock and the StrictMode request count. See [development.md](../development.md) §5.
 
-### Phase 7 — Polish (first half complete)
+### Phase 7 — Polish (complete)
 
-- [ ] Empty/error/offline states; friendly message for private playlists
+- [x] Empty/error/offline states; friendly message for private playlists
 - [x] Responsive: phone, tablet, desktop
 - [x] Basic a11y: focus states, ARIA on controls, respect `prefers-reduced-motion`
-- [ ] Lighthouse pass; lazy-load QR/audio code
-- [ ] **"Added by" attribution on the revealed side** — show who added that track to the
-      playlist, alongside title/artist/year, once the card is flipped. **Blocked on data
-      availability, not on UI:** the embed endpoint is the sole track source (§2's "no
-      Spotify credentials" decision), and Phase 0's field inventory for it (§5) is
-      exhaustive and has no `added_by`-shaped field at track level. Spotify's own Web API
-      does expose `added_by.id` on playlist items, but only through auth paths §2 already
-      ruled out for "anyone with a public link" — Client Credentials cannot read `items`,
-      and user-authorized PKCE only covers playlists the logged-in user owns. Before
-      building: either re-spike the embed payload to confirm it still lacks the field, or
-      treat this as needing a new auth path and re-open §2. Do not build a UI for this
-      against an assumed field that Phase 0 never found.
-- [ ] README: setup, env vars, deploy, known limitations
+- [x] Lighthouse pass; lazy-load QR/audio code
+- [x] README: setup, env vars, deploy, known limitations
 
-**The two ticked boxes are the first half, shipped 2026-08-05** —
-[plan.phase-7-look.md](./plan.phase-7-look.md). The remaining four are the second half,
-[plan.phase-7-robustness.md](./plan.phase-7-robustness.md), except "Added by", which is blocked on a
-re-spike and belongs to neither.
+**The middle two boxes are the first half, shipped 2026-08-05** —
+[plan.phase-7-look.md](./plan.phase-7-look.md). The other three are the second half, shipped
+2026-08-06 — [plan.phase-7-robustness.md](./plan.phase-7-robustness.md). **"Added by" has moved to
+Phase 8**, where its bullet now carries the re-spike that unblocked the decision (below).
 
 **The app now has a design surface.** `src/index.css` grew from 24 lines to one `@theme static` block
 naming every colour, dimension, duration and interaction minimum in the app, plus two `@utility`
@@ -386,8 +375,116 @@ of a fixed 288px card. The card is now fluid, so at its floor the same 96px is 5
 retuned: all five gesture thresholds are documented guesses that have never met a thumb, and a second
 guess is not an improvement on the first. The arithmetic is recorded in `src/game/gestures.ts`.
 
+**The second half shipped 2026-08-06** — [plan.phase-7-robustness.md](./plan.phase-7-robustness.md).
+Failure states, the bundle, the audit and the documentation. 497 tests across 36 files, up from 474
+across 34.
+
+**The failure work found a real defect by reading the code rather than by inferring it from the plan.**
+An **empty** `cards` array was rejected in the same branch as a malformed payload, so a public playlist
+with nothing playable in it was told _"Spotify returned something we could not read. This is a problem
+on our side, not with your link."_ — a confident, wrong diagnosis of a perfectly readable answer. And
+**no layer upstream owned the case**: the embed adapter requires only that `trackList` be an array, and
+the handler forwards `cards: []` as a 200, so both a genuinely empty playlist and one whose every track
+was skipped land in the client. It now has its own code and its own sentence. `offline` joined it as a
+second new code, checked **before** the fetch through an injected predicate so a request that cannot
+succeed is never made — and `network` stays distinct, because `navigator.onLine` reports an interface
+rather than reachability and a captive portal reports online.
+
+**Two new codes, no new screen.** Both flow through the machinery that already existed —
+`playlist-client.ts` produces the code, `messages.ts`'s exhaustive `Record` makes shipping one without
+copy a typecheck failure, and the landing screen's `role="alert"` slot renders it. `App.tsx` still
+knows exactly four statuses.
+
+**The one genuinely new component is an error boundary**, because React offers no other way to catch a
+render exception. **Its fallback must never render the caught error's message or stack**, and that is a
+leak rule rather than a style preference: every prop in the app flows through the tree it catches, so
+an error string can quote a track title, an artist or a year. State holds a boolean, not the `Error`,
+so the leak is unavailable rather than merely avoided. Two recovery actions, and the distinction is the
+point: Reload preserves the save, **Start over clears it** — a corrupt persisted session is the most
+plausible cause of a crash that recurs on every reload, and without that button the state is
+inescapable except through devtools.
+
+**The bundle was measured before anything was moved, and the measurement changed the plan's priority.**
+Decoding the build's own source map attributed **125.16 kB — 33.7% — to `motion`**, against 23.28 kB
+for `qrcode`. Both are needed only once a deck is dealt. `qrcode` went behind a dynamic `import()` that
+joins an await the placeholder already covered, and `GameScreen` went behind `React.lazy` with **the
+preparing screen as its fallback** — `playing` is only ever entered from `preparing`, so a chunk in
+flight leaves the player exactly where they were. **The landing screen went from 373.39 kB / 119.92 kB
+gzip to 218.52 kB / 70.27 kB — 41% less gzipped JavaScript**, verified in Lighthouse's own network log
+rather than only in the build output. There was **no audio code to lazy-load** despite the checkbox
+saying "QR/audio": `useCardAudio` wraps a native element that already carries `preload="none"`.
+
+**Lighthouse, landing screen, production build, 2026-08-06: Performance 99 · Accessibility 100 ·
+Best Practices 100 · SEO 100** (FCP 1.5 s, LCP 1.6 s, TBT 0 ms, CLS 0, 98.7 kB transferred).
+**Accessibility 100 is a floor, not a result** — an automated pass over a static screen, reaching none
+of the four behavioural checks the first half still owes.
+
+**But the audit's real finding was one image, and the first diagnosis of it was wrong — which is the
+part worth remembering.** `public/logo.png` was **1,262,175 bytes at 1254×1254**, served as the favicon
+on every visit: six times the entire JavaScript payload, and fifty times what the QR chunk split saved.
+The first audit scored **Performance 75 with LCP 7.8 s**, and that was written up as architectural — the
+LCP element is the landing tagline, it cannot paint until React mounts, so the fix must be prerendering
+and therefore Phase 8. **That was wrong.** Replacing the file with a 240×240 WebP of 20,610 bytes, with
+no code touched, took the same page to **Performance 99 and LCP 1.6 s**: the favicon had been saturating
+the simulated slow-4G link and delaying every paint behind it.
+
+Two lessons, and the second is the transferable one. **A favicon is not render-blocking, so no audit
+fails on it** — which is exactly how 1.24 MB survived seven phases while the phase fought for 8.4 kB on
+a lazy chunk. And **"LCP is gated on React mounting" is a conclusion that sounds correct for any SPA**,
+which is what made it easy to accept without reading what else was on the wire. Prerendering and a
+static shell are Phase 8 ideas again, not owed fixes.
+
+**Two decisions were resolved by reading rather than building.** A mid-game disconnect gets **no
+banner**: `resolver.ts` already treats `network` as transient and retries it with backoff, the QR is a
+data URL and the gestures are local, so the deck stays playable and only audio and further lookups
+stop — documented in [development.md](../development.md) §8 instead. And the "friendly message for
+private playlists" was **already shipped** in Phase 6, naming all three possibilities without claiming
+to know which; it was verified in place and left alone.
+
+**Two follow-ups landed after the plan closed, both on developer instruction (2026-08-06).**
+
+**A deck that empties because no card had a resolvable year now returns to the landing screen with a
+warning, instead of showing the end screen.** The reducer was already right — a yearless card is
+removed, so a playlist MusicBrainz cannot place drains to zero and the session ends — but `ended` meant
+the end screen, which read **"Deck finished"** over `cardsPlayed={0}`: a completed game announced to
+somebody who never saw a card, explaining nothing. `App.tsx` now derives `deckCollapsed` from
+`status === 'ended' && deck.length === 0`, which is exact because every other route to `ended` leaves
+the played cards in the deck. The warning is a new `no-years-found` code, and it is why `messages.ts`
+owns **`StartFailureCode = PlaylistClientErrorCode | 'no-years-found'`** — the code comes from the
+session rather than from a fetch, and adding it to the client's union would make that type claim
+something `fetchPlaylist` cannot return. Same slot, same copy map, no fifth view. The empty-playlist
+half of the instruction needed no work: it already warned and never left the landing screen.
+
+**And the 1.26 MB favicon was replaced**, which is what produced the Performance 99 above.
+
+**Still owed, and unchanged by this half:** the four behavioural passes from plan 1 (screen reader
+first), the real-device touch pass, the Android lock-screen check, and the preview-deployment
+verification — which this plan **added** the game-screen Lighthouse audit to rather than discharging.
+
 ### Phase 8 — Nice-to-haves (explicitly out of v1)
 
+- [ ] **"Added by" attribution on the revealed side** — show who added that track to the
+      playlist, alongside title/artist/year, once the card is flipped. **Moved here from Phase 7
+      on 2026-08-06, after the re-spike that phase owed.** Still blocked on data availability
+      rather than on UI, and now with current evidence:
+  - **Re-spiked 2026-08-06** against two live playlists — `37i9dQZF1DX0XUsuxWHRQd`
+    (RapCaviar, editorial, 50 tracks) and `2wJx2AIytvpaSJLsc2wy3V` (Radio Brianper,
+    user-owned, 100 tracks) — both identity-confirmed by `entity.uri` **and** `entity.name`,
+    not by a 200, per the Phase 0 write-race lesson. The **complete track-level field union
+    is 15 fields** and identical across both playlists: `uid`, `uri`, `title`, `subtitle`,
+    `duration`, `isExplicit`, `isPlayable`, `isNineteenPlus`, `playabilityReason`,
+    `entityType`, `contentRatings{labels}`, `audioPreview{url,format}`. **No attribution
+    field of any shape.** The raw payload contains none of `added_by`, `addedBy`, `addedAt`
+    or `added_at` anywhere. Playlist level has 18 fields, of which the only
+    attribution-shaped one is **`authors`, and it is `null`** on both.
+  - So Phase 0's inventory still holds two months on, and **building this requires a new auth
+    path, which re-opens §2's no-credentials decision** — a product decision about who the
+    audience is, not a UI task. Spotify's Web API does expose `added_by.id` on playlist
+    items, but only through paths §2 ruled out for "anyone with a public link": Client
+    Credentials cannot read `items`, and user-authorized PKCE only covers playlists the
+    logged-in user owns.
+  - **Do not build a UI against an assumed field.** If this is ever picked up, it needs its own
+    plan, because the field inventory is what three other decisions rest on.
 - [ ] Card visual design (take cues from the reference repo's neon-ring aesthetic)
 - [ ] Shareable deck URL (playlist id + shuffle seed = whole deck)
 - [ ] PWA / offline via `vite-plugin-pwa`

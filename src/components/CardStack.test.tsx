@@ -10,7 +10,7 @@
  * assertion below meaningful, since a rendered QR would otherwise be an unreadable `<img>`.
  */
 
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CardStack } from './CardStack';
@@ -100,7 +100,7 @@ describe('CardStack', () => {
     expect(container.querySelectorAll('[data-testid="card-back"]')).toHaveLength(1);
   });
 
-  it('should not render title, artist, year, or a QR code for the backs', () => {
+  it('should not render title, artist, year, or a QR code for the backs', async () => {
     // ===================================================================
     //  THE LEAK-AND-COST ASSERTION, and the one that stops a later
     //  "just reuse Card for the backs" refactor.
@@ -135,8 +135,17 @@ describe('CardStack', () => {
       expect(html).not.toContain(upcoming.id);
     }
 
-    // The QR was generated once, for the current card only.
-    expect(toDataURLMock).toHaveBeenCalledTimes(1);
+    /*
+      The QR was generated once, for the current card only.
+
+      AWAITED, which it did not have to be before Phase 7: `QrCode` now reaches `qrcode` through a
+      dynamic `import()`, so generation no longer starts synchronously inside the effect and a
+      same-tick `toHaveBeenCalledTimes(1)` reads 0. The assertion being made is still "once, for the
+      front card" -- `waitFor` only moves it to after the import resolves.
+    */
+    await waitFor(() => {
+      expect(toDataURLMock).toHaveBeenCalledTimes(1);
+    });
     expect(toDataURLMock.mock.calls[0]?.[0]).toContain(highConfidenceCard.id);
   });
 

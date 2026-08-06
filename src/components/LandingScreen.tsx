@@ -1,5 +1,5 @@
 /**
- * The landing screen: paste a playlist link, or pick one of suggested ones.
+ * The landing screen: paste a playlist link, or pick one of the suggestions.
  *
  * ===========================================================================
  *  THIS IS A PRE-START SURFACE, SO IT MUST LEAK NOTHING ABOUT ANY DECK.
@@ -39,7 +39,7 @@ import { playlistErrorMessage } from '../game/messages';
  */
 const ERROR_MESSAGE_ID = 'playlist-url-error';
 import { isSpotifyShortLink, parsePlaylistUrl, spotifyPlaylistUrl } from '../../shared/spotify-url';
-import type { PlaylistClientErrorCode } from '../game/playlist-client';
+import type { StartFailureCode } from '../game/messages';
 
 /**
  * The nine ready-to-try playlists, so a first-time visitor does not need a playlist of their own
@@ -48,16 +48,26 @@ import type { PlaylistClientErrorCode } from '../game/playlist-client';
  * ===========================================================================
  *  VERIFIED 2026-08-06, when this set replaced the five Phase 0 ids (RapCaviar
  *  is the one that survived). All nine resolve to the intended playlist, checked
- *  by `entity.uri` AND `entity.name`
- *  in the embed payload rather than by a 200 response -- editorial playlists get
- *  their contents refreshed by Spotify, so a 200 is not evidence that an id still
- *  means the same playlist (plan.md §5).
+ *  by `entity.uri` AND `entity.name` in the embed payload rather than by a 200
+ *  response -- editorial playlists get their contents refreshed by Spotify, so a
+ *  200 is not evidence that an id still means the same playlist (plan.md §5).
+ *
+ *  Track counts at that check, in the order below: 100, 40, 100, 100, 50, 100,
+ *  50, 50, 50. FOUR return exactly MAX_EMBED_TRACKS -- Éxitos Verano, Radio
+ *  BrianPer, Electro Latino and This is Duki -- so all four raise the truncation
+ *  notice by design. Preview coverage was total except Electro Latino (2 of 100
+ *  without one) and This is Duki (8 of 100).
  *
  *  Re-verify the same way before shipping any future change here.
  * ===========================================================================
  *
  * The labels are Spotify's own playlist titles and the blurbs are genre/era names. None of them
  * describes a track or a year, which is what keeps this section leak-free.
+ *
+ * "This is Duki (all songs)" is the one label that says something about a deck's contents -- it is
+ * a single-artist playlist, so picking it tells the player every card is by the same artist. That
+ * is not a leak in the sense this screen guards against: the game is guessing the YEAR, and the
+ * artist gives none of them away. Naming a track or a year still would.
  *
  * Stored as ids and turned into full links at the click, via `spotifyPlaylistUrl()`. The id is the
  * thing that was verified above and the thing a re-verification checks, so it stays the constant;
@@ -87,8 +97,15 @@ export interface LandingScreenProps {
   onSubmit: (url: string) => void;
   /** True while a request is in flight. Disables the controls. */
   isLoading: boolean;
-  /** A code from the server or the client, or undefined when there is no error to show. */
-  errorCode?: PlaylistClientErrorCode;
+  /**
+   * Why the player cannot play, or undefined when there is nothing to report.
+   *
+   * `StartFailureCode` rather than `PlaylistClientErrorCode`, because not every reason is a fetch
+   * failure: `no-years-found` means the playlist loaded fine and then every card's year lookup came
+   * back empty, which `App.tsx` turns into a return to this screen. One slot, one union, one
+   * sentence source (`messages.ts`).
+   */
+  errorCode?: StartFailureCode;
 }
 
 export function LandingScreen({ onSubmit, isLoading, errorCode }: LandingScreenProps) {
@@ -100,9 +117,7 @@ export function LandingScreen({ onSubmit, isLoading, errorCode }: LandingScreenP
    * is set: a stale server error from a previous submission must not sit underneath a fresh "that
    * is not a playlist link". Clearing it on every edit is what keeps the two from fighting.
    */
-  const [localErrorCode, setLocalErrorCode] = useState<PlaylistClientErrorCode | undefined>(
-    undefined,
-  );
+  const [localErrorCode, setLocalErrorCode] = useState<StartFailureCode | undefined>(undefined);
 
   const shownErrorCode = localErrorCode ?? errorCode;
 

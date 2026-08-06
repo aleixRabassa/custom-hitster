@@ -2,7 +2,7 @@
 
 Custom Hitster is a **client-heavy single-page app with a thin serverless backend**. The game itself — shuffle, flip, swipe, audio, progress — runs entirely in the browser. The backend exists only to do the three things a browser cannot: reach a CORS-blocked endpoint, set a custom `User-Agent`, and hold a cache shared across all users.
 
-> **Implementation status: Phases 1–6 complete, and Phase 7's first half with them — the app is playable end to end.** All three functions (`/api/hello`, `/api/playlist`, `/api/year`), the year cache, the client-side game layer (`src/game/`), the card UI, the gestures, and the game flow screens (landing, preparing, HUD, notices, end screen) plus the real `src/App.tsx` container all exist today. So does the **token layer**: `@theme` tokens, fluid card geometry, `prefers-reduced-motion`, focus states and the ARIA/contrast fixes ([`plans/plan.phase-7-look.md`](./plans/plan.phase-7-look.md)). What does not: Phase 7's second half — error/offline states, an error boundary, the Lighthouse pass, lazy-loading the QR and audio code, and the README ([`plans/plan.phase-7-robustness.md`](./plans/plan.phase-7-robustness.md)). Sections below are marked **[built]** or **[planned]** throughout; planned shapes come from [`plans/plan.md`](./plans/plan.md) §3 and are recorded here because they determine where new code belongs, not because they exist.
+> **Implementation status: Phases 1–7 complete — the app is playable end to end, has a design surface, and fails legibly.** All three functions (`/api/hello`, `/api/playlist`, `/api/year`), the year cache, the client-side game layer (`src/game/`), the card UI, the gestures, and the game flow screens (landing, preparing, HUD, notices, end screen) plus the real `src/App.tsx` container all exist today. So does the **token layer** — `@theme` tokens, fluid card geometry, `prefers-reduced-motion`, focus states and the ARIA/contrast fixes ([`plans/plan.phase-7-look.md`](./plans/plan.phase-7-look.md)) — and the **failure surface**: the `offline` and `empty-playlist` codes, the collapsed-deck redirect, the error boundary, and the two chunk splits ([`plans/plan.phase-7-robustness.md`](./plans/plan.phase-7-robustness.md)). **Nothing in Phase 8 is built or planned.** Sections below are marked **[built]** or **[planned]** throughout; planned shapes come from [`plans/plan.md`](./plans/plan.md) §3 and are recorded here because they determine where new code belongs, not because they exist.
 >
 > **One thing is owed rather than planned:** progressive loading has never been verified against a real deployment (step 15 of [`plans/plan.phase-4-6-screens.md`](./plans/plan.phase-4-6-screens.md)). See [`development.md`](./development.md) §8.
 >
@@ -263,7 +263,7 @@ src/App.tsx             THE container. The only caller of useGameSession(). Swit
                         on state.status; holds the ended-destination flag and the
                         notice-dismissal state. No router
 src/components/
-  LandingScreen.tsx     URL input, inline validation, 5 suggested playlists
+  LandingScreen.tsx     URL input, inline validation, 9 suggested playlists
   PreparingScreen.tsx   The card-1 gate. COUNT-ONLY
   Hud.tsx               Cards remaining + playlist name. Counts only, no Exit
   NoticeBanner.tsx      truncated / skippedCount / yearLookupsUnavailable
@@ -286,6 +286,14 @@ Three things in the client are not obvious:
 **Four statuses, four screens, no router.** `GameState.status` already models exactly `idle` / `preparing` / `playing` / `ended`, one per screen. A router would add a dependency plus a second source of truth to keep in sync — and a browser Back mid-deck is a transition the reducer never modelled, so the two would disagree the first time anyone pressed it.
 
 **Exit and deck-exhaustion are indistinguishable in `GameState`, so the container carries the distinction.** Both produce `status: 'ended'` and `currentIndex` cannot separate them either — an Exit on the last card looks identical to finishing. A container-local flag resolves it rather than an `endReason` field on `GameState`, which keeps Phase 3's reducer, types, persistence format and tests untouched for what is purely a presentation question. It is phrased as a **destination** (`'end-screen' | 'landing'`) rather than as a reason, because "New playlist" from the end screen also has to reach the landing screen and the reducer has no action that returns `ended` to `idle` — deliberately, since there is nothing to un-end.
+
+**An `ended` session with an EMPTY deck is not a finished game, and the container sends it back to the landing screen.** A card whose year lookup finds nothing is removed from the deck, so a playlist MusicBrainz knows nothing about drains to zero and the reducer answers `ended` — correctly, since there is nothing to play. Until Phase 7 that reached the end screen, which read **"Deck finished"** over `cardsPlayed={0}`: a completed game announced to somebody who never saw a card, with no explanation. `App.tsx` now derives `deckCollapsed` from `status === 'ended' && deck.length === 0` and renders the landing screen with a `no-years-found` warning instead.
+
+The condition is exact rather than approximate: **every other route to `ended` leaves the played cards in the deck** — natural exhaustion stops on the last card and Exit does not empty it — so an empty deck at `ended` can only mean there was never anything to play. It is checked **before** `endedView`, which is still `'end-screen'` from the `START` that dealt the deck and is not a destination the player chose. All three of the reducer's empty-deck exits land there: `YEAR_RESOLVED` (the common one), `START` with nothing dealable, and `RESUME` of a pre-reversal save whose every card was yearless. Derived in the container rather than added to `GameState` for the same reason `endedView` is, above.
+
+**The landing screen's message slot takes a union wider than the HTTP client's, and the widening is deliberate.** `messages.ts` owns `StartFailureCode = PlaylistClientErrorCode | 'no-years-found'`. The extra code is produced by the session, not by a fetch, and it is **not** added to `PlaylistClientErrorCode` because that union is the set of things `fetchPlaylist` returns and its tests enumerate exactly that — widening it would make the client's own type claim a code it cannot produce. Widening the copy map is the honest direction: "why you cannot play this playlist" is one question with one answer slot, not two, so there is no second notice channel and no fifth view. The `Record<StartFailureCode, string>` still makes shipping a code without copy a typecheck failure.
+
+**The offline check is injected, not read from `navigator`.** `fetchPlaylist` takes an optional `isOnline: () => boolean` defaulting to `isBrowserOnline()`, and short-circuits **before** the fetch — a request that cannot succeed is not made, so the player is told immediately instead of watching a spinner time out. It is injected for the property that makes both clients cheap to test: every status branch is a **node** unit test with no jsdom, and a bare global read would trade that away for one boolean. `network` stays as a separate code because `navigator.onLine` reports a network _interface_ rather than reachability — a captive portal reports online and still fails.
 
 **Every pre-reveal surface is count-only.** The landing screen, the preparing screen, the HUD and the notices all report numbers and never a title, artist or year. The preparing screen is the one most easily forgotten — "Looking up Bohemian Rhapsody…" is the natural, helpful thing to write, and it spoils the first card before the game starts. Each of those four components has a leak assertion in its own test file, and none of them takes a `Card` at all.
 
@@ -315,6 +323,45 @@ Browser (SPA)                          Serverless (Vercel Functions)
 **Why progressive loading is structural, not polish:** a lookup costs two paced MusicBrainz requests, so a cold 100-track playlist takes **~3-5 minutes** — measured 1.3-3.6 s per track on 2026-08-04, against a warm cache 0 ms. Years resolve in the background, the game starts as soon as **card 1** is ready, and it only blocks if the player outruns the resolver. Two invariants fall out of that, both easy to violate without any test failing: **shuffle runs before resolution** (so the resolver walks the deck in play order and card 1 is genuinely the card the player sees first), and the resolver is a **sequential loop, not a fan-out** — a `Promise.all` over 100 cards turns the shared 1 req/s gate into ~99 429s. See [`plans/plan.md`](./plans/plan.md) §1 and §3.
 
 ---
+
+### The error boundary and the chunk layout — built
+
+```
+src/main.tsx
+  <StrictMode>
+    <ErrorBoundary>            ← OUTSIDE <App />, and that position is the point
+      <MotionConfig>
+        <App />
+```
+
+**`ErrorBoundary` wraps `<App />` from `main.tsx`, never from inside it.** A boundary catches only what is **below** it, so one rendered inside `App` would be unmounted by the very exception it exists to catch — a throw in `App`'s own render passes straight through a boundary that same render produced. Out here its render depends on nothing the game touches, so there is nothing left in it to break. It sits outside `MotionConfig` too, so a crash in Motion's own tree is caught.
+
+It is the **only class component in the app**, by necessity: `componentDidCatch` and `getDerivedStateFromError` have no hook equivalent, and the alternative was a dependency for thirty lines.
+
+**Its fallback must never render the caught error's message or stack, and that is a leak rule.** Every prop and every piece of state in the app flows through the tree it catches, and the deck is in there — so an error string can quote a track title, an artist or a year, and a stack can carry a serialized prop. `"Invalid year 1975 for Bohemian Rhapsody"` is the answer to the card the player is looking at. **"Show the error so the player can report it" is the natural next change and it is the one that turns a crash screen into a spoiler.** The detail goes to `console.error`, which is not a rendered surface, so a developer keeps everything they need. State holds a **boolean**, not the `Error`, so the leak is unavailable rather than merely avoided; `ErrorBoundary.test.tsx` throws an error containing a fixture card's title, artist and year and asserts all three are absent from the document.
+
+**Two recovery actions, and they are not the same button.** Reload preserves the saved session, for a transient failure. **Start over clears it first** — a corrupt or unexpected persisted session is the most plausible cause of a crash that recurs on _every_ reload, and without that button the state is inescapable except through devtools. Clearing goes through `persistence.ts`'s own `clearSession`, which owns the key and already swallows a storage that throws. Both `storage` and `reload` are injectable, the latter because jsdom implements no navigation.
+
+#### The bundle is split at two boundaries, both measured
+
+The landing screen was downloading the entire game. Attribution by decoding the build's own source map (2026-08-06) put **`motion` at 125.16 kB of a 373.39 kB single chunk — 33.7%** — and `qrcode` at 23.28 kB. Both are needed only once a deck has been dealt.
+
+| Boundary                                                 | How                                    | Why that mechanism                                                                                                                                                                                                                                                                                                                           |
+| -------------------------------------------------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GameScreen` (and with it `motion`, `Card`, `CardStack`) | `React.lazy` in `App.tsx`              | `motion` is used as JSX by two components, which cannot be awaited in place, so it needs a boundary. **The `Suspense` fallback is the preparing screen** — `playing` is only ever entered from `preparing`, so a chunk in flight leaves the player on the screen they are already looking at, notice and all. No loading state was invented. |
+| `qrcode`                                                 | dynamic `import()` inside `QrCode.tsx` | A loading state **already existed**: generation was always async and a same-size placeholder always covered it, so the import joins an await already there. `React.lazy` here would have stacked a `Suspense` fallback on a placeholder inside one 176px square.                                                                             |
+
+**Result: the landing screen went from 373.39 kB / 119.92 kB gzip of JavaScript to 218.52 kB / 70.27 kB — 41% less gzipped.** Verified in Lighthouse's own network log, not only in the build output: the entry HTML preloads the runtime and one shared helper, and neither deferred chunk is requested.
+
+**`QrCode.tsx` memoizes its import at module scope, and that is a bug fix rather than tidiness.** The effect re-runs per card, so a bare `import()` in its body issues a fresh call per advance and two overlap whenever a card is superseded before its code resolves — the exact fast-advance race the generation counter exists for. Measured: with two imports in flight, the second one's continuation never ran and the new card kept the old card's placeholder forever. A rejected load stays cached deliberately, so a broken chunk is not re-fetched on every advance. There is **no audio code to lazy-load** despite the phase checkbox saying "QR/audio": `useCardAudio` wraps a native element that already carries `preload="none"`.
+
+#### `index.html` carries three tags and one rule about itself
+
+Comments in that file are **shipped bytes** — it is the blocking request on the critical path and nothing strips it, unlike comments in `src/`. So the reasoning lives here and the file keeps one-line pointers.
+
+- **`meta description`** — a Lighthouse SEO item and the text a link preview shows. It describes what the app does and names the one constraint a visitor needs in advance: the playlist has to be public.
+- **`meta theme-color`, `#0a0a0a`** — colours the browser chrome on a phone, which is the device this game is played on; without it the near-black app sits under a light grey address bar. It is **the one duplicated colour literal in the app**, because `index.html` is not processed by Tailwind and a `meta` content attribute cannot hold a `var()`. It must be updated by hand when `--color-page` changes, which Phase 8's redesign will do.
+- **`link rel="icon"`, a 240×240 WebP of 20,610 bytes** — replacing a 1254×1254 PNG of **1,262,175 bytes**, which was downloaded on every visit and was six times the entire JavaScript payload. **That single asset was costing 6.2 s of LCP** (see `development.md` §8). There is deliberately no PNG fallback: every browser that can run this app reads a WebP favicon, and a second `<link>` would reintroduce a request whose only purpose is a tab icon elsewhere. If one is ever needed, add a _small_ PNG.
 
 ### The token layer and the motion strategy (`src/index.css`) — built
 

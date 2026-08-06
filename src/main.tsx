@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { MotionConfig } from 'motion/react';
 import './index.css';
 import App from './App';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 /**
  * ===========================================================================
@@ -35,11 +36,27 @@ import App from './App';
  *  jsdom's `window.matchMedia` satisfies Motion's listener registration, which
  *  was an open question for this plan. It does, with no stub.
  * ===========================================================================
+ *
+ * ===========================================================================
+ *  `ErrorBoundary` WRAPS `<App />` FROM HERE, AND THAT POSITION IS THE POINT.
+ *
+ *  A boundary only catches what is BELOW it, so one rendered INSIDE `App` would
+ *  be unmounted by the very exception it exists to catch: a throw in `App`'s own
+ *  render passes straight through a boundary that same render produced. Out here
+ *  its render depends on nothing the game touches, so there is nothing left in
+ *  it to break.
+ *
+ *  Inside `StrictMode` and outside `MotionConfig`, so a crash in Motion's own
+ *  tree is caught too. Its fallback renders no error message by design -- see
+ *  `ErrorBoundary.tsx`, the deck is in scope of anything it catches.
+ * ===========================================================================
  */
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <MotionConfig reducedMotion="user">
-      <App />
-    </MotionConfig>
+    <ErrorBoundary>
+      <MotionConfig reducedMotion="user">
+        <App />
+      </MotionConfig>
+    </ErrorBoundary>
   </StrictMode>,
 );

@@ -9,6 +9,23 @@
  *
  * The mock encodes the input into its fake data URL, so "the image source encodes the given
  * URL" is a literal assertion rather than a proxy for one.
+ *
+ * ===========================================================================
+ *  THE MOCK SURVIVED THE MOVE TO A DYNAMIC `import()` UNCHANGED.
+ *
+ *  `vi.mock` intercepts a module by specifier, not by import FORM, so the same
+ *  factory serves `import('qrcode')` exactly as it served the static import
+ *  (checked 2026-08-06 -- this was an open question for the plan, and the answer
+ *  is that the doubling needed no restructure).
+ *
+ *  What DID change is timing: generation no longer begins synchronously inside
+ *  the effect, so every assertion about a generated code has to be awaited. Two
+ *  tests below carry the consequence explicitly.
+ *
+ *  The library never arriving at all is the one case that CANNOT live here --
+ *  the component memoizes its import, so a settled load stays settled for the
+ *  life of the module. It has its own file, `QrCode.load-failure.test.tsx`.
+ * ===========================================================================
  */
 
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
@@ -58,6 +75,10 @@ describe('QrCode', () => {
   it('should hold a same-sized placeholder until the code resolves', () => {
     // Generation is async, so the very first paint has no image. The placeholder must
     // occupy the final dimensions or the card's layout jumps when the code arrives.
+    //
+    // This is also the test that shows the dynamic import needs NO second loading state: the
+    // window it covers simply got wider -- library fetch, then generation -- and the same
+    // placeholder covers both halves. Nothing was added for the import.
     render(<QrCode url="https://open.spotify.com/track/x" size={160} />);
 
     expect(screen.queryByRole('img')).toBeNull();
@@ -114,6 +135,18 @@ describe('QrCode', () => {
   it('should ignore a resolved code for a superseded url', async () => {
     // The fast-advance race: card 1's generation resolves AFTER card 2 is already on
     // screen. Painting it would put the previous track's scannable code on the new card.
+    //
+    // ===================================================================
+    //  THE DYNAMIC IMPORT MAKES THIS RACE WIDER, NOT DIFFERENT.
+    //
+    //  The library fetch and the generation are awaited as one chain, so the
+    //  same generation counter guards both -- but the window in which a card
+    //  can be superseded now includes the module load, which is the slowest
+    //  half on a cold cache. The behaviour asserted is unchanged; only the
+    //  FLUSH below had to change, because the extra `.then` hop means one
+    //  `await Promise.resolve()` no longer reaches the continuation that
+    //  would (wrongly) store the stale result.
+    // ===================================================================
     const slow = 'https://open.spotify.com/track/slowslowslowslowslowsl';
     const fast = 'https://open.spotify.com/track/fastfastfastfastfastfa';
 
@@ -134,7 +167,9 @@ describe('QrCode', () => {
 
     // Card 1's code finally arrives, long after its card is gone.
     resolveSlow(fakeDataUrl(slow));
-    await Promise.resolve();
+    // A full macrotask turn, which drains every pending microtask rather than exactly one -- so
+    // this stays correct however many `.then` hops the chain grows.
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(screen.getByRole('img').getAttribute('src')).toBe(fakeDataUrl(fast));
   });
@@ -214,4 +249,11 @@ describe('QrCode', () => {
     expect(screen.queryByRole('img')).toBeNull();
     expect(document.querySelector('[aria-hidden="true"]')).not.toBeNull();
   });
+
+  /*
+    The library-fails-to-load case is in `QrCode.load-failure.test.tsx`, not here. `QrCode.tsx`
+    memoizes its `import('qrcode')` promise per module instance, so a load cannot succeed for these
+    tests and then fail for one of them -- a settled promise stays settled. A whole file whose mock
+    factory always throws is the only honest way to reach that branch.
+  */
 });

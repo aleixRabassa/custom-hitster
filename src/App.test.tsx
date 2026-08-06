@@ -19,10 +19,11 @@
  */
 
 import { cleanup, render, screen, waitFor, fireEvent } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import App from './App';
 import { fixtureDeck, highConfidenceCard, pendingYearCard } from './components/__fixtures__/cards';
+import { PLAYLIST_ERROR_MESSAGES } from './game/messages';
 import { SESSION_STORAGE_KEY, SESSION_VERSION } from './game/persistence';
 import type { PlaylistFetch } from './game/playlist-client';
 import type { StorageLike } from './game/persistence';
@@ -177,6 +178,32 @@ function startPlaylist(url = PLAYLIST_URL) {
 }
 
 describe('App', () => {
+  /**
+   * Warm the game-screen chunk before any test needs it.
+   *
+   * ===========================================================================
+   *  THIS IS ABOUT VITE'S TRANSFORM COST, NOT ABOUT THE APP'S BEHAVIOUR.
+   *
+   *  `App.tsx` reaches `GameScreen` through `React.lazy` so that `motion` --
+   *  a third of the bundle, and 250-odd modules -- leaves the landing screen's
+   *  chunk. In production that resolves from a warm HTTP cache in milliseconds.
+   *  In this suite the FIRST test to reach `playing` pays Vite's first-time
+   *  transform of every one of those modules, and it pays it INSIDE a
+   *  `waitFor`, whose default timeout is one second. That test failed while the
+   *  fifteen after it passed against the now-warm module cache -- which reads
+   *  as a broken game screen rather than as a cold cache, and would have
+   *  reappeared as a flake in whichever test happened to run first.
+   *
+   *  Awaiting the import here moves the cost outside every timeout and makes
+   *  the order of the tests below irrelevant. It asserts nothing, and it is not
+   *  a substitute for the real check: that the chunk is ABSENT from the landing
+   *  screen, which is verified in the build output and the network tab.
+   * ===========================================================================
+   */
+  beforeAll(async () => {
+    await import('./components/GameScreen');
+  });
+
   beforeEach(() => {
     toDataURLMock.mockReset();
     toDataURLMock.mockImplementation((text) =>
@@ -243,28 +270,74 @@ describe('App', () => {
     expect(screen.queryByTestId('hud')).toBeNull();
   });
 
-  it('should end the session when every card turns out to have no year', async () => {
+  it('should return to the landing screen with a warning when no card has a year', async () => {
     // ===================================================================
     //  THE REVERSAL, END TO END THROUGH THE CONTAINER.
     //
     //  A yearless card is dropped from the deck (2026-08-05), so a deck of
     //  tracks MusicBrainz knows nothing about drains to nothing. The reducer
-    //  answers `ended`; what this pins is that the container then shows a
-    //  SCREEN rather than hanging on the preparing spinner -- which is what
-    //  it would do if the gate were still waiting on card 1's lookup, since
-    //  every lookup here completes and every card leaves.
+    //  answers `ended`; what this pins is that the container then sends the
+    //  player back to the LANDING SCREEN with a warning.
+    //
+    //  It used to show the end screen, which read "Deck finished" over a
+    //  count of zero -- announcing a completed game to somebody who never saw
+    //  a card, and explaining nothing. The regression to guard against is
+    //  either that copy coming back, or the preparing spinner hanging: the
+    //  gate would wait forever on card 1, since every lookup here completes
+    //  and every card leaves.
     // ===================================================================
     stubDroppingYearApi();
     renderApp(playlistFetch(200, playlistResult()));
 
     startPlaylist();
 
-    expect(await screen.findByText(/deck finished/i)).not.toBeNull();
+    /*
+      Awaited on the ALERT, not on the input. The landing screen is already on screen at `idle`, so
+      `findByLabelText('Playlist link')` resolves on the first frame — before a single lookup has
+      returned — and every assertion after it would then run against the pre-Start screen and pass
+      for the wrong reason. The warning is the thing that only exists after the collapse.
+    */
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      PLAYLIST_ERROR_MESSAGES['no-years-found'],
+    );
+    // And it is the landing screen the warning is on.
+    expect(screen.queryByLabelText('Playlist link')).not.toBeNull();
+
+    // Not the end screen, and not the preparing spinner.
+    expect(screen.queryByText(/deck finished/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /play again/i })).toBeNull();
     expect(screen.queryByTestId('hud')).toBeNull();
-    // And nothing about the tracks it dropped is on screen.
+
+    // And nothing about the tracks it dropped is on screen -- the player is being sent away from a
+    // deck they never played, so it must not leak what was in it on the way out.
     for (const card of UNRESOLVED_DECK) {
       expect(screen.queryByText(card.title)).toBeNull();
     }
+  });
+
+  it('should let the player start a different playlist after a collapsed deck', async () => {
+    // The warning is only useful if the screen it appears on still works. A dead end here would be
+    // worse than the end screen it replaced, because the end screen at least had "New playlist".
+    stubDroppingYearApi();
+    const fetchImpl = vi.fn<PlaylistFetch>(() =>
+      Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(playlistResult()) }),
+    );
+    render(<App storage={memoryStorage()} fetchImpl={fetchImpl} />);
+
+    startPlaylist();
+    // Awaited on the alert for the same reason as the test above: the input is there from frame one.
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      PLAYLIST_ERROR_MESSAGES['no-years-found'],
+    );
+
+    // A second submission goes through, and the warning about the previous deck does not sit over it.
+    stubYearApi();
+    startPlaylist();
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('hud')).not.toBeNull();
+    });
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('should keep playing the cards that do have a year when others are dropped', async () => {

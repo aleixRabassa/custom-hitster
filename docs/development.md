@@ -285,7 +285,7 @@ The end-to-end checks worth running by hand, each pinning a decision:
 
 | Check                                                                                            | Status  |
 | ------------------------------------------------------------------------------------------------ | ------- |
-| Each of the five suggested playlists loads and deals a deck                                      | Pending |
+| Each of the nine suggested playlists loads and deals a deck                                      | Pending |
 | A `spotify.link` URL from a phone's share sheet loads the right playlist                         | Pending |
 | A legacy `/user/{user}/playlist/{id}` URL loads instead of erroring                              | Pending |
 | A private/deleted playlist and a track URL each produce their inline error copy                  | Pending |
@@ -342,7 +342,7 @@ touch for exactly the users who asked for less motion.
 | `BACK_OFFSET_PX` (10px) still reads as depth on the smallest card                 | Pending |
 | The HUD and the notice banner line up with the card's width when wide             | Pending |
 | A long user-created playlist name truncates without pushing the count off the row | Pending |
-| The landing screen's five suggestions are usable at 320px                         | Pending |
+| The landing screen's nine suggestions are usable at 320px                         | Pending |
 | A phone in **landscape**: the card fits the short viewport                        | Pending |
 
 The landscape row is what the `62dvh` term in `--card-height` exists for; without it a landscape
@@ -400,6 +400,26 @@ Seven changes **are** expected to be visible. Anything else is an accident:
 | The card shrinks below ~723px of viewport height | game screen                                    | The geometry clamp           |
 
 Measured ratios for all of it are in [`agent_findings.md`](./agent_findings.md).
+
+### Phase 7 failure-state and bundle verification
+
+Five checks from [`plan.phase-7-robustness.md`](./plans/plan.phase-7-robustness.md). Unlike the four
+above, these are cheap and three of them need only devtools — but all five are **Pending**, and every
+one covers a path whose automated test necessarily stubs the very thing being checked.
+
+| #   | Check                                                                                                                                                                                                                                                                                                                   | Status  |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| 1   | **Offline.** Devtools → Network → Offline, then press Start. The message must appear **immediately** and **no request may be made** — check the network tab is empty. A code that arrives after a request that timed out is the behaviour this replaced.                                                                | Pending |
+| 2   | **The error boundary, both paths.** Force a throw (temporarily, in a component), then: **Reload** must keep a game in progress resumable, and **Start over** must clear it — confirm `hitster:session:v1` disappears from Application → Local Storage. Also confirm the screen shows **no error message and no stack**. | Pending |
+| 3   | **The QR chunk is absent from the landing screen.** Load with a clean network tab: `browser-*.js` must not be requested. Deal a deck and it must arrive. Same for `GameScreen-*.js`. Verified once in Lighthouse's network log; this is the check that it stays true.                                                   | Pending |
+| 4   | **A mid-game disconnect.** Go offline mid-deck: flip, swipe, the QR and Exit must all keep working, and only audio and further year lookups stop. This is the documented degradation in §8 and nothing signals it, so it is worth seeing once.                                                                          | Pending |
+| 5   | **The empty-playlist copy against a real playlist**, if one can be made. **Cannot be claimed from the test suite** — the unit test stubs a `cards: []` response. Note that the second route in, a playlist whose every track is unplayable, cannot be constructed on demand at all.                                     | Pending |
+
+**The `no-years-found` path is worth one live look too**, and it is the awkward one: it needs a real
+playlist obscure enough that MusicBrainz places none of its tracks, which cannot be arranged reliably.
+`App.test.tsx` covers it end to end through the container with a stubbed `/api/year` that answers
+`null` for everything, which is the honest substitute.
+
 ---
 
 ## 6. Before you commit
@@ -431,17 +451,41 @@ Two things to check before deploying, neither of which any local tool can see:
 
 If a function returns `FUNCTION_INVOCATION_FAILED`, the Vercel **runtime** log (`vercel logs <deployment-url>`, or the dashboard's Runtime Logs) names the underlying error; the build log will not mention it. Retention is short, so request the failing route again to generate a fresh entry before looking.
 
+### What the next preview deployment owes
+
+One errand, four questions — deliberately one trip rather than four. Step 15 of
+[`plan.phase-4-6-screens.md`](./plans/plan.phase-4-6-screens.md), carried over from Phase 3, needs a
+preview deployment **with both Upstash variables configured**, because nothing local models the shared
+cache or the 1 req/s gate: without them the gate paces nothing and any number measured is meaningless.
+
+While there, collect all four:
+
+1. **Progressive loading against a real deck** — the original errand.
+2. **The 50-track cold-deck wall clock**, unmeasured since Phase 2.
+3. **A count of `/api/year` requests under React 19 StrictMode.** `use-game-session.ts` has a
+   double-crawl guard that nothing tests, so the number is the only evidence it works.
+4. **Lighthouse on the game screen and the card**, added by Phase 7. It cannot be done locally at all
+   — `vite preview` serves no `/api`, so Start fails and the game screen is unreachable (§8). The
+   landing screen has been audited; these two have not.
+
 ---
 
 ## 8. Known limitations
 
-Mostly carried forward from the Phase 0 research; measurements and reasoning in [`plans/plan.md`](./plans/plan.md) §5. The last three are execution gaps rather than research findings — things this repo cannot check about itself.
+Mostly carried forward from the Phase 0 research; measurements and reasoning in [`plans/plan.md`](./plans/plan.md) §5. Several are execution gaps rather than research findings — things this repo cannot check about itself — and three are deliberate decisions whose reasoning is recorded here instead of being deferred as work.
 
 - **Playlists are capped at 100 tracks, and the app cannot tell when it happened.** The Spotify embed endpoint returns at most 100 tracks and its payload contains **no pagination signal whatsoever** — no total, no offset, no `hasMore` — so a response of exactly 100 is indistinguishable from a playlist that genuinely holds 100. There is no way to page past track 100: the anonymous bearer token in the embed payload was tested against the Web API and returns `429 QUOTA_EXCEEDED` immediately, because its client ID is shared by every embed viewer on the internet. Phase 6 will show a non-blocking warning at exactly 100 tracks; a manual track-paste fallback is deferred past v1.
 - **The embed endpoint is unofficial and may change or break without notice.** Reading it is outside Spotify's Developer Terms; this is an accepted risk for a personal project. All scraping is to be confined to a single adapter module so a breakage is contained, and the QR code is always rendered regardless of whether audio or metadata extraction works — so the deck degrades rather than dies.
 - **Release years will sometimes be wrong.** MusicBrainz has no canonical "original studio recording" per song; famous tracks have hundreds of competing live, bootleg, and reissue entries. As built, the strict pass resolved **14 of 14** known-tricky tracks exactly (2026-08-04) against a ~6% naive baseline — but that is a curated set, not a random one, and a track the strict filters cannot place falls through to a relaxed pass that is measurably off by a year or so. Those come back as `confidence: 'low'`, and Phase 6 marks them unconfirmed on the card's revealed side. There is no pre-Start review of years — the player pastes the playlist, so that would spoil the deck.
 - **Year resolution is slow the first time, and the 1 req/s budget is shared by everyone.** A lookup costs two paced MusicBrainz requests, so a cold 100-track playlist takes several minutes. The cache means only genuinely new songs ever pay it — but the budget is global, so two people resolving cold playlists at once each get half the throughput. Acceptable for a personal project; the number to watch if the app is ever shared widely.
 - **In-app audio covers ~99.5% of tracks, not all of them.** Measured across 398/400 tracks in Phase 0. For a track with no preview URL, Play/Pause and Restart are disabled; the QR code and Exit still work.
+- **A mid-game disconnect degrades the deck rather than killing it, and nothing tells the player.** This is a decision (Phase 7, plan 2, decision 7), not an oversight. Verified by reading `src/game/resolver.ts`: a `network` outcome is already classified as transient alongside `upstream-unavailable` and `unexpected-payload`, retried with exponential backoff and jitter (500 → 1000 → 2000 ms), and settled rather than allowed to crash the crawl. So losing connectivity mid-deck leaves the game **fully playable** — the QR is a data URL and needs no network, the flip and the swipe are local, the years already resolved travel with the cards, and Exit works. Only two things stop: audio previews, and year lookups for cards not yet resolved. **There is deliberately no offline banner.** `NoticeBanner` carries three notices, two derived from the fetch and one from game state; a fourth driven by a live browser event would need either a new reducer action (which only `App.tsx` could dispatch) or connectivity state in the container, and that is real complexity for a case where the deck keeps working. A documented graceful degradation is the better answer, in the same "degrades rather than dies" framing `plan.md` §4 uses for the embed endpoint. What is **not** silent is a disconnect at the moment of Start: that is the `offline` code, which short-circuits the request and says so immediately.
+- **Lighthouse has only ever been run against the landing screen.** Scores on a production build under `vite preview`, Lighthouse 12.8.2, headless Chrome, **2026-08-06 after the favicon fix: Performance 99 · Accessibility 100 · Best Practices 100 · SEO 100** (FCP 1.5 s, LCP 1.6 s, TBT 0 ms, CLS 0; 98.7 kB transferred in total). Two limits remain on those numbers:
+  - **The game screen and the card were not audited and cannot be locally.** `vite preview` serves no `/api`, so Start fails with `unexpected-payload` — the same trap as `pnpm dev` above — and the game screen is unreachable. That audit is folded into the preview-deployment errand below rather than being a second one.
+  - **Accessibility 100 is a floor, not a result.** An automated audit reaches a fraction of WCAG and this one ran over a static landing screen. The four Phase 7 passes in §5 are the real coverage and every row is still Pending.
+- **One 1.26 MB image was costing 6.2 seconds of LCP, and the first diagnosis of it was wrong.** Worth reading before trusting any performance reasoning in this repo. `public/logo.png` was 1,262,175 bytes at 1254×1254, served as the favicon on every visit — 6× the entire JavaScript payload. The first audit scored **Performance 75 with LCP 7.8 s**, and that was written up as architectural: the LCP element is the landing tagline, it cannot paint until React mounts, so the fix must be prerendering and therefore Phase 8. **That was wrong.** Replacing the file with a 240×240 WebP of 20,610 bytes — a 98.4% reduction, no code touched — took the same page to **Performance 99, LCP 1.6 s**. The favicon was saturating the simulated slow-4G link and delaying the paint of everything behind it, including the LCP element.
+  - Two lessons, and the second is the useful one. **A favicon is not render-blocking, so no audit fails on it** — which is exactly how it survived seven phases unnoticed, and why the 8.4 kB the chunk split fought for looked more significant than the 1.24 MB sitting next to it. And **"LCP is gated on React mounting" is a conclusion that sounds right for any SPA**, which is what made it easy to accept without checking what else was on the wire. Read the network log before blaming the architecture.
+  - Nothing further is owed here: prerendering and an inline static shell are **not** needed for the landing screen's score, and both remain unbuilt Phase 8 ideas rather than outstanding fixes.
 - **The app cannot be played under `pnpm dev` — only under `npx vercel dev` or a deployment.** Vite serves `api/playlist.ts` as transpiled source with status 200, so the playlist client reports `unexpected-payload` and the landing screen shows an error that reads like an app bug. This is not fixable without a dev-server plugin that runs functions, which `vercel dev` already is.
 - **Progressive loading has never been verified against a real deployment.** Step 15 of the Phase 6 plan, carried over from Phase 3, is still owed — including the 50-track cold-deck wall clock (unmeasured since Phase 2) and the StrictMode request count. Nothing local models it: the shared cache and the 1 req/s gate are both backed by the Upstash variables, so without them the gate paces nothing and the numbers mean nothing. Checklist in §5.
 - **None of Phase 7's reduced-motion, responsive, keyboard or screen-reader behaviour has been verified, and no test in this repo can verify it.** The token layer, the fluid card, the `prefers-reduced-motion` block, the focus states and the ARIA fixes all landed with both ends of each contract asserted — a component renders a `data-motion` hook or a `focus-visible:focus-ring` class, and `src/index.css.test.ts` asserts the stylesheet names it — and **nothing in between**. jsdom evaluates no media queries, has no `window.matchMedia` at all, computes no layout, and has no accessibility-tree consumer, so a class-name assertion is the ceiling of what is automatable. The four passes are scoped in §5 and every row is Pending. **The screen-reader pass is the one to prioritise**: Phase 7 added the app's only live region, on the card's reveal, and the entire point of it is that a flip becomes audible — a player using a screen reader had no way to learn the year before it, and no local check confirms they do now. A live region that mounts already-populated is the known soft spot, since readers differ on announcing content present at insertion.

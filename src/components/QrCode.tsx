@@ -41,15 +41,30 @@
  * generation counter below is what stops that from painting the wrong track's code, which
  * would be a leak of a kind (the QR is scannable) and not merely a glitch.
  *
- * The `qrcode` import is deliberately STATIC. Lazy-loading it is an explicit Phase 7 item
- * (`plan.md` §5) and doing it here would mean a second loading state for no measured gain.
+ * ## The `qrcode` import is DYNAMIC, and it costs no loading state
+ *
+ * ===========================================================================
+ *  MEASURED BEFORE AND AFTER, 2026-08-06.
+ *
+ *  `qrcode` (plus its `dijkstrajs` dependency) is 23.28 kB of a 373.39 kB
+ *  single-chunk bundle -- attributed by decoding the build's own source map. It
+ *  is needed only once a deck has been dealt, and the LANDING SCREEN, which is
+ *  every visitor's first paint, was downloading a QR encoder it never calls.
+ *
+ *  The comment that used to sit here said lazy-loading "would mean a second
+ *  loading state for no measured gain". Both halves are now answered. There is
+ *  no second loading state, because the import joins an await THAT ALREADY
+ *  EXISTS -- generation was always asynchronous and the same-size placeholder
+ *  below has always covered that window, so a chunk fetch simply widens a gap
+ *  the layout already handled. And the gain is the number above.
+ *
+ *  This is why it is a dynamic `import()` rather than `React.lazy` on the
+ *  component: `lazy` would stack a `Suspense` fallback on top of a placeholder
+ *  that already exists, inside one 176px square (decision 8).
+ * ===========================================================================
  */
 
 import { useEffect, useRef, useState } from 'react';
-// A NAMED import, not a default one: `@types/qrcode` declares named exports only, and
-// `verbatimModuleSyntax` is on with no `esModuleInterop`, so `import QRCode from 'qrcode'`
-// does not typecheck here even though most examples online write it that way.
-import { toDataURL } from 'qrcode';
 
 export interface QrCodeProps {
   /** The URL to encode. For a card this is `spotifyTrackUrl(card.id)`. */
@@ -78,6 +93,38 @@ export interface QrCodeProps {
 }
 
 const DEFAULT_ALT = 'Scan to play in Spotify';
+
+/**
+ * The in-flight or settled `import('qrcode')`, shared by every instance and every effect run.
+ *
+ * ===========================================================================
+ *  MEMOIZED, AND IT IS NOT A MICRO-OPTIMISATION.
+ *
+ *  The effect below re-runs on every card advance, so a bare `import()` in its
+ *  body issues a fresh import call per card -- and TWO OF THEM OVERLAP whenever a
+ *  card is superseded before its code resolves, which is exactly the fast-advance
+ *  race the generation counter exists for. Measured 2026-08-06: with two imports
+ *  in flight at once under Vitest's module mocker, the SECOND one's continuation
+ *  never ran, so the new card kept the old card's placeholder forever. One shared
+ *  promise makes the second card await the first card's already-settled load
+ *  instead of starting a second one.
+ *
+ *  A rejected load stays cached, deliberately. A chunk that failed to fetch will
+ *  fail again on the next card, and retrying it per advance would be a request
+ *  loop on exactly the flaky connection that broke it. The consequence is that a
+ *  session which loses this chunk keeps the placeholder for the rest of the game
+ *  -- and stays fully playable, because the reveal and the audio do not go
+ *  through this component. It is also why the load-failure case is tested in its
+ *  own file: once this promise is settled, nothing in a process can un-settle it.
+ * ===========================================================================
+ */
+let qrcodeModule: Promise<typeof import('qrcode')> | null = null;
+
+function loadQrcode(): Promise<typeof import('qrcode')> {
+  qrcodeModule ??= import('qrcode');
+
+  return qrcodeModule;
+}
 
 /** Identifies what a generated code was generated FOR, so a stale one can be spotted. */
 function cacheKey(url: string, size: number): string {
@@ -113,13 +160,27 @@ export function QrCode({ url, size, displaySize, alt = DEFAULT_ALT }: QrCodeProp
     const generation = ++generationRef.current;
     const key = cacheKey(url, size);
 
-    toDataURL(url, {
-      // `margin` is in modules, not pixels. The default of 4 is a lot of white space at
-      // card size; 1 keeps the quiet zone valid while the code stays large enough to scan.
-      margin: 1,
-      width: size,
-      errorCorrectionLevel: 'M',
-    })
+    /*
+      The library and the code it generates are awaited as ONE chain, so the generation counter
+      guards both halves with the same check -- a chunk that resolves late is dropped exactly as a
+      slow `toDataURL` is. That matters more here than before the split: the import widens the
+      window in which a card can be superseded, which makes the race more likely rather than
+      different in kind.
+
+      A NAMED import, not a default one: `@types/qrcode` declares named exports only, and
+      `verbatimModuleSyntax` is on with no `esModuleInterop`, so `qrcode`'s default does not
+      typecheck even though most examples online write it that way.
+    */
+    loadQrcode()
+      .then(({ toDataURL }) =>
+        toDataURL(url, {
+          // `margin` is in modules, not pixels. The default of 4 is a lot of white space at
+          // card size; 1 keeps the quiet zone valid while the code stays large enough to scan.
+          margin: 1,
+          width: size,
+          errorCorrectionLevel: 'M',
+        }),
+      )
       .then((dataUrl) => {
         if (generationRef.current !== generation) return;
         setGenerated({ key, dataUrl });
@@ -128,6 +189,11 @@ export function QrCode({ url, size, displaySize, alt = DEFAULT_ALT }: QrCodeProp
         // A failed generation leaves the placeholder in place. There is nothing useful to
         // say to the player here and nothing to retry -- the input is a URL built from an
         // opaque id, so a failure means the library itself is broken, not the data.
+        //
+        // This now also covers a FAILED CHUNK FETCH, which is a real case rather than a
+        // theoretical one: a flaky connection mid-game means the import rejects instead of the
+        // generation. Same outcome, same place, and the card stays playable -- the reveal and the
+        // audio do not depend on this component.
         if (generationRef.current !== generation) return;
         setGenerated(null);
       });

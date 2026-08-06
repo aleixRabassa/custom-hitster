@@ -19,15 +19,20 @@ import type { Card, PlaylistErrorCode, PlaylistResult, PlaylistSummary } from '.
  * `PlaylistErrorCode` plus the failures that have no server-side existence.
  *
  * Client-only, so they are defined here rather than widening the shared union -- the server can
- * produce neither, and adding them there would force `api/playlist.ts`'s exhaustive status table
- * to handle cases that cannot happen.
+ * produce none of them, and adding them there would force `api/playlist.ts`'s exhaustive status
+ * table to handle cases that cannot happen.
  *
- * - `network`: the request never completed. Offline, DNS, an abort.
+ * - `network`: the request never completed. DNS, a dropped connection, an abort.
+ * - `offline`: the request was never ATTEMPTED, because the browser already knows there is no
+ *   connection. Distinct from `network` on purpose -- see `isBrowserOnline` below.
+ * - `empty-playlist`: a well-formed 200 describing a deck with no cards in it. A valid answer to
+ *   a valid question, not a parse failure.
  * - `unknown-error`: it completed with a failure this client cannot name. Today that is the
  *   handler's two UNTYPED codes -- `method-not-allowed` (405) and `internal-error` (500), neither
  *   of which is in `PlaylistErrorCode` -- plus any status a future deployment invents.
  */
-export type PlaylistClientErrorCode = PlaylistErrorCode | 'network' | 'unknown-error';
+export type PlaylistClientErrorCode =
+  PlaylistErrorCode | 'network' | 'offline' | 'empty-playlist' | 'unknown-error';
 
 export type PlaylistOutcome =
   { ok: true; result: PlaylistResult } | { ok: false; code: PlaylistClientErrorCode };
@@ -54,6 +59,45 @@ export interface FetchPlaylistOptions {
    * so a slow first request cannot land after a second one has already been answered.
    */
   signal?: AbortSignal;
+  /**
+   * Whether the browser has a connection. Defaults to `isBrowserOnline`.
+   *
+   * INJECTED RATHER THAN READ, for the same reason `fetchImpl` is: this module's tests are NODE
+   * tests with no jsdom and no network, and that property is what makes every status branch cheap
+   * to cover. A bare `navigator.onLine` read in the module body would trade it away for one
+   * boolean. It also mirrors `StorageLike` in `persistence.ts`, so it is the house style here
+   * rather than a workaround.
+   */
+  isOnline?: () => boolean;
+}
+
+/**
+ * The default online check: what the browser thinks of its own connectivity.
+ *
+ * ===========================================================================
+ *  `navigator.onLine` REPORTS AN INTERFACE, NOT REACHABILITY.
+ *
+ *  A captive portal -- hotel Wi-Fi, a conference network, a train -- reports
+ *  ONLINE and still fails every request. So this check can only ever be a fast
+ *  path for the case the browser is certain about; it cannot be the only check.
+ *  That is exactly why `network` stays as the fallback for a request that was
+ *  attempted and failed, and why the two codes have different copy. Merging them
+ *  would make one of them lie.
+ *
+ *  Exported so its own guard can be asserted directly. An ABSENT `navigator` is
+ *  treated as online: this module runs under the node environment in every one of
+ *  its tests, and refusing to fetch there because a DOM global is missing would
+ *  be a false negative in the one environment that cannot be offline.
+ * ===========================================================================
+ */
+export function isBrowserOnline(): boolean {
+  // Read defensively rather than as `navigator.onLine`: node has a `navigator` with no `onLine`
+  // at all, and older runtimes have no `navigator` whatsoever. Both mean "cannot tell", which
+  // resolves to online.
+  const candidate = (globalThis as { navigator?: { onLine?: unknown } }).navigator;
+  const onLine = candidate?.onLine;
+
+  return typeof onLine === 'boolean' ? onLine : true;
 }
 
 /** The endpoint. Same-origin and relative, so preview deployments and production both just work. */
@@ -104,6 +148,22 @@ export async function fetchPlaylist(
   url: string,
   options: FetchPlaylistOptions,
 ): Promise<PlaylistOutcome> {
+  /*
+    ===========================================================================
+     CHECKED BEFORE THE FETCH, AND SHORT-CIRCUITING IT.
+
+     A request that cannot succeed should not be made: without this the player
+     watches the Start button say "Loading…" for however long the browser takes
+     to give up, and is then told to check a connection the browser already knew
+     was missing. The answer is available synchronously, so waiting for it is
+     pure latency.
+
+     This does NOT make `network` redundant -- see `isBrowserOnline`.
+    ===========================================================================
+  */
+  const isOnline = options.isOnline ?? isBrowserOnline;
+  if (!isOnline()) return { ok: false, code: 'offline' };
+
   const query = new URLSearchParams({ url });
 
   /*
@@ -135,16 +195,18 @@ export async function fetchPlaylist(
     const init = options.signal ? { signal: options.signal } : undefined;
     response = await fetchImpl(`${PLAYLIST_ENDPOINT}?${query.toString()}`, init);
   } catch {
-    // Offline, DNS failure, or an abort. All three are "the request did not happen"; an abort
-    // is only ever caused by this app itself moving on, so it needs no separate code.
+    // A DNS failure, a dropped connection, a captive portal, or an abort. All of them are "the
+    // request did not complete"; an abort is only ever caused by this app itself moving on, so it
+    // needs no separate code.
+    //
+    // Still reachable with `isOnline()` true, which is the point of keeping both codes: the
+    // predicate above knows about a missing interface, not about an unreachable server.
     return { ok: false, code: 'network' };
   }
 
   const body = await readJson(response);
 
   if (response.ok) {
-    const result = asPlaylistResult(body);
-
     // =======================================================================
     //  A 200 THAT IS NOT JSON IS THE `pnpm dev` TRAP, AND IT IS NOT THEORETICAL.
     //
@@ -153,12 +215,15 @@ export async function fetchPlaylist(
     //  with status 200. Anyone who runs `pnpm dev` instead of `npx vercel dev`
     //  hits exactly this, on their very first Start.
     //
-    //  `readJson` swallows the parse failure and `asPlaylistResult` rejects the
+    //  `readJson` swallows the parse failure and `parsePlaylistBody` rejects the
     //  `undefined`, so it surfaces as `unexpected-payload` -- a sentence the
     //  player can read -- rather than as a raw `SyntaxError` from deep inside a
     //  promise chain. See `docs/development.md`.
     // =======================================================================
-    return result ? { ok: true, result } : { ok: false, code: 'unexpected-payload' };
+    //
+    // Returned as-is: the parse's own outcome is already a `PlaylistOutcome`, and its two failure
+    // codes are the two different things a 200 can be wrong in.
+    return parsePlaylistBody(body);
   }
 
   const code = errorCodeFrom(body) ?? STATUS_FALLBACK[response.status] ?? 'unknown-error';
@@ -181,6 +246,19 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 }
 
 /**
+ * The 200-body parse, as an outcome rather than a `PlaylistResult | undefined`.
+ *
+ * Two DIFFERENT things can be wrong with a 200 and they need different sentences, which a single
+ * `undefined` return could not express -- see the empty-deck branch below.
+ */
+type PlaylistBodyOutcome =
+  | { ok: true; result: PlaylistResult }
+  | { ok: false; code: 'unexpected-payload' | 'empty-playlist' };
+
+/** Every malformed-body exit goes through this, so the common case reads as one word. */
+const MALFORMED: PlaylistBodyOutcome = { ok: false, code: 'unexpected-payload' };
+
+/**
  * Validate a 200 body before handing it to the reducer.
  *
  * The point is to catch "this is not a playlist response at all" -- transpiled source, an HTML
@@ -189,32 +267,52 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
  * this array and every card in it reaches a render: one malformed entry would surface as a blank
  * card mid-game, a long way from its cause.
  *
- * An EMPTY deck is rejected. A playlist with no readable tracks is not a game, and the reducer
- * would deal a deck whose `currentCard` is undefined on the very first frame.
+ * ===========================================================================
+ *  AN EMPTY DECK IS STILL REJECTED -- BUT AS ITS OWN CODE, NOT AS A PARSE FAILURE.
+ *
+ *  It has to be rejected: `START` would deal a deck whose `currentCard` is
+ *  undefined on the very first frame. But through Phase 6 it was rejected as
+ *  `unexpected-payload`, whose copy reads "Spotify returned something we could
+ *  not read. This is a problem on our side, not with your link." That is a
+ *  confident, wrong answer -- the payload was perfectly readable and said,
+ *  correctly, that the playlist has nothing playable in it.
+ *
+ *  IT IS REACHABLE IN PRODUCTION, not just through a stub. Verified by reading
+ *  the whole path 2026-08-06: `api/_lib/spotify-embed.ts` accepts an empty
+ *  `trackList` (it only requires an ARRAY), and `api/playlist.ts` forwards
+ *  whatever the adapter returns. So an empty public playlist -- or one whose
+ *  every track was skipped, which `skippedCount` reaching the raw length also
+ *  produces -- arrives here as a 200 with `cards: []`. NO layer above this one
+ *  owns the case.
+ * ===========================================================================
  */
-function asPlaylistResult(body: unknown): PlaylistResult | undefined {
+function parsePlaylistBody(body: unknown): PlaylistBodyOutcome {
   const record = asRecord(body);
-  if (!record) return undefined;
+  if (!record) return MALFORMED;
 
   const playlist = asPlaylistSummary(record['playlist']);
-  if (!playlist) return undefined;
+  if (!playlist) return MALFORMED;
 
   const rawCards = record['cards'];
-  if (!Array.isArray(rawCards) || rawCards.length === 0) return undefined;
+  // Not an array is a MALFORMED payload; an array with nothing in it is a well-formed payload
+  // describing an empty deck. Collapsing the two is the defect this split exists to fix, so the
+  // two conditions stay on separate lines with separate returns.
+  if (!Array.isArray(rawCards)) return MALFORMED;
+  if (rawCards.length === 0) return { ok: false, code: 'empty-playlist' };
 
   const cards: Card[] = [];
   for (const entry of rawCards) {
     const card = asCard(entry);
-    if (!card) return undefined;
+    if (!card) return MALFORMED;
     cards.push(card);
   }
 
-  if (typeof record['truncated'] !== 'boolean') return undefined;
+  if (typeof record['truncated'] !== 'boolean') return MALFORMED;
 
   const skippedCount = record['skippedCount'];
-  if (typeof skippedCount !== 'number' || !Number.isFinite(skippedCount)) return undefined;
+  if (typeof skippedCount !== 'number' || !Number.isFinite(skippedCount)) return MALFORMED;
 
-  return { playlist, cards, truncated: record['truncated'], skippedCount };
+  return { ok: true, result: { playlist, cards, truncated: record['truncated'], skippedCount } };
 }
 
 function asPlaylistSummary(value: unknown): PlaylistSummary | undefined {
