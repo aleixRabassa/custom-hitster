@@ -62,6 +62,16 @@ Spotify's Feb 2026 Web API changes broke the obvious implementation:
 - **Playback: QR is always shown** on the hidden side (so a second device/phone can always scan-and-play in Spotify), **plus** in-app background playback when available — controlled by explicit **[■ Exit] / [▶ Play/Pause] / [↺ Restart]** buttons (Exit ends the game session and returns to the landing page). Background audio is additive, not a replacement for the QR.
 - **Release year comes from MusicBrainz, not Spotify.** Spotify returns the _album edition's_ date, so remasters and compilations give wrong years (a 2011 remaster of Bohemian Rhapsody → 2011). MusicBrainz's earliest release date for a recording is exactly the value Hitster needs. This makes year resolution a **core component**, not an enrichment pass. **Fallback — tiered, MusicBrainz-only (revised 2026-08-03):** ~~use the year from the Spotify embed data~~ — **there is no Spotify year to fall back to.** The Phase 0 embed spike (§5) established that the payload carries no release date and no album name at track level, and playlist-level `releaseDate` is null. The fallback is therefore three MusicBrainz tiers: a **strict** pass (official studio album, filtered per the Phase 0 fix) marked high confidence; a **relaxed** pass with the release-group filters dropped, marked low confidence; and finally **no year at all**. Low-confidence years are flagged exactly as the original "unconfirmed" wording intended — but **on the card's revealed side, never on a pre-Start screen**: the player is the one pasting the playlist, so a list of years before Start would spoil the whole deck (§6).
 
+**What this decision costs, named so the trade-off is visible from here and not only from the feature
+that pays it:** the embed endpoint carries no attribution field of any shape, so **"Added by" on the
+revealed side cannot be built** — resolved as won't-build 2026-08-06 in §5's Phase 8 list, on evidence
+re-spiked that day against one editorial and one user-owned playlist. Spotify's Web API _does_ expose
+`added_by.id` on playlist items, but only through the two rows above that this decision rules out:
+Client Credentials cannot read `items` at all, and PKCE covers only playlists the logged-in user owns
+or collaborates on, behind the five-user Development Mode cap. **So that item re-opens if and only if
+this decision is re-taken** — it is not a UI task waiting for effort, and it is the concrete price of
+"anyone with a public link".
+
 > ⚠️ **Worth knowing:** scraping the embed endpoint and hiding/reskinning the embed player are outside Spotify's Developer Terms, and these unofficial endpoints can change without notice. Acceptable for a personal project; it does mean the QR fallback (step 3 below) must always remain functional so the app degrades instead of dying.
 
 ---
@@ -463,10 +473,14 @@ verification — which this plan **added** the game-screen Lighthouse audit to r
 
 ### Phase 8 — Nice-to-haves (explicitly out of v1)
 
-- [ ] **"Added by" attribution on the revealed side** — show who added that track to the
-      playlist, alongside title/artist/year, once the card is flipped. **Moved here from Phase 7
-      on 2026-08-06, after the re-spike that phase owed.** Still blocked on data availability
-      rather than on UI, and now with current evidence:
+- [x] **"Added by" attribution on the revealed side — RESOLVED 2026-08-06 as won't-build, not
+      deferred a third time.** Show who added that track to the playlist, alongside
+      title/artist/year, once the card is flipped. **Moved here from Phase 7 on 2026-08-06, after
+      the re-spike that phase owed**, then resolved the same day by
+      [`plan.phase-8-added-by.md`](./plan.phase-8-added-by.md) — a plan that writes no code, which is
+      its result rather than its limitation. The checkbox is ticked for the **decision**; no feature
+      was built and none should be. It was blocked on data availability rather than on UI, and here
+      is the current evidence:
   - **Re-spiked 2026-08-06** against two live playlists — `37i9dQZF1DX0XUsuxWHRQd`
     (RapCaviar, editorial, 50 tracks) and `2wJx2AIytvpaSJLsc2wy3V` (Radio Brianper,
     user-owned, 100 tracks) — both identity-confirmed by `entity.uri` **and** `entity.name`,
@@ -485,6 +499,23 @@ verification — which this plan **added** the game-screen Lighthouse audit to r
     logged-in user owns.
   - **Do not build a UI against an assumed field.** If this is ever picked up, it needs its own
     plan, because the field inventory is what three other decisions rest on.
+  - **Re-open condition, and it is the only one: the app adopts a Spotify auth path.** That is
+    §2's decision, not this item's — see the back-reference there. Nothing about the payload
+    re-opens this on its own; the union growing would only mean the re-spike is worth a third run,
+    and the procedure for that is in
+    [`docs/agent_findings.md`](../agent_findings.md) (2026-08-06), written as five re-runnable steps
+    precisely so the next check is a re-run rather than a redesign.
+  - **What was deliberately NOT done, so it does not read as an oversight:** no optional `addedBy`
+    on `Card` "ready for later". A field that is never populated reads as a half-built feature, and
+    it would surface in the normaliser, in the persisted session's validator and in the year cache's
+    key space for nothing. `shared/types.ts` is untouched, and so is every other file under `src/`,
+    `api/` and `shared/`.
+  - Two questions were left genuinely open rather than answered by this resolution, both in
+    `plan.phase-8-added-by.md` §Open Questions: whether a **user-owned-playlists product** (PKCE,
+    "make your own deck from your own playlist") is ever wanted, which is §2's decision to re-take;
+    and whether any **non-Spotify attribution source** exists — not obviously, since nothing in
+    MusicBrainz knows who added a track to somebody's playlist, and no third source has been looked
+    for.
 - [ ] Card visual design (take cues from the reference repo's neon-ring aesthetic)
 - [ ] Shareable deck URL (playlist id + shuffle seed = whole deck)
 - [ ] PWA / offline via `vite-plugin-pwa`

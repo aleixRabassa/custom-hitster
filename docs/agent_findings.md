@@ -1812,6 +1812,37 @@ Incidental: `SUGGESTED_PLAYLISTS` labels that playlist **"Radio BrianPer"** whil
 `entity.name` is **"Radio Brianper"**. Capitalisation in a label, not a functional problem, but noted
 so the next re-verification does not read it as a mismatch.
 
+### The procedure, so the third check is a re-run and not a redesign
+
+Written out because this spike has now been run twice (Phase 0, then here) with the same answer, and
+the thing that made the second run cost anything was that the first was recorded as a conclusion.
+`plan.phase-8-added-by.md` resolves the item on this evidence; **re-run these five steps before
+re-opening it**, not a fresh investigation.
+
+1. **Pick two playlist ids: one editorial, one user-owned.** Not one of each _kind of music_ — one of
+   each _kind of ownership_. An editorial playlist has no meaningful "added by" (Spotify added
+   everything), so an absence there proves nothing on its own; a user-owned playlist is where the field
+   would appear if it existed. A single sample is what makes this look answered when it is not.
+2. **Fetch `https://open.spotify.com/embed/playlist/{id}` with a normal browser `User-Agent`** and pull
+   the JSON out of `<script id="__NEXT_DATA__">`. Tracks are at
+   `props.pageProps.state.data.entity.trackList`.
+3. **Identity-confirm each fetch by `entity.uri` AND `entity.name`, never by the HTTP status.** A
+   nonexistent id returns **200** with `pageProps.status: 404` and no `state`, and Phase 0's parallel
+   fan-out silently read the wrong playlist twice by trusting the status code plus a shared filename.
+   If the fetches are parallelised, give each one its own output filename.
+4. **Enumerate the field union over EVERY `trackList` entry, then diff the two playlists' unions** —
+   do not read entry `[0]`, and do not grep for one field name. The question is "what fields exist",
+   not "does `added_by` exist"; a targeted search cannot see an attribution field under a name nobody
+   guessed. Record the union, not a verdict.
+5. **Also grep the raw payload string for the absence list**, as a second independent check that the
+   parse did not drop something: `added_by`, `addedBy`, `added_at`, `addedAt`. All four absent
+   2026-08-06. Then check playlist level for `authors` — present, and `null` on both playlists, which
+   is the one field that could plausibly turn non-null without any API change.
+
+**The result is only interesting if step 4's union grows or `authors` is non-null.** Anything else is
+this same entry, and the item stays resolved on the grounds in `plan.md` §5 — which are about auth,
+not about the payload.
+
 ## 2026-08-06 — The suite flake IS real and it reproduced: 15 files error, zero tests fail
 
 Plan 2 recorded a red `pnpm test` run on 2026-08-05 — 13 errors with only 19 of 32 files completing —

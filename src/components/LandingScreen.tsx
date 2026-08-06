@@ -80,7 +80,7 @@ export const SUGGESTED_PLAYLISTS: readonly { id: string; label: string; blurb: s
     blurb: 'Spanish summer hits',
   },
   { id: '37i9dQZF1DX1HCSfq0nSal', label: 'PEGAO', blurb: 'Reggaeton' },
-  { id: '2wJx2AIytvpaSJLsc2wy3V', label: 'Radio BrianPer', blurb: 'Mixed radio' },
+  { id: '2wJx2AIytvpaSJLsc2wy3V', label: 'Radio Brianper', blurb: 'Mixed radio' },
   { id: '7nnjdGCdCe24vVeSlFpGQV', label: 'Electro Latino Mejores Temazos', blurb: 'Latin electro' },
   { id: '37i9dQZEVXbNFJfN1Vw8d9', label: 'Top 50 España', blurb: 'Spain chart' },
   { id: '2ASgmy04ZIcIXLBn8nkmKj', label: 'This is Duki (all songs)', blurb: 'Argentine trap' },
