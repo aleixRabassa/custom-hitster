@@ -237,7 +237,9 @@ describe('src/index.css', () => {
     for (const utility of ['card-ring', 'card-ring-dim']) {
       const block = utilityBlock(stylesheet, utility);
       expect(block).not.toBeNull();
-      expect(block ?? '').not.toMatch(/(?:^|[;{\s])position\s*:\s*(?:relative|static|fixed|sticky)/);
+      expect(block ?? '').not.toMatch(
+        /(?:^|[;{\s])position\s*:\s*(?:relative|static|fixed|sticky)/,
+      );
     }
   });
 

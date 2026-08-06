@@ -83,9 +83,7 @@ describe('the web app manifest', () => {
     expect(maskable).toHaveLength(1);
     expect(maskable[0]?.sizes).toBe('512x512');
 
-    const fullBleed512 = icons.find(
-      (icon) => icon.sizes === '512x512' && icon.purpose === 'any',
-    );
+    const fullBleed512 = icons.find((icon) => icon.sizes === '512x512' && icon.purpose === 'any');
     expect(fullBleed512).toBeDefined();
     expect(maskable[0]?.src).not.toBe(fullBleed512?.src);
 

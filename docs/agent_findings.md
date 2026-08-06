@@ -1212,51 +1212,51 @@ digit before any new value was measured with it.
 > **8.72:1** against the true **5.94:1**. That is a two-and-a-half-stop error in the direction that
 > makes a failure look like a pass, and Phase 7's recorded numbers are what caught it.
 
-| Foreground                              | Background                        | Ratio    | Verdict                                  |
-| --------------------------------------- | --------------------------------- | -------- | ---------------------------------------- |
-| _1.4.3 — text on the page_              |                                   |          |                                          |
-| `--color-fg`                            | `--color-page`                    | 18.15    | pass                                     |
-| `--color-fg-secondary`                  | `--color-page`                    | 7.63     | pass                                     |
-| `--color-fg-muted` (HUD, hints)         | `--color-page`                    | 6.12     | pass                                     |
-| `--color-danger` (landing error)        | `--color-page`                    | 6.84     | pass                                     |
-| _1.4.3 — text on a control surface_     |                                   |          |                                          |
-| `--color-fg` (input, buttons)           | `--color-surface`                 | 16.42    | pass                                     |
-| `--color-fg-muted` (placeholder)        | `--color-surface`                 | 5.54     | pass                                     |
-| `--color-fg` at `--opacity-disabled`    | `--color-surface`                 | 6.54     | pass                                     |
-| `--color-fg` at `--opacity-disabled`    | `--color-surface-raised`          | 5.94     | pass                                     |
-| _1.4.3 — the HIDDEN card face_          |                                   |          |                                          |
-| `--color-fg` ("Scan to play…")          | `--color-surface`                 | 16.42    | pass                                     |
-| _1.4.3 — the REVEAL card face_          |                                   |          |                                          |
-| **`--color-fg-year` (the year, 60px)**  | `--color-surface-raised`          | 11.30    | pass — **new**, needs 3:1 (large)        |
-| `--color-fg` (title, 20px semibold)     | `--color-surface-raised`          | 13.86    | pass                                     |
-| `--color-fg-secondary` (artist, 16px)   | `--color-surface-raised`          | 5.83     | pass                                     |
-| `--color-fg-heading` ("Year unknown")   | `--color-surface-raised`          | 10.20    | pass                                     |
-| `--color-warning` ("Unconfirmed year")  | `--color-surface-raised`          | 10.45    | pass                                     |
-| `--color-fg-decorative` (`····`)        | `--color-surface-raised`          | 1.94     | **exempt** — `aria-hidden` decoration     |
-| _1.4.3 — filled controls_               |                                   |          |                                          |
-| `--color-on-accent`                     | `--color-accent`                  | 5.40     | pass                                     |
-| `--color-on-accent`                     | `--color-accent-hover`            | 8.03     | pass                                     |
-| `--color-on-danger`                     | `--color-danger`                  | 6.84     | pass                                     |
-| `--color-on-danger`                     | `--color-danger-hover`            | 10.30    | pass                                     |
-| `--color-danger` (exit glyph)           | `--color-surface-raised`          | 5.23     | pass                                     |
-| _1.4.3 — the notice banner_             |                                   |          |                                          |
-| `--color-warning-text`                  | `warning-surface/40` over page    | 14.71    | pass                                     |
-| `--color-warning-glyph` (Dismiss ✕)     | `warning-surface/40` over page    | 10.68    | pass                                     |
-| _1.4.11 — the focus ring, needs 3:1_    |                                   |          |                                          |
-| `--color-focus-ring`                    | `--color-page`                    | 18.15    | pass                                     |
-| `--color-focus-ring`                    | `--color-surface`                 | 16.42    | pass                                     |
-| `--color-focus-ring`                    | `--color-surface-raised`          | 13.86    | pass                                     |
-| `--color-focus-ring`                    | `--color-border-strong`           | 9.53     | pass                                     |
-| `--color-focus-ring`                    | `--color-accent`                  | 3.36     | pass — narrowly                          |
-| `--color-focus-ring`                    | `--color-danger` (End game)       | **2.65** | **exempt** — see below. Newly surfaced   |
-| _1.4.11 — the neon ring, decoration_    |                                   |          |                                          |
-| `--color-ring-from` (green)             | `--color-surface`                 | 13.39    | pass                                     |
-| `--color-ring-via` (cyan)               | `--color-surface`                 | 11.84    | pass                                     |
-| `--color-ring-to` (magenta)             | `--color-surface`                 | 4.90     | pass                                     |
-| `--color-ring-from` (green)             | `--color-surface-raised`          | 11.30    | pass                                     |
-| `--color-ring-via` (cyan)               | `--color-surface-raised`          | 9.99     | pass                                     |
-| `--color-ring-to` (magenta)             | `--color-surface-raised`          | 4.13     | pass — the worst of the three stops      |
-| `--color-ring-dim` (the backs)          | `--color-page`                    | 4.23     | pass — was **1.31**, see below           |
+| Foreground                             | Background                     | Ratio    | Verdict                                |
+| -------------------------------------- | ------------------------------ | -------- | -------------------------------------- |
+| _1.4.3 — text on the page_             |                                |          |                                        |
+| `--color-fg`                           | `--color-page`                 | 18.15    | pass                                   |
+| `--color-fg-secondary`                 | `--color-page`                 | 7.63     | pass                                   |
+| `--color-fg-muted` (HUD, hints)        | `--color-page`                 | 6.12     | pass                                   |
+| `--color-danger` (landing error)       | `--color-page`                 | 6.84     | pass                                   |
+| _1.4.3 — text on a control surface_    |                                |          |                                        |
+| `--color-fg` (input, buttons)          | `--color-surface`              | 16.42    | pass                                   |
+| `--color-fg-muted` (placeholder)       | `--color-surface`              | 5.54     | pass                                   |
+| `--color-fg` at `--opacity-disabled`   | `--color-surface`              | 6.54     | pass                                   |
+| `--color-fg` at `--opacity-disabled`   | `--color-surface-raised`       | 5.94     | pass                                   |
+| _1.4.3 — the HIDDEN card face_         |                                |          |                                        |
+| `--color-fg` ("Scan to play…")         | `--color-surface`              | 16.42    | pass                                   |
+| _1.4.3 — the REVEAL card face_         |                                |          |                                        |
+| **`--color-fg-year` (the year, 60px)** | `--color-surface-raised`       | 11.30    | pass — **new**, needs 3:1 (large)      |
+| `--color-fg` (title, 20px semibold)    | `--color-surface-raised`       | 13.86    | pass                                   |
+| `--color-fg-secondary` (artist, 16px)  | `--color-surface-raised`       | 5.83     | pass                                   |
+| `--color-fg-heading` ("Year unknown")  | `--color-surface-raised`       | 10.20    | pass                                   |
+| `--color-warning` ("Unconfirmed year") | `--color-surface-raised`       | 10.45    | pass                                   |
+| `--color-fg-decorative` (`····`)       | `--color-surface-raised`       | 1.94     | **exempt** — `aria-hidden` decoration  |
+| _1.4.3 — filled controls_              |                                |          |                                        |
+| `--color-on-accent`                    | `--color-accent`               | 5.40     | pass                                   |
+| `--color-on-accent`                    | `--color-accent-hover`         | 8.03     | pass                                   |
+| `--color-on-danger`                    | `--color-danger`               | 6.84     | pass                                   |
+| `--color-on-danger`                    | `--color-danger-hover`         | 10.30    | pass                                   |
+| `--color-danger` (exit glyph)          | `--color-surface-raised`       | 5.23     | pass                                   |
+| _1.4.3 — the notice banner_            |                                |          |                                        |
+| `--color-warning-text`                 | `warning-surface/40` over page | 14.71    | pass                                   |
+| `--color-warning-glyph` (Dismiss ✕)    | `warning-surface/40` over page | 10.68    | pass                                   |
+| _1.4.11 — the focus ring, needs 3:1_   |                                |          |                                        |
+| `--color-focus-ring`                   | `--color-page`                 | 18.15    | pass                                   |
+| `--color-focus-ring`                   | `--color-surface`              | 16.42    | pass                                   |
+| `--color-focus-ring`                   | `--color-surface-raised`       | 13.86    | pass                                   |
+| `--color-focus-ring`                   | `--color-border-strong`        | 9.53     | pass                                   |
+| `--color-focus-ring`                   | `--color-accent`               | 3.36     | pass — narrowly                        |
+| `--color-focus-ring`                   | `--color-danger` (End game)    | **2.65** | **exempt** — see below. Newly surfaced |
+| _1.4.11 — the neon ring, decoration_   |                                |          |                                        |
+| `--color-ring-from` (green)            | `--color-surface`              | 13.39    | pass                                   |
+| `--color-ring-via` (cyan)              | `--color-surface`              | 11.84    | pass                                   |
+| `--color-ring-to` (magenta)            | `--color-surface`              | 4.90     | pass                                   |
+| `--color-ring-from` (green)            | `--color-surface-raised`       | 11.30    | pass                                   |
+| `--color-ring-via` (cyan)              | `--color-surface-raised`       | 9.99     | pass                                   |
+| `--color-ring-to` (magenta)            | `--color-surface-raised`       | 4.13     | pass — the worst of the three stops    |
+| `--color-ring-dim` (the backs)         | `--color-page`                 | 4.23     | pass — was **1.31**, see below         |
 
 **The audit found one pair nobody had measured, and it is the same lesson Phase 7 recorded.** Phase 7
 wrote "two of the four failures were not on the plan's list… that is the argument for computing
@@ -2156,3 +2156,191 @@ invisible until a test observes something global.
 Still owed from the same session: the **devtools DOM search on an unflipped card** (not reported), the
 **printed-QR scan**, one **re-check of the lock screen** now that the fix is in, and the whole **iOS**
 column of the Phase 5 checklist — this pass was Android only.
+
+---
+
+## 2026-08-06 — `public/logo.png` and `public/logo.webp` are DIFFERENT ARTWORK, not two encodings of one image
+
+Found while executing Phase 8 plan 1 step 10, whose instruction — recover the pre-deletion source
+"rather than upscaling `logo.webp`" — assumes the WebP is a re-encode of the PNG. **It is not.**
+
+Commit **`5e178f6`** (2026-08-06) deleted `public/logo.png` (1,262,175 bytes, 1254×1254, added in
+**`667b974`**, 2026-08-03) and added `public/logo.webp` (20,610 bytes, 240×240) in the **same
+commit**. The two images are different marks:
+
+| File                 | Artwork                                                                                               |
+| -------------------- | ----------------------------------------------------------------------------------------------------- |
+| `logo.png` (deleted) | Rounded **card stack**: equaliser bars, "PLAYLIST / HITSTER", "TU PLAYLIST, TU JUEGO", a vinyl record |
+| `logo.webp` (added)  | A **circular** neon "HITSTER" wordmark over concentric arcs                                           |
+
+Only those two image assets have ever been committed, plus `docs/plans/custom-hitster-mockup.png`.
+
+**Why this was worth an entry rather than a shrug:** Phase 7's note that the favicon "replaced a
+1.26 MB PNG which was costing 6.2 s of LCP" is entirely true about the bytes and completely silent
+about the artwork, so **nothing anywhere recorded that the brand mark had changed**. A later session
+reading that note reasonably concludes the two files are the same picture at two sizes — which is what
+step 10 assumed, and it is why the step's "recover the original source" would silently have shipped a
+home-screen icon that did not match the browser tab.
+
+**Resolved by the developer, 2026-08-06: one identity everywhere, from the card-stack source.** All
+four PWA icons and a regenerated `logo.webp` now come from the recovered 1254×1254 PNG, which is also
+the mark `docs/plans/custom-hitster-mockup.png` draws in its own header — so the icon set matches the
+design language Phase 8 is implementing. The app name became **"Playlist Hitster"** to match.
+
+**Bytes, because the 1.26 MB lesson is two weeks old:**
+
+| File                       |              Size | Note                                                                              |
+| -------------------------- | ----------------: | --------------------------------------------------------------------------------- |
+| `logo.webp`                |            10,376 | **Smaller** than the 20,610 it replaced. Still the only icon on the critical path |
+| `pwa-192x192.png`          |            26,361 |                                                                                   |
+| `apple-touch-icon.png`     |            23,526 | 180×180. iOS ignores the manifest's icons and uses only this                      |
+| `pwa-512x512.png`          |           131,461 |                                                                                   |
+| `pwa-maskable-512x512.png` |           103,328 |                                                                                   |
+|                            | **284,676 added** | None of the four is fetched before first paint                                    |
+
+All PNGs are palette-quantised to 256 colours, which roughly halves them (the 512 was 227,819 bytes
+as truecolour) with no banding visible in a side-by-side at full size. **Never restore a large icon to
+the favicon slot** — that constraint is unchanged and is the one that actually cost LCP.
+
+**The maskable variant was sized by measurement, not by a guessed padding.** The artwork's maximum
+content radius is **95.1%** of the source's half-width, so drawing the whole square at **84%** of the
+canvas puts its content at a 204.9px radius against the 204.8px safe radius of the 80% circle. Checked
+by compositing the result under a simulated circular mask: nothing clips. A maskable icon that is the
+full-bleed 512 renamed — or one entry carrying `purpose: 'any maskable'` — validates cleanly and gets
+its edges cropped on every round-icon Android launcher, which is what `manifest.test.ts` asserts
+against.
+
+---
+
+## 2026-08-06 — The two peeking backs of the deck do not render at all on a full-height card
+
+**Pre-existing, from Phase 5, and found only because the stack was rendered in a real browser for the
+first time.** `AGENTS.md` already says `CardStack`'s constants were "chosen by eye" and "have never
+been seen on a phone". They have now been seen and the depth cue does not work.
+
+`BACK_OFFSET_PX = 10` and `BACK_SCALE_STEP = 0.04`, measured with `getBoundingClientRect` at the
+card's 448px ceiling:
+
+| Element | Height | Peek below the card | Inset on every other side |
+| ------- | -----: | ------------------: | ------------------------: |
+| back 1  | 430.08 |          **1.04px** |                    5.76px |
+| back 2  | 412.16 |          **2.08px** |                   11.52px |
+
+**The cause is that `scale()` is centre-origin.** It pulls the bottom edge _up_ by
+`(H / 2) × step` — 8.96px at H = 448 — while `translateY` pushes it _down_ by only 10px. The net peek
+is 1px and 2px, on the bottom edge alone, and the card's own 2px ring covers even that. Every other
+edge is inset, i.e. behind the card.
+
+**The cue degrades as the card grows, which is backwards.** At the 288px floor the inset is 5.76px
+against the same absolute 10px offset, so back 1 peeks by a marginal 4.24px — visible-ish on a phone,
+gone on a laptop. Phase 7 open question 2 decided to keep the offset absolute _because_ a fixed 10px
+is "close to the minimum that reads as another card behind this one"; that reasoning is sound and the
+scale term silently cancels it.
+
+**The condition for any visible peek is `BACK_OFFSET_PX > (H / 2) × BACK_SCALE_STEP`,** and nothing
+enforces or tests it — jsdom computes no layout, so no test in this repo can.
+
+**Not fixed.** It is outside Phase 8 plan 1's steps, and the fix is a deck-feel decision with real
+options (raise the offset, drop the scale step to zero, or make the offset proportional to
+`--card-height`) rather than a mechanical correction. The consequence to know about: `card-ring-dim`,
+added by that plan to take the backs from 1.31:1 to 4.23:1 against the page, **is currently inert at
+desktop card sizes** because there is nothing of the backs to see. The colour correction is right; the
+geometry is a separate decision.
+
+---
+
+## 2026-08-06 — Lightning CSS prefixes `mask-composite` on its own; and a ring utility must not declare `position`
+
+Two things learned building Phase 8's `card-ring` gradient border.
+
+**1. Do not hand-write `-webkit-mask-*` prefixes.** The gradient band is the standard two-layer mask
+subtraction (a `content-box` layer excluded from a `border-box` layer, leaving the
+`padding: var(--ring-width)` ring). `mask-composite: exclude` is the declaration with the least
+uniform support, so the built CSS was grepped rather than trusted — and Lightning CSS expands the
+authored two-line `mask` shorthand into the full longhand set with `-webkit-mask-image`,
+`-webkit-mask-clip`, `-webkit-mask-origin` and `-webkit-mask-composite: xor` beside every standard
+property. Adding prefixes by hand would duplicate what the pipeline already emits.
+
+**2. `position: relative` inside the utility would be a bug, not a safeguard.** The band is a
+`position: absolute` `::before`, so it needs a positioned ancestor and the reflex is to guarantee one
+in the utility itself. Both call sites are **already** `absolute inset-0` — the two faces in
+`Card.tsx` and the backs in `CardStack.tsx` — so the two declarations would collide in the same
+cascade layer, and which won would depend on the order Tailwind emitted two custom utilities in. If
+`relative` won, both card faces would leave absolute positioning and stack in flow.
+
+The contract is therefore **the caller is positioned**, pinned at both ends the way this repo pins
+anything whose middle is untestable: `index.css.test.ts` asserts neither ring utility declares a
+`position`, and the two component tests assert `absolute` sits beside the ring class.
+
+**Also worth recording:** the ring adds **no layout**. `--ring-width` is a border inside a
+`border-box` element and the glow is a `box-shadow`, so the card's measured box is 288×448 exactly as
+before — CLS should be unaffected, and the risk a Lighthouse run should be aimed at is _paint_
+instead.
+
+---
+
+## 2026-08-06 — `includeAssets` plus a matching `globPatterns` silently duplicates precache entries
+
+Verifying that Phase 8's service worker precached the lazy chunks (it does — all seven) turned up
+**five duplicated entries** in `dist/sw.js`: both 512 icons, the 192, the favicon and the
+apple-touch-icon, each listed twice.
+
+Two overlapping causes:
+
+- **`includeAssets` is only for files `globPatterns` does not match.** `public/` is copied to the root
+  of the build output and the glob covered `png`/`webp`, so everything named in `includeAssets` was
+  already included.
+- **`vite-plugin-pwa` adds every manifest-declared icon itself**, which the glob then matched a second
+  time. `globIgnores: ['pwa-*.png']` leaves those three to the plugin. `apple-touch-icon.png` must
+  **not** be ignored — it is referenced from `index.html` rather than from the manifest, so the glob is
+  the only thing that precaches it.
+
+**Why it was worth fixing rather than tolerating:** the duplicate entries carried _identical_
+revisions, so workbox deduplicated them silently instead of throwing
+`add-to-cache-list-conflicting-entries`. It was invisible — and it would have become a **build-time
+throw** the first time the two paths disagreed about a revision. 19 entries afterwards, no duplicates,
+nothing missing.
+
+**Unrelated but adjacent:** Vite's native config loader rejects an extensionless relative import and
+warns on every build. `vite.config.ts` imports the manifest as `./src/pwa/manifest.ts` with an
+explicit **`.ts`** — deliberately _not_ the `.js` form `AGENTS.md` mandates for `api/`, because the two
+rules have opposite causes: `api/`'s `.js` specifiers exist so Node's ESM resolver can find a file it
+will never transpile, whereas this one is resolved by Vite's own TypeScript-aware loader and never
+reaches Node.
+
+---
+
+## 2026-08-06 — A THIRD `pnpm test` flake shape: one genuine assertion timeout under load
+
+Two shapes are already recorded above and both mean "not a real failure": **`Errors` with zero failed
+tests** (the jsdom workers never started) and **`N skipped` in one file** (a `beforeAll` timed out).
+This is a third and it is neither.
+
+**Observed twice in one session, and it named a DIFFERENT test each time** — which is the detail that
+identifies it. Both runs reported `Test Files 1 failed | 40 passed (41)`,
+`Tests 1 failed | 587 passed (588)`, always in `src/App.test.tsx`:
+
+| Run | Test blamed                                               | Failing line                                       |
+| --- | --------------------------------------------------------- | -------------------------------------------------- |
+| 1   | _should return to the landing screen from the end screen_ | `findByText(/deck finished/i)`, `App.test.tsx:566` |
+| 2   | _should reset the end reason when a new game starts_      | timed out after 1101 ms                            |
+
+A **named assertion at a named line** is exactly the signature the first entry offers as the way to
+tell a real regression from an environment failure. Here it is a false positive, and the fact that the
+name **moves between runs** is what gives it away: a regression breaks the same test every time.
+
+Neither was real. `pnpm vitest run src/App.test.tsx` passed 27/27 immediately after each, and the next
+full `pnpm test` passed **588/588** both times. The failing runs reported 462 s and 352 s of cumulative
+`environment` time against 386–391 s on the clean ones, so the file is being **starved of wall clock
+under parallel load** rather than asserting anything wrong.
+
+**Why this file specifically:** `App.test.tsx` is the one that warms up Vite's first-time transform of
+~250 `motion` modules (see the `beforeAll` entry above). That hook now has a 60 s budget so it no
+longer skips the file — but the cost did not go away, it just moved, and it now lands inside individual
+`waitFor`/`findBy*` timeouts instead.
+
+**So the distinguishing signal is no longer the summary shape — it is reproducibility.** Before
+treating a single named failure in `App.test.tsx` as a regression, re-run the file alone and then the
+suite. Both passing means the clock, not the code, and a different test name on a second occurrence
+confirms it. This does not weaken the two entries above; it adds a case where their "a real regression
+names an assertion and a line" test gives a false positive under parallel load.

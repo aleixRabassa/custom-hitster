@@ -48,38 +48,38 @@ single most valuable change Phase 7 made — and the card is about to be rebuilt
 
 ### Produces for downstream plans
 
-| Output                                                | Consumed by                                                                                                                                                    |
-| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| The new `@theme static` values and the ring utilities | `plan.phase-8-features.md` — the PDF export consumes the token names, **not** necessarily the values; see that plan's print-palette decision                    |
-| The generated icon set and its source-asset provenance | Nothing downstream, but it is the answer to "where did these PNGs come from" that the deleted 1.26 MB source would otherwise take a `git log` to reconstruct    |
+| Output                                                 | Consumed by                                                                                                                                                    |
+| ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The new `@theme static` values and the ring utilities  | `plan.phase-8-features.md` — the PDF export consumes the token names, **not** necessarily the values; see that plan's print-palette decision                   |
+| The generated icon set and its source-asset provenance | Nothing downstream, but it is the answer to "where did these PNGs come from" that the deleted 1.26 MB source would otherwise take a `git log` to reconstruct   |
 | A post-redesign Lighthouse baseline                    | `plan.phase-8-features.md` — the PDF library is a new dependency and its chunk needs to be measured against a number that reflects the redesign, not Phase 7's |
 
 ---
 
 ## Scope & Affected Areas
 
-| Area                                    | Type     | Notes                                                                                                                  |
-| --------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `src/index.css`                         | Modified | The whole of this plan's visual half: new tokens, the ring utilities, a possible fourth reduced-motion rule             |
-| `src/index.css.test.ts`                 | Modified | The canary extends to the new tokens and utilities                                                                      |
-| `src/components/Card.tsx`               | Modified | Consumes the ring utility; any literal border or radius it still carries moves to a token                               |
-| `src/components/CardHiddenSide.tsx`     | Modified | Face treatment; the QR's surround is the one place contrast is about scannability rather than reading                   |
-| `src/components/CardRevealSide.tsx`     | Modified | Face treatment; the year is the largest thing in the app and the redesign must not reduce that                          |
-| `src/components/CardStack.tsx`          | Modified | The two peeking backs get a dimmer ring variant. They stay **empty divs** — no content, no QR, no id                    |
-| `src/components/*.test.tsx`             | Modified | Class-name assertions for every new utility, per the silent-no-op rule                                                  |
-| `index.html`                            | Modified | `theme-color` by hand if `--color-page` moves; the icon links; the manifest link if not injected                        |
-| `public/`                               | New      | The generated PWA icon set (192, 512, 512-maskable, 180 apple-touch). `logo.webp` stays as the favicon                  |
-| `src/pwa/manifest.ts` (or similar)      | New      | The manifest as a plain typed module so it is unit-testable, imported by `vite.config.ts`                               |
-| `src/pwa/manifest.test.ts`              | New      | Node environment. Asserts the fields an installability check actually requires                                          |
-| `vite.config.ts`                        | Modified | `vite-plugin-pwa` registered, workbox options, `devOptions` left off                                                    |
-| `package.json`                          | Modified | `vite-plugin-pwa` as a **devDependency**                                                                                |
-| `vercel.json`                           | Review   | The SPA rewrite already excludes paths containing a dot, so `/sw.js` and `/manifest.webmanifest` serve as files — verify, do not assume |
-| `docs/architecture.md`                  | Modified | §3 — the ring utilities, the icon set, the service worker's position and what it deliberately does not cache            |
-| `docs/development.md`                   | Modified | §5 new manual rows, §8 known limitations                                                                                |
-| `docs/agent_findings.md`                | Modified | The re-audited contrast table, the icon provenance, and whatever the PWA work turns up                                  |
-| `docs/plans/plan.md`                    | Modified | §5 — tick the card-design and PWA boxes, record the reversal of the prerender assumption                                |
-| `AGENTS.md`                             | Modified | Current-phase line; the service worker as a new structural fact                                                         |
-| `README.md`                             | Modified | That the app is installable, and the update behaviour a user will see                                                   |
+| Area                                | Type     | Notes                                                                                                                                   |
+| ----------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/index.css`                     | Modified | The whole of this plan's visual half: new tokens, the ring utilities, a possible fourth reduced-motion rule                             |
+| `src/index.css.test.ts`             | Modified | The canary extends to the new tokens and utilities                                                                                      |
+| `src/components/Card.tsx`           | Modified | Consumes the ring utility; any literal border or radius it still carries moves to a token                                               |
+| `src/components/CardHiddenSide.tsx` | Modified | Face treatment; the QR's surround is the one place contrast is about scannability rather than reading                                   |
+| `src/components/CardRevealSide.tsx` | Modified | Face treatment; the year is the largest thing in the app and the redesign must not reduce that                                          |
+| `src/components/CardStack.tsx`      | Modified | The two peeking backs get a dimmer ring variant. They stay **empty divs** — no content, no QR, no id                                    |
+| `src/components/*.test.tsx`         | Modified | Class-name assertions for every new utility, per the silent-no-op rule                                                                  |
+| `index.html`                        | Modified | `theme-color` by hand if `--color-page` moves; the icon links; the manifest link if not injected                                        |
+| `public/`                           | New      | The generated PWA icon set (192, 512, 512-maskable, 180 apple-touch). `logo.webp` stays as the favicon                                  |
+| `src/pwa/manifest.ts` (or similar)  | New      | The manifest as a plain typed module so it is unit-testable, imported by `vite.config.ts`                                               |
+| `src/pwa/manifest.test.ts`          | New      | Node environment. Asserts the fields an installability check actually requires                                                          |
+| `vite.config.ts`                    | Modified | `vite-plugin-pwa` registered, workbox options, `devOptions` left off                                                                    |
+| `package.json`                      | Modified | `vite-plugin-pwa` as a **devDependency**                                                                                                |
+| `vercel.json`                       | Review   | The SPA rewrite already excludes paths containing a dot, so `/sw.js` and `/manifest.webmanifest` serve as files — verify, do not assume |
+| `docs/architecture.md`              | Modified | §3 — the ring utilities, the icon set, the service worker's position and what it deliberately does not cache                            |
+| `docs/development.md`               | Modified | §5 new manual rows, §8 known limitations                                                                                                |
+| `docs/agent_findings.md`            | Modified | The re-audited contrast table, the icon provenance, and whatever the PWA work turns up                                                  |
+| `docs/plans/plan.md`                | Modified | §5 — tick the card-design and PWA boxes, record the reversal of the prerender assumption                                                |
+| `AGENTS.md`                         | Modified | Current-phase line; the service worker as a new structural fact                                                                         |
+| `README.md`                         | Modified | That the app is installable, and the update behaviour a user will see                                                                   |
 
 ---
 
@@ -230,28 +230,60 @@ worth asserting in a node test, and a literal buried in a plugin call cannot be 
         lazily and precached eagerly is worth verifying rather than assuming. — **Verified against
         the emitted `dist/sw.js`, not assumed: all seven lazy chunks are listed. The check also
         found five DUPLICATE entries, which is execution note 7.**
+
+> **Steps 13–17 are the manual half, and ALL FIVE ARE STILL PENDING.** Every one of them needs
+> something this environment does not have: a preview deployment, an installed app on a real phone,
+> an airplane-mode toggle, Lighthouse, or a running screen reader. They are listed unchecked rather
+> than described as done, and the reasons are per-step below. **One thing was verified in a real
+> browser** — see execution note 8, which is not a substitute for any of these five.
+
 - [ ] **13. Keep the waiting update strategy and verify what a user sees.** Deploy, load, deploy
       again, reload. The old worker should keep serving until the tab closes. Confirm that a
       mid-game reload does not produce a missing-chunk error.
+  - **PENDING — needs two deployments.** What IS verified locally, by reading the generated
+    `dist/sw.js`: `skipWaiting()` appears only inside a `message` listener gated on a
+    `SKIP_WAITING` payload, nothing in the app posts that message, and there is no
+    `clientsClaim()`. So the worker is configured to wait. That the waiting is _invisible and
+    harmless to a player mid-game_ is the part only a redeploy can show.
 - [ ] **14. Verify the offline story end to end, and change nothing if it already works.** With the
       app installed and the network off: the shell loads; a saved session resumes and is playable
       without audio; pressing Start produces Phase 7's `offline` copy rather than a hung request.
       If all three hold, this step writes documentation and no code.
+  - **PENDING — needs an installed app and a network toggle.** The precache list was verified to
+    contain the shell, the CSS and all seven lazy chunks, and `runtimeCaching` is empty, so the
+    three outcomes are what the configuration implies. None of the three has been observed.
 - [ ] **15. Re-run Lighthouse on the landing screen, production build, all four categories.** The
       number to protect is **Performance 99**; the number to watch is CLS, because a glow that
       paints late is a layout-stable change and a ring that resizes the card is not. Record the
       scores beside Phase 7's so the comparison is one table.
+  - **PENDING — Lighthouse is not installed here.** Worth knowing before it runs: the ring adds
+    **no layout**, so CLS should be untouched. `--ring-width` is a border inside a `border-box`
+    element and the glow is a `box-shadow`, neither of which participates in layout; the card's
+    measured box is 288×448 exactly as before. The CSS bundle went 24.61 → 24.9 kB. The new risk
+    Lighthouse should be pointed at is **paint** rather than layout: two `box-shadow` blooms plus a
+    masked pseudo-element on a 3D-transformed element.
   - [ ] Accessibility 100 is a floor and not a result — it is an automated pass over a static
         screen. Do not let it stand in for step 16.
 - [ ] **16. Run the screen-reader pass over one flip.** Phase 7 debt, and the one it names as most
       valuable. Flip a card with a screen reader running and confirm `CardRevealSide`'s polite live
       region announces the year. Confirm the hidden face announces nothing about the track.
+  - **PENDING, and it is the most valuable outstanding item in the phase.** Nothing about it was
+    discharged here. What this plan did do is leave it reachable: `CardRevealSide` still mounts only
+    while flipped, its `role="status"` is untouched, and the year's colour change is the only edit to
+    that component — so the pass tests exactly what Phase 7 built.
   - [ ] Record the reader and platform used. "It worked" without naming NVDA or VoiceOver is not a
         result anyone can build on.
 - [ ] **17. Three widths and the reduced-motion pass, if the redesign touched either.** A ring with
       a glow changes what reduced motion has to suppress, and a fluid card with a new border width
       changes what the clamp resolves to. Both are Phase 7 rows in `development.md` §5 that this
       plan can either discharge or leave Pending — but not silently invalidate.
+  - **PENDING, and the plan's warning about not silently invalidating them is the operative part.**
+    Reduced motion: the ring does **not** animate (open question 1), so the `prefers-reduced-motion`
+    block still covers exactly the three surfaces it covered before and that row is unchanged rather
+    than invalidated. Three widths: the ring is a border on a `border-box` element, so the clamp
+    resolves to the same 288×448 it did — **but the two peeking backs turn out not to render at all
+    at the card's full height**, which the three-widths pass would have caught and which execution
+    note 9 records. That row is now more valuable than it was, not less.
 
 ---
 
@@ -341,18 +373,18 @@ worth asserting in a node test, and a literal buried in a plugin call cannot be 
 
 ## Assumptions & Decisions
 
-| #  | Assumption / Decision                                                                                   | Rationale                                                                                                                                                                     |
-| -- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1  | The ring is tokens plus `@utility` composites; no new component                                          | Chosen over a `NeonRing` component and over a values-only recolour. Avoids a decorative node inside the leak-critical subtree and a second place to teach reduced motion       |
-| 2  | Prerendering is **not** in this plan                                                                     | Already retired. The favicon fix took the landing screen from Performance 75 / LCP 7.8 s to 99 / 1.6 s with no code touched                                                    |
-| 3  | The logo/asset item is **already discharged**                                                            | `public/logo.png` is gone; `public/logo.webp` is 240×240 and 20,610 bytes. What remains is the PWA icon set, which is a different asset for a different purpose                |
-| 4  | Contrast is re-audited as a step, not as a follow-up                                                     | A new palette makes Phase 7's measured table describe a build that no longer exists, and an unknown colour utility fails silently with all four checks green                   |
-| 5  | The service worker precaches build output only — no API runtime caching                                  | A cached playlist response can deal a deck that no longer matches the real playlist. Offline is worth having; a wrong deck is not                                              |
-| 6  | The update strategy waits rather than `skipWaiting`                                                      | `GameScreen` and `qrcode` are lazy chunks. An activation mid-game after a redeploy makes the next card a missing-chunk error                                                   |
-| 7  | The manifest is a typed module imported by `vite.config.ts`                                              | Makes the installability-critical fields assertable in a node test. A literal inside a plugin call cannot be imported                                                          |
-| 8  | Icons are PNG, generated from the pre-deletion source in git history                                     | Manifest WebP support is not universal and iOS ignores manifest icons entirely; upscaling the 240px WebP would produce a soft 512                                              |
-| 9  | The screen-reader pass rides with this plan                                                              | It is Phase 7's highest-value outstanding check and it covers the component this plan is rebuilding around                                                                     |
-| 10 | `--color-page` and `--color-surface` are expected to stay near-black                                     | Preserves most of the contrast table, suits an OLED phone, and is what makes a neon ring read as neon. Step 1 may overturn it, but it is the starting position                 |
+| #   | Assumption / Decision                                                   | Rationale                                                                                                                                                                |
+| --- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | The ring is tokens plus `@utility` composites; no new component         | Chosen over a `NeonRing` component and over a values-only recolour. Avoids a decorative node inside the leak-critical subtree and a second place to teach reduced motion |
+| 2   | Prerendering is **not** in this plan                                    | Already retired. The favicon fix took the landing screen from Performance 75 / LCP 7.8 s to 99 / 1.6 s with no code touched                                              |
+| 3   | The logo/asset item is **already discharged**                           | `public/logo.png` is gone; `public/logo.webp` is 240×240 and 20,610 bytes. What remains is the PWA icon set, which is a different asset for a different purpose          |
+| 4   | Contrast is re-audited as a step, not as a follow-up                    | A new palette makes Phase 7's measured table describe a build that no longer exists, and an unknown colour utility fails silently with all four checks green             |
+| 5   | The service worker precaches build output only — no API runtime caching | A cached playlist response can deal a deck that no longer matches the real playlist. Offline is worth having; a wrong deck is not                                        |
+| 6   | The update strategy waits rather than `skipWaiting`                     | `GameScreen` and `qrcode` are lazy chunks. An activation mid-game after a redeploy makes the next card a missing-chunk error                                             |
+| 7   | The manifest is a typed module imported by `vite.config.ts`             | Makes the installability-critical fields assertable in a node test. A literal inside a plugin call cannot be imported                                                    |
+| 8   | Icons are PNG, generated from the pre-deletion source in git history    | Manifest WebP support is not universal and iOS ignores manifest icons entirely; upscaling the 240px WebP would produce a soft 512                                        |
+| 9   | The screen-reader pass rides with this plan                             | It is Phase 7's highest-value outstanding check and it covers the component this plan is rebuilding around                                                               |
+| 10  | `--color-page` and `--color-surface` are expected to stay near-black    | Preserves most of the contrast table, suits an OLED phone, and is what makes a neon ring read as neon. Step 1 may overturn it, but it is the starting position           |
 
 ---
 
@@ -420,18 +452,18 @@ including all three surfaces, so **the only rows this plan adds to the contrast 
 tokens that did not exist**, and every pair Phase 7 measured is still that ratio. Open question 3
 above is why.
 
-| Token                 | Value                        | From the mockup    | Notes                                                                     |
-| --------------------- | ---------------------------- | ------------------ | ------------------------------------------------------------------------- |
-| `--color-ring-from`   | `oklch(88% 0.2 152)`         | the green stop     | The ring's first stop, and the value `--color-fg-year` copies              |
-| `--color-ring-via`    | `oklch(85% 0.13 205)`        | the cyan stop      | The middle stop, and what `--color-ring-dim` is a darkened version of      |
-| `--color-ring-to`     | `oklch(65% 0.25 310)`        | the magenta stop   | The darkest of the three at 4.13:1 on the reveal face — still over 3:1     |
-| `--color-ring-dim`    | `oklch(55% 0.08 205)`        | the stack's edges  | Replaces `border-border` on the backs, which was **1.31:1** — invisible    |
-| `--color-ring-glow`   | `oklch(85% 0.16 175 / 0.3)`  | the outer bloom    | Between the green and cyan stops. Alpha is in the token, not at the call site |
-| `--color-fg-year`     | `oklch(88% 0.2 152)`         | the year, in green | **New**, and the one text colour this plan changes. See note 2            |
-| `--ring-width`        | `2px`                        | —                  | 2px at the 288px ceiling and at the 185px floor alike; it must stay crisp  |
-| `--ring-glow-blur`    | `1.25rem`                    | —                  | 20px of bloom                                                             |
-| `--ring-glow-spread`  | `-0.25rem`                   | —                  | Negative, so the bloom hugs the ring instead of washing the page           |
-| `--radius-card`       | `1rem`                       | —                  | Exactly the `rounded-2xl` it replaces in three places. Nothing moves       |
+| Token                | Value                       | From the mockup    | Notes                                                                         |
+| -------------------- | --------------------------- | ------------------ | ----------------------------------------------------------------------------- |
+| `--color-ring-from`  | `oklch(88% 0.2 152)`        | the green stop     | The ring's first stop, and the value `--color-fg-year` copies                 |
+| `--color-ring-via`   | `oklch(85% 0.13 205)`       | the cyan stop      | The middle stop, and what `--color-ring-dim` is a darkened version of         |
+| `--color-ring-to`    | `oklch(65% 0.25 310)`       | the magenta stop   | The darkest of the three at 4.13:1 on the reveal face — still over 3:1        |
+| `--color-ring-dim`   | `oklch(55% 0.08 205)`       | the stack's edges  | Replaces `border-border` on the backs, which was **1.31:1** — invisible       |
+| `--color-ring-glow`  | `oklch(85% 0.16 175 / 0.3)` | the outer bloom    | Between the green and cyan stops. Alpha is in the token, not at the call site |
+| `--color-fg-year`    | `oklch(88% 0.2 152)`        | the year, in green | **New**, and the one text colour this plan changes. See note 2                |
+| `--ring-width`       | `2px`                       | —                  | 2px at the 288px ceiling and at the 185px floor alike; it must stay crisp     |
+| `--ring-glow-blur`   | `1.25rem`                   | —                  | 20px of bloom                                                                 |
+| `--ring-glow-spread` | `-0.25rem`                  | —                  | Negative, so the bloom hugs the ring instead of washing the page              |
+| `--radius-card`      | `1rem`                      | —                  | Exactly the `rounded-2xl` it replaces in three places. Nothing moves          |
 
 **A second accent family is now a stated decision rather than an accident.** `--color-accent`
 (emerald) remains the **action** colour — Start, Play again, the Play control — and the ring is
@@ -452,3 +484,151 @@ the same silent-failure shape as the unknown-colour-utility bug this repo alread
 A flat bright green measures **11.30:1** on the reveal face, is one number a future session can
 re-check, and cannot fail to a blank slot. `--color-fg-strong` (14.48:1) is what it replaces, so the
 year gets more colour and keeps well over its 3:1 large-text floor.
+
+### 3. Neither ring utility sets `position`, and the reflex fix is the bug (step 3)
+
+`card-ring`'s gradient band is a `::before` with `position: absolute`, which needs a positioned
+ancestor — so the obvious move is `position: relative` inside the utility. **That would be a real
+bug here.** Both call sites are already `absolute inset-0` (the two faces in `Card.tsx`, the backs in
+`CardStack.tsx`), the two declarations land in the same cascade layer, and which one wins depends on
+the order Tailwind happens to emit two custom utilities in. If `relative` won, both faces would drop
+out of absolute positioning and stack in flow — the card would come apart.
+
+So the contract is **the caller is positioned**, and it is pinned at both ends in the house style for
+anything whose middle is untestable: `index.css.test.ts` asserts neither utility declares a
+`position`, and `Card.test.tsx` / `CardStack.test.tsx` assert `absolute` sits beside the ring class
+on every element that carries it.
+
+### 4. The mask needed no hand-written prefixes, and the grep is how that was established (step 8)
+
+The gradient border is the standard two-layer mask subtraction — `content-box` layer excluded from a
+`border-box` layer, leaving the `padding: var(--ring-width)` band. `mask-composite: exclude` is the
+load-bearing declaration and the one with the least uniform support, so step 8's grep over
+`dist/assets/*.css` was checking for more than the class name.
+
+**Lightning CSS expands and prefixes it automatically.** The authored two-line `mask` shorthand comes
+out as the full longhand set with `-webkit-mask-image`, `-webkit-mask-clip`, `-webkit-mask-origin` and
+`-webkit-mask-composite: xor` beside every standard property. Nothing had to be written by hand, and
+now nothing should be: adding prefixes manually would duplicate what the pipeline already emits.
+
+All 14 new names — ten tokens, two utilities, `rounded-card` and `text-fg-year` — emit rules.
+
+### 5. The contrast calculator was validated before it was trusted (step 6)
+
+A new contrast script producing plausible numbers is worth very little, so it was pointed at
+**Phase 7's 16 recorded ratios first** and had to reproduce every one to the last recorded digit
+before it was used on a new value. It did — but not on the first attempt, and the discrepancy is the
+useful part:
+
+**Alpha compositing must be done on gamma-encoded sRGB, not in linear light.** Two of the sixteen
+disagreed until that was fixed. `--color-fg` at `--opacity-disabled` over `--color-surface-raised`
+came out at **8.72:1** against the true **5.94:1** — a two-and-a-half-stop error, in the direction
+that makes a failure look like a pass. Without Phase 7's numbers to check against, that error would
+have been invisible and the new table would have been quietly wrong. Recorded in
+`docs/agent_findings.md`.
+
+### 6. Step 10's premise was wrong: the two logos are different artwork (step 10)
+
+The step says to recover the pre-deletion source "rather than upscaling `logo.webp`", which assumes
+the WebP is a re-encode of the PNG. **It is not.** Both changed in commit `5e178f6`: the 1.26 MB
+`logo.png` was deleted and a 20,610-byte `logo.webp` was added in the same commit, and they are
+**different images** — the PNG is the "PLAYLIST HITSTER" card-stack wordmark, the WebP was a circular
+neon "HITSTER". Phase 7's note that the favicon "replaced a 1.26 MB PNG" is true about the bytes and
+silent about the artwork, so nothing recorded that the brand had changed.
+
+Escalated rather than guessed, because a home-screen icon is an identity decision. **The developer
+chose one identity everywhere** (2026-08-06): all four PWA icons _and_ a regenerated `logo.webp` come
+from the recovered 1254×1254 source, which is also the mark the redesign's own reference —
+`docs/plans/custom-hitster-mockup.png` — draws in its header. The favicon came out **smaller** than
+the file it replaced (10,376 vs 20,610 bytes).
+
+The maskable variant was sized by measurement rather than by a guessed padding: the artwork's content
+radius is 95.1% of the source's half-width, so drawing the whole square at 84% of the canvas puts
+content at a 204.9px radius against the 204.8px safe radius of the 80% circle. Verified by rendering
+it under a simulated circular mask; nothing is clipped.
+
+### 7. Five duplicate precache entries, benign today and a build failure tomorrow (step 12)
+
+The step asks for the lazy chunks to be _verified_ in the precache manifest rather than assumed. They
+are all there — and the same inspection found **five duplicated entries**: both 512s, the 192, the
+favicon and the apple-touch-icon each appeared twice.
+
+Two overlapping causes, both removed. `includeAssets` listed files that `globPatterns` already matched
+(`public/` is copied to the build root, and the glob covers `png`/`webp`), and the plugin adds every
+manifest-declared icon itself, which the glob was matching a second time — so `globIgnores:
+['pwa-*.png']` leaves those three to the plugin while keeping `apple-touch-icon.png`, which is
+referenced from `index.html` rather than the manifest and is therefore only reachable via the glob.
+
+Worth doing rather than tolerating: the revisions were identical, so workbox deduplicated silently
+instead of throwing `add-to-cache-list-conflicting-entries`. It was invisible, and it would have
+become a **build-time throw** the moment the two paths disagreed about a revision. 19 entries now,
+no duplicates, nothing missing.
+
+### 8. The ring was rendered in a real browser, because jsdom cannot (steps 4, 8)
+
+Class-name assertions are the automated ceiling, and they say nothing about whether a masked
+pseudo-element and two layered `box-shadow`s actually paint. So the built stylesheet was loaded into
+a throwaway static page reproducing `Card`'s and `CardStack`'s exact class strings, and screenshotted
+in Chrome.
+
+The ring paints: a green → cyan → magenta band following the card's corners, on both faces, with the
+year in neon green on the reveal side. **The glow was retuned as a result** — at the first values
+(`0.3` alpha, `1.25rem` blur) the bloom was barely perceptible against the page, so
+`--color-ring-glow` went to `0.45` and `--ring-glow-blur` to `1.75rem`. That is the one value in
+note 1's table that was set by looking rather than by measuring, and it is the only kind of value
+that should be.
+
+**This is not a substitute for steps 15–17.** It is one viewport, one browser, no OS preferences, no
+assistive technology and no Lighthouse.
+
+### 9. The two peeking backs do not render at all on a full-height card (found in step 4)
+
+The most important thing this plan turned up, and it is **pre-existing rather than caused here** —
+Phase 5's `BACK_OFFSET_PX = 10` and `BACK_SCALE_STEP = 0.04`, which `AGENTS.md` already records as
+numbers "chosen by eye" that "have never been seen on a phone". They have now been seen, and they do
+not work at the card's full height.
+
+Measured in the browser at the card's 448px ceiling, via `getBoundingClientRect`:
+
+| Element | Height | Peek below the card | Inset each side |
+| ------- | ------ | ------------------- | --------------- |
+| back 1  | 430.08 | **1.04px**          | 5.76px          |
+| back 2  | 412.16 | **2.08px**          | 11.52px         |
+
+`scale()` is centre-origin, so it pulls the bottom edge **up** by `(H / 2) × step` — 8.96px at
+H = 448 — while `translateY` only pushes it **down** by 10px. Net peek is 1px and 2px, on the bottom
+edge only, and the card's own 2px ring covers it completely. Every other side is inset, i.e. hidden
+behind the card.
+
+**The cue degrades as the card grows, which is backwards.** At the 288px floor the inset is 5.76px
+against the same 10px offset, so back 1 peeks by a marginal 4.24px. The condition for any visible
+peek is `BACK_OFFSET_PX > (H / 2) × BACK_SCALE_STEP`, and nothing enforces it.
+
+**Deliberately NOT fixed here.** It is outside this plan's steps; Phase 7 open question 2 explicitly
+resolved to keep the offset absolute; and `AGENTS.md` names these constants as the first place to look
+for touch problems, so changing them is a deck-feel decision rather than a bug fix. What it does mean
+is that `card-ring-dim` — added by step 4 to take the backs from 1.31:1 to 4.23:1 — **is currently
+inert on a desktop-sized card**, because there is nothing of the backs to see. The colour fix is
+correct and the geometry has to be decided separately.
+
+### 10. `vercel.json` needs no change, and that was checked rather than assumed
+
+The scope table flags the SPA rewrite as a **Review** item with the instruction "verify, do not
+assume". Verified by running the actual pattern — `/((?!api/|@)[^.]*)` — against the paths the worker
+introduces:
+
+| Path                    | Result                  |
+| ----------------------- | ----------------------- |
+| `/sw.js`                | served as a file        |
+| `/workbox-*.js`         | served as a file        |
+| `/registerSW.js`        | served as a file        |
+| `/manifest.webmanifest` | served as a file        |
+| `/pwa-512x512.png`      | served as a file        |
+| `/api/year`             | served as a file        |
+| `/`, `/anything`        | rewritten to index.html |
+
+The `[^.]*` term is what does it: every new path contains a dot, so none of them can match, and the
+capture group cannot span one. **No edit to `vercel.json`.** Worth having checked rather than reasoned
+about loosely — a rewritten `/sw.js` would serve `index.html` with a 200 and an HTML content type,
+which registers as a script-evaluation failure rather than a 404 and would have been diagnosed as a
+worker bug.

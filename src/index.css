@@ -232,7 +232,7 @@
    * strength is tunable from this block like everything else -- a `box-shadow`
    * colour cannot take a Tailwind opacity modifier anyway.
    */
-  --color-ring-glow: oklch(85% 0.16 175 / 0.3);
+  --color-ring-glow: oklch(85% 0.16 175 / 0.45);
 
   /*
    * Ring width, and it is one value for the live card and the backs both.
@@ -250,7 +250,7 @@
    * 4px, the halo reads as light coming off the edge rather than as a drop
    * shadow under the whole card.
    */
-  --ring-glow-blur: 1.25rem;
+  --ring-glow-blur: 1.75rem;
   --ring-glow-spread: -0.25rem;
 
   /*
