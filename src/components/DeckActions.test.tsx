@@ -519,8 +519,9 @@ describe('DeckActions', () => {
      *  The gate exists because an export taken mid-crawl prints a deck
      *  that is QUIETLY short. It does not exist because a short deck is
      *  never wanted: somebody who wants to start playing with 6 of 8
-     *  cards is making a trade, and the caption plus the "N cards left
-     *  out" line are what make it a trade rather than a surprise.
+     *  cards is making a trade, and the "N cards left out" line is what
+     *  makes it a trade rather than a surprise -- which is why the test
+     *  below asserts that count rather than only the download.
      *
      *  The two properties these tests pin: the export HAPPENS, and the
      *  wait SURVIVES it -- the complete deck still arrives by itself.
@@ -534,15 +535,11 @@ describe('DeckActions', () => {
       return rendered;
     }
 
-    it('should offer the partial print beside Cancel and say what it prints', () => {
-      const { container } = startWait();
+    it('should offer the partial print beside Cancel', () => {
+      startWait();
 
       expect(screen.queryByRole('button', { name: /print so far/i })).not.toBeNull();
       expect(screen.queryByRole('button', { name: /^cancel$/i })).not.toBeNull();
-      // The caption is what makes the omission informed rather than silent, so it is asserted
-      // rather than left to the button's label.
-      expect(container.textContent ?? '').toMatch(/only the cards that already have a year/i);
-      expect(container.textContent ?? '').toMatch(/the wait keeps running/i);
     });
 
     it('should export the resolved cards and report how many were left out', async () => {

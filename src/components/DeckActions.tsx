@@ -371,14 +371,6 @@ export function DeckActions({
           </p>
         </div>
 
-        {/*
-          Static copy, so it is deliberately OUTSIDE the live region above: it never changes, and
-          the region's job is to announce the two lines that do.
-        */}
-        <p className="max-w-narrow text-xs text-fg-muted">
-          “Print so far” prints only the cards that already have a year — the wait keeps running.
-        </p>
-
         <div className="flex flex-wrap items-center justify-center gap-3">
           {/*
             ===================================================================
@@ -389,9 +381,10 @@ export function DeckActions({
              that is QUIETLY short -- the omission is discoverable only by
              counting printed paper. It does not exist because a short deck is
              never what the player wants: somebody printing 40 of 60 cards to
-             start a game now is making an informed trade, and the caption
-             above plus the "N cards left out" line below are what make it
-             informed. What the gate rules out is the SILENT version.
+             start a game now is making an informed trade. What the gate rules
+             out is the SILENT version, and what answers that here is the
+             "N cards left out, no year yet" line below -- the label says what
+             the button prints, so a caption repeating it was cut as noise.
 
              It does not touch `hasAskedToPrint`, so the wait survives the
              press and the full deck still exports itself when the last year

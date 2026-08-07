@@ -2636,9 +2636,16 @@ Follow-up to this morning's year gate, from a complaint about the wait: the gate
 export taken mid-crawl prints a deck that is **quietly** short, and wrong if it is read as "a short
 deck is never wanted". Somebody who wants to start playing with 40 of 60 cards while the rest look up
 is making a trade. **What the gate actually protects is the player's knowledge of the omission**, and
-the fix is therefore copy at both ends of the press rather than a lifted gate: a caption before it
-("prints only the cards that already have a year — the wait keeps running") and the excluded **count**
-after it, which the export already reported and which is now the ordinary case rather than a residue.
+the fix is therefore disclosure rather than a lifted gate: the excluded **count** after the press,
+which the export already reported and which is now the ordinary case rather than a residue.
+
+A caption above the buttons ("prints only the cards that already have a year — the wait keeps
+running") was written first and then **cut on review the same day**. Worth recording as a judgement
+rather than a fact: the button's label already says what it prints, the wait already carries two
+sentences, and a third made the panel read as an explanation of itself. The consequence is that
+"PDF downloaded — N cards left out, no year yet" is the **whole** of the disclosure — so that line is
+the one not to weaken, and a future edit that drops the count for a bare "PDF downloaded" takes the
+feature back to the silent short deck the gate exists to prevent.
 
 So the wait has a second button, and four things fell out of adding it.
 

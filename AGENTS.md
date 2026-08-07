@@ -120,8 +120,9 @@ beside the reducer and is the first caller `resolvedCount` has had since 2026-08
 
 **The wait offers "Print so far", and it does not contradict the gate — it is the gate's informed
 version** (2026-08-07). What the gate refuses is a deck that is **quietly** short; a player who
-presses this is told the count that was left out, in the caption before the press and in
-"PDF downloaded — N cards left out, no year yet" after it. Three things to know. It does **not touch
+presses this is told the count that was left out, in "PDF downloaded — N cards left out, no year yet".
+**That line is now the whole of the disclosure** — an explanatory caption above the buttons was
+written and then cut as noise, so do not weaken the message. Three things to know. It does **not touch
 `hasAskedToPrint`**, so the wait survives its own export and the complete deck still arrives by
 itself — **two files, both asked for**, which is the behaviour, not a double-export bug. **`role="status"`
 moved off the wait's outer div onto the two sentences inside it**, because the button's label counts
