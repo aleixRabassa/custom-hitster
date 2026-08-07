@@ -122,14 +122,19 @@ buttons already fill.
         rows are labelled with their position (e.g. "Playlist link 2") so each input's accessible name
         is unique. Keep the wrapping `<label>` and add **no** `aria-label` — the WCAG 2.5.3 failure
         documented in that file is exactly what an `aria-label` here would reintroduce.
-  - [x] Add the **"+" button** below the rows: `type="button"`, an accessible name of "Add another
-        playlist" (the `+` glyph is `aria-hidden` decoration, the same split `NoticeBanner`'s Dismiss and
-        the library's remove button already use), `touch-target`, `focus-visible:focus-ring`, and
-        disabled while loading. At `MAX_DECK_PLAYLISTS` rows it is **unmounted rather than disabled**
-        (amended 2026-08-07): a control offering an action that can never succeed is noise on a
-        pre-start surface, and a screen-reader user has to walk past it to reach Start. Either way the
-        cap hint is required — a control that vanishes with no explanation reads as broken just as a
-        dead one does.
+  - [x] Add the **add-playlist control** below the rows: `type="button"`, an accessible name of "Add
+        another playlist", `touch-target`, `focus-visible:focus-ring`, and disabled while loading.
+        Amended 2026-08-07 on two points. It is a **full-width dashed ghost row** rather than a small
+        `self-start` square with a bare `+` glyph — the square put a third width into a column that
+        otherwise has one, and floated in its own slot belonging neither to the rows nor to Start;
+        the ghost row takes the slot shape of a playlist row, so it reads as the next box the player
+        can create. The sentence is therefore **visible text and the `aria-label` is gone** (the `+`
+        stays `aria-hidden` decoration): the name now matches the visible label, which is the same
+        WCAG 2.5.3 point the inputs above were fixed for. And at `MAX_DECK_PLAYLISTS` rows it is
+        **unmounted rather than disabled** — a control offering an action that can never succeed is
+        noise on a pre-start surface, and a screen-reader user has to walk past it to reach Start.
+        Either way the cap hint is required, in the same full-width slot: a control that vanishes with
+        no explanation reads as broken just as a dead one does.
   - [x] Add a per-row remove button, rendered only when there is more than one row, named for its row
         ("Remove playlist 3") for the same reason the library's remove button names its playlist.
         Removing a row must not renumber the values under the player's cursor — key the rows on a

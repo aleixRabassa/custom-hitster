@@ -396,14 +396,28 @@ export function LandingScreen({
         {/*
           The "+". `type="button"`, so it cannot submit the form it lives inside.
 
-          The glyph is `aria-hidden` decoration and the accessible name is the sentence -- the same
-          split `NoticeBanner`'s Dismiss and the library's remove button already use, and the
-          reason a name of "+" would be useless to anyone not looking at the screen.
+          =============================================================================
+           A FULL-WIDTH GHOST ROW, NOT A SMALL SQUARE BUTTON (amended 2026-08-07).
 
-          UNMOUNTED AT THE CAP RATHER THAN DISABLED: a control offering an action that can never
-          succeed is noise on a pre-start surface, and it is also a button a screen-reader user has
-          to walk past to reach Start. The sentence below replaces it, so the cap is still said out
-          loud -- which is the half that must not be dropped with it.
+           It was `self-start` with `px-3 py-1` and a bare `+`, which put a THIRD width
+           into a column that otherwise has exactly one -- the full-width inputs -- and
+           left it floating in its own slot between the rows and Start, belonging to
+           neither. It now occupies the same slot shape as a playlist row (`w-full`,
+           the input's own `rounded-lg` / `px-3` / `py-2`) with a DASHED border, so it
+           reads as the next box the player can create, which is what pressing it does.
+
+           The visible sentence is what lets the `aria-label` go: the accessible name
+           now comes from the text content, so the name and the visible label MATCH.
+           An `aria-label` duplicating visible text is the redundancy the inputs above
+           were fixed for (WCAG 2.5.3), and a name of "+" was useless to anyone not
+           looking at the screen. The glyph stays `aria-hidden` decoration.
+
+           UNMOUNTED AT THE CAP RATHER THAN DISABLED: a control offering an action that
+           can never succeed is noise on a pre-start surface, and it is also a button a
+           screen-reader user has to walk past to reach Start. The sentence below takes
+           over the same full-width slot, so the cap is still said out loud -- which is
+           the half that must not be dropped with it -- and the layout barely moves.
+          =============================================================================
         */}
         {!canAddRow ? null : (
           <button
@@ -412,10 +426,10 @@ export function LandingScreen({
               setRows((current) => [...current, ...makeRows([''])]);
             }}
             disabled={isLoading}
-            aria-label="Add another playlist"
-            className="touch-target self-start rounded-lg border border-border px-3 py-1 text-sm text-fg-secondary hover:border-border-strong hover:text-fg focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)"
+            className="touch-target flex w-full items-center gap-2 rounded-lg border border-dashed border-border px-3 py-2 text-sm text-fg-secondary hover:border-border-strong hover:bg-surface hover:text-fg focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)"
           >
             <span aria-hidden="true">+</span>
+            Add another playlist
           </button>
         )}
 

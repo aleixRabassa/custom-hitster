@@ -2609,3 +2609,21 @@ form.
 General shape worth remembering: **swapping `disabled` for unmounting turns a no-op interaction into
 a query failure**, so any test that relied on pressing a dead control has to be re-read, and the
 four checks will not point at the reason.
+
+**Follow-up the same day — the "+" is also a full-width ghost row now, and that is what let the
+`aria-label` go.** The button was `self-start` with `px-3 py-1` and a bare `+`: a third width in a
+column whose only other width is the full-bleed inputs, sitting in its own slot between the rows and
+Start and belonging to neither. It is now `w-full` with a **dashed** border and the input's own
+`rounded-lg px-3 py-2`, so it occupies the slot shape of a playlist row and reads as the next box the
+player can create. `hover:bg-surface` is deliberate: `--color-surface` is the inputs' own background,
+so hovering fills the ghost in as a real box, and it introduces **no new contrast pair** (`text-fg` on
+`bg-surface` is what every input already renders).
+
+The accessibility half is the part worth keeping: the sentence is now **visible text**, so the
+accessible name comes from the text content and the `aria-label` was removed. A name of "+" is
+useless to anyone not looking at the screen and an `aria-label` duplicating visible text is exactly
+the redundancy the inputs above were fixed for (WCAG 2.5.3). `LandingScreen.test.tsx` gains
+`hasAttribute('aria-label') === false` beside a `textContent` check, because **every existing query
+was by accessible name and would pass identically with the attribute back** — the role query alone
+cannot tell the two shapes apart, which is why the negative attribute assertion has to be explicit.
+Same pattern as that file's existing input-label test.

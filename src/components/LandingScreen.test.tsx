@@ -501,6 +501,20 @@ describe('LandingScreen', () => {
       expect(rowInput(0).value).toBe('');
     });
 
+    it('should label the add button with visible text rather than an aria-label', () => {
+      // The button was a bare `+` whose only name was an `aria-label`, i.e. a name nobody looking at
+      // the screen could read and a glyph nobody using a screen reader could. It is now a
+      // full-width ghost row carrying the sentence as VISIBLE text, so the accessible name and the
+      // visible label are the same string -- the same WCAG 2.5.3 reasoning as the inputs above, and
+      // the reason the attribute could go.
+      renderLanding();
+
+      const add = screen.getByRole('button', { name: 'Add another playlist' });
+
+      expect(add.hasAttribute('aria-label')).toBe(false);
+      expect(add.textContent).toContain('Add another playlist');
+    });
+
     it('should add a row when the add button is pressed', () => {
       renderLanding();
 
