@@ -125,8 +125,11 @@ buttons already fill.
   - [x] Add the **"+" button** below the rows: `type="button"`, an accessible name of "Add another
         playlist" (the `+` glyph is `aria-hidden` decoration, the same split `NoticeBanner`'s Dismiss and
         the library's remove button already use), `touch-target`, `focus-visible:focus-ring`, and
-        disabled at `MAX_DECK_PLAYLISTS` rows or while loading. When disabled, render a short hint that
-        five is the maximum — a disabled control with no explanation reads as broken.
+        disabled while loading. At `MAX_DECK_PLAYLISTS` rows it is **unmounted rather than disabled**
+        (amended 2026-08-07): a control offering an action that can never succeed is noise on a
+        pre-start surface, and a screen-reader user has to walk past it to reach Start. Either way the
+        cap hint is required — a control that vanishes with no explanation reads as broken just as a
+        dead one does.
   - [x] Add a per-row remove button, rendered only when there is more than one row, named for its row
         ("Remove playlist 3") for the same reason the library's remove button names its playlist.
         Removing a row must not renumber the values under the player's cursor — key the rows on a

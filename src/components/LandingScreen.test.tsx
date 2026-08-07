@@ -514,20 +514,22 @@ describe('LandingScreen', () => {
     it('should not add more rows than the maximum', () => {
       // The cap is `MAX_DECK_PLAYLISTS` -- the same constant `deck-link.ts` rejects an over-long
       // link with, so the form cannot build a deck the link format could not describe.
+      //
+      // Pressed exactly to the cap and no further, because THE BUTTON IS GONE at that point: the
+      // "+" is unmounted rather than disabled, so a sixth press has nothing to click and
+      // `pressAdd()` would fail on the query rather than on an assertion.
       renderLanding();
 
-      for (let index = 0; index < MAX_DECK_PLAYLISTS + 3; index += 1) pressAdd();
+      for (let index = 1; index < MAX_DECK_PLAYLISTS; index += 1) pressAdd();
 
       expect(screen.getAllByRole('textbox')).toHaveLength(MAX_DECK_PLAYLISTS);
-      expect(
-        (screen.getByRole('button', { name: 'Add another playlist' }) as HTMLButtonElement)
-          .disabled,
-      ).toBe(true);
+      expect(screen.queryByRole('button', { name: 'Add another playlist' })).toBeNull();
     });
 
-    it('should explain why the add button is disabled at the maximum', () => {
-      // A disabled control with no explanation reads as broken. This is the sentence that says the
-      // cap out loud rather than leaving the player pressing a dead button.
+    it('should explain the cap once the add button is gone', () => {
+      // A control that vanishes with no explanation reads as broken just as a dead one does. This
+      // is the sentence that says the cap out loud in the space the "+" left, and it is why the
+      // button may be unmounted at all.
       renderLanding();
 
       expect(screen.queryByText(/is the maximum/i)).toBeNull();

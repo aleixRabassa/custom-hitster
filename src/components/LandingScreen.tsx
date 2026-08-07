@@ -399,22 +399,30 @@ export function LandingScreen({
           The glyph is `aria-hidden` decoration and the accessible name is the sentence -- the same
           split `NoticeBanner`'s Dismiss and the library's remove button already use, and the
           reason a name of "+" would be useless to anyone not looking at the screen.
+
+          UNMOUNTED AT THE CAP RATHER THAN DISABLED: a control offering an action that can never
+          succeed is noise on a pre-start surface, and it is also a button a screen-reader user has
+          to walk past to reach Start. The sentence below replaces it, so the cap is still said out
+          loud -- which is the half that must not be dropped with it.
         */}
-        <button
-          type="button"
-          onClick={() => {
-            setRows((current) => [...current, ...makeRows([''])]);
-          }}
-          disabled={!canAddRow || isLoading}
-          aria-label="Add another playlist"
-          className="touch-target self-start rounded-lg border border-border px-3 py-1 text-sm text-fg-secondary hover:border-border-strong hover:text-fg focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)"
-        >
-          <span aria-hidden="true">+</span>
-        </button>
+        {!canAddRow ? null : (
+          <button
+            type="button"
+            onClick={() => {
+              setRows((current) => [...current, ...makeRows([''])]);
+            }}
+            disabled={isLoading}
+            aria-label="Add another playlist"
+            className="touch-target self-start rounded-lg border border-border px-3 py-1 text-sm text-fg-secondary hover:border-border-strong hover:text-fg focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)"
+          >
+            <span aria-hidden="true">+</span>
+          </button>
+        )}
 
         {/*
-          A disabled control with no explanation reads as broken, so the cap says itself out loud.
-          Not a `role="alert"`: nothing failed, and pressing "+" a sixth time is not an error.
+          A control that VANISHES with no explanation reads as broken just as a dead one does, so the
+          cap says itself out loud in the space the "+" left. Not a `role="alert"`: nothing failed,
+          and reaching five playlists is not an error.
         */}
         {canAddRow ? null : (
           <p className="text-xs text-fg-muted">

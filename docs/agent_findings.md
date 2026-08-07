@@ -2583,3 +2583,29 @@ dedupe, the number of `/api/playlist` requests a five-row submit makes under Rea
 the bundle delta. All three need the UI. Plan 1's own open question 1 IS resolved:
 `pdfFileName("Rock Classics +2 more")` → `hitster-rock-classics-2-more.pdf`, because the existing
 `[^a-z0-9]+` → `-` collapse eats the `+` before it can reach a filesystem.
+
+---
+
+## 2026-08-07 — The landing screen's "+" is now unmounted at the cap, and one test helper became unsafe past five rows
+
+The add-playlist button was `disabled={!canAddRow || isLoading}`; it is now rendered only while
+`canAddRow`, still `disabled={isLoading}`. The cap hint stays and its justification shifts rather
+than disappearing: **a control that vanishes with no explanation reads as broken exactly as a dead
+one does**, so the sentence "5 playlists is the maximum for one deck." is the half that must not be
+dropped along with the button. `plan.multi-playlist-ui.md` step 2's checkbox said "disabled at
+`MAX_DECK_PLAYLISTS` rows" and is amended in place.
+
+**The gotcha is in the tests, not the component.** `LandingScreen.test.tsx`'s `pressAdd()` helper is
+`fireEvent.click(getByRole('button', { name: 'Add another playlist' }))`. While the button was merely
+disabled, over-pressing it was harmless — `fireEvent` on a disabled button dispatches nothing and the
+row count simply stopped growing, which is how "should not add more rows than the maximum" was
+written: press `MAX + 3` times, then assert five textboxes. With the button unmounted, the sixth
+`pressAdd()` throws in `getByRole` instead, and **the failure names a missing button rather than the
+cap the test is about**. Every loop that walks the form to its maximum must now stop exactly at it
+(`for (let i = 1; i < MAX_DECK_PLAYLISTS; i += 1)`, from the one row the form starts with). Two such
+loops exist — the cap test and the leak assertion, which deliberately re-runs against a fully grown
+form.
+
+General shape worth remembering: **swapping `disabled` for unmounting turns a no-op interaction into
+a query failure**, so any test that relied on pressing a dead control has to be re-read, and the
+four checks will not point at the reason.
