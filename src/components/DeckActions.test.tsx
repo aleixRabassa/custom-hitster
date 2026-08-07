@@ -11,11 +11,59 @@
  */
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DeckActions } from './DeckActions';
 import { fixtureDeck } from './__fixtures__/cards';
 import type { DeckActionsProps } from './DeckActions';
+
+/**
+ * Both halves of the export are doubled, and neither is doubled for speed.
+ *
+ * `qrcode`'s browser build draws through `<canvas>`, which jsdom does not implement, and jsPDF
+ * assembles a real document and hands it to a download jsdom has nowhere to put. Between them, an
+ * un-doubled export fails for reasons that have nothing to do with this component -- which is why
+ * every test here before 2026-08-07 stopped at `nothing-to-print`, the one outcome reached before
+ * either import. "Print so far" made a FINISHED export something the player can see mid-wait, so
+ * the happy path had to become assertable.
+ *
+ * `vi.mock` intercepts by specifier rather than by import form, so the same doubles serve the
+ * dynamic `import()`s in `usePdfExport` -- the finding `QrCode.test.tsx` records.
+ */
+const { toDataURLMock, saveMock } = vi.hoisted(() => ({
+  // `vi.hoisted` is required: the factories below are hoisted above ordinary `const` declarations.
+  toDataURLMock: vi.fn<(text: string, options?: unknown) => Promise<string>>(),
+  saveMock: vi.fn<(fileName: string) => void>(),
+}));
+
+vi.mock('qrcode', () => ({ toDataURL: toDataURLMock }));
+
+vi.mock('jspdf', () => {
+  /** Every call `usePdfExport` makes, with only the two that RETURN anything doing any work. */
+  class FakeDoc {
+    setFont() {}
+    setDrawColor() {}
+    setLineWidth() {}
+    setTextColor() {}
+    setFontSize() {}
+    rect() {}
+    addImage() {}
+    addPage() {}
+    text() {}
+
+    // The real one wraps to the card's width. One line per string is enough for a test that never
+    // measures the page -- `pdf-sheet.ts` owns the geometry and has its own tests.
+    splitTextToSize(text: string): string[] {
+      return [text];
+    }
+
+    save(fileName: string): void {
+      saveMock(fileName);
+    }
+  }
+
+  return { jsPDF: FakeDoc };
+});
 
 const PLAYLIST_ID = '37i9dQZF1DXcBWIGoYBM5M';
 const SECOND_PLAYLIST_ID = '2zmXlpkOMN92NlQaE2M62c';
@@ -58,6 +106,16 @@ function stubClipboard(writeText: unknown): void {
 }
 
 describe('DeckActions', () => {
+  beforeEach(() => {
+    // Re-applied per test rather than set in the factory above, which runs once: `restoreAllMocks`
+    // below would otherwise leave `toDataURL` returning `undefined` for every test but the first.
+    toDataURLMock.mockReset();
+    toDataURLMock.mockImplementation((text) =>
+      Promise.resolve(`data:image/png;base64,QR(${text})`),
+    );
+    saveMock.mockReset();
+  });
+
   afterEach(() => {
     cleanup();
     // Leaves jsdom's own `navigator.clipboard` shape behind rather than a stub from the last test.
@@ -448,6 +506,117 @@ describe('DeckActions', () => {
       for (const card of fixtureDeck) {
         expect(text).not.toContain(card.title);
         expect(text).not.toContain(card.artist);
+      }
+    });
+  });
+
+  describe('printing what has already arrived', () => {
+    /**
+     * ===================================================================
+     *  "PRINT SO FAR" IS THE INFORMED VERSION OF WHAT THE YEAR GATE
+     *  REFUSES (2026-08-07).
+     *
+     *  The gate exists because an export taken mid-crawl prints a deck
+     *  that is QUIETLY short. It does not exist because a short deck is
+     *  never wanted: somebody who wants to start playing with 6 of 8
+     *  cards is making a trade, and the caption plus the "N cards left
+     *  out" line are what make it a trade rather than a surprise.
+     *
+     *  The two properties these tests pin: the export HAPPENS, and the
+     *  wait SURVIVES it -- the complete deck still arrives by itself.
+     * ===================================================================
+     */
+    function startWait(overrides: Partial<DeckActionsProps> = {}) {
+      const rendered = renderActions({ deck: fixtureDeck, pendingYearCount: 2, ...overrides });
+
+      fireEvent.click(screen.getByRole('button', { name: /print as pdf cards/i }));
+
+      return rendered;
+    }
+
+    it('should offer the partial print beside Cancel and say what it prints', () => {
+      const { container } = startWait();
+
+      expect(screen.queryByRole('button', { name: /print so far/i })).not.toBeNull();
+      expect(screen.queryByRole('button', { name: /^cancel$/i })).not.toBeNull();
+      // The caption is what makes the omission informed rather than silent, so it is asserted
+      // rather than left to the button's label.
+      expect(container.textContent ?? '').toMatch(/only the cards that already have a year/i);
+      expect(container.textContent ?? '').toMatch(/the wait keeps running/i);
+    });
+
+    it('should export the resolved cards and report how many were left out', async () => {
+      // The fixture deck holds 6 cards with a year, one with `null` and one with `undefined`. Both
+      // of the latter are dropped by `selectPrintableCards`, and the count is the honest part.
+      startWait();
+
+      fireEvent.click(screen.getByRole('button', { name: /print so far/i }));
+
+      // Synchronous, because `usePdfExport` publishes `working` before it awaits either import.
+      expect(screen.queryByRole('button', { name: /building pdf… 0\/6/i })).not.toBeNull();
+
+      await waitFor(() => {
+        expect(screen.getByText(/pdf downloaded/i).textContent).toMatch(
+          /2 cards left out, no year yet/i,
+        );
+      });
+
+      expect(saveMock).toHaveBeenCalledTimes(1);
+      expect(toDataURLMock).toHaveBeenCalledTimes(6);
+    });
+
+    it('should keep waiting after the partial print, then export the full deck by itself', async () => {
+      // "El modal continúa el proceso": the press is not an exit. `hasAskedToPrint` is untouched, so
+      // the wait survives its own export and the complete deck still arrives -- two files, both
+      // asked for.
+      const { rerender, props } = startWait();
+
+      fireEvent.click(screen.getByRole('button', { name: /print so far/i }));
+      await waitFor(() => {
+        expect(screen.queryByText(/pdf downloaded/i)).not.toBeNull();
+      });
+
+      expect(screen.queryByText(/waiting for the last years/i)).not.toBeNull();
+      expect(screen.queryByRole('button', { name: /print so far/i })).not.toBeNull();
+
+      // The crawl finishes: the wait ends on its own and the auto-export takes over, exactly as it
+      // does for a player who never pressed this.
+      rerender(<DeckActions {...props} deck={fixtureDeck} pendingYearCount={0} />);
+
+      expect(screen.queryByText(/waiting for the last years/i)).toBeNull();
+      await waitFor(() => {
+        expect(saveMock).toHaveBeenCalledTimes(2);
+      });
+    });
+
+    it('should refuse politely when no year has arrived at all', () => {
+      // The common case on card 1, and it is not a failure: the whole deck is still in flight.
+      startWait({ deck: fixtureDeck.filter((card) => typeof card.year !== 'number') });
+
+      fireEvent.click(screen.getByRole('button', { name: /print so far/i }));
+
+      expect(screen.getByText(/nothing to print/i)).not.toBeNull();
+      // Still waiting -- a refusal is not an exit either.
+      expect(screen.queryByText(/waiting for the last years/i)).not.toBeNull();
+      expect(saveMock).not.toHaveBeenCalled();
+    });
+
+    it('should name no card while a partial export runs or reports', async () => {
+      // The wait mounts beside an UNFLIPPED card, and the cards this export leaves out are exactly
+      // the ones whose answer the player has not seen. A count, never a list -- and the leak rule
+      // covers the DONE message as much as the pending one.
+      const { container } = startWait();
+
+      fireEvent.click(screen.getByRole('button', { name: /print so far/i }));
+      await waitFor(() => {
+        expect(screen.queryByText(/pdf downloaded/i)).not.toBeNull();
+      });
+
+      const text = container.textContent ?? '';
+      for (const card of fixtureDeck) {
+        expect(text).not.toContain(card.title);
+        expect(text).not.toContain(card.artist);
+        if (typeof card.year === 'number') expect(text).not.toContain(String(card.year));
       }
     });
   });

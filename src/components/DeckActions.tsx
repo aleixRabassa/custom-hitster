@@ -58,6 +58,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Spinner } from './Spinner';
 import { buildDeckLink } from '../game/deck-link';
 import { sheetsForDeck, usePdfExport } from '../hooks/usePdfExport';
+import type { PdfExportState } from '../hooks/usePdfExport';
 import type { Card } from '../../shared/types';
 
 export interface DeckActionsProps {
@@ -124,6 +125,11 @@ export interface DeckActionsProps {
    *  "every card in this deck can be printed", because a lookup that finds
    *  nothing removes its card rather than leaving it yearless.
    *
+   *  The wait offers "PRINT SO FAR" (2026-08-07), which is the informed version
+   *  of the thing the gate rules out: it exports the resolved cards NOW, says how
+   *  many were left out, and leaves the wait running so the complete deck still
+   *  arrives. What the gate refuses is a short deck nobody was told about.
+   *
    *  Zero on the end screen in the ordinary case, so nothing changes there.
    * ===========================================================================
    */
@@ -135,6 +141,49 @@ export interface DeckActionsProps {
  * `role="status"` region from announcing anything before it has news.
  */
 type CopyState = 'idle' | 'copied' | 'failed';
+
+/**
+ * What the last export did, or nothing at all.
+ *
+ * ===========================================================================
+ *  THE EXPORT'S OWN LIVE REGION, SEPARATE FROM THE COPY'S: the two can both
+ *  have news, and one region rewritten by two features announces the wrong
+ *  thing at the wrong time. Every message here is a COUNT -- never the title of
+ *  an excluded card (step 20).
+ *
+ *  Extracted from the resolved view on 2026-08-07 because "Print so far" gave
+ *  the WAIT an export to report too, and a partial export is precisely the case
+ *  the excluded count was written for. One component, so the two views cannot
+ *  describe the same `PdfExportState` in two different sets of words.
+ *
+ *  The `excludedCount` and `nothing-to-print` branches survived the year gate
+ *  and are NOT dead code: the gate waits for `year === undefined` to clear,
+ *  while `selectPrintableCards` also drops `year === null`. A live deck holds no
+ *  null years since the 2026-08-05 reversal, but a RESUMED pre-reversal save
+ *  does -- so the two conditions are not the same condition. Under "Print so
+ *  far" both are ordinary rather than residual.
+ * ===========================================================================
+ */
+function ExportMessage({ state }: { state: PdfExportState }) {
+  // `idle` and `working` say nothing: the button label is already carrying the progress, and an
+  // empty region is what keeps this from announcing before it has news.
+  if (state.status === 'idle' || state.status === 'working') return null;
+
+  return (
+    <p
+      role="status"
+      className={`text-center text-xs ${state.status === 'done' ? 'text-fg-secondary' : 'text-warning'}`}
+    >
+      {state.status === 'done'
+        ? state.excludedCount === 0
+          ? 'PDF downloaded'
+          : `PDF downloaded — ${state.excludedCount} ${state.excludedCount === 1 ? 'card' : 'cards'} left out, no year yet`
+        : state.status === 'nothing-to-print'
+          ? 'No card has a year yet, so there is nothing to print'
+          : 'Could not build the PDF'}
+    </p>
+  );
+}
 
 /** Every button here is the app's secondary button. One string, so they cannot drift apart. */
 const BUTTON_CLASSES =
@@ -183,6 +232,10 @@ export function DeckActions({
    * Pressing Print unmounts the button that was focused. Without this, focus falls to `<body>`, and
    * inside `DeckActionsDialog` that also means the Tab trap has nothing to cycle FROM -- the panel
    * would still hold focus, but a keyboard player would have lost their place in it.
+   *
+   * Cancel rather than the "Print so far" beside it, even though the dialog's own convention is that
+   * the first ACTION takes focus: an Enter pressed reflexively on arrival should not spend paper on a
+   * deck that is still filling in. Cancel is the reversible one -- Print is still one Tab away.
    */
   const cancelRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -286,39 +339,102 @@ export function DeckActions({
    *
    * A COUNT, never a list. The cards still looking up a year are the ones whose answer the player
    * has not seen, so naming one here would spoil the card they are looking at.
+   *
+   * ===========================================================================
+   *  `role="status"` IS ON THE TEXT BLOCK, NOT ON THE WHOLE VIEW, AND THAT IS
+   *  WHAT LETS "PRINT SO FAR" REPORT PROGRESS.
+   *
+   *  Its label counts codes as they are generated, and a count that climbs a
+   *  hundred times inside a live region is a hundred announcements. So the region
+   *  wraps exactly the two sentences that are the wait -- the buttons and the
+   *  export's own outcome sit outside it, and the outcome brings the SEPARATE
+   *  region it already had in the resolved view. Same arrangement as down there:
+   *  statuses in dedicated paragraphs, buttons plain.
+   * ===========================================================================
    */
   if (isWaitingForYears) {
     return (
-      <div role="status" className="flex flex-col items-center gap-3 py-2 text-center">
-        <Spinner />
+      <div className="flex flex-col items-center gap-3 text-center">
+        <div role="status" className="flex flex-col items-center gap-3">
+          <Spinner />
 
-        <p className="text-sm font-medium text-fg">Waiting for the last years…</p>
+          <p className="text-sm font-medium text-fg">Waiting for the last years…</p>
+
+          {/*
+            Says what the wait actually is, in the same spirit as the preparing screen's second
+            line. The crawl is paced at one lookup a second by the shared rate gate, so a number
+            here is a rough number of seconds -- which is the only honest expectation available.
+          */}
+          <p className="max-w-narrow text-xs text-fg-muted">
+            {pendingYearCount === 1 ? '1 card is' : `${pendingYearCount} cards are`} still looking
+            up a year.
+          </p>
+        </div>
 
         {/*
-          Says what the wait actually is, in the same spirit as the preparing screen's second line.
-          The crawl is paced at one lookup a second by the shared rate gate, so a number here is a
-          rough number of seconds -- which is the only honest expectation available.
+          Static copy, so it is deliberately OUTSIDE the live region above: it never changes, and
+          the region's job is to announce the two lines that do.
         */}
         <p className="max-w-narrow text-xs text-fg-muted">
-          {pendingYearCount === 1 ? '1 card is' : `${pendingYearCount} cards are`} still looking up
-          a year.
+          “Print so far” prints only the cards that already have a year — the wait keeps running.
         </p>
 
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          {/*
+            ===================================================================
+             THE ESCAPE HATCH FROM THE 2026-08-07 GATE, AND IT IS EXPLICIT
+             RATHER THAN AUTOMATIC.
+
+             The gate exists because an export taken mid-crawl prints a deck
+             that is QUIETLY short -- the omission is discoverable only by
+             counting printed paper. It does not exist because a short deck is
+             never what the player wants: somebody printing 40 of 60 cards to
+             start a game now is making an informed trade, and the caption
+             above plus the "N cards left out" line below are what make it
+             informed. What the gate rules out is the SILENT version.
+
+             It does not touch `hasAskedToPrint`, so the wait survives the
+             press and the full deck still exports itself when the last year
+             lands. Two files, both asked for.
+            ===================================================================
+          */}
+          <button
+            type="button"
+            onClick={() => {
+              exportDeck(deck, playlistName);
+            }}
+            // Disabled only while working: `exportDeck` bumps its own generation counter, so a
+            // second press would abandon the document the first one is half-way through.
+            disabled={pdf.status === 'working'}
+            className={BUTTON_CLASSES}
+          >
+            {pdf.status === 'working'
+              ? `Building PDF… ${pdf.completed}/${pdf.total}`
+              : 'Print so far'}
+          </button>
+
+          {/*
+            Takes focus when the wait begins -- see `cancelRef`. The button that was focused (Print)
+            has just been unmounted, and focus falling to `<body>` would leave a keyboard player with
+            nothing selected in a panel they cannot see the state of.
+          */}
+          <button
+            ref={cancelRef}
+            type="button"
+            onClick={() => {
+              setHasAskedToPrint(false);
+            }}
+            className={BUTTON_CLASSES}
+          >
+            Cancel
+          </button>
+        </div>
+
         {/*
-          Takes focus when the wait begins -- see `cancelRef`. The button that was focused (Print)
-          has just been unmounted, and focus falling to `<body>` would leave a keyboard player with
-          nothing selected in a panel they cannot see the state of.
+          The partial export's outcome, in the same words the resolved view uses -- including the
+          excluded count, which is the whole point here rather than an edge case. Still a COUNT.
         */}
-        <button
-          ref={cancelRef}
-          type="button"
-          onClick={() => {
-            setHasAskedToPrint(false);
-          }}
-          className={BUTTON_CLASSES}
-        >
-          Cancel
-        </button>
+        <ExportMessage state={pdf} />
       </div>
     );
   }
@@ -391,30 +507,7 @@ export function DeckActions({
           : `${pendingYearCount === 1 ? '1 card is' : `${pendingYearCount} cards are`} still looking up a year — printing waits for them all`}
       </p>
 
-      {/*
-        The export's own live region, separate from the copy's: the two can both have news, and one
-        region rewritten by two features announces the wrong thing at the wrong time. Every message
-        here is a COUNT -- never the title of an excluded card (step 20).
-
-        The `excludedCount` and `nothing-to-print` branches survived the year gate and are NOT dead
-        code: the gate waits for `year === undefined` to clear, while `selectPrintableCards` also
-        drops `year === null`. A live deck holds no null years since the 2026-08-05 reversal, but a
-        RESUMED pre-reversal save does -- so the two conditions are not the same condition.
-      */}
-      {pdf.status === 'idle' || pdf.status === 'working' ? null : (
-        <p
-          role="status"
-          className={`text-center text-xs ${pdf.status === 'done' ? 'text-fg-secondary' : 'text-warning'}`}
-        >
-          {pdf.status === 'done'
-            ? pdf.excludedCount === 0
-              ? 'PDF downloaded'
-              : `PDF downloaded — ${pdf.excludedCount} ${pdf.excludedCount === 1 ? 'card' : 'cards'} left out, no year yet`
-            : pdf.status === 'nothing-to-print'
-              ? 'No card has a year yet, so there is nothing to print'
-              : 'Could not build the PDF'}
-        </p>
-      )}
+      <ExportMessage state={pdf} />
 
       {/*
         One live region for both copy outcomes, and it exists only once there is something to say --

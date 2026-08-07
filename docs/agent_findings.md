@@ -2627,3 +2627,55 @@ the redundancy the inputs above were fixed for (WCAG 2.5.3). `LandingScreen.test
 was by accessible name and would pass identically with the attribute back** — the role query alone
 cannot tell the two shapes apart, which is why the negative attribute assertion has to be explicit.
 Same pattern as that file's existing input-label test.
+
+---
+
+## 2026-08-07 — "Print so far": the year gate refuses a *silent* short deck, not a short deck
+
+Follow-up to this morning's year gate, from a complaint about the wait: the gate is right that an
+export taken mid-crawl prints a deck that is **quietly** short, and wrong if it is read as "a short
+deck is never wanted". Somebody who wants to start playing with 40 of 60 cards while the rest look up
+is making a trade. **What the gate actually protects is the player's knowledge of the omission**, and
+the fix is therefore copy at both ends of the press rather than a lifted gate: a caption before it
+("prints only the cards that already have a year — the wait keeps running") and the excluded **count**
+after it, which the export already reported and which is now the ordinary case rather than a residue.
+
+So the wait has a second button, and four things fell out of adding it.
+
+1. **It does not touch `hasAskedToPrint`, and that is the requested behaviour rather than a bug.** The
+   wait survives its own export, so the full deck still exports itself when the last year lands —
+   **two files, both asked for.** `hasAutoExportedRef` is untouched by the press (it is reset only in
+   `handlePrint`), which is exactly why the later auto-export still fires.
+2. **`role="status"` had to move off the wait's outer element.** The new button's label carries
+   `Building PDF… n/m`, and that count climbing **inside** a live region is one announcement per card
+   — a hundred on a full deck. The region now wraps only the two sentences that are the wait; the
+   buttons and the export's outcome sit outside it, and the outcome brings the separate region it
+   already had in the resolved view. The general shape: **a live region should wrap the sentences that
+   change, not the view that contains them**, because anything else that changes inside it is
+   conscripted into the announcement.
+3. **Focus stays on Cancel**, against `DeckActionsDialog`'s own "the first action takes focus"
+   convention. That convention was justified by the three actions being harmless; this one spends
+   paper, and focus arrives here without the player choosing it (the wait replaces the view under
+   their cursor). Cancel is the reversible target and Print is one Tab away.
+4. **The export's happy path was untestable and nobody had noticed why.** Every export test written
+   before today stopped at `nothing-to-print` — which is the one outcome `usePdfExport` publishes
+   **before** either dynamic `import()` runs, so the suite had a full set of assertions that all
+   happened to stop at the same line. Reaching `done` needs `qrcode` doubled (its browser build draws
+   through a `<canvas>` jsdom does not implement) **and** `jspdf` doubled (it hands a download to a
+   browser that is not there). Both go through `vi.mock` by specifier, which serves the dynamic
+   imports unchanged — the finding `QrCode.test.tsx` records, now used a second time. The jsPDF double
+   is a class whose only working methods are the two that **return** anything, `splitTextToSize` and
+   `save`.
+
+One smaller thing: the `excludedCount` and `nothing-to-print` branches were documented in the gate's
+own entry as live-but-residual, reachable only through a resumed pre-reversal save. Under "Print so
+far" they are both **ordinary** — a press on card 1 hits `nothing-to-print` as the normal answer.
+
+**Also fixed in the same pass:** the wait's container carried `py-2`, which stacked with
+`DeckActionsDialog`'s `gap-4` to put 24px between Cancel and "Back to the game" where every other
+view of the panel has 16px. Removed, so the panel's own gap is the only spacing in play — the general
+lesson being that a padded child inside a `gap`-ed flex column is spacing declared in two places.
+
+**Unverified.** Nothing here has been printed. A partial export's honesty is a claim about paper, and
+row 13 of `docs/development.md` §5 (watch the wait against a real crawl) now also covers pressing
+"Print so far" mid-crawl and counting what comes out.

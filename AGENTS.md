@@ -118,6 +118,22 @@ branches**: the gate waits for `year === undefined`, while `selectPrintableCards
 `year === null`, which only a resumed pre-reversal save holds. `pendingYearCount` is a selector
 beside the reducer and is the first caller `resolvedCount` has had since 2026-08-05.
 
+**The wait offers "Print so far", and it does not contradict the gate — it is the gate's informed
+version** (2026-08-07). What the gate refuses is a deck that is **quietly** short; a player who
+presses this is told the count that was left out, in the caption before the press and in
+"PDF downloaded — N cards left out, no year yet" after it. Three things to know. It does **not touch
+`hasAskedToPrint`**, so the wait survives its own export and the complete deck still arrives by
+itself — **two files, both asked for**, which is the behaviour, not a double-export bug. **`role="status"`
+moved off the wait's outer div onto the two sentences inside it**, because the button's label counts
+codes as they are generated and a count climbing inside a live region is a hundred announcements; the
+buttons and the outcome now sit outside it, and the outcome brings the separate region it already
+had. And **focus still lands on Cancel rather than on the new first action**, against the dialog's own
+convention, because an Enter pressed reflexively on arrival should not spend paper. The outcome
+paragraph is now the shared `ExportMessage`, so the two views cannot describe one `PdfExportState` in
+two different sets of words. Its happy path is finally testable: `DeckActions.test.tsx` doubles both
+`qrcode` and `jspdf` — before this, every export test stopped at `nothing-to-print`, the one outcome
+reached before either dynamic import.
+
 **`src/components/Spinner.tsx` exists for the `data-motion` hook, not for its four class names.**
 Under `prefers-reduced-motion: reduce` the spinner is HIDDEN rather than stopped, keyed on
 `data-motion="spinner"` in `src/index.css` — so a hand-rolled second copy is one typo away from an
