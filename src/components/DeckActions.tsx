@@ -301,7 +301,7 @@ export function DeckActions({
         */}
         <p className="max-w-narrow text-xs text-fg-muted">
           {pendingYearCount === 1 ? '1 card is' : `${pendingYearCount} cards are`} still looking up
-          a year. Printing before they arrive would leave them out of the deck.
+          a year.
         </p>
 
         {/*
