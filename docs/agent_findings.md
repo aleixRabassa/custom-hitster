@@ -2520,3 +2520,66 @@ terminates even for a playlist MusicBrainz can only partly place.
 50-card deck is on the order of a minute, and whether that reads as "working" or as "hung" is a
 judgement no local test can make — it is the same class of question the preparing screen's
 "the rest fill in while you play" line exists to answer. Added to `docs/development.md` §5 as row 13.
+
+---
+
+## 2026-08-07 — Multi-playlist plan 1: the two version lifts, the `savedDeckKey` sort, and a plan that could not go green as written
+
+Plan 1 of `plan.multi-playlist-core.md` built everything below React for a 1..5-playlist deck. Six
+things worth carrying forward.
+
+**1. The plan's own step 8 was unsatisfiable as written, and this is a shape to expect from any
+two-plan split that renames a type.** Step 8 demands all four checks green while the scope table
+excludes every component; but renaming `GameState.playlist` → `playlists`, `SavedPlaylist.id` →
+`ids`, `DeckLink.playlistId` → `playlistIds`, and changing `removePlaylist` / `buildDeckLink` /
+`start` breaks `App.tsx`, `DeckActions.tsx`, `LandingScreen.tsx` and six test files at compile time.
+Step 8's own sub-bullet ("confirm every remaining hit is in plan 2's files") reads as if hits were
+expected to remain, which contradicts a green typecheck. Resolved with the developer: **minimal n=1
+shims in the plan-2 files, each carrying a comment naming plan 2 as its replacement.** The lesson for
+a future split: **a plan that renames a type in plan 1 and updates its consumers in plan 2 cannot
+have "all four checks green" as plan 1's exit criterion** — either the rename moves to plan 2, or
+plan 1 owns mechanical shims and says so up front.
+
+**2. One shim has a behavioural edge worth knowing: `App.tsx`'s link effect IGNORES a link naming
+several playlists** rather than dealing its first. Unreachable today — this build's `buildDeckLink`
+only ever emits one id — and it was chosen over "deal the first" because dealing a deck the link did
+not describe is exactly what `deck-link.ts`'s over-cap rejection exists to refuse. Plan 2 deletes it.
+
+**3. Both `localStorage` payloads went to v2 and both read v1, and the KEYS were deliberately not
+bumped.** The reflex on a shape change in this repo is to bump the `v1` segment of the key, because
+that is the documented invalidation lever. Here it is the wrong lever: bumping the key makes existing
+payloads unreachable, which is precisely what the lift is preventing. The library case is the
+sharper one — a version mismatch clears the whole store, so shipping v2 without the lift would
+**silently empty a library the player curated, on the landing screen, with no message**. A lost
+session costs one game; a lost library costs every game they meant to keep. Both lifts are exact
+rather than guesses (a v1 payload described exactly one playlist), which is the only reason this
+module's "guessing at a migration is how a wrong year ends up on a card" rule tolerates them. **A v3
+drops the v1 lift rather than chaining a second one.**
+
+**4. `savedDeckKey` must copy before it sorts, and the copy is load-bearing rather than hygiene.**
+`Array.prototype.sort` is in place, so `entry.ids.sort().join(',')` would reorder the array it was
+called on. `App.tsx` computes the key from `state.playlists.map(p => p.id)` — a fresh array, so that
+call site is safe — but `isPlaylistSaved` also calls it on every entry in the library state, and
+those are the arrays rendered on the landing screen. `[...ids].sort()`, with a test asserting the
+input is unmutated.
+
+**5. The write-side leak rebuild needed extending for an array field, and the existing test did not
+catch it.** `savePlaylist` already rebuilt three named fields because a spread defeats TypeScript's
+excess-property check. An array field is a **new** smuggling route that the field rebuild does not
+close: `ids: [...entry.ids]` copies whatever the caller put in it. Now filtered element by element
+to non-empty strings, with its own test. The general rule: **a field-by-field rebuild is only as
+strong as its weakest field, and a container field needs rebuilding element by element.**
+
+**6. `pnpm format:check` fails repo-wide and always has.** `core.autocrlf=true` and no
+`.gitattributes`, so every file checks out CRLF while Prettier's `endOfLine` default is `lf` — 18
+files fail, including ones untouched for weeks (`docs/plans/plan.phase-8-added-by.md`). It is not one
+of the four gate checks and `pnpm lint` is unaffected (`eslint-config-prettier` disables stylistic
+rules), so nothing is broken. Two consequences: **do not read a `format:check` failure as evidence
+your change is unformatted**, and **`git stash` round-trips flip edited files from LF to CRLF**,
+which makes the failure list grow for reasons that have nothing to do with the diff.
+
+**Not measured here, and still owed by plan 2:** what a real five-playlist deck merges to after the
+dedupe, the number of `/api/playlist` requests a five-row submit makes under React 19 StrictMode, and
+the bundle delta. All three need the UI. Plan 1's own open question 1 IS resolved:
+`pdfFileName("Rock Classics +2 more")` → `hitster-rock-classics-2-more.pdf`, because the existing
+`[^a-z0-9]+` → `-` collapse eats the `+` before it can reach a filesystem.

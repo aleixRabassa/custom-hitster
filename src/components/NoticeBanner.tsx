@@ -1,17 +1,30 @@
 /**
- * The three non-blocking notices, as a dismissible banner.
+ * The five non-blocking notices, as a dismissible banner.
  *
  * ===========================================================================
  *  NO NOTICE HERE MAY EVER GATE START.
  *
  *  Every one of these describes a deck that is already dealt and already
  *  playable: a playlist that may hold more tracks than we could read, a handful
- *  of unreadable entries left out, or a deployment with no year lookups at all.
- *  None of them is a reason to stop. A modal, a confirm step, or a disabled
- *  Start button here would turn three footnotes into three obstacles.
+ *  of unreadable entries left out, a deployment with no year lookups at all, a
+ *  playlist among several that could not be loaded, or simply how big the
+ *  combined deck came out. None of them is a reason to stop. A modal, a confirm
+ *  step, or a disabled Start button here would turn five footnotes into five
+ *  obstacles.
  * ===========================================================================
  *
- * Count-only, like every other pre-reveal surface: "3 tracks could not be read" names no track.
+ * Count-only, like every other pre-reveal surface: "3 tracks could not be read" names no track,
+ * and "1 playlist could not be loaded" names no playlist.
+ *
+ * ===========================================================================
+ *  A FAILED PLAYLIST IS NOT NAMED, AND THAT IS DELIBERATE (decision 7).
+ *
+ *  A playlist title is safe data -- the suggestion buttons render nine of them.
+ *  The reason is different: the failures are ordered by the ROW they came from,
+ *  and the rows are gone by the time this renders. So a name here would be
+ *  information the player cannot act on, in a banner whose every other line is
+ *  a count.
+ * ===========================================================================
  *
  * ## Why this renders on the preparing screen AND the game screen
  *
@@ -30,8 +43,21 @@ export interface NoticeBannerProps {
    * "may", because the embed payload carries no total, no offset and no `hasMore`.
    */
   truncated: boolean;
-  /** From `PlaylistResult.skippedCount`. Normally 0, so normally nothing renders. */
+  /** From `PlaylistResult.skippedCount`, summed across the loaded playlists. Normally 0. */
   skippedCount: number;
+  /**
+   * From `MergedDeck.failures.length`. How many of the playlists the player named did not load.
+   *
+   * The visible half of "a playlist that fails is dropped with a count, and only a TOTAL failure
+   * blocks Start": one private or deleted playlist among five costs a line here, not the deck.
+   * Zero for a single playlist that loaded, and unreachable above zero when NONE loaded -- that
+   * case never produces a deck at all.
+   */
+  failedPlaylistCount?: number;
+  /** `MergedDeck.cards.length`. Rendered only beside `loadedPlaylistCount` above one. */
+  deckSize?: number;
+  /** `MergedDeck.playlists.length`. One means the single-playlist screen, unchanged. */
+  loadedPlaylistCount?: number;
   /**
    * From `state.yearLookupsUnavailable`. The one notice derived from GAME state rather than from
    * the fetch: it means the server has no `MUSICBRAINZ_USER_AGENT`, so no card will ever get a
@@ -44,14 +70,19 @@ export interface NoticeBannerProps {
 export function NoticeBanner({
   truncated,
   skippedCount,
+  failedPlaylistCount = 0,
+  deckSize = 0,
+  loadedPlaylistCount = 0,
   yearLookupsUnavailable,
   onDismiss,
 }: NoticeBannerProps) {
   const notices: string[] = [];
 
   if (truncated) {
+    // "A playlist", not "this playlist": a combined deck can be truncated because ONE of five hit
+    // the cap, and `MergedDeck.truncated` is an OR that does not say which.
     notices.push(
-      `This playlist may have more tracks than shown — only the first ${MAX_EMBED_TRACKS} could be loaded.`,
+      `A playlist may have more tracks than shown — only the first ${MAX_EMBED_TRACKS} of it could be loaded.`,
     );
   }
 
@@ -61,6 +92,22 @@ export function NoticeBanner({
       skippedCount === 1
         ? '1 track could not be read and was left out.'
         : `${skippedCount} tracks could not be read and were left out.`,
+    );
+  }
+
+  if (failedPlaylistCount > 0) {
+    notices.push(
+      failedPlaylistCount === 1
+        ? '1 playlist could not be loaded and was left out.'
+        : `${failedPlaylistCount} playlists could not be loaded and were left out.`,
+    );
+  }
+
+  // Only for a COMBINED deck. One playlist is the case the whole app had before this feature, and
+  // its size was never worth a line -- saying it now would put a banner on a screen that had none.
+  if (loadedPlaylistCount > 1) {
+    notices.push(
+      `${deckSize} cards from ${loadedPlaylistCount} playlists, shuffled into one deck.`,
     );
   }
 

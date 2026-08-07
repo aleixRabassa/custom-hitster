@@ -18,12 +18,13 @@ import { fixtureDeck } from './__fixtures__/cards';
 import type { DeckActionsProps } from './DeckActions';
 
 const PLAYLIST_ID = '37i9dQZF1DXcBWIGoYBM5M';
+const SECOND_PLAYLIST_ID = '2zmXlpkOMN92NlQaE2M62c';
 const SEED = 'a1b2c3d4e5f60718';
 const ORIGIN = 'https://hitster.example/';
 
 function renderActions(overrides: Partial<DeckActionsProps> = {}) {
   const props: DeckActionsProps = {
-    playlistId: PLAYLIST_ID,
+    playlistIds: [PLAYLIST_ID],
     playlistName: 'Rock Classics',
     seed: SEED,
     shareOrigin: ORIGIN,
@@ -131,6 +132,41 @@ describe('DeckActions', () => {
       await waitFor(() => {
         expect(screen.getByRole('status').textContent).toMatch(/copied/i);
       });
+    });
+
+    it('should copy a link holding every playlist id', async () => {
+      /*
+        A link that named only the first playlist would deal the recipient a deck the sender never
+        played -- and it would do it silently, since a one-playlist deck is perfectly valid. The
+        ids are joined with a literal comma, which needs no escaping in a query value and is the
+        form `parseDeckLink` reads back.
+
+        Built at CLICK time, from the props as they are then, exactly as the single-id link is.
+      */
+      const writeText = vi.fn<(text: string) => Promise<void>>(() => Promise.resolve());
+      stubClipboard(writeText);
+      renderActions({ playlistIds: [PLAYLIST_ID, SECOND_PLAYLIST_ID] });
+
+      fireEvent.click(screen.getByRole('button', { name: /copy share link/i }));
+
+      expect(writeText.mock.calls[0]?.[0]).toBe(
+        `https://hitster.example?playlist=${PLAYLIST_ID},${SECOND_PLAYLIST_ID}&seed=${SEED}`,
+      );
+      await waitFor(() => {
+        expect(screen.getByRole('status').textContent).toMatch(/copied/i);
+      });
+    });
+
+    it('should say playlists rather than playlist for a combined deck', () => {
+      // The caption is the sentence that has to be read and believed, so it agrees with the deck it
+      // describes. "Same playlist" over a three-playlist deck reads as a link to one of them.
+      renderActions({ playlistIds: [PLAYLIST_ID, SECOND_PLAYLIST_ID] });
+
+      const text = document.body.textContent ?? '';
+      expect(text).toMatch(/same playlists, same shuffle/i);
+      // And still never the one promise it cannot keep -- which now has a third reason: a playlist
+      // that has gone private since is dropped with a notice rather than blocking.
+      expect(text).not.toMatch(/same deck/i);
     });
 
     it('should build the share link from the current seed', () => {

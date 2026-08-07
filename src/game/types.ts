@@ -34,8 +34,31 @@ export type GameStatus = 'idle' | 'preparing' | 'playing' | 'ended';
  */
 export interface GameState {
   status: GameStatus;
-  /** The deck being played, or null while `idle`. Never invented -- it comes from `/api/playlist`. */
-  playlist: PlaylistSummary | null;
+  /**
+   * The playlists this deck was dealt from, ordered as the player entered the rows.
+   *
+   * ===========================================================================
+   *  1..5 ENTRIES WHENEVER THE STATUS IS NOT `idle`, AND EMPTY EXACTLY WHILE IT
+   *  IS. THE `null` SENTINEL IS GONE DELIBERATELY (decision 2).
+   *
+   *  This was `playlist: PlaylistSummary | null` until multi-playlist. Widening
+   *  it to an array makes ONE playlist the `n = 1` case, so no consumer carries a
+   *  permanent two-shape branch -- and an empty array carries the same
+   *  information the `null` did without being a SECOND empty state to test for
+   *  beside `status === 'idle'`.
+   *
+   *  The obvious cheaper change -- keep `playlist` singular and add a sibling id
+   *  list -- was rejected because the id is not decorative: it feeds the share
+   *  link and the library key, so every consumer would have to know which of two
+   *  overlapping fields to read, forever.
+   *
+   *  Never invented; every entry comes from `/api/playlist`, folded together by
+   *  `deck-merge.ts`. `deckLabel()` is the one function that turns this into a
+   *  string, so the HUD, the end screen, the PDF filename and the library row
+   *  cannot disagree about what the deck is called.
+   * ===========================================================================
+   */
+  playlists: readonly PlaylistSummary[];
   /**
    * The shuffle seed this deck was dealt with. Persisted, and accepted as an override on
    * `START`, so a Phase 8 shareable URL (playlist id + seed) is a caller change rather than
@@ -97,7 +120,7 @@ export type GameAction =
    * the resolver is only ever handed an already-shuffled deck and "card 1" always means the
    * first card of the SHUFFLED deck. `seed` is generated when omitted.
    */
-  | { type: 'START'; cards: Card[]; playlist: PlaylistSummary; seed?: string }
+  | { type: 'START'; cards: Card[]; playlists: readonly PlaylistSummary[]; seed?: string }
   /**
    * One completed lookup. Matched onto the deck BY CARD ID, never by index (decision 13):
    * the resolver's priority jump makes its ordering and the deck's ordering diverge
@@ -125,7 +148,13 @@ export type GameAction =
  */
 export interface PersistedSession {
   version: number;
-  playlist: PlaylistSummary;
+  /**
+   * The deck's playlists, in row order. Non-empty -- a saved session always describes a dealt deck.
+   *
+   * Deliberately NOT capped at `MAX_DECK_PLAYLISTS` on read: the cap governs what the landing screen
+   * accepts as INPUT, and this describes a deck that already exists. See `validateSession`.
+   */
+  playlists: PlaylistSummary[];
   seed: string;
   /** The shuffled deck INCLUDING every year already resolved -- so a reload costs zero lookups. */
   deck: Card[];

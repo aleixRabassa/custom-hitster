@@ -34,8 +34,31 @@ import type { Card, PlaylistSummary, YearConfidence } from '../../shared/types';
  */
 export const SESSION_STORAGE_KEY = 'hitster:session:v1';
 
-/** Current payload version. Must be bumped together with any incompatible shape change. */
-export const SESSION_VERSION = 1;
+/**
+ * Current payload version. Must be bumped together with any incompatible shape change.
+ *
+ * ===========================================================================
+ *  v2 IS MULTI-PLAYLIST, AND v1 IS READ BY LIFTING ITS SINGLE `playlist` INTO A
+ *  ONE-ELEMENT ARRAY (decision 7).
+ *
+ *  This is the ONE migration this module permits, and it is allowed only because
+ *  it is EXACT rather than a guess: a v1 save described exactly one playlist, so
+ *  `[playlist]` is not an interpretation of it -- it is the same fact in the new
+ *  shape. The header block's "a version mismatch is not corruption, but guessing
+ *  at a migration is how a wrong year ends up on a card" still holds for
+ *  everything else, including any future v3: **a v3 drops this lift** rather
+ *  than chaining a second one.
+ *
+ *  Without it, deploying multi-playlist would silently discard every game in
+ *  progress. The key's own `v1` segment is deliberately NOT bumped alongside
+ *  this, because bumping it is exactly how you make those saves unreachable --
+ *  which is the opposite of what the lift is for.
+ * ===========================================================================
+ */
+export const SESSION_VERSION = 2;
+
+/** The version this module can still read, by lifting its single playlist. See above. */
+const SESSION_VERSION_LEGACY = 1;
 
 /**
  * The slice of `Storage` this module uses, kept structural so a test double is three lines and
@@ -63,11 +86,15 @@ export interface StorageLike {
 
 /** Shape a live session for storage. Returns null while there is nothing worth saving. */
 export function toPersistedSession(state: GameState): PersistedSession | null {
-  if (state.status === 'idle' || state.playlist === null || state.deck.length === 0) return null;
+  if (state.status === 'idle' || state.playlists.length === 0 || state.deck.length === 0) {
+    return null;
+  }
 
   return {
     version: SESSION_VERSION,
-    playlist: state.playlist,
+    // Copied into a fresh array rather than shared: `GameState.playlists` is `readonly`, and the
+    // persisted shape is mutable and structurally separate on purpose (see `PersistedSession`).
+    playlists: [...state.playlists],
     seed: state.seed,
     deck: state.deck,
     currentIndex: state.currentIndex,
@@ -158,11 +185,16 @@ function validateSession(value: unknown): PersistedSession | null {
 
   // The version gate. A mismatch is not corruption -- it is a save from a different build of
   // the app -- but it is equally unusable, and guessing at a migration is how a wrong year ends
-  // up on a card.
-  if (record['version'] !== SESSION_VERSION) return null;
+  // up on a card. The ONE exception is v1, whose single playlist lifts exactly (see
+  // `SESSION_VERSION`); everything else is still a rejection.
+  const version = record['version'];
+  if (version !== SESSION_VERSION && version !== SESSION_VERSION_LEGACY) return null;
 
-  const playlist = validatePlaylist(record['playlist']);
-  if (!playlist) return null;
+  const playlists =
+    version === SESSION_VERSION_LEGACY
+      ? liftLegacyPlaylist(record['playlist'])
+      : validatePlaylists(record['playlists']);
+  if (!playlists) return null;
 
   const seed = record['seed'];
   if (typeof seed !== 'string' || seed === '') return null;
@@ -182,15 +214,56 @@ function validateSession(value: unknown): PersistedSession | null {
   // means the payload did not come from this code.
   if (status !== 'preparing' && status !== 'playing' && status !== 'ended') return null;
 
+  // Always reported as the CURRENT version, whichever version came in: a lifted v1 payload is a
+  // valid v2 session, and the next `saveSession` writes it back as one.
   return {
     version: SESSION_VERSION,
-    playlist,
+    playlists,
     seed,
     deck,
     currentIndex,
     isFlipped,
     status,
   };
+}
+
+/**
+ * Validate the v2 `playlists` field: a NON-EMPTY array of summaries.
+ *
+ * ===========================================================================
+ *  DELIBERATELY NOT CAPPED AT `MAX_DECK_PLAYLISTS`, UNLIKE THE LIBRARY
+ *  (decision 10).
+ *
+ *  The cap governs what the landing screen accepts as INPUT. A stored session
+ *  describes a deck that ALREADY EXISTS and is already shuffled -- rejecting or
+ *  truncating it would throw away a game in progress the moment the cap ever
+ *  moved, and truncating would leave the deck's cards attributed to playlists
+ *  that are no longer listed beside them.
+ *
+ *  `playlist-library.ts` caps on read for the opposite reason: an entry there IS
+ *  input to a future fetch.
+ * ===========================================================================
+ */
+function validatePlaylists(value: unknown): PlaylistSummary[] | null {
+  if (!Array.isArray(value) || value.length === 0) return null;
+
+  const playlists: PlaylistSummary[] = [];
+  for (const entry of value) {
+    // One bad summary invalidates the whole save, the same call `validateDeck` makes about one bad
+    // card: a deck silently missing the playlist it came from would mis-label itself everywhere.
+    const playlist = validatePlaylist(entry);
+    if (!playlist) return null;
+    playlists.push(playlist);
+  }
+
+  return playlists;
+}
+
+/** A v1 payload's single `playlist`, as the one-element array a v2 payload would have held. */
+function liftLegacyPlaylist(value: unknown): PlaylistSummary[] | null {
+  const playlist = validatePlaylist(value);
+
+  return playlist ? [playlist] : null;
 }
 
 function validatePlaylist(value: unknown): PlaylistSummary | null {

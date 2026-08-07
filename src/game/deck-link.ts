@@ -1,5 +1,5 @@
 /**
- * The shareable deck link: `?playlist={id}&seed={hex}`.
+ * The shareable deck link: `?playlist={id}[,{id}...]&seed={hex}`.
  *
  * Pure parse and build over STRINGS. No `window`, no `URL` construction against
  * `location`, no history API — the caller hands in a query string and an origin, which is what
@@ -7,17 +7,22 @@
  * without touching `window.location`.
  *
  * ===========================================================================
- *  WHAT THE LINK PROMISES: "SAME PLAYLIST, SAME SHUFFLE". NOT "THE SAME DECK".
+ *  WHAT THE LINK PROMISES: "SAME PLAYLISTS, SAME SHUFFLE". NOT "THE SAME DECK".
  *
  *  The seeded shuffle is exact -- `shuffleDeck` over the same fetched track list
  *  with the same seed always deals the same order. The INPUT to it is not
- *  reproducible, for two independent reasons:
+ *  reproducible, for THREE independent reasons:
  *
  *  1. A card whose year lookup finds nothing is REMOVED from the deck
  *     (`gameReducer`, `YEAR_RESOLVED`, 2026-08-05), and which cards those are
  *     depends on what MusicBrainz answers at play time.
  *  2. An editorial playlist has its tracks refreshed by Spotify periodically, so
  *     even the fetched list can differ between two opens of the same link.
+ *  3. NEW WITH MULTI-PLAYLIST: a link can name up to five playlists, and one that
+ *     has gone private or been deleted since the link was made is DROPPED with a
+ *     notice rather than blocking the deal (decision 4). So the recipient can get
+ *     a strictly smaller deck than the sender had, from fewer playlists, and
+ *     nothing about that is an error state.
  *
  *  This is a COPY problem rather than a blocker (decision 4), and the copy on the
  *  end screen is where it is handled -- never "share this exact deck". The only
@@ -34,10 +39,25 @@
  * reducer change". Nothing in the reducer changes for this feature.
  */
 
+import { MAX_DECK_PLAYLISTS } from './deck-merge';
 import { parsePlaylistUrl } from '../../shared/spotify-url';
 
-/** The query parameter carrying the playlist. Its value is anything `parsePlaylistUrl` accepts. */
+/**
+ * The query parameter carrying the playlists.
+ *
+ * Its value is a COMMA-SEPARATED LIST of anything `parsePlaylistUrl` accepts, and a single id is
+ * simply the one-element case -- so every link shared before multi-playlist parses identically and
+ * needs no back-compat branch (decision 8).
+ */
 export const PLAYLIST_PARAM = 'playlist';
+
+/**
+ * The separator between ids in the `playlist` value.
+ *
+ * A comma is a legal query-VALUE character (RFC 3986 puts it in `sub-delims`), so neither the
+ * builder nor `URLSearchParams` has to escape it, and the link stays readable in a chat client.
+ */
+const ID_SEPARATOR = ',';
 
 /** The query parameter carrying the shuffle seed. */
 export const SEED_PARAM = 'seed';
@@ -62,10 +82,15 @@ export const SEED_PARAM = 'seed';
  */
 const SEED_PATTERN = /^[0-9a-f]{16}$/i;
 
-/** A link that named a playlist and a seed this app could have produced. */
+/** A link that named 1..5 playlists and a seed this app could have produced. */
 export interface DeckLink {
-  /** A bare 22-character Spotify playlist id, already through `parsePlaylistUrl`. */
-  playlistId: string;
+  /**
+   * Bare 22-character Spotify playlist ids, each already through `parsePlaylistUrl`.
+   *
+   * Ordered as the link listed them and deduped, so it is directly the row order the fan-out and
+   * the merge want. Never empty, and never longer than `MAX_DECK_PLAYLISTS`.
+   */
+  playlistIds: string[];
   /** Lowercased hex, exactly as `generateSeed()` mints it. */
   seed: string;
 }
@@ -87,6 +112,20 @@ export interface DeckLink {
  *  promised; a seed with no playlist addresses nothing.
  * ===========================================================================
  *
+ * ===========================================================================
+ *  A LINK NAMING MORE THAN `MAX_DECK_PLAYLISTS` IS REJECTED, NOT TRUNCATED
+ *  (decision 9).
+ *
+ *  Truncating would deal a deck the link did not describe -- silently, and with a
+ *  seed that makes it look deliberate. Rejecting is also the CHEAPER answer to
+ *  explain, because every other rejection in this module already looks identical
+ *  to "no link at all": the plain landing screen, no error, the params still in
+ *  the address bar.
+ *
+ *  The DEDUPE RUNS FIRST, so a link that repeats one id is not punished for it --
+ *  six entries naming five distinct playlists is a five-playlist link.
+ * ===========================================================================
+ *
  * @param search a `location.search`-shaped string. A leading `?` is optional, `''` is a miss.
  */
 export function parseDeckLink(search: string): DeckLink | null {
@@ -104,21 +143,46 @@ export function parseDeckLink(search: string): DeckLink | null {
     return null;
   }
 
-  const playlistParam = params.get(PLAYLIST_PARAM);
+  /*
+    `getAll`, not `get`: the canonical form the builder emits is ONE `playlist` param holding a
+    comma list, but repeated `playlist` params are accepted too and flattened into the same list.
+    That is one line of tolerance for a link a chat client, a URL shortener or a future build
+    reshaped -- and because the builder only ever emits the comma form, the round trip stays exact.
+  */
+  const playlistParams = params.getAll(PLAYLIST_PARAM);
   const seedParam = params.get(SEED_PARAM);
-  if (playlistParam === null || seedParam === null) return null;
+  if (playlistParams.length === 0 || seedParam === null) return null;
 
-  // Validated through the SHARED parser, not a new regex (step 6). A bare id is already one of the
-  // forms it accepts, so this is reuse rather than a special case -- and it means a link carrying a
-  // full `open.spotify.com/playlist/...` URL, or an album link, is judged by exactly the same code
-  // the landing form and `api/playlist.ts` use.
-  const parsed = parsePlaylistUrl(playlistParam.trim());
-  if (!parsed.ok) return null;
+  const playlistIds: string[] = [];
+  for (const param of playlistParams) {
+    for (const element of param.split(ID_SEPARATOR)) {
+      const trimmed = element.trim();
+      // An empty element is what a trailing comma or a doubled one produces. Dropped rather than
+      // failed: it is punctuation, not a playlist somebody meant to name.
+      if (trimmed === '') continue;
+
+      // EVERY element goes through the SHARED parser, not a new regex. A bare id is already one of
+      // the forms it accepts, so this is reuse rather than a special case -- and it means a link
+      // carrying a full `open.spotify.com/playlist/...` URL is judged by exactly the same code the
+      // landing form and `api/playlist.ts` use, in every position.
+      const parsed = parsePlaylistUrl(trimmed);
+      // One bad element fails the WHOLE link, so an album link buried at position four cannot deal
+      // a quietly smaller deck than the sender described.
+      if (!parsed.ok) return null;
+
+      if (!playlistIds.includes(parsed.id)) playlistIds.push(parsed.id);
+    }
+  }
+
+  // Nothing usable: `?playlist=` on its own, or a value of nothing but commas.
+  if (playlistIds.length === 0) return null;
+  // Deduped above, so this counts DISTINCT playlists (see the header block).
+  if (playlistIds.length > MAX_DECK_PLAYLISTS) return null;
 
   const seed = seedParam.trim();
   if (!SEED_PATTERN.test(seed)) return null;
 
-  return { playlistId: parsed.id, seed: seed.toLowerCase() };
+  return { playlistIds, seed: seed.toLowerCase() };
 }
 
 /**
@@ -131,14 +195,23 @@ export function parseDeckLink(search: string): DeckLink | null {
  * A trailing slash on `origin` is tolerated and normalised, because `location.origin +
  * location.pathname` produces one for a root-served app.
  *
- * The id and the seed are NOT validated here. Both come from live `GameState` -- the id from a
- * playlist the server resolved, the seed from `generateSeed()` or from a link this same module
+ * The ids and the seed are NOT validated here. Both come from live `GameState` -- the ids from
+ * playlists the server resolved, the seed from `generateSeed()` or from a link this same module
  * already validated -- and a builder that could fail would push an error branch into a click
  * handler. Interpolation is safe: a Spotify id is 22 base62 characters and a seed is hex, so
  * neither can escape a query value.
+ *
+ * The ids are joined with a LITERAL COMMA and nothing is escaped, because nothing needs to be: a
+ * comma is a legal query-value character (see `ID_SEPARATOR`), and it keeps the link readable in
+ * the chat clients this app's links get pasted into.
  */
-export function buildDeckLink(origin: string, playlistId: string, seed: string): string {
+export function buildDeckLink(
+  origin: string,
+  playlistIds: readonly string[],
+  seed: string,
+): string {
   const base = origin.endsWith('/') ? origin.slice(0, -1) : origin;
+  const ids = playlistIds.join(ID_SEPARATOR);
 
-  return `${base}?${PLAYLIST_PARAM}=${playlistId}&${SEED_PARAM}=${seed}`;
+  return `${base}?${PLAYLIST_PARAM}=${ids}&${SEED_PARAM}=${seed}`;
 }

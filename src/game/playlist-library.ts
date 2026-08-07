@@ -10,9 +10,11 @@
  *  holds every card, with every resolved year), and it makes the known two-tab
  *  last-write-wins problem materially worse by multiplying what a clobber costs.
  *
- *  So an entry is an ID, a NAME and a TIMESTAMP. Playing a saved entry re-fetches
- *  normally, which costs one `/api/playlist` call and re-resolves years from the
- *  shared cache. There is still exactly ONE resumable game.
+ *  So an entry is a LIST OF IDS, a NAME and a TIMESTAMP. Playing a saved entry
+ *  re-fetches normally, which costs one `/api/playlist` call per id and
+ *  re-resolves years from the shared cache. There is still exactly ONE resumable
+ *  game -- multi-playlist widened what a deck is dealt from, not how many
+ *  sessions exist.
  * ===========================================================================
  *
  * Modelled on `persistence.ts` deliberately, down to the shape of the validators: same injected
@@ -25,11 +27,18 @@
  *
  *  It is read on the LANDING SCREEN, which is a pre-start surface -- the one place
  *  in the app where a leak costs the whole game before it begins. Playlist-level
- *  data only, exactly as `PlaylistSummary` is. `name` is a playlist title, which
- *  is the same class of data the suggested-playlist buttons already show.
+ *  data only, exactly as `PlaylistSummary` is. `name` is a playlist title -- now
+ *  a `deckLabel()` over up to five of them, which is the same class of data the
+ *  suggested-playlist buttons already show -- and `ids` is up to five playlist
+ *  ids. Neither can name a track, an artist or a year.
+ *
+ *  MULTI-PLAYLIST MADE THE WRITE-SIDE REBUILD MATTER MORE, not less: an ARRAY
+ *  field is a new way to smuggle a larger object in, so `savePlaylist` rebuilds
+ *  the ids ELEMENT BY ELEMENT rather than sharing the caller's array.
  * ===========================================================================
  */
 
+import { MAX_DECK_PLAYLISTS } from './deck-merge';
 import type { StorageLike } from './persistence';
 
 /**
@@ -39,8 +48,26 @@ import type { StorageLike } from './persistence';
  */
 export const LIBRARY_STORAGE_KEY = 'hitster:library:v1';
 
-/** Current payload version. Bump together with any incompatible shape change. */
-export const LIBRARY_VERSION = 1;
+/**
+ * Current payload version. Bump together with any incompatible shape change.
+ *
+ * ===========================================================================
+ *  v2 IS MULTI-PLAYLIST, AND v1 IS READ BY LIFTING EACH ENTRY'S `id` INTO
+ *  `[id]` (decision 7).
+ *
+ *  Same reasoning as `SESSION_VERSION`'s lift, and HERE IT MATTERS MORE. A
+ *  version mismatch clears the whole store, so shipping v2 without the lift would
+ *  silently empty a library the player CURATED -- on the landing screen, with no
+ *  message, and with nothing to distinguish it from "you never saved anything".
+ *  A lost session is one game; a lost library is every game they meant to keep.
+ *
+ *  Exact rather than a guess: a v1 entry described exactly one playlist.
+ * ===========================================================================
+ */
+export const LIBRARY_VERSION = 2;
+
+/** The version this module can still read, by lifting each entry's single id. See above. */
+const LIBRARY_VERSION_LEGACY = 1;
 
 /**
  * How many entries are kept, most-recent-first.
@@ -58,11 +85,16 @@ export const LIBRARY_VERSION = 1;
  */
 export const LIBRARY_MAX_ENTRIES = 20;
 
-/** One saved playlist. Playlist-level data only -- see the header block. */
+/** One saved deck: 1..5 playlists. Playlist-level data only -- see the header block. */
 export interface SavedPlaylist {
-  /** The Spotify playlist id, as `PlaylistSummary.id`. The dedupe key. */
-  id: string;
-  /** The playlist's own title, as shown on the landing screen. */
+  /**
+   * The Spotify playlist ids the deck was dealt from, as `PlaylistSummary.id`, in row order.
+   *
+   * Non-empty, and capped at `MAX_DECK_PLAYLISTS` on read. The DEDUPE KEY is `savedDeckKey()` over
+   * this array, not the array itself -- see that function for why it sorts.
+   */
+  ids: string[];
+  /** What to call the deck: `deckLabel()`'s output, as shown on the landing screen. */
   name: string;
   /** When it was saved, epoch milliseconds. Sorts the list; never rendered as a date. */
   savedAt: number;
@@ -71,6 +103,30 @@ export interface SavedPlaylist {
 interface LibraryPayload {
   version: number;
   entries: SavedPlaylist[];
+}
+
+/**
+ * The identity of a saved deck: its ids, SORTED and joined.
+ *
+ * ===========================================================================
+ *  SORTED, SO ROW ORDER DOES NOT CREATE A SECOND FAVOURITE (decision 11).
+ *
+ *  The same three playlists entered in a different order are ONE favourite. Left
+ *  unsorted, saving them twice would produce two rows with the same `deckLabel()`
+ *  and the same playlists, distinguishable only by their timestamps -- which is
+ *  the "a bug that looks like data" this module's dedupe already exists to
+ *  prevent, one dimension up.
+ *
+ *  DERIVED ON DEMAND AND NEVER STORED. A stored key is a second source of truth
+ *  that can disagree with the ids sitting beside it, and the disagreement would
+ *  only show up as a remove button that removes the wrong row.
+ *
+ *  It is also (plan 2) the React list key and the `removePlaylist` argument, so
+ *  all three read one function.
+ * ===========================================================================
+ */
+export function savedDeckKey(entry: Pick<SavedPlaylist, 'ids'>): string {
+  return [...entry.ids].sort().join(',');
 }
 
 /**
@@ -113,9 +169,9 @@ export function loadLibrary(storage: StorageLike): SavedPlaylist[] {
 }
 
 /**
- * Save a playlist, most-recent-first, deduped by id and capped.
+ * Save a deck, most-recent-first, deduped by `savedDeckKey` and capped.
  *
- * Re-saving a playlist already in the library MOVES it to the front with a new timestamp rather
+ * Re-saving a deck already in the library MOVES it to the front with a new timestamp rather
  * than adding a second row -- a player who plays a favourite twice has one favourite, and a list
  * with two identical rows and different timestamps is a bug that looks like data.
  *
@@ -138,11 +194,23 @@ export function savePlaylist(storage: StorageLike, entry: SavedPlaylist): SavedP
 
      Three named fields make the leak UNAVAILABLE rather than merely avoided,
      which is the same reason `validateSession` rebuilds instead of casting.
+
+     `ids` IS REBUILT ELEMENT BY ELEMENT, not spread. An array field is a new way
+     to smuggle a larger object in -- `[...entry.ids]` would happily copy across
+     whatever a caller had put in it -- so each element is checked and coerced to
+     a plain string, and anything that is not one is dropped.
     ===========================================================================
   */
-  const clean: SavedPlaylist = { id: entry.id, name: entry.name, savedAt: entry.savedAt };
+  const clean: SavedPlaylist = {
+    ids: entry.ids
+      .filter((id): id is string => typeof id === 'string' && id !== '')
+      .slice(0, MAX_DECK_PLAYLISTS),
+    name: entry.name,
+    savedAt: entry.savedAt,
+  };
 
-  const existing = loadLibrary(storage).filter((saved) => saved.id !== clean.id);
+  const key = savedDeckKey(clean);
+  const existing = loadLibrary(storage).filter((saved) => savedDeckKey(saved) !== key);
   const entries = [clean, ...existing].slice(0, LIBRARY_MAX_ENTRIES);
 
   writeLibrary(storage, entries);
@@ -150,9 +218,15 @@ export function savePlaylist(storage: StorageLike, entry: SavedPlaylist): SavedP
   return entries;
 }
 
-/** Drop one playlist by id. Returns the remaining list. Removing an absent id is a no-op write. */
-export function removePlaylist(storage: StorageLike, id: string): SavedPlaylist[] {
-  const entries = loadLibrary(storage).filter((saved) => saved.id !== id);
+/**
+ * Drop one saved deck by its `savedDeckKey`. Returns the remaining list.
+ *
+ * Keyed rather than id-based because an entry is now a SET of playlists: removing "the deck with
+ * this id in it" would take out every deck that happens to share one playlist. Removing an absent
+ * key is a no-op write.
+ */
+export function removePlaylist(storage: StorageLike, key: string): SavedPlaylist[] {
+  const entries = loadLibrary(storage).filter((saved) => savedDeckKey(saved) !== key);
 
   writeLibrary(storage, entries);
 
@@ -198,8 +272,11 @@ function validateLibrary(value: unknown): SavedPlaylist[] | null {
   if (!record) return null;
 
   // A version mismatch is not corruption -- it is a payload from a different build -- but it is
-  // equally unusable, and guessing at a migration is how a wrong name ends up on a button.
-  if (record['version'] !== LIBRARY_VERSION) return null;
+  // equally unusable, and guessing at a migration is how a wrong name ends up on a button. The ONE
+  // exception is v1, whose single id per entry lifts exactly (see `LIBRARY_VERSION`).
+  const version = record['version'];
+  if (version !== LIBRARY_VERSION && version !== LIBRARY_VERSION_LEGACY) return null;
+  const isLegacy = version === LIBRARY_VERSION_LEGACY;
 
   const rawEntries = record['entries'];
   if (!Array.isArray(rawEntries)) return null;
@@ -207,11 +284,12 @@ function validateLibrary(value: unknown): SavedPlaylist[] | null {
   const entries: SavedPlaylist[] = [];
   const seen = new Set<string>();
   for (const candidate of rawEntries) {
-    const entry = validateEntry(candidate);
+    const entry = isLegacy ? liftLegacyEntry(candidate) : validateEntry(candidate);
     if (!entry) return null;
-    // A duplicate id is corruption rather than data: `savePlaylist` cannot produce one.
-    if (seen.has(entry.id)) return null;
-    seen.add(entry.id);
+    // A duplicate deck is corruption rather than data: `savePlaylist` cannot produce one.
+    const key = savedDeckKey(entry);
+    if (seen.has(key)) return null;
+    seen.add(key);
     entries.push(entry);
   }
 
@@ -224,12 +302,55 @@ function validateEntry(value: unknown): SavedPlaylist | null {
   const record = asRecord(value);
   if (!record) return null;
 
-  const { id, name, savedAt } = record;
-  if (typeof id !== 'string' || id === '') return null;
+  const { ids, name, savedAt } = record;
   if (typeof name !== 'string') return null;
   if (typeof savedAt !== 'number' || !Number.isFinite(savedAt)) return null;
 
-  return { id, name, savedAt };
+  const validIds = validateIds(ids);
+  if (!validIds) return null;
+
+  return { ids: validIds, name, savedAt };
+}
+
+/**
+ * A non-empty array of non-empty strings, CAPPED AT `MAX_DECK_PLAYLISTS` on read.
+ *
+ * ===========================================================================
+ *  CAPPED HERE, UNLIKE A STORED SESSION, AND THE ASYMMETRY IS THE POINT
+ *  (decision 10).
+ *
+ *  A library entry is INPUT to a future fetch: pressing it fires one
+ *  `/api/playlist` request per id. So a payload written by a build with a larger
+ *  cap -- or edited by hand -- must not be able to fan out past what this build
+ *  allows. `persistence.ts` deliberately does the opposite, because a stored
+ *  session describes a deck that already exists.
+ *
+ *  Truncated rather than rejected, matching how `validateLibrary` already caps
+ *  the entry COUNT on read: an over-long entry is still recognisably the deck the
+ *  player saved.
+ * ===========================================================================
+ */
+function validateIds(value: unknown): string[] | null {
+  if (!Array.isArray(value) || value.length === 0) return null;
+
+  const ids: string[] = [];
+  for (const id of value) {
+    if (typeof id !== 'string' || id === '') return null;
+    ids.push(id);
+  }
+
+  return ids.slice(0, MAX_DECK_PLAYLISTS);
+}
+
+/** A v1 entry, whose single `id` becomes `[id]`. Every other field is validated unchanged. */
+function liftLegacyEntry(value: unknown): SavedPlaylist | null {
+  const record = asRecord(value);
+  if (!record) return null;
+
+  const { id } = record;
+  if (typeof id !== 'string' || id === '') return null;
+
+  return validateEntry({ ...record, ids: [id] });
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {

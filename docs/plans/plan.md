@@ -636,6 +636,27 @@ what makes the game's payoff audible at all.
       WinAnsi already covers every Spanish and Latin glyph, so it is a no-op on this app's own
       playlists. **Nothing about it has been verified on paper** ([`../development.md`](../development.md) §5).
 
+### Post-Phase-8
+
+- [ ] **Multi-playlist — a deck from up to 5 playlists.** Two plans:
+      [`plan.multi-playlist-core.md`](./plan.multi-playlist-core.md) (the merge module, the widened
+      `GameState`, both v2 storage formats, the multi-id link — **built 2026-08-07**) and
+      [`plan.multi-playlist-ui.md`](./plan.multi-playlist-ui.md) (the landing rows, the fan-out hook,
+      the container wiring and the labels — **not built**). Until plan 2 lands there is no way for a
+      player to name a second playlist, so the app behaves exactly as it did: the whole feature is the
+      `n = 1` case.
+      **It SUPERSEDES the "Multiple decks / saved playlists" item above in the number of PLAYLISTS
+      ONLY, not in the number of SESSIONS** — a library entry is now `ids[]` rather than one id, keyed
+      by `savedDeckKey()`, and `hitster:library:v1` carries a v2 payload that still reads v1. **There is
+      still exactly one resumable game**, and that decision is not reopened: generalising the session
+      key into a keyed collection of full mid-game decks would still reopen persistence validation,
+      `RESUME` and the quota.
+      The fan-out is **client-side** — `api/playlist.ts` is untouched, because partial success has no
+      representation in `PlaylistErrorCode` and a server merge would widen the shared response type,
+      the handler's exhaustive status table, and the edge cache key. A playlist that fails is dropped
+      with a **count**, and only a total failure blocks Start. See
+      [`../architecture.md`](../architecture.md) §3, "The combined deck".
+
 ---
 
 ## 6. Open Questions

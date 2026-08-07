@@ -103,16 +103,22 @@ export interface GameScreenProps {
   isPlayable: boolean;
   /** Cards still to come after the current one, from `cardsRemaining`. Straight to the HUD. */
   cardsRemaining: number;
-  /** The playlist's name, from `state.playlist`. Playlist-level only — never track data. */
+  /**
+   * The deck's label, from `deckLabel(state.playlists)`. Playlist-level only — never track data.
+   *
+   * A SINGLE STRING even though a deck is now 1..5 playlists (decision 8). The label is that
+   * string, the HUD already truncates a long one, and pushing the array down here would turn a
+   * truncation rule into a layout decision for no gain.
+   */
   playlistName: string;
   /**
-   * The playlist's Spotify id, from `state.playlist`. One half of the share link.
+   * The deck's 1..5 Spotify playlist ids, from `state.playlists`. One half of the share link.
    *
    * These five are the deck-actions props, straight through to `DeckActionsDialog` and used for
    * nothing else here. They are playlist-level and seed-level -- not one of them derives from a
    * card, which is what keeps this screen's leak story unchanged by the whole feature.
    */
-  playlistId: string;
+  playlistIds: readonly string[];
   /** The seed this deck was dealt with, from `state.seed`. The other half of the link. */
   seed: string;
   /** Where a shared link should point -- `origin + pathname`, supplied by the container. */
@@ -166,7 +172,7 @@ export function GameScreen({
   isPlayable,
   cardsRemaining,
   playlistName,
-  playlistId,
+  playlistIds,
   seed,
   shareOrigin,
   onSavePlaylist,
@@ -373,7 +379,7 @@ export function GameScreen({
 
       {isDeckActionsOpen ? (
         <DeckActionsDialog
-          playlistId={playlistId}
+          playlistIds={playlistIds}
           playlistName={playlistName}
           seed={seed}
           shareOrigin={shareOrigin}

@@ -190,6 +190,12 @@ src/game/
   qrcode-loader.ts    The one memoized import('qrcode'), shared by QrCode and the export
   qr-cache.ts         Generated codes by size+url, so the deck's preloaded QR survives the
                       element that generated it. Read during RENDER, not in an effect
+  ── multi-playlist (2026-08-07) ──────────────────────────────────────────────
+  deck-merge.ts       Folds up to 5 already-fetched PlaylistOutcomes into one deck:
+                      the dedupe, the notice aggregation, the failure ordering, the
+                      deck label, and MAX_DECK_PLAYLISTS. A DECISION MODULE WITH NO
+                      I/O — no fetch, no window, no storage. The fan-out itself is
+                      usePlaylist's; this only decides what the results mean together
 ```
 
 Three properties of that split are load-bearing:
@@ -197,6 +203,8 @@ Three properties of that split are load-bearing:
 - **The reducer is pure and the resolver is framework-free**, so both are tested as plain functions with no DOM and no timers of their own. `use-game-session.ts` is deliberately thin enough to go untested — and the rule that keeps that honest is written at the top of the file: any logic accumulating there belongs in the reducer or the resolver instead.
 - **`YEAR_RESOLVED` matches by card id, never by index.** The priority jump makes the resolver's order and the deck's order diverge routinely, and a duplicated track (legal in a playlist) must have **every** copy updated, not the first match.
 - **`src/game/` is browser code.** It may use DOM APIs and the `@/` alias; nothing under `api/` may ever import it, and `GameState` must not migrate into `shared/types.ts` — see §2.
+
+**`deck-merge.ts` is the fifth application of the same rule, and the reason is the sharpest yet: a wrong dedupe reads as a duplicate card halfway through a deck, and a wrong label reads as a slightly odd heading — neither is a jsdom failure.** So it takes outcomes the caller already has and returns a `MergedDeck`, and every rule in it is a node test. See "The combined deck" below.
 
 **Phase 8's four new modules are here rather than in a component or a hook for one reason each, and the reason is always "what could not otherwise be tested".** `deck-link.ts` takes a query STRING instead of reading `location`, so its rejection cases are node tests rather than jsdom ones. `playlist-library.ts` takes an injected `StorageLike`, exactly as `persistence.ts` does, so a corrupt-payload test is a three-line stub. `pdf-sheet.ts` holds every millimetre as arithmetic over numbers because **getting the duplex mirror wrong pairs every card with the wrong answer and is discoverable only by printing and cutting** — the same decision/binding split as `gestures.ts` and `resolver.ts`, applied a third time. `pdf-text.ts` is string rules, and string rules in a hook are string rules nothing covers. The binding halves are `App.tsx` (the link), `EndScreen.tsx` (the two buttons) and `src/hooks/usePdfExport.ts` (the imports, the QR loop, the download).
 
@@ -364,33 +372,37 @@ Browser (SPA)                          Serverless (Vercel Functions)
 
 Three features that add to the app without changing how a game is played, and all three are **caller changes**: the reducer, `GameState` and the persistence format are untouched.
 
+> **Superseded in part by "The combined deck" below (2026-08-07).** Multi-playlist widened the link's `playlist` param to a comma list, a library entry to `ids[]`, and `start`'s second argument to an array; both payloads went to **v2** while keeping their `v1` keys. Everything else in this section — the lazy read, the saved-session precedence, the untouched address bar, the print palette, the duplex mirror — is unchanged.
+
 ```
-                    ?playlist=<id>&seed=<16 hex>
+                    ?playlist=<id>[,<id>…]&seed=<16 hex>
                                 │  read ONCE, in a lazy state initialiser
                                 ▼
   ┌───────────────────────────────────────────────────────────────┐
   │ App.tsx                                                        │
   │  · a saved session OUTRANKS a link → resume, ignore params     │
-  │  · otherwise: request(spotifyPlaylistUrl(id)) — the SAME       │
-  │    fetch path the landing form uses                            │
-  │  · the seed rides in a REF into start(cards, playlist, seed)    │
+  │  · otherwise: request(…) — the SAME fetch path the landing     │
+  │    form uses                                                   │
+  │  · the seed rides in a REF into start(cards, playlists, seed)  │
   │  · the address bar is never touched: no pushState              │
   └───────────────────────────────────────────────────────────────┘
 
   hitster:session:v1   one resumable game        (persistence.ts)
-  hitster:library:v1   ≤20 saved playlists       (playlist-library.ts)
-                       id + name + savedAt only
+                       payload v2; reads v1
+  hitster:library:v1   ≤20 saved decks           (playlist-library.ts)
+                       payload v2; reads v1
+                       ids[] + name + savedAt only
 ```
 
 **The link is (playlist id + seed) and nothing more, which `GameState.seed`'s own comment predicted:** the seed is accepted as an override on `START`, so this is a caller change rather than a reducer change. Query params rather than a hash fragment — a hash is marginally more private but is mangled by some chat clients, and this is a link people paste into WhatsApp.
 
-**It promises "same playlist, same shuffle", never "the same deck", and that is a copy decision standing in for an encoder.** The seeded shuffle is exact; its INPUT is not, for two independent reasons — a card whose year lookup finds nothing is removed from the deck, and which cards those are depends on what MusicBrainz answers at play time; and an editorial playlist has its tracks refreshed by Spotify. The only encoding that could pin the card set is a versioned opaque token carrying every id, at the cost of an unreadable link. The end screen's caption says so, and `EndScreen.test.tsx` asserts that the phrase "same deck" is absent.
+**It promises "same playlist(s), same shuffle", never "the same deck", and that is a copy decision standing in for an encoder.** The seeded shuffle is exact; its INPUT is not, for three independent reasons — a card whose year lookup finds nothing is removed from the deck, and which cards those are depends on what MusicBrainz answers at play time; an editorial playlist has its tracks refreshed by Spotify; and since multi-playlist, one playlist of five that has gone private is dropped with a notice rather than blocking. The only encoding that could pin the card set is a versioned opaque token carrying every id, at the cost of an unreadable link. The end screen's caption says so, and `EndScreen.test.tsx` asserts that the phrase "same deck" is absent.
 
 **A saved session outranks a link**, because opening an old link must not silently discard a game in progress. `useGameSession`'s own lazy initialiser has already run when `App` reads the params, so `state.status === 'idle'` is exactly "there was nothing to resume".
 
 **A malformed link is `null`, and `null` is the plain landing screen with no error.** Someone whose chat client ate half a URL is a visitor, not a failure state. The playlist id is validated through `shared/spotify-url.ts` — reuse, so a link is judged by the same code the form and `api/playlist.ts` use — and the seed is bounded to `generateSeed`'s own 16-hex alphabet, because an accepted seed is hashed and then **persisted**.
 
-**The library stores playlists, not sessions** (id, name, timestamp; deduped, capped at 20). The alternative — generalising the session key into a keyed collection of full mid-game decks — reopens persistence validation, `RESUME` and the localStorage quota, and makes the known two-tab clobber materially worse. There is still exactly one resumable game. The store is read on the **landing screen**, which is a pre-start surface, so it is rebuilt field by field on the **write** as well as on the read: `SavedPlaylist` is a structural interface and TypeScript's excess-property check does not fire for a spread, so a caller passing something larger would otherwise put track data one devtools panel away from a player who has not started.
+**The library stores playlists, not sessions** (ids, name, timestamp; deduped by `savedDeckKey`, capped at 20). The alternative — generalising the session key into a keyed collection of full mid-game decks — reopens persistence validation, `RESUME` and the localStorage quota, and makes the known two-tab clobber materially worse. There is still exactly one resumable game. The store is read on the **landing screen**, which is a pre-start surface, so it is rebuilt field by field on the **write** as well as on the read: `SavedPlaylist` is a structural interface and TypeScript's excess-property check does not fire for a spread, so a caller passing something larger would otherwise put track data one devtools panel away from a player who has not started.
 
 **Both keys share the two-tab hazard `plan.md` §6 already accepts.** Last write wins; a `storage`-event guard remains the fix if it ever bites, and v1 does not build one.
 
@@ -401,6 +413,60 @@ Three features that add to the app without changing how a game is played, and al
 **Only cards with a resolved year are exported, and the count of the rest is reported — never a list.** The end screen is one press from re-dealing the same deck, so naming an excluded title would spoil the rematch. In practice the only exclusion is a card the resolver has not reached yet.
 
 **A standard PDF font is WinAnsi-encoded, so titles are sanitised rather than a font embedded.** Measured before deciding: WinAnsi already covers every Spanish, Portuguese, French, German and Italian glyph, and four of the nine suggested playlists are Spanish or Latin — so the transformation is a no-op on the decks this app is built for. The gap is Cyrillic, Greek, CJK and a few Latin extras, and embedding a Latin-Extended font would cost 200–400 kB in the export chunk to fix Polish and Turkish while still failing on the rest. A Cyrillic or CJK title prints as `?` placeholders; **the year and the QR are unaffected**, so the card still plays and still scans. Listed in [`development.md`](./development.md) §8.
+
+---
+
+### The combined deck — 1..5 playlists (multi-playlist, core half built 2026-08-07)
+
+A deck is dealt from **up to five playlists**, merged in the browser. `plan.multi-playlist-core.md` built everything below React; `plan.multi-playlist-ui.md` builds the landing rows, the fan-out hook and the container wiring on top of it.
+
+```
+  five raw URLs, in row order
+        │
+        ▼  usePlaylist — one AbortController, N parallel /api/playlist?url= (plan 2)
+  ┌──────────────────────────────────────────────────────────────┐
+  │ PlaylistOutcome[]  ── in ROW ORDER, one per playlist          │
+  └───────────────────────────┬──────────────────────────────────┘
+                              ▼  src/game/deck-merge.ts — pure, no I/O
+  ┌──────────────────────────────────────────────────────────────┐
+  │ mergePlaylists()                                              │
+  │  · concatenate the loaded decks, then dedupe BY Card.id       │
+  │  · truncated = OR   ·  skippedCount = SUM                     │
+  │  · failures[]  = the codes of the ones that did not load      │
+  │  · every playlist failed → the FIRST code, and Start blocks   │
+  │  · nothing merged        → 'empty-playlist'                   │
+  └───────────────────────────┬──────────────────────────────────┘
+                              ▼  MergedDeck
+                     start(cards, playlists, seed?)
+
+  hitster:session:v1   one resumable game, payload v2   reads v1 by lifting `playlist`
+  hitster:library:v1   ≤20 saved DECKS,   payload v2    reads v1 by lifting each `id`
+                       ids[] + name + savedAt only
+```
+
+**The fan-out is client-side and `api/playlist.ts` is untouched.** The obvious alternative — one request carrying five `url` params — has no way to say "four of these worked": partial success is not in `PlaylistErrorCode`, so a 200 body carrying per-playlist failures would be a **new response shape**, widening `shared/types.ts` and the handler's documented-exhaustive status table. It would also put merge logic in `api/`, which is deliberately thin, untested, and where both deploy-only hazards of §2 live; stretch one function invocation across five sequential embed fetches; and make the edge cache key the exact **combination** of playlists, so two decks sharing four playlists out of five would share no cache entry. Fanning out in the browser keeps every playlist a separately cached request and keeps each failure attributable to the row it came from.
+
+**`GameState.playlist` became `playlists: readonly PlaylistSummary[]`, and the `null` sentinel is gone.** One playlist is the `n = 1` case, so no consumer carries a permanent two-shape branch, and an empty array says what the `null` said without being a second empty state to test for beside `status === 'idle'`. Keeping `playlist` singular and adding a sibling id list was rejected because the id is not decorative — it feeds the share link and the library key — so every consumer would have to know which of two overlapping fields to read, forever.
+
+**Cards are deduped by track id, first occurrence wins, and nothing else is merged.** That is safe because of where these cards come from: a card from `/api/playlist` never carries a year (the embed payload has no track-level release date), so two copies of one track differ in nothing the game reads. Two identical cards in one deck read as a bug, and the same track in two of someone's five playlists is the ordinary case.
+
+**A playlist that fails is dropped with a count; only a total failure blocks Start.** Same non-blocking-notice pattern as `truncated` and `skippedCount` — one dead editorial playlist must not cost a five-playlist deck. A total failure reports the **first** row's code, which is the only reason the merge insists on row order: the landing screen has one error slot, and it should describe the first thing that went wrong. **No new `StartFailureCode`** — a partial failure is a notice, and a total failure is already exactly one of the codes `fetchPlaylist` returns, so `messages.ts`'s exhaustive `Record` is untouched by the whole feature.
+
+**One `deckLabel()` names the deck everywhere**: the first playlist's name, then `"<first> +N more"`. The HUD, the end screen, the PDF filename and the library row all read it, so they cannot disagree. It is playlist-level data only — the same class of string the suggestion buttons already render. Through `pdfFileName` it slugs cleanly: `hitster-rock-classics-2-more.pdf`.
+
+**The share link's `playlist` param is a comma list, and a single id parses identically** — so every link already shared keeps working with no back-compat branch. A comma is a legal query-value character, so nothing is escaped. Repeated `playlist` params are also accepted via `getAll`, one line of tolerance for a link a chat client reshaped; the builder only ever emits the comma form, so the round trip stays exact. Every element goes through `shared/spotify-url.ts`, so an album link **in any position** rejects the whole link rather than quietly dealing a smaller deck. **Over five distinct ids is a rejection, not a truncation** (`null`, i.e. the plain landing screen with no error): truncating would deal a deck the link did not describe, with a seed that makes it look deliberate. The dedupe runs **before** the cap check, so a link repeating one id is not punished for it.
+
+The link now has a **third** reason it cannot promise the same deck, beside the dropped-yearless-card and refreshed-editorial-playlist reasons above: a playlist that has gone private since the link was made is dropped with a notice, so the recipient can get a strictly smaller deck than the sender had.
+
+**Both `localStorage` payloads went to v2, and both read v1 by lifting the single value.** This is the one migration either module permits, and it is allowed only because it is **exact rather than a guess**: a v1 payload described exactly one playlist, so `[playlist]` and `[id]` are the same fact in the new shape. Neither storage KEY is bumped — bumping the key is precisely how you make those payloads unreachable, which is the opposite of what a lift is for. Without them, deploying this would discard every game in progress and **silently empty a library the player curated**, on the landing screen, with no message. A future v3 drops the v1 lift rather than chaining a second one.
+
+**The library caps its ids on read; a stored session deliberately does not.** The cap governs INPUT. A library entry is input to a future fetch — pressing it fires one `/api/playlist` per id — so a payload from a build with a larger cap must not fan out past what this build allows. A stored session describes a deck that **already exists** and is already shuffled: rejecting or truncating it would throw away a game in progress the moment the cap moved, and truncating would leave the deck's cards attributed to playlists no longer listed beside them.
+
+**A saved deck's identity is `savedDeckKey()` — its ids sorted and joined — derived on demand and never stored.** Sorted, so the same three playlists entered in a different row order are one favourite rather than two rows distinguishable only by their timestamps. Derived, because a stored key is a second source of truth that can disagree with the ids beside it, and the disagreement would only ever surface as a remove button that removes the wrong row. It is the dedupe key, the remove argument and the React list key.
+
+**The leak rule survived a new shape and got stricter.** `savePlaylist` already rebuilt an entry field by field on the **write** as well as the read, because the store is read on the landing screen — a pre-start surface. An **array** field is a new way to smuggle a larger object in (`[...entry.ids]` copies whatever a caller put in it), so `ids` is rebuilt element by element and non-strings are dropped. The module's own leak test covers both halves.
+
+**No cap on the combined deck size, and the year resolver is untouched.** Five playlists can be ~500 cards and the crawl runs at roughly 1 req/s, but the card-1 gate means play still starts in seconds — the resolver already takes the deck rather than the playlist, so a 500-card crawl needed no new code. Plan 2 says the size out loud in a notice instead of capping it.
 
 ---
 

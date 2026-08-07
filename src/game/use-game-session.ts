@@ -63,7 +63,14 @@ export interface GameSession {
    * the PDF export waits for -- see the selector's own block in `reducer.ts`.
    */
   pendingYearCount: number;
-  start: (cards: Card[], playlist: PlaylistSummary, seed?: string) => void;
+  /**
+   * Deal a deck.
+   *
+   * `playlists` is the 1..5 playlists it came from, in row order, already merged into `cards` by
+   * `deck-merge.ts`. The resolver takes the DECK rather than the playlist, so a five-playlist
+   * crawl needs no new code here -- only more time (see `resolver.ts` for the per-lookup cost).
+   */
+  start: (cards: Card[], playlists: readonly PlaylistSummary[], seed?: string) => void;
   flip: () => void;
   next: () => void;
   end: () => void;
@@ -180,14 +187,14 @@ export function useGameSession(options: UseGameSessionOptions = {}): GameSession
   }, [state, storage]);
 
   const start = useCallback(
-    (cards: Card[], playlist: PlaylistSummary, seed?: string) => {
+    (cards: Card[], playlists: readonly PlaylistSummary[], seed?: string) => {
       // Cleared before the new session is dealt, so a failure between here and the first save
       // cannot leave the previous game resumable.
       clearSession(storage);
       dispatch(
         seed === undefined
-          ? { type: 'START', cards, playlist }
-          : { type: 'START', cards, playlist, seed },
+          ? { type: 'START', cards, playlists }
+          : { type: 'START', cards, playlists, seed },
       );
       bumpSessionId();
     },

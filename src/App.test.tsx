@@ -43,12 +43,36 @@ const PLAYLIST_URL = 'https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M';
 
 const PLAYLIST = { id: '37i9dQZF1DXcBWIGoYBM5M', name: 'Test Playlist', owner: 'Spotify' };
 
+/** A second playlist, for the fan-out. Its own id, its own name, its own cards. */
+const SECOND_URL = 'https://open.spotify.com/playlist/2zmXlpkOMN92NlQaE2M62c';
+const SECOND_PLAYLIST = { id: '2zmXlpkOMN92NlQaE2M62c', name: 'Second Playlist', owner: 'Someone' };
+
 /** A deck with no years at all, so the resolver has real work to do and the gate really gates. */
 const UNRESOLVED_DECK: Card[] = fixtureDeck.map(({ year, yearConfidence, ...card }) => {
   void year;
   void yearConfidence;
   return card;
 });
+
+/** Three cards nothing else holds, so a merged deck's size is exact rather than approximate. */
+const SECOND_DECK: Card[] = UNRESOLVED_DECK.slice(0, 3).map((card, index) => ({
+  ...card,
+  id: `bbbbbbbbbbbbbbbbbbbb${index}${index}`,
+  title: `Second Track ${index + 1}`,
+}));
+
+/**
+ * How many cards a merged deck of these outcomes holds.
+ *
+ * Counted rather than summed, because the FIXTURE DECK ALREADY CONTAINS A DUPLICATE ID:
+ * `duplicateIdCardA` and `duplicateIdCardB` are two entries with one id, put there for the
+ * reducer's own dedupe. The merge drops one of them, so `fixtureDeck.length` is not the size of a
+ * deck dealt from it -- and a test that assumed otherwise would fail with an off-by-one that reads
+ * like a merge bug.
+ */
+function distinctCardCount(...decks: readonly Card[][]): number {
+  return new Set(decks.flat().map((card) => card.id)).size;
+}
 
 function playlistResult(overrides: Partial<PlaylistResult> = {}): PlaylistResult {
   return {
@@ -85,6 +109,30 @@ function playlistFetch(status: number, body: unknown): PlaylistFetch {
       json: () => Promise.resolve(body),
     }),
   );
+}
+
+/**
+ * A playlist `fetch` double that answers PER PLAYLIST ID.
+ *
+ * The fan-out fires one request per row against `/api/playlist?url=…`, so the id is what tells them
+ * apart -- it survives the query encoding unchanged, being 22 base62 characters. Anything not
+ * scripted answers 404, which is what makes "one of five is private" a one-line setup.
+ */
+function playlistFetchByPlaylist(
+  responses: Record<string, { status: number; body: unknown }>,
+): PlaylistFetch {
+  return vi.fn<PlaylistFetch>((url) => {
+    const scripted = Object.entries(responses).find(([id]) => String(url).includes(id))?.[1] ?? {
+      status: 404,
+      body: { code: 'not-found-or-private', message: 'nope' },
+    };
+
+    return Promise.resolve({
+      ok: scripted.status >= 200 && scripted.status < 300,
+      status: scripted.status,
+      json: () => Promise.resolve(scripted.body),
+    });
+  });
 }
 
 /**
@@ -177,6 +225,20 @@ function renderApp(fetchImpl: PlaylistFetch, storage = memoryStorage()) {
 /** Paste a URL and press Start. */
 function startPlaylist(url = PLAYLIST_URL) {
   fireEvent.change(screen.getByLabelText('Playlist link'), { target: { value: url } });
+  fireEvent.click(screen.getByRole('button', { name: /start/i }));
+}
+
+/** Press "+" until there are enough rows, fill them all in order, and press Start. */
+function startPlaylists(urls: readonly string[]) {
+  for (let index = 1; index < urls.length; index += 1) {
+    fireEvent.click(screen.getByRole('button', { name: 'Add another playlist' }));
+  }
+
+  urls.forEach((url, index) => {
+    const label = index === 0 ? 'Playlist link' : `Playlist link ${index + 1}`;
+    fireEvent.change(screen.getByLabelText(label), { target: { value: url } });
+  });
+
   fireEvent.click(screen.getByRole('button', { name: /start/i }));
 }
 
@@ -583,7 +645,7 @@ describe('App', () => {
     const storage = memoryStorage();
     const session: PersistedSession = {
       version: SESSION_VERSION,
-      playlist: PLAYLIST,
+      playlists: [PLAYLIST],
       seed: 'seed-1',
       deck: [highConfidenceCard],
       currentIndex: 0,
@@ -617,7 +679,7 @@ describe('App', () => {
       SESSION_STORAGE_KEY,
       JSON.stringify({
         version: SESSION_VERSION,
-        playlist: PLAYLIST,
+        playlists: [PLAYLIST],
         seed: 'seed-1',
         deck,
         currentIndex: 0,
@@ -743,7 +805,7 @@ describe('App', () => {
         SESSION_STORAGE_KEY,
         JSON.stringify({
           version: SESSION_VERSION,
-          playlist: PLAYLIST,
+          playlists: [PLAYLIST],
           seed: 'resumed-seed',
           deck: [highConfidenceCard],
           currentIndex: 0,
@@ -860,7 +922,7 @@ describe('App', () => {
         LIBRARY_STORAGE_KEY,
         JSON.stringify({
           version: LIBRARY_VERSION,
-          entries: [{ id: PLAYLIST.id, name: 'From last time', savedAt: 1 }],
+          entries: [{ ids: [PLAYLIST.id], name: 'From last time', savedAt: 1 }],
         }),
       );
 
@@ -876,7 +938,7 @@ describe('App', () => {
         LIBRARY_STORAGE_KEY,
         JSON.stringify({
           version: LIBRARY_VERSION,
-          entries: [{ id: PLAYLIST.id, name: 'Going away', savedAt: 1 }],
+          entries: [{ ids: [PLAYLIST.id], name: 'Going away', savedAt: 1 }],
         }),
       );
 
@@ -900,7 +962,7 @@ describe('App', () => {
         LIBRARY_STORAGE_KEY,
         JSON.stringify({
           version: LIBRARY_VERSION,
-          entries: [{ id: PLAYLIST.id, name: 'Playable', savedAt: 1 }],
+          entries: [{ ids: [PLAYLIST.id], name: 'Playable', savedAt: 1 }],
         }),
       );
       const fetchImpl = playlistFetch(200, playlistResult());
@@ -963,5 +1025,341 @@ describe('App', () => {
     });
 
     expect(screen.queryByTestId('notice-banner')).toBeNull();
+  });
+
+  describe('a deck from several playlists', () => {
+    /**
+     * Both playlists loading, each with its own cards.
+     *
+     * The default for this block, because "two playlists deal one deck" is the case every other
+     * assertion here is a variation on.
+     */
+    function bothLoad(): PlaylistFetch {
+      return playlistFetchByPlaylist({
+        [PLAYLIST.id]: { status: 200, body: playlistResult() },
+        [SECOND_PLAYLIST.id]: {
+          status: 200,
+          body: playlistResult({ playlist: SECOND_PLAYLIST, cards: SECOND_DECK }),
+        },
+      });
+    }
+
+    it('should deal one deck from two playlists', async () => {
+      /*
+        THE FAN-OUT, END TO END. Two requests go out -- one per row, in parallel under one
+        controller -- and one deck comes back holding both playlists' cards. The request COUNT is
+        the half that only an integration test can see: a sequential loop, a dropped row or a
+        second entry point would all still deal a playable deck.
+      */
+      stubYearApi();
+      const fetchImpl = bothLoad();
+      renderApp(fetchImpl);
+
+      startPlaylists([PLAYLIST_URL, SECOND_URL]);
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('hud')).not.toBeNull();
+      });
+
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+      const requested = vi.mocked(fetchImpl).mock.calls.map(([url]) => String(url));
+      expect(requested.some((url) => url.includes(PLAYLIST.id))).toBe(true);
+      expect(requested.some((url) => url.includes(SECOND_PLAYLIST.id))).toBe(true);
+
+      // The deck is both playlists' cards, which the HUD's count is the only visible measure of --
+      // nothing on a pre-reveal surface may name a card. `cardsRemaining` excludes the current one.
+      const total = distinctCardCount(UNRESOLVED_DECK, SECOND_DECK);
+      expect(screen.getByTestId('hud').textContent).toContain(`${total - 1} cards left`);
+    });
+
+    it('should show the deck label rather than one playlist name', async () => {
+      // ONE LABEL, EVERY SURFACE. The HUD gets `deckLabel()`, which is the first playlist's name
+      // plus a count -- not the first playlist's name alone, which would claim the deck is one
+      // playlist's, and not a list, which the HUD has no room for.
+      stubYearApi();
+      renderApp(bothLoad());
+
+      startPlaylists([PLAYLIST_URL, SECOND_URL]);
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('hud')).not.toBeNull();
+      });
+      expect(screen.getByTestId('hud').textContent).toContain('Test Playlist +1 more');
+    });
+
+    it('should deduplicate a track that appears in both playlists', async () => {
+      /*
+        The same track in two of somebody's five playlists is the ORDINARY case, and two identical
+        cards in one deck read as a bug. Deduped by track id, first occurrence wins -- safe because
+        a card from `/api/playlist` carries no year, so the copies differ in nothing the game reads.
+
+        Asserted through the HUD's count, which is the only place the deck's size is visible.
+      */
+      stubYearApi();
+      const shared = UNRESOLVED_DECK.slice(0, 2);
+      renderApp(
+        playlistFetchByPlaylist({
+          [PLAYLIST.id]: { status: 200, body: playlistResult({ cards: shared }) },
+          [SECOND_PLAYLIST.id]: {
+            status: 200,
+            // Its own card plus BOTH of the first playlist's, so two of the three are duplicates.
+            body: playlistResult({
+              playlist: SECOND_PLAYLIST,
+              cards: [...shared, SECOND_DECK[0] as Card],
+            }),
+          },
+        }),
+      );
+
+      startPlaylists([PLAYLIST_URL, SECOND_URL]);
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('hud')).not.toBeNull();
+      });
+      // Three distinct tracks, not five.
+      expect(screen.getByTestId('hud').textContent).toContain('2 cards left');
+    });
+
+    it('should play the remaining playlists when one fails, and say so', async () => {
+      /*
+        DECISION 4, WHICH IS THE ONE THIS WHOLE FEATURE TURNS ON: one dead playlist among several
+        must not cost the deck. It is dropped with a COUNT, exactly like the truncation and skipped
+        notices, and Start is not gated -- a modal or a disabled button here would turn a footnote
+        into an obstacle.
+      */
+      stubYearApi();
+      renderApp(
+        playlistFetchByPlaylist({
+          [PLAYLIST.id]: { status: 200, body: playlistResult() },
+          // The second is scripted nowhere, so it 404s as private-or-deleted.
+        }),
+      );
+
+      startPlaylists([PLAYLIST_URL, SECOND_URL]);
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('hud')).not.toBeNull();
+      });
+
+      const banner = screen.getByTestId('notice-banner').textContent ?? '';
+      expect(banner).toContain('1 playlist could not be loaded and was left out.');
+      // A NOTICE, never the landing screen's error slot: the deck is dealt and playable.
+      expect(screen.queryByLabelText('Playlist link')).toBeNull();
+      // And the failure is not named -- the row it belonged to is gone by now.
+      expect(banner).not.toContain(SECOND_PLAYLIST.name);
+    });
+
+    it('should show the error copy when every playlist fails', async () => {
+      /*
+        A TOTAL failure is the one that blocks, and it reports the FIRST row's code -- which is why
+        the fan-out insists on row order. No new `StartFailureCode` was needed: the code is one
+        `fetchPlaylist` already returns, so `messages.ts`'s exhaustive map is untouched.
+      */
+      stubHangingYearApi();
+      renderApp(playlistFetch(404, { code: 'not-found-or-private', message: 'nope' }));
+
+      startPlaylists([PLAYLIST_URL, SECOND_URL]);
+
+      await waitFor(() => {
+        expect(screen.getByRole('alert').textContent).toBe(
+          PLAYLIST_ERROR_MESSAGES['not-found-or-private'],
+        );
+      });
+      expect(screen.queryByTestId('hud')).toBeNull();
+      // Still on the landing screen, with the rows the player typed still in them.
+      expect((screen.getByLabelText('Playlist link') as HTMLInputElement).value).toBe(PLAYLIST_URL);
+    });
+
+    it('should report the combined deck size when more than one playlist loaded', async () => {
+      // The "say the size out loud" half of the no-cap decision. It is a count, so it is safe on a
+      // pre-reveal surface, and it is the only thing that tells a player their five playlists came
+      // to several hundred cards.
+      stubYearApi();
+      renderApp(bothLoad());
+
+      startPlaylists([PLAYLIST_URL, SECOND_URL]);
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('notice-banner')).not.toBeNull();
+      });
+      const total = distinctCardCount(UNRESOLVED_DECK, SECOND_DECK);
+      expect(screen.getByTestId('notice-banner').textContent).toContain(
+        `${total} cards from 2 playlists, shuffled into one deck.`,
+      );
+    });
+
+    it('should not report a deck size for a single playlist', async () => {
+      // The single-playlist screen is unchanged by this feature: its size was never worth a line,
+      // and saying it now would put a banner on a screen that had none.
+      stubYearApi();
+      renderApp(playlistFetch(200, playlistResult()));
+
+      startPlaylist();
+      await waitFor(() => {
+        expect(screen.queryByTestId('hud')).not.toBeNull();
+      });
+
+      expect(screen.queryByTestId('notice-banner')).toBeNull();
+    });
+
+    it('should deal from a share link naming two playlists', async () => {
+      // The multi-id link, end to end. It goes through the SAME `request` the form uses, so it
+      // exercises the same fan-out, the same merge and the same notices -- there is no second
+      // entry point into the session.
+      stubYearApi();
+      const storage = memoryStorage();
+      const fetchImpl = bothLoad();
+      const seed = 'a1b2c3d4e5f60718';
+      render(
+        <App
+          storage={storage}
+          fetchImpl={fetchImpl}
+          search={`?playlist=${PLAYLIST.id},${SECOND_PLAYLIST.id}&seed=${seed}`}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('hud')).not.toBeNull();
+      });
+
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+      const saved = JSON.parse(storage.map.get(SESSION_STORAGE_KEY) ?? '{}') as PersistedSession;
+      expect(saved.seed).toBe(seed);
+      expect(saved.playlists.map((playlist) => playlist.id)).toEqual([
+        PLAYLIST.id,
+        SECOND_PLAYLIST.id,
+      ]);
+    });
+
+    it('should still deal from a single-id share link', async () => {
+      // BACK-COMPAT AT THE CONTAINER: every link shared before this feature names one id, and one
+      // playlist is simply the `n = 1` case of the same path.
+      stubYearApi();
+      const storage = memoryStorage();
+      const fetchImpl = playlistFetch(200, playlistResult());
+      render(
+        <App
+          storage={storage}
+          fetchImpl={fetchImpl}
+          search={`?playlist=${PLAYLIST.id}&seed=a1b2c3d4e5f60718`}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('hud')).not.toBeNull();
+      });
+
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+      const saved = JSON.parse(storage.map.get(SESSION_STORAGE_KEY) ?? '{}') as PersistedSession;
+      expect(saved.playlists.map((playlist) => playlist.id)).toEqual([PLAYLIST.id]);
+    });
+
+    it('should ignore a share link when a game is already in progress', async () => {
+      // The existing precedence, re-run with a multi-id link: opening an old link must not discard
+      // a live session, and a link naming five playlists is five times the deck to lose.
+      stubYearApi();
+      const storage = memoryStorage();
+      storage.map.set(
+        SESSION_STORAGE_KEY,
+        JSON.stringify({
+          version: SESSION_VERSION,
+          playlists: [PLAYLIST],
+          seed: 'resumed-seed',
+          deck: [highConfidenceCard],
+          currentIndex: 0,
+          isFlipped: false,
+          status: 'playing',
+        } satisfies PersistedSession),
+      );
+      const fetchImpl = playlistFetch(500, { code: 'internal-error' });
+
+      render(
+        <App
+          storage={storage}
+          fetchImpl={fetchImpl}
+          search={`?playlist=${PLAYLIST.id},${SECOND_PLAYLIST.id}&seed=a1b2c3d4e5f60718`}
+        />,
+      );
+
+      expect(screen.queryByTestId('hud')).not.toBeNull();
+      expect(fetchImpl).not.toHaveBeenCalled();
+
+      const saved = JSON.parse(storage.map.get(SESSION_STORAGE_KEY) ?? '{}') as PersistedSession;
+      expect(saved.seed).toBe('resumed-seed');
+    });
+
+    it('should save the whole set of playlists and show it on the landing screen', async () => {
+      /*
+        THE LIBRARY ROUND TRIP FOR A COMBINED DECK. A press on the end screen has to become one row
+        on the landing screen carrying ALL the ids -- saving only the first would offer the player a
+        deck that is not the one the row is named after.
+      */
+      stubYearApi();
+      const storage = memoryStorage();
+      // One card each, so two advances finish the deck and reach the end screen.
+      renderApp(
+        playlistFetchByPlaylist({
+          [PLAYLIST.id]: { status: 200, body: playlistResult({ cards: [{ ...pendingYearCard }] }) },
+          [SECOND_PLAYLIST.id]: {
+            status: 200,
+            body: playlistResult({
+              playlist: SECOND_PLAYLIST,
+              cards: [SECOND_DECK[0] as Card],
+            }),
+          },
+        }),
+        storage,
+      );
+
+      startPlaylists([PLAYLIST_URL, SECOND_URL]);
+      await waitFor(() => {
+        expect(screen.queryByTestId('hud')).not.toBeNull();
+      });
+      fireEvent.keyDown(window, { key: 'ArrowRight' });
+      fireEvent.keyDown(window, { key: 'ArrowRight' });
+      await screen.findByText(/deck finished/i);
+
+      fireEvent.click(screen.getByRole('button', { name: /save this playlist/i }));
+      expect(screen.queryByRole('button', { name: /saved to your playlists/i })).not.toBeNull();
+
+      // Both ids, under one label, in one entry.
+      const stored = storage.map.get(LIBRARY_STORAGE_KEY) ?? '';
+      expect(stored).toContain(PLAYLIST.id);
+      expect(stored).toContain(SECOND_PLAYLIST.id);
+
+      // And one row on the landing screen, named by the deck label.
+      fireEvent.click(screen.getByRole('button', { name: /^home$/i }));
+      expect(await screen.findByText('Your playlists')).not.toBeNull();
+      expect(screen.queryByRole('button', { name: 'Test Playlist +1 more' })).not.toBeNull();
+    });
+
+    it('should re-deal every playlist of a saved multi-playlist deck', async () => {
+      // The other half of the round trip: a saved row submits ALL its ids, so the fan-out runs
+      // again and the deck it deals is the deck the row is named after.
+      stubYearApi();
+      const storage = memoryStorage();
+      storage.map.set(
+        LIBRARY_STORAGE_KEY,
+        JSON.stringify({
+          version: LIBRARY_VERSION,
+          entries: [
+            {
+              ids: [PLAYLIST.id, SECOND_PLAYLIST.id],
+              name: 'Test Playlist +1 more',
+              savedAt: 1,
+            },
+          ],
+        }),
+      );
+      const fetchImpl = bothLoad();
+
+      renderApp(fetchImpl, storage);
+      fireEvent.click(screen.getByRole('button', { name: 'Test Playlist +1 more' }));
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('hud')).not.toBeNull();
+      });
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+    });
   });
 });

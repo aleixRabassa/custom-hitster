@@ -98,126 +98,148 @@ buttons already fill.
 
 ## Implementation Steps
 
-- [ ] **Step 1 — Fan out in `src/hooks/usePlaylist.ts`.**
-  - [ ] `request(urls: readonly string[])`. Abort the controller in flight, make one new controller for
+- [x] **Step 1 — Fan out in `src/hooks/usePlaylist.ts`.**
+  - [x] `request(urls: readonly string[])`. Abort the controller in flight, make one new controller for
         the whole batch, set `loading`, and fire one `fetchPlaylist` per URL with that one signal.
-  - [ ] Await them all together, then call `mergePlaylists()` with the outcomes **in URL order**, so
+  - [x] Await them all together, then call `mergePlaylists()` with the outcomes **in URL order**, so
         the failure the error slot reports is the first row's. Keep the two existing guards after the
         await — still mounted, still the current controller — unchanged and in the same order.
-  - [ ] `PlaylistRequestState`'s `loaded` variant carries `MergedDeck`. The union's own comment about
+  - [x] `PlaylistRequestState`'s `loaded` variant carries `MergedDeck`. The union's own comment about
         why it is a union rather than three booleans still stands verbatim.
-  - [ ] Requests go out **in parallel**, not sequentially: five sequential embed fetches would put the
+  - [x] Requests go out **in parallel**, not sequentially: five sequential embed fetches would put the
         card-1 gate behind the sum of them for no benefit. Say so in a comment, and say that the shared
         `AbortController` is what keeps "the player changed their mind" a single act.
-  - [ ] Keep the `fetchImpl` binding note and the ref-read pattern exactly as they are — the brand-check
+  - [x] Keep the `fetchImpl` binding note and the ref-read pattern exactly as they are — the brand-check
         failure they document is unrelated to this change and still real.
-  - [ ] Do **not** add a per-URL retry, a partial-progress state or a per-row status here. The hook's
+  - [x] Do **not** add a per-URL retry, a partial-progress state or a per-row status here. The hook's
         rule is that logic belongs in the client or in `deck-merge.ts`; a progress readout is a
         follow-up, not this task.
 
-- [ ] **Step 2 — Turn the landing form into rows in `src/components/LandingScreen.tsx`.**
-  - [ ] Replace the single `value` state with an array of row values, starting as one empty row.
+- [x] **Step 2 — Turn the landing form into rows in `src/components/LandingScreen.tsx`.**
+  - [x] Replace the single `value` state with an array of row values, starting as one empty row.
         `onSubmit` becomes `(urls: string[]) => void`.
-  - [ ] Render one labelled input per row. The **first** row keeps the current visible label text; later
+  - [x] Render one labelled input per row. The **first** row keeps the current visible label text; later
         rows are labelled with their position (e.g. "Playlist link 2") so each input's accessible name
         is unique. Keep the wrapping `<label>` and add **no** `aria-label` — the WCAG 2.5.3 failure
         documented in that file is exactly what an `aria-label` here would reintroduce.
-  - [ ] Add the **"+" button** below the rows: `type="button"`, an accessible name of "Add another
+  - [x] Add the **"+" button** below the rows: `type="button"`, an accessible name of "Add another
         playlist" (the `+` glyph is `aria-hidden` decoration, the same split `NoticeBanner`'s Dismiss and
         the library's remove button already use), `touch-target`, `focus-visible:focus-ring`, and
         disabled at `MAX_DECK_PLAYLISTS` rows or while loading. When disabled, render a short hint that
         five is the maximum — a disabled control with no explanation reads as broken.
-  - [ ] Add a per-row remove button, rendered only when there is more than one row, named for its row
+  - [x] Add a per-row remove button, rendered only when there is more than one row, named for its row
         ("Remove playlist 3") for the same reason the library's remove button names its playlist.
         Removing a row must not renumber the values under the player's cursor — key the rows on a
         stable per-row id rather than on the index.
-  - [ ] Per-row validation on submit, reusing the existing rules unchanged: ignore blank rows; a
+  - [x] Per-row validation on submit, reusing the existing rules unchanged: ignore blank rows; a
         `spotify.link` short URL skips the client-side parse and goes to the server; everything else
         goes through `parsePlaylistUrl`. A row that fails gets **its own** message under it, with its
         own id wired to that input's `aria-describedby` and `aria-invalid`, and `role="alert"` so it is
         announced. Replace the module's single `ERROR_MESSAGE_ID` constant with a per-row id derived
         from the row's stable id, and update the comment that justified the single literal.
-  - [ ] Submit only when **every** non-blank row parses. All-blank is itself a failure: report
+  - [x] Submit only when **every** non-blank row parses. All-blank is itself a failure: report
         `invalid-url` on the first row rather than firing a request for nothing.
-  - [ ] Clear a row's error when that row is edited, not all of them — the existing "an error about the
+  - [x] Clear a row's error when that row is edited, not all of them — the existing "an error about the
         previous value must not sit beside a half-typed new one" reasoning, applied per row.
-  - [ ] The container-level `errorCode` prop keeps its single slot below the form, with its current
+  - [x] The container-level `errorCode` prop keeps its single slot below the form, with its current
         `role="alert"` copy from `messages.ts`. It describes the request, not a row.
-  - [ ] **Suggested and saved buttons keep submitting instantly.** A click replaces the rows with that
+  - [x] **Suggested and saved buttons keep submitting instantly.** A click replaces the rows with that
         pick's ids (one for a suggestion, up to five for a saved deck) and submits immediately, which is
         today's behaviour and the one-click demo path. Record in the comment that this **discards typed
         rows** and why that is acceptable: the screen is replaced by the game anyway, and the rows are
         visibly refilled with what was actually submitted before it is.
-  - [ ] A saved entry's row now derives its React key and its remove argument from `savedDeckKey(saved)`
+  - [x] A saved entry's row now derives its React key and its remove argument from `savedDeckKey(saved)`
         rather than from `saved.id`. The row still renders the entry's `name` and **nothing else** — the
         leak rule and the "no second line" reasoning are unchanged.
 
-- [ ] **Step 3 — Wire the container in `src/App.tsx`.**
-  - [ ] `handleSubmit(urls: string[])` — still dropping the pending link seed first, for the reason
+- [x] **Step 3 — Wire the container in `src/App.tsx`.**
+  - [x] `handleSubmit(urls: string[])` — still dropping the pending link seed first, for the reason
         already documented there.
-  - [ ] The deal effect reads `result.playlists` and `result.cards` from the `MergedDeck` and calls
+  - [x] The deal effect reads `result.playlists` and `result.cards` from the `MergedDeck` and calls
         `start(result.cards, result.playlists, seed?)`. `dealtResultRef` compares the merged object by
         identity exactly as before: the hook produces one merged object per batch, so the guard is as
         idempotent under StrictMode as it is today.
-  - [ ] The notice state grows to carry `failures.length`, the deck's card count and the loaded playlist
+  - [x] The notice state grows to carry `failures.length`, the deck's card count and the loaded playlist
         count alongside `truncated` and `skippedCount`. Dismissal stays container state, for the reason
         decision 9 already gives.
-  - [ ] The link effect maps `deckLink.playlistIds` through `spotifyPlaylistUrl` into one array and
+  - [x] The link effect maps `deckLink.playlistIds` through `spotifyPlaylistUrl` into one array and
         passes it to `request`. **Leave the address bar alone** — no `pushState`, no `replaceState` — and
         **do not add an "already submitted" ref**: both rules are load-bearing and both are documented
         in that effect's header block. It stays a single effect with the same two stable dependencies.
-  - [ ] `handleSavePlaylist` writes `{ ids: state.playlists.map(…id), name: deckLabel(state.playlists),
+  - [x] `handleSavePlaylist` writes `{ ids: state.playlists.map(…id), name: deckLabel(state.playlists),
         savedAt: … }`. `isPlaylistSaved` compares `savedDeckKey` of the live deck against the saved
         entries' keys, so a partially-overlapping set is correctly **not** "saved".
-  - [ ] `handleRemoveSaved(key)` takes the deck key.
-  - [ ] `handleRestart` reads `state.playlists`. It still restarts from `state.deck` rather than from a
+  - [x] `handleRemoveSaved(key)` takes the deck key.
+  - [x] `handleRestart` reads `state.playlists`. It still restarts from `state.deck` rather than from a
         remembered fetch — that decision is unaffected and is what makes a restart cost zero lookups.
-  - [ ] Every `state.playlist?.name ?? ''` site becomes `deckLabel(state.playlists)`; every
+  - [x] Every `state.playlist?.name ?? ''` site becomes `deckLabel(state.playlists)`; every
         `state.playlist?.id ?? ''` site becomes the id array. The `??` fallbacks disappear with the
         `null` sentinel.
-  - [ ] `deckCollapsed` is unchanged. Its condition is about the deck, not the playlist, and a
+  - [x] `deckCollapsed` is unchanged. Its condition is about the deck, not the playlist, and a
         five-playlist deck that resolves no years at all is exactly the same `no-years-found` case.
 
-- [ ] **Step 4 — Add two notices to `src/components/NoticeBanner.tsx`.** Both optional, both count-only,
+- [x] **Step 4 — Add two notices to `src/components/NoticeBanner.tsx`.** Both optional, both count-only,
       neither gating Start — the header block's rule holds.
-  - [ ] `failedPlaylistCount`: "1 playlist could not be loaded and was left out." / "N playlists could
+  - [x] `failedPlaylistCount`: "1 playlist could not be loaded and was left out." / "N playlists could
         not be loaded and were left out.", pluralised properly. This is the visible half of decision 4:
         a private or deleted playlist among five costs a notice, not the deck.
-  - [ ] The combined-deck line, rendered **only** when more than one playlist loaded: the deck's card
+  - [x] The combined-deck line, rendered **only** when more than one playlist loaded: the deck's card
         count and the number of playlists it came from. This is the "say the size" half of the no-cap
         decision, and it is a count, so it is safe on a pre-reveal surface.
-  - [ ] Update the header comment: "the three non-blocking notices" becomes five, and the new pair keeps
+  - [x] Update the header comment: "the three non-blocking notices" becomes five, and the new pair keeps
         the same `role="status"` (never `alert`) and the same dismissal.
-  - [ ] Do **not** name which playlist failed. The name is safe data, but the failure list is ordered by
+  - [x] Do **not** name which playlist failed. The name is safe data, but the failure list is ordered by
         row and the rows are gone by the time this renders, so a name here would be information the
         player cannot act on — and the count is what every other notice in this app reports.
 
-- [ ] **Step 5 — Carry the ids through the deck actions.**
-  - [ ] `DeckActions` takes `playlistIds: readonly string[]` and calls `buildDeckLink(shareOrigin,
+- [x] **Step 5 — Carry the ids through the deck actions.**
+  - [x] `DeckActions` takes `playlistIds: readonly string[]` and calls `buildDeckLink(shareOrigin,
         playlistIds, seed)` **inside the handler**, unchanged. The build-at-click rule is documented and
         still load-bearing: a restart deals a fresh seed.
-  - [ ] The share caption pluralises: "Same playlists, same shuffle …" beyond one playlist. It must
+  - [x] The share caption pluralises: "Same playlists, same shuffle …" beyond one playlist. It must
         still **never** say "the same deck" — and it now has a third reason, since a playlist that has
         gone private since the link was made is dropped with a notice.
-  - [ ] `exportDeck(deck, playlistName)` is unchanged; it receives the label, so the PDF filename follows
+  - [x] `exportDeck(deck, playlistName)` is unchanged; it receives the label, so the PDF filename follows
         for free.
-  - [ ] `DeckActionsDialog` and `GameScreen` pass the ids through. `GameScreen`'s own props keep
+  - [x] `DeckActionsDialog` and `GameScreen` pass the ids through. `GameScreen`'s own props keep
         `playlistName` as a single string, so the HUD is untouched — it already truncates a long name.
 
-- [ ] **Step 6 — The end screen is the one place the full playlist list appears.**
-  - [ ] The count line uses the deck label.
-  - [ ] Below it, list every playlist's name. This is post-game, so nothing can be spoiled, and it is
+- [x] **Step 6 — The end screen is the one place the full playlist list appears.**
+  - [x] The count line uses the deck label.
+  - [x] Below it, list every playlist's name. This is post-game, so nothing can be spoiled, and it is
         the only surface where the full set is worth the space. Playlist names only — the screen's leak
         test asserts no track, artist or year reaches it, and that test does not change.
-  - [ ] The second button still says "Home", and the assertion that "New playlist" is absent stays.
+  - [x] The second button still says "Home", and the assertion that "New playlist" is absent stays.
 
-- [ ] **Step 7 — Update the tests below, then run the four checks.** `pnpm typecheck && pnpm lint &&
-      pnpm test && pnpm build`, all four green.
-  - [ ] Every DOM test file keeps its `afterEach(cleanup)` — Testing Library does not auto-clean here —
+- [x] **Step 7 — Update the tests below, then run the four checks.** `pnpm typecheck && pnpm lint &&
+      pnpm test && pnpm build`, all four green. **Run 2026-08-07: all four green, 45 files / 706 tests.**
+  - [x] Every DOM test file keeps its `afterEach(cleanup)` — Testing Library does not auto-clean here —
         and every file that renders a card keeps `clearQrCache()` in its `beforeEach`.
-  - [ ] Measure and record: the bundle delta on the initial path (the landing screen gains rows and the
+  - [x] Measure and record: the bundle delta on the initial path (the landing screen gains rows and the
         `deck-merge` module), the number of `/api/playlist` requests a five-row submit makes under React
         19 StrictMode, and the card count a real five-playlist deck merges to after the dedupe.
+
+    **Measured 2026-08-07** (these still owe an `agent_findings.md` entry — see Documentation Updates):
+
+    - **Bundle, initial path: +3.10 kB raw / +0.77 kB gzip** on `index-*.js` (210.00 → 213.10 kB;
+      65.94 → 66.71 kB gzip), plus **+0.16 kB raw / +0.04 kB gzip** of CSS. That is the whole
+      feature, both plans together, against the pre-multi-playlist `HEAD` — the rows, the two
+      notices, the fan-out, `deck-merge.ts`, both v2 migrations and the comma link. Under 1 kB gzip
+      for all of it, because every new module is small and none of them pulled in a dependency.
+    - **A five-row submit makes exactly 5 `/api/playlist` requests under React 19 StrictMode**, one
+      per row, all in flight together. No doubling: the submit is an EVENT HANDLER, and StrictMode
+      double-invokes render and effects rather than handlers — so the double-fetch hazard the link
+      path has (and absorbs through `usePlaylist`'s abort) does not exist on the form path at all.
+    - **A real five-playlist deck: 390 raw tracks → 365 after the dedupe** (25 duplicates, 6.4%).
+      Measured against the live embed endpoint on 2026-08-07 with Éxitos Verano (100), PEGAO (40),
+      Radio Brianper (100), Electro Latino (100) and Top 50 España (50) — five of the nine
+      suggestions. **Three of those five return exactly `MAX_EMBED_TRACKS`, so a deck like this
+      raises the truncation notice**, and the overlap is real rather than theoretical: 25 tracks
+      appear in more than one of five Spanish-chart playlists, which is exactly the case the dedupe
+      exists for. The deck then loses roughly a third again to `no-years-found` drops at play time,
+      so ~240 cards is the shape of what actually gets played. **Decision 12's "no cap" is therefore
+      not yet stress-tested against the HUD** — 365 is well past 400/3 but not absurd; the open
+      question below stays open.
 
 ---
 
@@ -225,72 +247,72 @@ buttons already fill.
 
 `src/components/LandingScreen.test.tsx` — jsdom:
 
-- [ ] `should start with one playlist row` — covers the default state
-- [ ] `should add a row when the add button is pressed` — covers the "+"
-- [ ] `should not add more rows than the maximum` — covers the cap and the disabled state
-- [ ] `should explain why the add button is disabled at the maximum` — covers the hint
-- [ ] `should remove a row without disturbing the other values` — covers the stable row keys
-- [ ] `should not render a remove button when there is only one row` — covers the single-row case
-- [ ] `should submit every non-blank row` — covers the array submit
-- [ ] `should ignore blank rows` — covers the trimming rule
-- [ ] `should report an error on the row that failed to parse` — covers per-row validation, asserting
+- [x] `should start with one playlist row` — covers the default state
+- [x] `should add a row when the add button is pressed` — covers the "+"
+- [x] `should not add more rows than the maximum` — covers the cap and the disabled state
+- [x] `should explain why the add button is disabled at the maximum` — covers the hint
+- [x] `should remove a row without disturbing the other values` — covers the stable row keys
+- [x] `should not render a remove button when there is only one row` — covers the single-row case
+- [x] `should submit every non-blank row` — covers the array submit
+- [x] `should ignore blank rows` — covers the trimming rule
+- [x] `should report an error on the row that failed to parse` — covers per-row validation, asserting
       the message is associated with that input via `aria-describedby`
-- [ ] `should not submit when any row is invalid` — covers the all-or-nothing submit
-- [ ] `should report an error when every row is blank` — covers the all-blank case
-- [ ] `should clear only the edited row's error` — covers the per-row clear
-- [ ] `should submit a short link without parsing it` — covers that the existing `spotify.link` exception
+- [x] `should not submit when any row is invalid` — covers the all-or-nothing submit
+- [x] `should report an error when every row is blank` — covers the all-blank case
+- [x] `should clear only the edited row's error` — covers the per-row clear
+- [x] `should submit a short link without parsing it` — covers that the existing `spotify.link` exception
       survived the rewrite
-- [ ] `should submit a suggestion immediately as a single playlist` — covers the preserved demo path
-- [ ] `should submit every id of a saved multi-playlist deck` — covers the saved-entry path
-- [ ] `should remove a saved deck by its deck key` — covers the new remove argument
-- [ ] `should not render a track title, artist or year` — the existing leak assertion, re-run against the
+- [x] `should submit a suggestion immediately as a single playlist` — covers the preserved demo path
+- [x] `should submit every id of a saved multi-playlist deck` — covers the saved-entry path
+- [x] `should remove a saved deck by its deck key` — covers the new remove argument
+- [x] `should not render a track title, artist or year` — the existing leak assertion, re-run against the
       new row markup
 
 `src/App.test.tsx` — jsdom:
 
-- [ ] `should deal one deck from two playlists` — covers the fan-out end to end from a stubbed fetch,
+- [x] `should deal one deck from two playlists` — covers the fan-out end to end from a stubbed fetch,
       asserting both requests were made and the deck holds both playlists' cards
-- [ ] `should deduplicate a track that appears in both playlists` — covers the merge through the container
-- [ ] `should play the remaining playlists when one fails, and say so` — covers decision 4 and the new
+- [x] `should deduplicate a track that appears in both playlists` — covers the merge through the container
+- [x] `should play the remaining playlists when one fails, and say so` — covers decision 4 and the new
       notice line together
-- [ ] `should show the error copy when every playlist fails` — covers the total-failure code reaching the
+- [x] `should show the error copy when every playlist fails` — covers the total-failure code reaching the
       landing screen's single slot
-- [ ] `should deal from a share link naming two playlists` — covers the multi-id link entry path
-- [ ] `should still deal from a single-id share link` — covers back-compat at the container
-- [ ] `should ignore a share link when a game is already in progress` — the existing assertion, re-run
-- [ ] `should save the whole set of playlists and show it on the landing screen` — covers save + library
+- [x] `should deal from a share link naming two playlists` — covers the multi-id link entry path
+- [x] `should still deal from a single-id share link` — covers back-compat at the container
+- [x] `should ignore a share link when a game is already in progress` — the existing assertion, re-run
+- [x] `should save the whole set of playlists and show it on the landing screen` — covers save + library
       round trip through the stubbed storage
-- [ ] `should report the combined deck's size when more than one playlist loaded` — covers the new notice
-- [ ] `should not report a deck size for a single playlist` — covers that the single-playlist screen is
+- [x] `should report the combined deck's size when more than one playlist loaded` — covers the new notice
+- [x] `should not report a deck size for a single playlist` — covers that the single-playlist screen is
       unchanged
 
 `src/components/NoticeBanner.test.tsx` — jsdom:
 
-- [ ] `should report one playlist that could not be loaded` — covers the singular copy
-- [ ] `should report several playlists that could not be loaded` — covers the plural copy
-- [ ] `should report the deck size and playlist count` — covers the combined-deck line
-- [ ] `should render nothing for a single successful playlist` — covers that the common case still
+- [x] `should report one playlist that could not be loaded` — covers the singular copy
+- [x] `should report several playlists that could not be loaded` — covers the plural copy
+- [x] `should report the deck size and playlist count` — covers the combined-deck line
+- [x] `should render nothing for a single successful playlist` — covers that the common case still
       renders no banner at all
-- [ ] `should not name a playlist that failed` — covers the count-only rule
+- [x] `should not name a playlist that failed` — covers the count-only rule
 
 `src/components/DeckActions.test.tsx` — jsdom:
 
-- [ ] `should copy a link holding every playlist id` — covers the multi-id build at click time
-- [ ] `should say playlists rather than playlist for a combined deck` — covers the pluralised caption
-- [ ] `should never promise the same deck` — the existing assertion, re-run
-- [ ] `should not render any card's title, artist or year` — the existing leak test, re-run with the new
+- [x] `should copy a link holding every playlist id` — covers the multi-id build at click time
+- [x] `should say playlists rather than playlist for a combined deck` — covers the pluralised caption
+- [x] `should never promise the same deck` — the existing assertion, re-run
+- [x] `should not render any card's title, artist or year` — the existing leak test, re-run with the new
       props
 
 `src/components/EndScreen.test.tsx` — jsdom:
 
-- [ ] `should list every playlist the deck came from` — covers step 6
-- [ ] `should show the deck label in the count line` — covers the label
-- [ ] `should not offer a button labelled New playlist` — the existing assertion, re-run
-- [ ] `should not render any card's title, artist or year` — the existing leak test, re-run
+- [x] `should list every playlist the deck came from` — covers step 6
+- [x] `should show the deck label in the count line` — covers the label
+- [x] `should not offer a button labelled New playlist` — the existing assertion, re-run
+- [x] `should not render any card's title, artist or year` — the existing leak test, re-run
 
 `src/components/GameScreen.test.tsx` — jsdom:
 
-- [ ] `should not leak the current card through the deck actions` — the existing assertion, re-run with
+- [x] `should not leak the current card through the deck actions` — the existing assertion, re-run with
       the multi-id props
 
 ---

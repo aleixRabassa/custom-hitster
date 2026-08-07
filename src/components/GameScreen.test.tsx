@@ -57,7 +57,7 @@ function renderScreen(props: {
       playlistName="Test Playlist"
       // The deck-actions props. Arbitrary too -- what they DO is `DeckActions.test.tsx`'s job, and
       // what this file cares about is that opening the panel suspends the game's own controls.
-      playlistId="37i9dQZF1DXcBWIGoYBM5M"
+      playlistIds={['37i9dQZF1DXcBWIGoYBM5M']}
       seed="a1b2c3d4e5f60718"
       shareOrigin="https://hitster.example/"
       onSavePlaylist={props.onSavePlaylist ?? vi.fn()}

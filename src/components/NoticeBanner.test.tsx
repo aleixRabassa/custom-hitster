@@ -1,8 +1,8 @@
 /**
  * @vitest-environment jsdom
  *
- * The notices are three independent booleans in one banner, and the common case is that none of them
- * applies -- so "renders nothing" is as much a requirement as any of the messages.
+ * The notices are five independent conditions in one banner, and the common case is that none of
+ * them applies -- so "renders nothing" is as much a requirement as any of the messages.
  */
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -17,6 +17,11 @@ function renderBanner(props: Partial<Parameters<typeof NoticeBanner>[0]> = {}) {
     <NoticeBanner
       truncated={props.truncated ?? false}
       skippedCount={props.skippedCount ?? 0}
+      failedPlaylistCount={props.failedPlaylistCount ?? 0}
+      deckSize={props.deckSize ?? 0}
+      // Defaults to zero rather than one, so the combined-deck line is opt-in per test. The
+      // container passes the real count; a test that does not care gets no line.
+      loadedPlaylistCount={props.loadedPlaylistCount ?? 0}
       yearLookupsUnavailable={props.yearLookupsUnavailable ?? false}
       onDismiss={onDismiss}
     />,
@@ -82,11 +87,76 @@ describe('NoticeBanner', () => {
     expect(text).toContain('still playable');
   });
 
-  it('should render all three notices together', () => {
-    // They are independent, so all three can apply at once and the banner must not pick one.
-    renderBanner({ truncated: true, skippedCount: 2, yearLookupsUnavailable: true });
+  it('should render all five notices together', () => {
+    // They are independent, so all five can apply at once and the banner must not pick one. A
+    // five-playlist deck with a dead playlist, a truncated one and no year lookups is the worst
+    // realistic case, and it is still a list of footnotes rather than a blocker.
+    renderBanner({
+      truncated: true,
+      skippedCount: 2,
+      failedPlaylistCount: 1,
+      deckSize: 240,
+      loadedPlaylistCount: 4,
+      yearLookupsUnavailable: true,
+    });
 
-    expect(screen.getByTestId('notice-banner').querySelectorAll('li')).toHaveLength(3);
+    expect(screen.getByTestId('notice-banner').querySelectorAll('li')).toHaveLength(5);
+  });
+
+  it('should report one playlist that could not be loaded', () => {
+    // The visible half of "a playlist that fails is dropped with a count, and only a TOTAL failure
+    // blocks Start": one private or deleted playlist among five costs a line, not the deck.
+    renderBanner({ failedPlaylistCount: 1, deckSize: 180, loadedPlaylistCount: 4 });
+
+    const text = screen.getByTestId('notice-banner').textContent ?? '';
+    expect(text).toContain('1 playlist could not be loaded and was left out.');
+    // Singular throughout, because "1 playlists ... were left out" undermines the sentence.
+    expect(text).not.toContain('1 playlists');
+  });
+
+  it('should report several playlists that could not be loaded', () => {
+    renderBanner({ failedPlaylistCount: 3, deckSize: 90, loadedPlaylistCount: 2 });
+
+    expect(screen.getByTestId('notice-banner').textContent).toContain(
+      '3 playlists could not be loaded and were left out.',
+    );
+  });
+
+  it('should report the deck size and playlist count', () => {
+    // The "say the size out loud" half of the no-cap decision (plan 1, decision 12): five playlists
+    // can merge to several hundred cards, and a count is safe on a pre-reveal surface.
+    renderBanner({ deckSize: 214, loadedPlaylistCount: 3 });
+
+    expect(screen.getByTestId('notice-banner').textContent).toContain(
+      '214 cards from 3 playlists, shuffled into one deck.',
+    );
+  });
+
+  it('should render nothing for a single successful playlist', () => {
+    /*
+      THE SINGLE-PLAYLIST SCREEN IS UNCHANGED BY THIS WHOLE FEATURE. One playlist that loaded, no
+      failures, nothing truncated or skipped: the deck size was never worth a line before
+      multi-playlist and saying it now would put a banner on a screen that had none.
+    */
+    const { container } = renderBanner({ deckSize: 42, loadedPlaylistCount: 1 });
+
+    expect(container.firstChild).toBeNull();
+  });
+
+  it('should not name a playlist that failed', () => {
+    /*
+      COUNT ONLY (decision 7). A playlist title is safe data -- the suggestions render nine of them
+      -- but the failures are ordered by the ROW they came from and the rows are gone by the time
+      this renders, so a name here is information the player cannot act on. This asserts the
+      component has no way to receive one: a name would have to arrive as a prop.
+    */
+    renderBanner({ failedPlaylistCount: 2, deckSize: 60, loadedPlaylistCount: 3 });
+
+    const text = screen.getByTestId('notice-banner').textContent ?? '';
+    expect(text).toContain('2 playlists could not be loaded');
+    // No quoting, no colon-then-list: the shapes a name would arrive in.
+    expect(text).not.toMatch(/["“”]/);
+    expect(text).not.toContain('left out:');
   });
 
   it('should invoke the dismiss callback', () => {
@@ -128,7 +198,14 @@ describe('NoticeBanner', () => {
   it('should never gate anything: it renders no confirm or blocking control', () => {
     // No notice here may ever gate Start. Every one of them describes a deck that is already dealt
     // and already playable, so the only control is dismissal.
-    renderBanner({ truncated: true, skippedCount: 2, yearLookupsUnavailable: true });
+    renderBanner({
+      truncated: true,
+      skippedCount: 2,
+      failedPlaylistCount: 1,
+      deckSize: 240,
+      loadedPlaylistCount: 4,
+      yearLookupsUnavailable: true,
+    });
 
     const names = screen
       .getAllByRole('button')

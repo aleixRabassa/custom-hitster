@@ -22,7 +22,7 @@ import type { Card } from '../../shared/types';
 /** A session that has not started. Phase 6's landing screen renders against this. */
 export const initialGameState: GameState = {
   status: 'idle',
-  playlist: null,
+  playlists: [],
   seed: '',
   deck: [],
   currentIndex: 0,
@@ -58,7 +58,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       if (deck.length === 0) {
         return {
           status: 'ended',
-          playlist: action.playlist,
+          playlists: action.playlists,
           seed,
           deck,
           currentIndex: 0,
@@ -88,12 +88,13 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       // =======================================================================
       const status = deck[0]?.year === undefined ? 'preparing' : 'playing';
 
-      // A wholesale replacement, deliberately: starting a new playlist mid-game must not
+      // A wholesale replacement, deliberately: starting a new SET OF PLAYLISTS mid-game must not
       // merge into the old deck, keep the old index, or leave a stale `yearLookupsUnavailable`
-      // from a previous deployment state.
+      // from a previous deployment state. The merge that produced `action.cards` happened above
+      // this reducer, in `deck-merge.ts`; nothing here folds two decks together.
       return {
         status,
-        playlist: action.playlist,
+        playlists: action.playlists,
         seed,
         deck,
         currentIndex: 0,
@@ -323,7 +324,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       return {
         // A saved deck of nothing but yearless cards leaves nothing to resume.
         status: deck.length === 0 ? 'ended' : session.status,
-        playlist: session.playlist,
+        playlists: session.playlists,
         seed: session.seed,
         deck,
         currentIndex,

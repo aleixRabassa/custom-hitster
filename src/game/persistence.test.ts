@@ -8,6 +8,7 @@ import {
   saveSession,
   toPersistedSession,
 } from './persistence';
+import { MAX_DECK_PLAYLISTS } from './deck-merge';
 import { gameReducer, initialGameState } from './reducer';
 import type { StorageLike } from './persistence';
 import type { GameState, PersistedSession } from './types';
@@ -18,6 +19,10 @@ const PLAYLIST: PlaylistSummary = {
   name: 'Rock Classics',
   owner: 'Spotify',
 };
+
+/** Two more, so the v2 format's list can be asserted as a list rather than as a wrapped single. */
+const SECOND_PLAYLIST: PlaylistSummary = { id: 'second-id', name: 'Second', owner: 'Someone' };
+const THIRD_PLAYLIST: PlaylistSummary = { id: 'third-id', name: 'Third', owner: 'Someone Else' };
 
 function card(id: string, overrides: Partial<Card> = {}): Card {
   return {
@@ -77,7 +82,7 @@ function memoryStorage(): StorageLike & { data: Map<string, string> } {
 function session(): GameState {
   return {
     status: 'playing',
-    playlist: PLAYLIST,
+    playlists: [PLAYLIST],
     seed: 'persistence-seed',
     deck: [
       card('a', { year: 1975, yearConfidence: 'high', previewUrl: 'https://p.scdn.co/mp3/a' }),
@@ -101,7 +106,7 @@ function seed(storage: StorageLike, payload: unknown): void {
 function validPayload(overrides: Partial<PersistedSession> = {}): PersistedSession {
   return {
     version: SESSION_VERSION,
-    playlist: PLAYLIST,
+    playlists: [PLAYLIST],
     seed: 'persisted-seed',
     deck: [card('a', { year: 1975, yearConfidence: 'high' }), card('b')],
     currentIndex: 1,
@@ -121,7 +126,7 @@ describe('saveSession / loadSession', () => {
 
     expect(loaded).toEqual({
       version: SESSION_VERSION,
-      playlist: state.playlist,
+      playlists: state.playlists,
       seed: state.seed,
       deck: state.deck,
       currentIndex: state.currentIndex,
@@ -226,8 +231,8 @@ describe('saveSession / loadSession', () => {
 
   it('should return null on a missing or unusable field', () => {
     const cases: Partial<Record<keyof PersistedSession, unknown>>[] = [
-      { playlist: undefined },
-      { playlist: { id: '', name: 'x', owner: 'y' } },
+      { playlists: undefined },
+      { playlists: [{ id: '', name: 'x', owner: 'y' }] },
       { seed: '' },
       { seed: 42 },
       { isFlipped: 'yes' },
@@ -302,6 +307,99 @@ describe('saveSession / loadSession', () => {
     } finally {
       warn.mockRestore();
     }
+  });
+});
+
+// ===========================================================================
+//  THE v2 FORMAT AND THE v1 LIFT
+//
+//  `SESSION_VERSION` went to 2 for multi-playlist, and v1 is still read by
+//  lifting its single `playlist` into `[playlist]` -- the one migration this
+//  module permits, because it is exact rather than a guess.
+// ===========================================================================
+
+describe('the multi-playlist session format', () => {
+  it('should round-trip a session with three playlists', () => {
+    const storage = memoryStorage();
+    const state: GameState = {
+      ...session(),
+      playlists: [PLAYLIST, SECOND_PLAYLIST, THIRD_PLAYLIST],
+    };
+
+    saveSession(state, storage);
+
+    // In ROW ORDER, because that is the order the share link and the deck label read.
+    expect(loadSession(storage)?.playlists).toEqual([PLAYLIST, SECOND_PLAYLIST, THIRD_PLAYLIST]);
+    // And it re-enters through `RESUME` with all three still attached.
+    const resumed = gameReducer(initialGameState, {
+      type: 'RESUME',
+      session: loadSession(storage)!,
+    });
+    expect(resumed.playlists).toHaveLength(3);
+  });
+
+  it('should read a v1 payload by lifting its single playlist', () => {
+    // ===================================================================
+    //  WITHOUT THIS, DEPLOYING MULTI-PLAYLIST DISCARDS EVERY GAME IN
+    //  PROGRESS.
+    //
+    //  A v1 save described exactly ONE playlist, so `[playlist]` is the same
+    //  fact in the new shape rather than an interpretation of it -- which is
+    //  why this is the one migration the module's "guessing at a migration is
+    //  how a wrong year ends up on a card" rule allows.
+    // ===================================================================
+    const storage = memoryStorage();
+    const { playlists, ...rest } = validPayload();
+    seed(storage, { ...rest, version: 1, playlist: playlists[0] });
+
+    const loaded = loadSession(storage);
+
+    expect(loaded?.playlists).toEqual([PLAYLIST]);
+    // Reported as the CURRENT version, so the next save writes it back as a v2 payload.
+    expect(loaded?.version).toBe(SESSION_VERSION);
+    // And nothing of the old shape survives the rebuild.
+    expect(loaded).not.toHaveProperty('playlist');
+  });
+
+  it('should reject a payload whose playlists array is empty', () => {
+    // A session with no playlists could not name its own deck: the HUD, the share link and the save
+    // button all read that list, and an empty one is not a smaller deck, it is an unusable save.
+    for (const playlists of [[], 'nope', {}, undefined]) {
+      const storage = memoryStorage();
+      seed(storage, { ...validPayload(), playlists });
+
+      expect(loadSession(storage)).toBeNull();
+    }
+  });
+
+  it('should reject a payload whose playlists array holds a malformed summary', () => {
+    // One bad summary invalidates the whole save, the same call `validateDeck` makes about one bad
+    // card -- a deck silently missing the playlist it came from would mis-label itself everywhere.
+    const storage = memoryStorage();
+    seed(storage, { ...validPayload(), playlists: [PLAYLIST, { id: 'x', name: 'y' }] });
+
+    expect(loadSession(storage)).toBeNull();
+  });
+
+  it('should not cap the playlists on read', () => {
+    // ===================================================================
+    //  THE DELIBERATE ASYMMETRY WITH THE LIBRARY (decision 10).
+    //
+    //  `MAX_DECK_PLAYLISTS` governs what the landing screen accepts as INPUT.
+    //  A stored session describes a deck that ALREADY EXISTS and is already
+    //  shuffled, so capping it would throw away a game in progress the moment
+    //  the cap moved -- and truncating would leave the deck's cards attributed
+    //  to playlists no longer listed beside them.
+    // ===================================================================
+    const storage = memoryStorage();
+    const many = Array.from({ length: MAX_DECK_PLAYLISTS + 3 }, (_, i) => ({
+      id: `over-${i}`,
+      name: `Over ${i}`,
+      owner: 'Someone',
+    }));
+    seed(storage, { ...validPayload(), playlists: many });
+
+    expect(loadSession(storage)?.playlists).toHaveLength(MAX_DECK_PLAYLISTS + 3);
   });
 });
 

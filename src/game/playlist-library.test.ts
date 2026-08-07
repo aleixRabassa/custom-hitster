@@ -13,7 +13,9 @@ import {
   loadLibrary,
   removePlaylist,
   savePlaylist,
+  savedDeckKey,
 } from './playlist-library';
+import { MAX_DECK_PLAYLISTS } from './deck-merge';
 import type { SavedPlaylist } from './playlist-library';
 import type { StorageLike } from './persistence';
 
@@ -33,8 +35,14 @@ function memoryStorage(): StorageLike & { map: Map<string, string> } {
   };
 }
 
+/** A one-playlist entry -- the `n = 1` case every pre-multi-playlist test in here is about. */
 function entry(id: string, overrides: Partial<SavedPlaylist> = {}): SavedPlaylist {
-  return { id, name: `Playlist ${id}`, savedAt: 1_000, ...overrides };
+  return { ids: [id], name: `Playlist ${id}`, savedAt: 1_000, ...overrides };
+}
+
+/** The first id of an entry, which is all the single-playlist assertions ever cared about. */
+function firstId(saved: SavedPlaylist): string | undefined {
+  return saved.ids[0];
 }
 
 describe('playlist-library', () => {
@@ -51,11 +59,11 @@ describe('playlist-library', () => {
     expect(loadLibrary(storage)).toEqual([entry('a')]);
 
     savePlaylist(storage, entry('b', { savedAt: 2_000 }));
-    expect(loadLibrary(storage).map((saved) => saved.id)).toEqual(['b', 'a']);
+    expect(loadLibrary(storage).map(firstId)).toEqual(['b', 'a']);
 
     const remaining = removePlaylist(storage, 'a');
-    expect(remaining.map((saved) => saved.id)).toEqual(['b']);
-    expect(loadLibrary(storage).map((saved) => saved.id)).toEqual(['b']);
+    expect(remaining.map(firstId)).toEqual(['b']);
+    expect(loadLibrary(storage).map(firstId)).toEqual(['b']);
   });
 
   it('should dedupe by playlist id and keep the most recent first', () => {
@@ -69,8 +77,8 @@ describe('playlist-library', () => {
 
     const entries = loadLibrary(storage);
     expect(entries).toHaveLength(2);
-    expect(entries[0]).toEqual({ id: 'a', name: 'Renamed', savedAt: 3_000 });
-    expect(entries[1]?.id).toBe('b');
+    expect(entries[0]).toEqual({ ids: ['a'], name: 'Renamed', savedAt: 3_000 });
+    expect(firstId(entries[1]!)).toBe('b');
   });
 
   it('should cap the stored list', () => {
@@ -85,8 +93,8 @@ describe('playlist-library', () => {
     const entries = loadLibrary(storage);
     expect(entries).toHaveLength(LIBRARY_MAX_ENTRIES);
     // The newest survived and the oldest were dropped, not the other way round.
-    expect(entries[0]?.id).toBe(`id-${LIBRARY_MAX_ENTRIES + 4}`);
-    expect(entries.some((saved) => saved.id === 'id-0')).toBe(false);
+    expect(firstId(entries[0]!)).toBe(`id-${LIBRARY_MAX_ENTRIES + 4}`);
+    expect(entries.some((saved) => firstId(saved) === 'id-0')).toBe(false);
   });
 
   it('should return an empty library rather than throwing on a corrupt payload', () => {
@@ -98,8 +106,17 @@ describe('playlist-library', () => {
       'null',
       JSON.stringify({ version: LIBRARY_VERSION + 1, entries: [entry('a')] }),
       JSON.stringify({ version: LIBRARY_VERSION, entries: 'nope' }),
-      JSON.stringify({ version: LIBRARY_VERSION, entries: [{ id: 'a', name: 'x' }] }),
-      JSON.stringify({ version: LIBRARY_VERSION, entries: [{ id: '', name: 'x', savedAt: 1 }] }),
+      JSON.stringify({ version: LIBRARY_VERSION, entries: [{ ids: ['a'], name: 'x' }] }),
+      JSON.stringify({ version: LIBRARY_VERSION, entries: [{ ids: [''], name: 'x', savedAt: 1 }] }),
+      JSON.stringify({ version: LIBRARY_VERSION, entries: [{ ids: [], name: 'x', savedAt: 1 }] }),
+      JSON.stringify({ version: LIBRARY_VERSION, entries: [{ ids: 'a', name: 'x', savedAt: 1 }] }),
+      JSON.stringify({ version: LIBRARY_VERSION, entries: [{ ids: [7], name: 'x', savedAt: 1 }] }),
+      // Two entries naming the same SET of playlists, in a different order: one deck, so a store
+      // holding both is corruption -- `savePlaylist` cannot produce it.
+      JSON.stringify({
+        version: LIBRARY_VERSION,
+        entries: [entry('a', { ids: ['a', 'b'] }), entry('a', { ids: ['b', 'a'] })],
+      }),
       JSON.stringify({ version: LIBRARY_VERSION, entries: [entry('a'), entry('a')] }),
     ]) {
       const storage = memoryStorage();
@@ -165,7 +182,7 @@ describe('playlist-library', () => {
     expect(raw['version']).toBe(LIBRARY_VERSION);
   });
 
-  it('should store nothing beyond id, name and timestamp', () => {
+  it('should not write any field beyond ids, name and savedAt', () => {
     // ===================================================================
     //  THE LEAK GUARD. This store is read on the LANDING SCREEN, which is a
     //  pre-start surface -- the one place where a leak costs the whole game
@@ -182,14 +199,29 @@ describe('playlist-library', () => {
 
     const raw = storage.map.get(LIBRARY_STORAGE_KEY) ?? '';
     expect(raw).not.toContain('Bohemian');
-    expect(Object.keys(loadLibrary(storage)[0] ?? {}).sort()).toEqual(['id', 'name', 'savedAt']);
+    expect(Object.keys(loadLibrary(storage)[0] ?? {}).sort()).toEqual(['ids', 'name', 'savedAt']);
+  });
+
+  it('should not write anything smuggled into the ids array', () => {
+    // The array field is the NEW way to smuggle something in: `[...entry.ids]` would copy whatever
+    // a caller had put in it, so `savePlaylist` rebuilds element by element and drops non-strings.
+    const storage = memoryStorage();
+
+    savePlaylist(storage, {
+      ...entry('a'),
+      ids: ['a', { title: 'Bohemian Rhapsody' }, '', 'b'] as unknown as string[],
+    });
+
+    const raw = storage.map.get(LIBRARY_STORAGE_KEY) ?? '';
+    expect(raw).not.toContain('Bohemian');
+    expect(loadLibrary(storage)[0]?.ids).toEqual(['a', 'b']);
   });
 
   it('should leave an absent id alone on removal', () => {
     const storage = memoryStorage();
     savePlaylist(storage, entry('a'));
 
-    expect(removePlaylist(storage, 'nope').map((saved) => saved.id)).toEqual(['a']);
+    expect(removePlaylist(storage, 'nope').map(firstId)).toEqual(['a']);
   });
 
   it('should clear the whole library', () => {
@@ -199,5 +231,157 @@ describe('playlist-library', () => {
     clearLibrary(storage);
 
     expect(loadLibrary(storage)).toEqual([]);
+  });
+});
+
+// ===========================================================================
+//  AN ENTRY IS 1..5 PLAYLISTS
+//
+//  `LIBRARY_VERSION` went to 2, and v1 is read by lifting each entry's single
+//  `id` into `[id]` -- which matters MORE here than it does for a session: a
+//  version mismatch clears the whole store, so shipping without the lift would
+//  silently empty a library the player curated, on the landing screen, with no
+//  message.
+// ===========================================================================
+
+describe('the multi-playlist library', () => {
+  it('should save an entry holding several ids', () => {
+    const storage = memoryStorage();
+
+    savePlaylist(storage, { ids: ['a', 'b', 'c'], name: 'Rock Classics +2 more', savedAt: 1_000 });
+
+    // In ROW ORDER on the entry itself -- only the KEY is sorted.
+    expect(loadLibrary(storage)).toEqual([
+      { ids: ['a', 'b', 'c'], name: 'Rock Classics +2 more', savedAt: 1_000 },
+    ]);
+  });
+
+  it('should dedupe an entry whose ids match an existing one in a different order', () => {
+    // ===================================================================
+    //  `savedDeckKey` SORTS, so the same three playlists entered in a
+    //  different order are ONE favourite (decision 11). Left unsorted this
+    //  would be two rows with the same label and the same playlists,
+    //  distinguishable only by their timestamps.
+    // ===================================================================
+    const storage = memoryStorage();
+
+    savePlaylist(storage, { ids: ['a', 'b', 'c'], name: 'First', savedAt: 1_000 });
+    savePlaylist(storage, { ids: ['c', 'a', 'b'], name: 'Second', savedAt: 2_000 });
+
+    const entries = loadLibrary(storage);
+    expect(entries).toHaveLength(1);
+    // The newer save wins outright, ROW ORDER INCLUDED: it is what the player just did.
+    expect(entries[0]).toEqual({ ids: ['c', 'a', 'b'], name: 'Second', savedAt: 2_000 });
+
+    // A PARTIALLY overlapping set is a different deck, though, and gets its own row.
+    savePlaylist(storage, { ids: ['a', 'b'], name: 'Third', savedAt: 3_000 });
+    expect(loadLibrary(storage)).toHaveLength(2);
+  });
+
+  it('should remove an entry by its deck key', () => {
+    const storage = memoryStorage();
+    savePlaylist(storage, { ids: ['a', 'b'], name: 'Pair', savedAt: 1_000 });
+    savePlaylist(storage, entry('c', { savedAt: 2_000 }));
+
+    // The key is sorted-and-joined, so it does not depend on the order the entry stores.
+    const remaining = removePlaylist(storage, savedDeckKey({ ids: ['b', 'a'] }));
+
+    expect(remaining.map((saved) => saved.ids)).toEqual([['c']]);
+    // And removing by a single id that merely APPEARS in a deck must not take the deck out.
+    savePlaylist(storage, { ids: ['c', 'd'], name: 'Other pair', savedAt: 3_000 });
+    expect(removePlaylist(storage, 'c').map((saved) => saved.ids)).toEqual([['c', 'd']]);
+  });
+
+  it('should read a v1 library by lifting each entry id', () => {
+    const storage = memoryStorage();
+    storage.map.set(
+      LIBRARY_STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        entries: [
+          { id: 'a', name: 'Rock Classics', savedAt: 2_000 },
+          { id: 'b', name: 'Disco', savedAt: 1_000 },
+        ],
+      }),
+    );
+
+    expect(loadLibrary(storage)).toEqual([
+      { ids: ['a'], name: 'Rock Classics', savedAt: 2_000 },
+      { ids: ['b'], name: 'Disco', savedAt: 1_000 },
+    ]);
+    // The lift REBUILDS rather than renaming in place, so the old field cannot ride along.
+    expect(loadLibrary(storage)[0]).not.toHaveProperty('id');
+  });
+
+  it('should reject a v1 library whose entry is malformed', () => {
+    // The lift is a migration, not an amnesty: every other field is validated exactly as it is for
+    // a v2 payload, and one bad entry still invalidates the whole store.
+    const storage = memoryStorage();
+    storage.map.set(
+      LIBRARY_STORAGE_KEY,
+      JSON.stringify({ version: 1, entries: [{ id: 'a', name: 'x' }] }),
+    );
+
+    expect(loadLibrary(storage)).toEqual([]);
+  });
+
+  it('should reject an entry whose ids array is empty', () => {
+    const storage = memoryStorage();
+    storage.map.set(
+      LIBRARY_STORAGE_KEY,
+      JSON.stringify({ version: LIBRARY_VERSION, entries: [{ ids: [], name: 'x', savedAt: 1 }] }),
+    );
+
+    expect(loadLibrary(storage)).toEqual([]);
+  });
+
+  it('should cap the ids of a stored entry on read', () => {
+    // ===================================================================
+    //  CAPPED HERE, UNLIKE A STORED SESSION (decision 10).
+    //
+    //  A library entry is INPUT to a future fetch -- pressing it fires one
+    //  `/api/playlist` request per id -- so a payload written by a build with
+    //  a larger cap, or edited by hand, must not fan out past what this build
+    //  allows. `persistence.ts` deliberately does the opposite.
+    // ===================================================================
+    const storage = memoryStorage();
+    const many = Array.from({ length: MAX_DECK_PLAYLISTS + 3 }, (_, i) => `over-${i}`);
+    storage.map.set(
+      LIBRARY_STORAGE_KEY,
+      JSON.stringify({
+        version: LIBRARY_VERSION,
+        entries: [{ ids: many, name: 'Too many', savedAt: 1 }],
+      }),
+    );
+
+    expect(loadLibrary(storage)[0]?.ids).toEqual(many.slice(0, MAX_DECK_PLAYLISTS));
+  });
+
+  it('should cap the ids of an entry on write', () => {
+    const storage = memoryStorage();
+    const many = Array.from({ length: MAX_DECK_PLAYLISTS + 3 }, (_, i) => `over-${i}`);
+
+    expect(savePlaylist(storage, { ids: many, name: 'Too many', savedAt: 1 })[0]?.ids).toHaveLength(
+      MAX_DECK_PLAYLISTS,
+    );
+  });
+});
+
+describe('savedDeckKey', () => {
+  it('should not depend on the order the ids are stored in', () => {
+    expect(savedDeckKey({ ids: ['c', 'a', 'b'] })).toBe(savedDeckKey({ ids: ['a', 'b', 'c'] }));
+  });
+
+  it('should distinguish decks that merely overlap', () => {
+    expect(savedDeckKey({ ids: ['a', 'b'] })).not.toBe(savedDeckKey({ ids: ['a', 'b', 'c'] }));
+  });
+
+  it('should not mutate the entry it reads', () => {
+    // `[...ids].sort()`, not `ids.sort()`: `Array.sort` is in place, so the un-copied version would
+    // silently reorder the entry it was called on -- including the live `state.playlists` mapping.
+    const ids = ['c', 'a', 'b'];
+    savedDeckKey({ ids });
+
+    expect(ids).toEqual(['c', 'a', 'b']);
   });
 });

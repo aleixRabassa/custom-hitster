@@ -15,7 +15,7 @@ import type { DeckActionsDialogProps } from './DeckActionsDialog';
 
 function renderDialog(overrides: Partial<DeckActionsDialogProps> = {}) {
   const props: DeckActionsDialogProps = {
-    playlistId: '37i9dQZF1DXcBWIGoYBM5M',
+    playlistIds: ['37i9dQZF1DXcBWIGoYBM5M'],
     playlistName: 'Rock Classics',
     seed: 'a1b2c3d4e5f60718',
     shareOrigin: 'https://hitster.example/',

@@ -19,6 +19,10 @@ const PLAYLIST: PlaylistSummary = {
   owner: 'Spotify',
 };
 
+/** Two more, so a multi-playlist `START` and `RESUME` can be asserted in order. */
+const SECOND_PLAYLIST: PlaylistSummary = { id: 'second-id', name: 'Second', owner: 'Someone' };
+const THIRD_PLAYLIST: PlaylistSummary = { id: 'third-id', name: 'Third', owner: 'Someone Else' };
+
 function card(id: string, overrides: Partial<Card> = {}): Card {
   return {
     id,
@@ -37,7 +41,7 @@ const SEED = 'reducer-test-seed';
 
 /** A dealt but ungated session: `preparing`, deck shuffled, nothing resolved. */
 function preparing(cards: Card[] = CARDS, seed = SEED): GameState {
-  return gameReducer(initialGameState, { type: 'START', cards, playlist: PLAYLIST, seed });
+  return gameReducer(initialGameState, { type: 'START', cards, playlists: [PLAYLIST], seed });
 }
 
 /** A session past the card-1 gate: card 1 resolved, everything else still `undefined`. */
@@ -71,7 +75,7 @@ describe('gameReducer transitions', () => {
     const state = preparing();
 
     expect(state.status).toBe('preparing');
-    expect(state.playlist).toEqual(PLAYLIST);
+    expect(state.playlists).toEqual([PLAYLIST]);
     expect(state.currentIndex).toBe(0);
     expect(state.isFlipped).toBe(false);
     expect(state.yearLookupsUnavailable).toBe(false);
@@ -84,7 +88,7 @@ describe('gameReducer transitions', () => {
     const state = gameReducer(initialGameState, {
       type: 'START',
       cards: CARDS,
-      playlist: PLAYLIST,
+      playlists: [PLAYLIST],
     });
 
     expect(state.seed).toMatch(/^[0-9a-f]{16}$/);
@@ -107,14 +111,48 @@ describe('gameReducer transitions', () => {
     const second = gameReducer(first, {
       type: 'START',
       cards: otherCards,
-      playlist: { id: 'other', name: 'Other', owner: 'Someone' },
+      playlists: [{ id: 'other', name: 'Other', owner: 'Someone' }],
       seed: 'second',
     });
 
     expect(second.status).toBe('preparing');
     expect(second.currentIndex).toBe(0);
     expect(second.deck.map((c) => c.id).sort()).toEqual(['other-1', 'other-2']);
-    expect(second.playlist?.id).toBe('other');
+    expect(second.playlists.map((p) => p.id)).toEqual(['other']);
+  });
+
+  it('should carry every playlist into state on START', () => {
+    // The widened action (multi-playlist decision 2). The MERGE happened above the reducer, in
+    // `deck-merge.ts`; all this branch does is record which playlists the deck came from, in row
+    // order, so `deckLabel()` and the share link read the same list the player entered.
+    const state = gameReducer(initialGameState, {
+      type: 'START',
+      cards: CARDS,
+      playlists: [PLAYLIST, SECOND_PLAYLIST, THIRD_PLAYLIST],
+      seed: SEED,
+    });
+
+    expect(state.playlists).toEqual([PLAYLIST, SECOND_PLAYLIST, THIRD_PLAYLIST]);
+  });
+
+  it('should replace the playlists wholesale when START runs mid-game', () => {
+    // The wholesale-replacement rule, now that the field is a list: a new SET of playlists must not
+    // union with the old one. Three in, one out -- not four.
+    const first = gameReducer(initialGameState, {
+      type: 'START',
+      cards: CARDS,
+      playlists: [PLAYLIST, SECOND_PLAYLIST, THIRD_PLAYLIST],
+      seed: SEED,
+    });
+
+    const second = gameReducer(first, {
+      type: 'START',
+      cards: [card('other-1')],
+      playlists: [SECOND_PLAYLIST],
+      seed: 'second',
+    });
+
+    expect(second.playlists).toEqual([SECOND_PLAYLIST]);
   });
 
   it('should record a resolved year on the matching card by id', () => {
@@ -448,8 +486,8 @@ describe('gameReducer transitions', () => {
 
   it('should restore a full session on RESUME', () => {
     const session: PersistedSession = {
-      version: 1,
-      playlist: PLAYLIST,
+      version: 2,
+      playlists: [PLAYLIST],
       seed: 'persisted-seed',
       deck: [card('a', { year: 1975, yearConfidence: 'high' }), card('b'), card('c')],
       currentIndex: 1,
@@ -461,7 +499,7 @@ describe('gameReducer transitions', () => {
 
     expect(state).toEqual({
       status: 'playing',
-      playlist: PLAYLIST,
+      playlists: [PLAYLIST],
       seed: 'persisted-seed',
       deck: session.deck,
       currentIndex: 1,
@@ -470,6 +508,24 @@ describe('gameReducer transitions', () => {
       // configuration, not the session.
       yearLookupsUnavailable: false,
     });
+  });
+
+  it('should restore every playlist on RESUME', () => {
+    // A resumed multi-playlist deck has to come back knowing all of them, or the HUD label, the
+    // share link and the save button would all describe a smaller deck than the one on screen.
+    const session: PersistedSession = {
+      version: 2,
+      playlists: [PLAYLIST, SECOND_PLAYLIST, THIRD_PLAYLIST],
+      seed: 'persisted-seed',
+      deck: [card('a', { year: 1975, yearConfidence: 'high' })],
+      currentIndex: 0,
+      isFlipped: false,
+      status: 'playing',
+    };
+
+    const state = gameReducer(initialGameState, { type: 'RESUME', session });
+
+    expect(state.playlists).toEqual([PLAYLIST, SECOND_PLAYLIST, THIRD_PLAYLIST]);
   });
 
   it('should drop yearless cards from a resumed session and move the index with them', () => {
@@ -493,8 +549,8 @@ describe('gameReducer transitions', () => {
     //  must not end up pointing at a different card than the player left on.
     // ===================================================================
     const session: PersistedSession = {
-      version: 1,
-      playlist: PLAYLIST,
+      version: 2,
+      playlists: [PLAYLIST],
       seed: 'persisted-seed',
       deck: [
         card('a', { year: 1975, yearConfidence: 'high' }),
@@ -517,8 +573,8 @@ describe('gameReducer transitions', () => {
 
   it('should end a resumed session whose every card was yearless', () => {
     const session: PersistedSession = {
-      version: 1,
-      playlist: PLAYLIST,
+      version: 2,
+      playlists: [PLAYLIST],
       seed: 'persisted-seed',
       deck: [card('x', { year: null, yearConfidence: 'none' })],
       currentIndex: 0,

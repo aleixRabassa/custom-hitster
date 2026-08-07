@@ -32,14 +32,15 @@ import { LandingScreen } from './components/LandingScreen';
 import { NoticeBanner } from './components/NoticeBanner';
 import { PreparingScreen } from './components/PreparingScreen';
 import { parseDeckLink } from './game/deck-link';
-import { loadLibrary, removePlaylist, savePlaylist } from './game/playlist-library';
+import { deckLabel } from './game/deck-merge';
+import { loadLibrary, removePlaylist, savePlaylist, savedDeckKey } from './game/playlist-library';
 import { useGameSession } from './game/use-game-session';
 import { usePlaylist } from './hooks/usePlaylist';
 import { spotifyPlaylistUrl } from '../shared/spotify-url';
+import type { MergedDeck } from './game/deck-merge';
 import type { StartFailureCode } from './game/messages';
 import type { PlaylistFetch } from './game/playlist-client';
 import type { StorageLike } from './game/persistence';
-import type { PlaylistResult } from '../shared/types';
 
 /**
  * The game screen, and everything only it needs, in a separate chunk.
@@ -228,19 +229,30 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
    * take a notice with it mid-game; and DISMISSAL has to live above the game screen so it survives
    * every card change (decision 9) -- a banner that reappeared on each advance would be worse than
    * no banner at all.
+   *
+   * Five counts rather than two since multi-playlist, and all five are COUNTS: the merge is what
+   * knows how many playlists failed and how big the combined deck came out, and neither fact
+   * survives into `GameState` -- a deck that lost a playlist is just a deck.
    */
-  const [notice, setNotice] = useState<{ truncated: boolean; skippedCount: number } | null>(null);
+  const [notice, setNotice] = useState<{
+    truncated: boolean;
+    skippedCount: number;
+    failedPlaylistCount: number;
+    deckSize: number;
+    loadedPlaylistCount: number;
+  } | null>(null);
 
   /**
-   * The result already dealt, by identity.
+   * The merged deck already dealt, by identity.
    *
    * The guard cannot be `status === 'idle'`, which is the obvious version and is wrong: after an
    * Exit the session sits at `ended` while the landing screen is on screen, so a deck fetched from
-   * there would never be dealt. Comparing the RESULT OBJECT instead is right regardless of what the
+   * there would never be dealt. Comparing the MERGED OBJECT instead is right regardless of what the
    * session's status happens to be, and it is also what makes the effect idempotent under
-   * StrictMode's double invocation.
+   * StrictMode's double invocation -- the hook produces exactly one merged object per batch, so a
+   * fan-out over five playlists is as idempotent here as a single fetch was.
    */
-  const dealtResultRef = useRef<PlaylistResult | null>(null);
+  const dealtDeckRef = useRef<MergedDeck | null>(null);
 
   /**
    * Deal the deck once a fetch succeeds.
@@ -253,11 +265,17 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
   useEffect(() => {
     if (requestState.status !== 'loaded') return;
 
-    const { result } = requestState;
-    if (dealtResultRef.current === result) return;
-    dealtResultRef.current = result;
+    const { deck } = requestState;
+    if (dealtDeckRef.current === deck) return;
+    dealtDeckRef.current = deck;
 
-    setNotice({ truncated: result.truncated, skippedCount: result.skippedCount });
+    setNotice({
+      truncated: deck.truncated,
+      skippedCount: deck.skippedCount,
+      failedPlaylistCount: deck.failures.length,
+      deckSize: deck.cards.length,
+      loadedPlaylistCount: deck.playlists.length,
+    });
     setEndedView('end-screen');
 
     // The seed from a share link, if this deal is the one it asked for. Cleared as it is consumed:
@@ -267,22 +285,24 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
     const seed = pendingSeedRef.current;
     pendingSeedRef.current = null;
 
-    if (seed === null) start(result.cards, result.playlist);
-    else start(result.cards, result.playlist, seed);
+    // Straight through: the merge already put the loaded playlists in row order and the cards in
+    // one deduped deck, so the container adds nothing to either. One playlist is the `n = 1` case.
+    if (seed === null) start(deck.cards, deck.playlists);
+    else start(deck.cards, deck.playlists, seed);
   }, [requestState, start]);
 
   /**
-   * Submit a playlist the player asked for by hand.
+   * Submit the playlists the player asked for by hand.
    *
    * Wrapping `request` rather than passing it straight to the landing screen, for one reason: it
    * DROPS a pending link seed. A link whose fetch failed leaves the seed set, and applying it to
-   * whatever playlist the player pastes next would deal that deck in an order somebody else's link
+   * whatever playlists the player pastes next would deal that deck in an order somebody else's link
    * chose -- harmless, but not what either of them asked for.
    */
   const handleSubmit = useCallback(
-    (url: string) => {
+    (urls: string[]) => {
       pendingSeedRef.current = null;
-      request(url);
+      request(urls);
     },
     [request],
   );
@@ -290,10 +310,13 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
   /**
    * Deal the link's deck, once.
    *
-   * It goes through the SAME `request` the landing form uses -- the id is turned back into a full
-   * playlist URL by `spotifyPlaylistUrl` -- so a shared link exercises exactly the fetch path, the
-   * error copy and the notice handling that a paste does. There is no second entry point into the
-   * session for this feature, which is why the whole thing is a caller change.
+   * It goes through the SAME `request` the landing form uses -- each id is turned back into a full
+   * playlist URL by `spotifyPlaylistUrl` -- so a shared link exercises exactly the fan-out, the
+   * merge, the error copy and the notice handling that a paste does. There is no second entry point
+   * into the session for this feature, which is why the whole thing is a caller change.
+   *
+   * The link's playlists are NOT editable before Start (plan 2, open question 3): a link deals
+   * immediately, exactly as it did when it named one playlist.
    *
    * THE ADDRESS BAR IS LEFT ALONE (step 10): no `pushState`, no `replaceState`. The params staying
    * visible is what makes a reload re-deal the same deck and the link copyable from the bar again,
@@ -327,8 +350,14 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
   useEffect(() => {
     if (deckLink === null) return;
 
+    /*
+      1..5 ids, all of them. `parseDeckLink` has already deduped them, capped them and rejected the
+      whole link if any element was not a playlist, so there is nothing left here to validate --
+      which is the point of it being a pure module. A single-id link is the `n = 1` case, so every
+      link shared before this feature existed still deals exactly the deck it always did.
+    */
     pendingSeedRef.current = deckLink.seed;
-    request(spotifyPlaylistUrl(deckLink.playlistId));
+    request(deckLink.playlistIds.map((id) => spotifyPlaylistUrl(id)));
   }, [deckLink, request]);
 
   const handleExit = useCallback(() => {
@@ -348,27 +377,28 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
     // original `/api/playlist` response no longer exists in memory.
     //
     // No seed argument, so `START` generates a new one and the order actually changes.
-    if (state.playlist) start(state.deck, state.playlist);
-  }, [start, state.deck, state.playlist]);
+    if (state.playlists.length > 0) start(state.deck, state.playlists);
+  }, [start, state.deck, state.playlists]);
 
   const handleSavePlaylist = useCallback(() => {
-    // Guarded rather than assumed: `state.playlist` is nullable for the whole `idle` status, and the
-    // end screen is the only caller -- but a null id would write an entry no click could ever use.
-    if (!state.playlist) return;
+    // Guarded rather than assumed: `state.playlists` is empty for the whole `idle` status, and the
+    // end screen is the only caller -- but an entry with no ids is one no click could ever use.
+    if (state.playlists.length === 0) return;
 
     setSavedPlaylists(
       savePlaylist(libraryStorage, {
-        id: state.playlist.id,
-        name: state.playlist.name,
+        ids: state.playlists.map((playlist) => playlist.id),
+        // The label the whole deck is known by, so the library row cannot disagree with the HUD.
+        name: deckLabel(state.playlists),
         // Stamped at the press. The library sorts on it, and it is never rendered as a date.
         savedAt: Date.now(),
       }),
     );
-  }, [libraryStorage, state.playlist]);
+  }, [libraryStorage, state.playlists]);
 
   const handleRemoveSaved = useCallback(
-    (id: string) => {
-      setSavedPlaylists(removePlaylist(libraryStorage, id));
+    (key: string) => {
+      setSavedPlaylists(removePlaylist(libraryStorage, key));
     },
     [libraryStorage],
   );
@@ -415,15 +445,37 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
   const deckCollapsed = state.status === 'ended' && state.deck.length === 0;
 
   /**
-   * Is the playlist on screen already in the library?
+   * What the deck is called, and which playlists it came from.
+   *
+   * ONE LABEL, EVERY SURFACE (decision 8). The HUD, the end screen's count line, the PDF filename
+   * and the saved-library row all read `deckLabel()`, so they cannot disagree about what this deck
+   * is -- and `GameScreen`, `Hud` and `PreparingScreen` keep taking one string, because the label
+   * IS that string. Pushing the array down to the HUD would buy nothing and would turn a truncation
+   * rule into a layout decision.
+   *
+   * Both are safe with an empty `state.playlists`: `deckLabel([])` is `''` and the id array is
+   * empty. That is the case the dropped `playlist: null` sentinel used to cover, and it is why the
+   * `?? ''` fallbacks these two replaced are gone.
+   */
+  const playlistName = deckLabel(state.playlists);
+  const playlistIds = state.playlists.map((playlist) => playlist.id);
+
+  /**
+   * Is the deck on screen already in the library?
    *
    * Derived from the live library rather than from a save's return value, so the button reads
-   * "Saved" immediately after the press AND on a deck whose playlist was saved in an earlier
+   * "Saved" immediately after the press AND on a deck whose playlists were saved in an earlier
    * session. Hoisted out of the end screen's props on 2026-08-06 because the game screen's
    * deck-actions dialog needs the same answer -- one derivation, two consumers, no chance of the
    * two disagreeing about whether a press already happened.
+   *
+   * Compared by `savedDeckKey` -- the ids sorted and joined -- rather than by a single id, so a set
+   * that merely OVERLAPS a saved one is correctly not "saved": four of these five playlists being
+   * a favourite says nothing about this deck.
    */
-  const isPlaylistSaved = savedPlaylists.some((saved) => saved.id === state.playlist?.id);
+  const isPlaylistSaved =
+    playlistIds.length > 0 &&
+    savedPlaylists.some((saved) => savedDeckKey(saved) === savedDeckKey({ ids: playlistIds }));
 
   /**
    * The landing screen, shared by the states that show it: a fresh session, a session that has ended
@@ -458,11 +510,16 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
    * time it takes to read a sentence, and a notice nobody can read is not a notice (decision 9).
    */
   const noticeBanner =
-    (notice === null || (!notice.truncated && notice.skippedCount === 0)) &&
-    !state.yearLookupsUnavailable ? null : (
+    notice === null && !state.yearLookupsUnavailable ? null : (
       <NoticeBanner
         truncated={notice?.truncated ?? false}
         skippedCount={notice?.skippedCount ?? 0}
+        // Both new since multi-playlist, and both COUNTS (decision 7). `failedPlaylistCount` is the
+        // visible half of "a playlist that fails is dropped, not fatal"; the deck size renders only
+        // beyond one playlist, which the banner itself decides.
+        failedPlaylistCount={notice?.failedPlaylistCount ?? 0}
+        deckSize={notice?.deckSize ?? 0}
+        loadedPlaylistCount={notice?.loadedPlaylistCount ?? 0}
         // The one notice that comes from game state rather than from the fetch: no
         // `MUSICBRAINZ_USER_AGENT` on the server means no card will ever get a year.
         yearLookupsUnavailable={state.yearLookupsUnavailable}
@@ -492,7 +549,10 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
         // The deck's length, not `currentIndex + 1`: a natural finish means every card was played,
         // and the reducer leaves `currentIndex` on the LAST card rather than one past the end.
         cardsPlayed={state.deck.length}
-        playlistName={state.playlist?.name ?? ''}
+        playlistName={playlistName}
+        // The full list, and this is the ONLY screen that gets it (decision 9). Post-game, so
+        // nothing can be spoiled, and it is the one surface with room for five names.
+        playlists={state.playlists}
         onRestart={handleRestart}
         onHome={handleHome}
         /*
@@ -500,7 +560,7 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
           Restart deals a FRESH seed, and the end screen unmounts and remounts around it, so these
           props can never describe a deck other than the one just played.
         */
-        playlistId={state.playlist?.id ?? ''}
+        playlistIds={playlistIds}
         seed={state.seed}
         shareOrigin={shareOrigin()}
         // The deck, for the PDF export and for nothing else. This screen renders no track data --
@@ -542,7 +602,9 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
         // Derived here because `GameScreen` deliberately knows nothing about `GameStatus`.
         isPlayable
         cardsRemaining={cardsRemaining}
-        playlistName={state.playlist?.name ?? ''}
+        // One string, which is the deck label -- the HUD already truncates a long name, and it is
+        // the same label the end screen and the PDF filename read.
+        playlistName={playlistName}
         /*
           The deck actions, mid-game (2026-08-06). The SAME five values the end screen gets, from
           the same live state -- which is what makes the share link correct here too: it is built at
@@ -551,7 +613,7 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
           Not one of them derives from a card, so the game screen's leak story is unchanged by the
           whole feature. The deck itself is already a prop of this screen.
         */
-        playlistId={state.playlist?.id ?? ''}
+        playlistIds={playlistIds}
         seed={state.seed}
         shareOrigin={shareOrigin()}
         onSavePlaylist={handleSavePlaylist}

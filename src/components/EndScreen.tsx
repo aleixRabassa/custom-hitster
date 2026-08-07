@@ -23,13 +23,30 @@
  */
 
 import { DeckActions } from './DeckActions';
-import type { Card } from '../../shared/types';
+import type { Card, PlaylistSummary } from '../../shared/types';
 
 export interface EndScreenProps {
   /** The deck's size. A natural finish means every card was played, so this is `deck.length`. */
   cardsPlayed: number;
-  /** The playlist just finished, from `state.playlist`. Playlist-level only -- no track data. */
+  /** The deck's label, from `deckLabel()`. Playlist-level only -- no track data. */
   playlistName: string;
+  /**
+   * Every playlist the deck came from, in row order.
+   *
+   * ===========================================================================
+   *  THIS IS THE ONLY SCREEN THAT GETS THE FULL LIST (decision 9).
+   *
+   *  Every other surface -- the HUD, the preparing screen, the PDF filename, the
+   *  saved-library row -- gets the LABEL, because they all sit somewhere a name
+   *  has to be short or somewhere the game is still in progress. This screen is
+   *  post-game, so nothing can be spoiled by anything on it, and it is the one
+   *  place with room for five names.
+   *
+   *  PLAYLIST NAMES ONLY. The screen's own leak test asserts that no track title,
+   *  artist or year reaches it, and a `PlaylistSummary` carries none.
+   * ===========================================================================
+   */
+  playlists: readonly PlaylistSummary[];
   /** Re-deal the same tracks in a fresh order. */
   onRestart: () => void;
   /**
@@ -42,8 +59,8 @@ export interface EndScreenProps {
    * is a label and a prop name and nothing else.
    */
   onHome: () => void;
-  /** The playlist's Spotify id, from `state.playlist`. One half of the share link. */
-  playlistId: string;
+  /** The deck's 1..5 Spotify playlist ids, from `state.playlists`. One half of the share link. */
+  playlistIds: readonly string[];
   /** The seed this deck was dealt with, from `state.seed`. The other half. */
   seed: string;
   /** Where the link should point -- `origin + pathname`, supplied by the container. */
@@ -83,9 +100,10 @@ export interface EndScreenProps {
 export function EndScreen({
   cardsPlayed,
   playlistName,
+  playlists,
   onRestart,
   onHome,
-  playlistId,
+  playlistIds,
   seed,
   shareOrigin,
   onSavePlaylist,
@@ -100,6 +118,21 @@ export function EndScreen({
         <p className="text-sm text-fg-secondary">
           {cardsPlayed === 1 ? '1 card played' : `${cardsPlayed} cards played`} from {playlistName}
         </p>
+
+        {/*
+          The full list, and only beyond one playlist: for a single deck the label above already IS
+          the playlist's name, so a list under it would say the same thing twice.
+
+          Names only -- see the `playlists` prop. A `<ul>` rather than a joined sentence, because
+          five titles run together are unreadable and a list is what a screen reader can navigate.
+        */}
+        {playlists.length < 2 ? null : (
+          <ul className="flex flex-col gap-0.5 text-xs text-fg-muted">
+            {playlists.map((playlist) => (
+              <li key={playlist.id}>{playlist.name}</li>
+            ))}
+          </ul>
+        )}
       </div>
 
       <div className="flex w-full max-w-content flex-col gap-3">
@@ -145,7 +178,7 @@ export function EndScreen({
         <h2 className="text-sm text-fg-secondary">Keep this deck</h2>
 
         <DeckActions
-          playlistId={playlistId}
+          playlistIds={playlistIds}
           playlistName={playlistName}
           seed={seed}
           shareOrigin={shareOrigin}

@@ -42,11 +42,14 @@
  *  it. Building inside the handler means the props read at that instant are the
  *  ones that go into the URL.
  *
- *  THE COPY MUST NOT PROMISE AN IDENTICAL DECK (decision 4). "Same playlist, same
- *  shuffle" is true. "The same deck" is not: yearless cards are dropped at play
- *  time and editorial playlists refresh, so the shuffle is exact while the list
- *  it shuffles is not. The caption under the button says so, and it is the honest
- *  alternative to the opaque token that could have pinned the card set.
+ *  THE COPY MUST NOT PROMISE AN IDENTICAL DECK (decision 4). "Same playlist(s),
+ *  same shuffle" is true. "The same deck" is not, and it now has THREE reasons
+ *  not to be: yearless cards are dropped at play time, editorial playlists
+ *  refresh their tracks, and -- since multi-playlist -- a playlist that has gone
+ *  private since the link was made is DROPPED WITH A NOTICE rather than blocking,
+ *  so the recipient can get a strictly smaller deck than the sender had. The
+ *  caption under the button says so, and it is the honest alternative to the
+ *  opaque token that could have pinned the card set.
  * ===========================================================================
  */
 
@@ -58,9 +61,14 @@ import { sheetsForDeck, usePdfExport } from '../hooks/usePdfExport';
 import type { Card } from '../../shared/types';
 
 export interface DeckActionsProps {
-  /** The playlist's Spotify id, from `state.playlist`. One half of the share link. */
-  playlistId: string;
-  /** The playlist's name, from `state.playlist`. Playlist-level only -- never track data. */
+  /**
+   * The deck's 1..5 Spotify playlist ids, in row order. One half of the share link.
+   *
+   * The whole set, because a link that named only the first would deal a deck the sender never
+   * played -- and `buildDeckLink` joins them with commas, which is the form `parseDeckLink` reads.
+   */
+  playlistIds: readonly string[];
+  /** The deck's label, from `deckLabel()`. Playlist-level only -- never track data. */
   playlistName: string;
   /** The seed this deck was dealt with, from `state.seed`. The other half of the link. */
   seed: string;
@@ -135,7 +143,7 @@ const BUTTON_CLASSES =
   'disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)';
 
 export function DeckActions({
-  playlistId,
+  playlistIds,
   playlistName,
   seed,
   shareOrigin,
@@ -193,8 +201,8 @@ export function DeckActions({
   const [failedLink, setFailedLink] = useState<string | null>(null);
 
   const handleCopy = () => {
-    // Built here, from the props as they are NOW. See the header block.
-    const link = buildDeckLink(shareOrigin, playlistId, seed);
+    // Built here, from the props as they are NOW -- every id, in row order. See the header block.
+    const link = buildDeckLink(shareOrigin, playlistIds, seed);
 
     const fail = () => {
       setCopyState('failed');
@@ -323,11 +331,16 @@ export function DeckActions({
 
       {/*
         Deliberately careful wording. The seeded shuffle is exact; the track list it shuffles is
-        not, because yearless cards are dropped at play time and editorial playlists refresh. See
-        the header block -- promising "the same deck" here is the one thing this copy must not do.
+        not, because yearless cards are dropped at play time, editorial playlists refresh, and a
+        playlist that has gone private since is dropped with a notice. See the header block --
+        promising "the same deck" here is the one thing this copy must not do.
+
+        Pluralised on the id count rather than left as "playlist(s)": the caption is the sentence
+        that has to be read and believed, and a slash in it reads as boilerplate.
       */}
       <p className="text-center text-xs text-fg-muted">
-        Same playlist, same shuffle — the years are looked up again, so the deck can differ slightly
+        {playlistIds.length === 1 ? 'Same playlist' : 'Same playlists'}, same shuffle — the years
+        are looked up again, so the deck can differ slightly
       </p>
 
       <button

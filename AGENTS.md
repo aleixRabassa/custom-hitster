@@ -28,8 +28,32 @@ Several decisions in this repo look like mistakes and are not. If something seem
 | [`docs/plans/plan.phase-8-look-and-shell.md`](./docs/plans/plan.phase-8-look-and-shell.md) | Phase 8, plan 1 — neon-ring card design, contrast re-audit, PWA, icon set. **Built**                        |
 | [`docs/plans/plan.phase-8-features.md`](./docs/plans/plan.phase-8-features.md)             | Phase 8, plan 2 — the share link, the saved-playlist library, the PDF export, the audio reversal. **Built** |
 | [`docs/plans/plan.phase-8-added-by.md`](./docs/plans/plan.phase-8-added-by.md)             | Phase 8, plan 3 — the "Added by" decision. Writes no code; resolved as won't-build                          |
+| [`docs/plans/plan.multi-playlist-core.md`](./docs/plans/plan.multi-playlist-core.md)       | Multi-playlist, plan 1 — the merge module, the widened state, both v2 storage formats, the link. **Built**   |
+| [`docs/plans/plan.multi-playlist-ui.md`](./docs/plans/plan.multi-playlist-ui.md)           | Multi-playlist, plan 2 — the landing rows, the fan-out hook, the container wiring, the labels. **Not built** |
 
 **Do not build ahead of the current phase.** The plan defers things deliberately. Current phase: **8, CODE COMPLETE.** Phases 1–7 are complete, all three Phase 8 plans are resolved, and the app is playable end to end, has a design surface, is installable, and fails legibly. `src/App.tsx` is the **real container** and the only caller of `useGameSession()`. Plan 2 built the shareable deck URL, the saved-playlist library, the printable PDF export and the audio reversal; plan 1 built the neon ring, the contrast re-audit, the PWA and the icon set; plan 3 resolved "Added by" as won't-build with no code. Note that plan 2 depended on plan 1 only **softly** and did not wait — so the PDF's print palette is deliberately its own and did not change when the screen was redesigned.
+
+**A DECK IS NOW 1..5 PLAYLISTS, and plan 1 of 2 is built (2026-08-07) — so the tree is green but the
+FEATURE IS HALF LANDED.** Everything below React exists: `src/game/deck-merge.ts` (the merge, the
+dedupe, the notice aggregation, the failure ordering, `deckLabel()` and `MAX_DECK_PLAYLISTS`),
+`GameState.playlists` replacing `playlist`, both `localStorage` payloads at **v2 reading v1**, the
+share link's `playlist` param as a **comma list**, and `SavedPlaylist.ids` keyed by `savedDeckKey()`.
+**Nothing above React does**: `usePlaylist` still fetches ONE playlist, the landing screen still has
+one input, and there is no way for a player to name a second playlist. That is
+[`plan.multi-playlist-ui.md`](./docs/plans/plan.multi-playlist-ui.md), and until it lands the app
+behaves exactly as it did — the whole feature is the `n = 1` case. **`App.tsx`, `DeckActions.tsx` and
+`LandingScreen.tsx` carry small n=1 SHIMS, each commented as such**, because plan 1 is out of scope
+for them and the four checks still had to pass; plan 2 replaces every one. The one shim with a
+behavioural edge: **`App.tsx`'s link effect IGNORES a link naming several playlists** rather than
+dealing its first — unreachable today, since this build's `buildDeckLink` only ever emits one id, and
+dealing a deck the link did not describe is exactly what the over-cap rejection refuses to do.
+**The merge lives in a pure module because a wrong dedupe or a wrong label is invisible to every DOM
+test** — it reads as a duplicate card halfway through a deck, or as a slightly odd heading. Three
+rules to know before touching any of it: **the v1 lifts on both storage keys are load-bearing** (drop
+one and a deploy silently empties a curated library on the landing screen), **the library caps its
+ids on read while a stored session deliberately does not** (the cap governs INPUT; a saved session
+describes a deck that already exists), and **a link over the cap is rejected, never truncated**. Full
+reasoning in [`docs/architecture.md`](./docs/architecture.md) §3, "The combined deck".
 
 **What is left in Phase 8 is entirely MANUAL VERIFICATION, and it is now the project's largest gap.** Nothing is waiting on a decision or on code. Everything automatable is automated, and the ceiling is genuinely low here — jsdom paints nothing, evaluates no media query, computes no layout and has no accessibility tree — so what remains needs a deployment, a printer, a phone and a screen reader. Scoped row by row in [`docs/development.md`](./docs/development.md) §5, gaps in its §8. **Run the screen-reader pass over one flip first**: it is the only check on the app's only live region, which is what makes the game's payoff audible at all, and it has now been carried by two phases without being run.
 
