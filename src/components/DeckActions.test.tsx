@@ -32,6 +32,8 @@ function renderActions(overrides: Partial<DeckActionsProps> = {}) {
     // A resolved deck, so the export has something to print. The fixture deck's yearless cards are
     // what the exclusion count is about, and one test uses them deliberately.
     deck: fixtureDeck.filter((card) => typeof card.year === 'number'),
+    // A finished crawl, which is the state the export's own tests want. The gate has its own block.
+    pendingYearCount: 0,
     ...overrides,
   };
 
@@ -257,6 +259,142 @@ describe('DeckActions', () => {
       expect(screen.getByRole('status').textContent).toMatch(/nothing to print/i);
       // Nothing was loaded and nothing was downloaded -- the check happens before the import.
       expect(screen.queryByText(/building pdf/i)).toBeNull();
+    });
+
+    it('should wait for the outstanding years instead of exporting a short deck', () => {
+      // ===================================================================
+      //  THE 2026-08-07 GATE. The PDF is the one artefact here that is
+      //  FINISHED WHEN IT IS MADE -- a share link and a saved playlist both
+      //  survive the years arriving afterwards, because the recipient looks
+      //  them up again. Exporting mid-crawl silently drops every card whose
+      //  year is still in flight, and the omission is discoverable only by
+      //  counting a printed stack.
+      //
+      //  So the press does not export and does not refuse: it waits.
+      // ===================================================================
+      const { container } = renderActions({ pendingYearCount: 3 });
+
+      fireEvent.click(screen.getByRole('button', { name: /print as pdf cards/i }));
+
+      const text = container.textContent ?? '';
+      expect(text).toMatch(/waiting for the last years/i);
+      expect(text).toMatch(/3 cards are still looking up a year/i);
+      // Nothing was started: no progress count, and the export's own statuses are all silent.
+      expect(screen.queryByText(/building pdf/i)).toBeNull();
+      expect(screen.queryByText(/nothing to print/i)).toBeNull();
+    });
+
+    it('should export by itself once the last year lands', () => {
+      // The wait ENDS on its own. A player who has to press Print a second time after watching a
+      // spinner has been made to do the app's bookkeeping.
+      const { rerender, props } = renderActions({ pendingYearCount: 2 });
+
+      fireEvent.click(screen.getByRole('button', { name: /print as pdf cards/i }));
+      expect(screen.queryByText(/waiting for the last years/i)).not.toBeNull();
+
+      // One more year arrives -- still waiting.
+      rerender(<DeckActions {...props} pendingYearCount={1} />);
+      expect(screen.queryByText(/waiting for the last years/i)).not.toBeNull();
+      expect(screen.queryByText(/1 card is still looking up a year/i)).not.toBeNull();
+
+      // The last one lands: the wait is over and the export has taken over the panel.
+      rerender(<DeckActions {...props} pendingYearCount={0} />);
+      expect(screen.queryByText(/waiting for the last years/i)).toBeNull();
+      expect(
+        screen.queryByRole('button', { name: /print as pdf cards|building pdf/i }),
+      ).not.toBeNull();
+    });
+
+    it('should carry the reduced-motion hook and say everything in text', () => {
+      // Under `prefers-reduced-motion: reduce` the spinner is HIDDEN, not stopped, so the two lines
+      // beside it have to carry everything it conveys. jsdom evaluates no media query, so this
+      // asserts the hook is present and that removing the element loses no information -- the same
+      // pair of checks `PreparingScreen.test.tsx` makes, for the same reason.
+      const { container } = renderActions({ pendingYearCount: 2 });
+
+      fireEvent.click(screen.getByRole('button', { name: /print as pdf cards/i }));
+
+      const spinner = container.querySelector('[data-motion="spinner"]');
+      expect(spinner).not.toBeNull();
+      expect(spinner?.getAttribute('aria-hidden')).toBe('true');
+
+      spinner?.remove();
+      expect(container.textContent ?? '').toMatch(/waiting for the last years/i);
+      expect(container.textContent ?? '').toMatch(/2 cards are still looking up a year/i);
+    });
+
+    it('should move focus to Cancel when the wait begins', () => {
+      // The press unmounts the button that was focused. Without this, focus falls to `<body>` --
+      // and inside the dialog that leaves a keyboard player with no place in a panel whose state
+      // they cannot see.
+      renderActions({ pendingYearCount: 2 });
+
+      fireEvent.click(screen.getByRole('button', { name: /print as pdf cards/i }));
+
+      expect(document.activeElement?.textContent).toMatch(/^cancel$/i);
+    });
+
+    it('should let the player cancel the wait', () => {
+      // The end screen has no other way out of it -- the game screen's dialog has its own Close,
+      // but this component cannot assume a host that provides one.
+      renderActions({ pendingYearCount: 5 });
+
+      fireEvent.click(screen.getByRole('button', { name: /print as pdf cards/i }));
+      fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }));
+
+      expect(screen.queryByText(/waiting for the last years/i)).toBeNull();
+      expect(screen.queryByRole('button', { name: /copy share link/i })).not.toBeNull();
+    });
+
+    it('should not resume a cancelled wait when the years arrive', () => {
+      // The flag is cleared by Cancel, so the effect's first line returns -- a deck that finishes
+      // its crawl a second later must not spring a download on somebody who backed out.
+      const { rerender, props } = renderActions({ pendingYearCount: 4 });
+
+      fireEvent.click(screen.getByRole('button', { name: /print as pdf cards/i }));
+      fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }));
+      rerender(<DeckActions {...props} pendingYearCount={0} />);
+
+      expect(screen.queryByText(/building pdf/i)).toBeNull();
+      expect(screen.queryByRole('status')).toBeNull();
+    });
+
+    it('should say what is outstanding instead of a sheet count while years are pending', () => {
+      // `sheetsForDeck` counts only the cards that already have a year, so mid-crawl it is a figure
+      // that would climb while the player read it -- and it would be describing a deck nobody is
+      // going to print, since the press waits for the rest.
+      const { container } = renderActions({ pendingYearCount: 7 });
+      const text = container.textContent ?? '';
+
+      expect(text).toMatch(/7 cards are still looking up a year — printing waits for them all/i);
+      expect(text).not.toMatch(/A4 sheets?/);
+    });
+
+    it('should keep copy and save available while years are pending', () => {
+      // The asymmetry is the whole design: a link and a save are complete the moment a deck exists.
+      // Only the PDF is finished when it is made.
+      renderActions({ pendingYearCount: 9 });
+
+      expect(
+        (screen.getByRole('button', { name: /copy share link/i }) as HTMLButtonElement).disabled,
+      ).toBe(false);
+      expect(
+        (screen.getByRole('button', { name: /save this playlist/i }) as HTMLButtonElement).disabled,
+      ).toBe(false);
+    });
+
+    it('should name no card while it waits', () => {
+      // The waiting panel mounts beside an unflipped card, and the cards it is waiting FOR are
+      // precisely the ones whose answer the player has not seen. A count, never a list.
+      const { container } = renderActions({ deck: fixtureDeck, pendingYearCount: 2 });
+
+      fireEvent.click(screen.getByRole('button', { name: /print as pdf cards/i }));
+
+      const text = container.textContent ?? '';
+      for (const card of fixtureDeck) {
+        expect(text).not.toContain(card.title);
+        expect(text).not.toContain(card.artist);
+      }
     });
 
     it('should name no excluded card', () => {

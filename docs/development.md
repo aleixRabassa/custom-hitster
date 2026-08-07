@@ -454,10 +454,11 @@ playlist obscure enough that MusicBrainz places none of its tracks, which cannot
 ### Phase 8 sharing, saving and printing
 
 Nine checks from [`plan.phase-8-features.md`](./plans/plan.phase-8-features.md), plus three added on
-2026-08-06 when the same three actions became reachable mid-game. The unit tests cover every branch
+2026-08-06 when the same three actions became reachable mid-game and one on 2026-08-07 when the PDF
+export gained its year gate. The unit tests cover every branch
 of the link parser, the library's storage validation and the sheet geometry; what they cannot cover
 is a clipboard, a `localStorage` shared between tabs, a printer, a phone camera — and, for rows
-10-12, a laid-out modal on a real screen.
+10-13, a laid-out modal on a real screen and a crawl running at its real pace.
 
 | #   | Check                                                                                                                                                                                                                                                                | Status                                                                                                                                                                                                                  |
 | --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -474,6 +475,7 @@ is a clipboard, a `localStorage` shared between tabs, a printer, a phone camera 
 | 10 | **The deck-actions panel fits a 360px screen** — open it mid-game on a phone, then force the copy fallback (an insecure origin will do it) so the share-link input is showing too. Nothing local computes layout, so this is the only check on the panel's height. | Pending |
 | 11 | **The backdrop leaves the card legible.** `bg-page/80` is meant to reassure the player the game is still there. If the card behind it reads as a spoiler risk or as visual noise, the fill is the thing to change — not the panel. | Pending |
 | 12 | **Four control buttons still clear 44px each and do not crowd the swipe.** The bar gained a fourth target on the surface a thumb swipes; `touch-target` is asserted at class-name level only, and jsdom measures nothing. | Pending |
+| 13 | **Watch the print wait against a real crawl.** Press Print mid-game on a 50-card deck: the shared 1 req/s gate makes the wait roughly a minute, and the only question is whether the spinner plus "N cards are still looking up a year" reads as working rather than hung. Confirm the export starts **by itself** when the count reaches zero, and that Cancel puts the three actions back. | Pending |
 
 **Row 9 comes with a trap worth knowing before you run it again: `qrcode-loader-*.js` is React's JSX
 runtime, not the QR encoder.** Rolldown named the shared vendor chunk after `src/game/qrcode-loader.ts`

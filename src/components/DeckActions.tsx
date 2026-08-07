@@ -50,8 +50,9 @@
  * ===========================================================================
  */
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
+import { Spinner } from './Spinner';
 import { buildDeckLink } from '../game/deck-link';
 import { sheetsForDeck, usePdfExport } from '../hooks/usePdfExport';
 import type { Card } from '../../shared/types';
@@ -94,6 +95,31 @@ export interface DeckActionsProps {
    * ===========================================================================
    */
   deck: readonly Card[];
+  /**
+   * How many cards are still waiting on a year lookup, from `pendingYearCount`.
+   *
+   * ===========================================================================
+   *  THE PDF WAITS FOR THIS TO REACH ZERO. THE OTHER TWO ACTIONS DO NOT, AND
+   *  THE ASYMMETRY IS THE POINT (2026-08-07).
+   *
+   *  A share link is (playlist id + seed) and a save is (id + name): both are
+   *  complete the moment a deck exists, and both survive the years arriving
+   *  afterwards because the recipient looks them up again. THE PDF IS THE ONE
+   *  ARTEFACT THAT IS FINISHED WHEN IT IS MADE. Cards without a year are dropped
+   *  from the sheet, so exporting mid-crawl prints a deck that is quietly short
+   *  -- and the omission is discoverable only by counting a stack of printed
+   *  paper, after the ink.
+   *
+   *  So a press with lookups outstanding does not export and does not refuse: it
+   *  WAITS, on a screen shaped like the one that dealt the deck, and exports
+   *  itself the moment the last year lands. `pendingYearCount === 0` is exactly
+   *  "every card in this deck can be printed", because a lookup that finds
+   *  nothing removes its card rather than leaving it yearless.
+   *
+   *  Zero on the end screen in the ordinary case, so nothing changes there.
+   * ===========================================================================
+   */
+  pendingYearCount: number;
 }
 
 /**
@@ -116,9 +142,44 @@ export function DeckActions({
   onSavePlaylist,
   isPlaylistSaved,
   deck,
+  pendingYearCount,
 }: DeckActionsProps) {
   const { state: pdf, exportDeck } = usePdfExport();
   const sheets = sheetsForDeck(deck);
+  const isDeckResolved = pendingYearCount === 0;
+
+  /**
+   * Whether the player has ASKED to print. Not whether they are waiting -- see below.
+   *
+   * A boolean rather than a fourth `PdfExportStatus`, deliberately: `usePdfExport` describes work
+   * the HOOK is doing, and this describes work it has not been asked to start. Putting it in that
+   * union would mean the hook owning a condition it cannot observe, and every existing branch
+   * having to say what it does about it.
+   */
+  const [hasAskedToPrint, setHasAskedToPrint] = useState(false);
+
+  /**
+   * The wait is DERIVED, not stored, and that is what keeps the effect below free of `setState`.
+   *
+   * The obvious shape is an `isWaiting` flag the effect clears when the last year lands -- and
+   * `react-hooks/set-state-in-effect` rejects it, correctly: clearing state from an effect is a
+   * cascading render, and the state was redundant anyway. "The player asked, and the deck is not
+   * ready" is a fact about two values that are already here. The wait therefore ENDS BY ITSELF, on
+   * the render where `pendingYearCount` reaches zero, with nothing to keep in step.
+   */
+  const isWaitingForYears = hasAskedToPrint && !isDeckResolved;
+
+  /**
+   * The wait's Cancel button, so focus can follow the view.
+   *
+   * Pressing Print unmounts the button that was focused. Without this, focus falls to `<body>`, and
+   * inside `DeckActionsDialog` that also means the Tab trap has nothing to cycle FROM -- the panel
+   * would still hold focus, but a keyboard player would have lost their place in it.
+   */
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (isWaitingForYears) cancelRef.current?.focus();
+  }, [isWaitingForYears]);
 
   const [copyState, setCopyState] = useState<CopyState>('idle');
   /**
@@ -154,6 +215,106 @@ export function DeckActions({
     }, fail);
   };
 
+  /**
+   * Print, or start waiting for the years that make printing honest.
+   *
+   * The gate is checked HERE rather than by disabling the button, because a disabled Print with no
+   * explanation is indistinguishable from a broken one -- and the explanation ("6 cards are still
+   * looking up a year") is a sentence nobody reads off a greyed-out control.
+   */
+  const handlePrint = () => {
+    if (!isDeckResolved) {
+      hasAutoExportedRef.current = false;
+      setHasAskedToPrint(true);
+      return;
+    }
+
+    exportDeck(deck, playlistName);
+  };
+
+  /**
+   * Whether the wait that is currently running has already handed off to the export.
+   *
+   * The effect below cannot clear `hasAskedToPrint` to make itself idempotent -- that is the
+   * `setState`-in-an-effect the derivation above exists to avoid -- so the guard is a ref instead.
+   * Reset when a NEW wait begins, in `handlePrint`.
+   */
+  const hasAutoExportedRef = useRef(false);
+
+  /**
+   * The last year landed while the player was waiting: export now.
+   *
+   * ===========================================================================
+   *  THE DEPENDENCIES LOOK UNSTABLE AND THE EXPORT STILL HAPPENS ONCE.
+   *
+   *  `deck` is a NEW ARRAY on every resolved year -- the reducer rebuilds it --
+   *  so this effect re-runs perhaps a hundred times during a crawl. Every one of
+   *  those runs returns at the first line, because `hasAskedToPrint` is false
+   *  unless the player pressed Print and `pendingYearCount` is above zero until
+   *  the crawl ends. The ref then closes the remaining case: `hasAskedToPrint`
+   *  STAYS true after the handoff (nothing clears it), so without the ref a
+   *  later re-render with a fresh `deck` identity would export a second time.
+   *  `exportDeck`'s own generation counter is a third line of defence rather
+   *  than the first.
+   *
+   *  StrictMode is not a hazard for a different reason again: this is an UPDATE
+   *  effect, React double-invokes on MOUNT, and on mount the flag is false.
+   * ===========================================================================
+   */
+  useEffect(() => {
+    if (!hasAskedToPrint || pendingYearCount > 0 || hasAutoExportedRef.current) return;
+
+    hasAutoExportedRef.current = true;
+    exportDeck(deck, playlistName);
+  }, [hasAskedToPrint, pendingYearCount, exportDeck, deck, playlistName]);
+
+  /**
+   * The wait, shaped like the screen that dealt the deck.
+   *
+   * It REPLACES the three actions rather than sitting under them, which is the honest shape: this
+   * is a job the player started and is now watching, not a fourth thing they can do. Cancel is
+   * inside it because the end screen has no other way out -- the game screen's dialog has its own
+   * Close, but this component cannot assume one exists.
+   *
+   * A COUNT, never a list. The cards still looking up a year are the ones whose answer the player
+   * has not seen, so naming one here would spoil the card they are looking at.
+   */
+  if (isWaitingForYears) {
+    return (
+      <div role="status" className="flex flex-col items-center gap-3 py-2 text-center">
+        <Spinner />
+
+        <p className="text-sm font-medium text-fg">Waiting for the last years…</p>
+
+        {/*
+          Says what the wait actually is, in the same spirit as the preparing screen's second line.
+          The crawl is paced at one lookup a second by the shared rate gate, so a number here is a
+          rough number of seconds -- which is the only honest expectation available.
+        */}
+        <p className="max-w-narrow text-xs text-fg-muted">
+          {pendingYearCount === 1 ? '1 card is' : `${pendingYearCount} cards are`} still looking up
+          a year. Printing before they arrive would leave them out of the deck.
+        </p>
+
+        {/*
+          Takes focus when the wait begins -- see `cancelRef`. The button that was focused (Print)
+          has just been unmounted, and focus falling to `<body>` would leave a keyboard player with
+          nothing selected in a panel they cannot see the state of.
+        */}
+        <button
+          ref={cancelRef}
+          type="button"
+          onClick={() => {
+            setHasAskedToPrint(false);
+          }}
+          className={BUTTON_CLASSES}
+        >
+          Cancel
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-3">
       <button type="button" onClick={handleCopy} className={BUTTON_CLASSES}>
@@ -185,9 +346,10 @@ export function DeckActions({
 
       <button
         type="button"
-        onClick={() => exportDeck(deck, playlistName)}
-        // Disabled only while working. A finished or failed export is repeatable -- the commonest
-        // reason to press it twice is that the year of one more card arrived in the meantime.
+        // Never disabled by the year gate -- see `handlePrint`. Disabled only while working: a
+        // finished or failed export is repeatable, and the commonest reason to press it twice is a
+        // printer that ate the first one.
+        onClick={handlePrint}
         disabled={pdf.status === 'working'}
         className={BUTTON_CLASSES}
       >
@@ -197,24 +359,34 @@ export function DeckActions({
       </button>
 
       {/*
-        Said BEFORE the press, not after: nine sheets is a thing to know before committing paper,
-        and the duplex setting is the one instruction that decides whether the sheet is usable at
-        all. `pdf-sheet.ts` mirrors the columns for LONG-edge binding, and short-edge would invert
-        the correction -- so the setting is named here rather than guessed at in code.
+        Two different sentences, because there are two different things worth knowing before the
+        press.
 
-        Mid-game the count is a LIVE one: the deck's years are still arriving, so this climbs as
-        `selectPrintableCards` finds more of them. That is honest rather than awkward -- it is
-        exactly the number of cards a press right now would print.
+        RESOLVED: the sheet count and the duplex setting. Nine sheets is a thing to know before
+        committing paper, and the binding edge is the one instruction that decides whether the sheet
+        is usable at all -- `pdf-sheet.ts` mirrors the columns for LONG-edge binding, and short-edge
+        would invert the correction, so it is named here rather than guessed at in code.
+
+        PENDING: no sheet count at all. `sheetsForDeck` counts only the cards that already have a
+        year, so mid-crawl it is a number that would climb while the player read it -- and since the
+        press now WAITS for the rest, it would also be describing a deck nobody is going to print.
+        Saying what the press will do is more useful than a figure that is about to be wrong.
       */}
       <p className="text-center text-xs text-fg-muted">
-        {sheets === 1 ? '1 A4 sheet' : `${sheets} A4 sheets`}, 12 cards each — print double-sided on
-        the long edge
+        {isDeckResolved
+          ? `${sheets === 1 ? '1 A4 sheet' : `${sheets} A4 sheets`}, 12 cards each — print double-sided on the long edge`
+          : `${pendingYearCount === 1 ? '1 card is' : `${pendingYearCount} cards are`} still looking up a year — printing waits for them all`}
       </p>
 
       {/*
         The export's own live region, separate from the copy's: the two can both have news, and one
         region rewritten by two features announces the wrong thing at the wrong time. Every message
         here is a COUNT -- never the title of an excluded card (step 20).
+
+        The `excludedCount` and `nothing-to-print` branches survived the year gate and are NOT dead
+        code: the gate waits for `year === undefined` to clear, while `selectPrintableCards` also
+        drops `year === null`. A live deck holds no null years since the 2026-08-05 reversal, but a
+        RESUMED pre-reversal save does -- so the two conditions are not the same condition.
       */}
       {pdf.status === 'idle' || pdf.status === 'working' ? null : (
         <p

@@ -144,10 +144,13 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
     currentCard,
     isCurrentYearPending,
     cardsRemaining,
-    // `resolvedCount` is deliberately NOT taken from the hook any more: the preparing screen's
-    // "N of M years found" line was removed, and it was this container's only consumer. The
-    // selector stays exported beside the reducer with its own tests -- a progress readout is an
-    // obvious thing for a later phase to want back, and it would want it from there.
+    // The PDF export's gate. Zero means every card in the deck carries a real year, so a printed
+    // sheet is the whole deck rather than a quietly short one -- see `DeckActions`.
+    pendingYearCount,
+    // `resolvedCount` is deliberately still NOT taken from the hook: the preparing screen's "N of M
+    // years found" line was removed and it was this container's only consumer. Its COMPLEMENT is
+    // taken, above -- which is the "a later phase will want a progress readout, and it will want it
+    // from the selector rather than reinvented in a component" prediction coming true.
     start,
     flip,
     next,
@@ -505,6 +508,7 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
         deck={state.deck}
         onSavePlaylist={handleSavePlaylist}
         isPlaylistSaved={isPlaylistSaved}
+        pendingYearCount={pendingYearCount}
       />
     );
   }
@@ -552,6 +556,7 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
         shareOrigin={shareOrigin()}
         onSavePlaylist={handleSavePlaylist}
         isPlaylistSaved={isPlaylistSaved}
+        pendingYearCount={pendingYearCount}
         notice={noticeBanner}
       />
     </Suspense>

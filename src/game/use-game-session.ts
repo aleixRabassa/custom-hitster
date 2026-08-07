@@ -26,6 +26,7 @@ import {
   gameReducer,
   initialGameState,
   isCurrentYearPending,
+  pendingYearCount,
   resolvedCount,
 } from './reducer';
 import { createYearResolver } from './resolver';
@@ -57,6 +58,11 @@ export interface GameSession {
   isCurrentYearPending: boolean;
   cardsRemaining: number;
   resolvedCount: number;
+  /**
+   * Lookups still in flight. Zero means every card in the deck carries a real year, which is what
+   * the PDF export waits for -- see the selector's own block in `reducer.ts`.
+   */
+  pendingYearCount: number;
   start: (cards: Card[], playlist: PlaylistSummary, seed?: string) => void;
   flip: () => void;
   next: () => void;
@@ -206,6 +212,7 @@ export function useGameSession(options: UseGameSessionOptions = {}): GameSession
     isCurrentYearPending: isCurrentYearPending(state),
     cardsRemaining: cardsRemaining(state),
     resolvedCount: resolvedCount(state),
+    pendingYearCount: pendingYearCount(state),
     start,
     flip,
     next,

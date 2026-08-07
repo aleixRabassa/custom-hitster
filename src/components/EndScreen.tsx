@@ -70,6 +70,14 @@ export interface EndScreenProps {
    * reaches the DOM, and the cards go into a PDF the player asked for.
    */
   deck: readonly Card[];
+  /**
+   * Lookups still in flight, from `pendingYearCount`. Straight through to `DeckActions`, which
+   * makes the PDF export wait for it to reach zero.
+   *
+   * Usually zero by the time this screen renders -- a deck that ran out has had the whole game to
+   * finish its crawl -- but not always: a player who swipes fast can outrun the 1 req/s gate.
+   */
+  pendingYearCount: number;
 }
 
 export function EndScreen({
@@ -83,6 +91,7 @@ export function EndScreen({
   onSavePlaylist,
   isPlaylistSaved,
   deck,
+  pendingYearCount,
 }: EndScreenProps) {
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center gap-8 bg-page p-6 text-fg">
@@ -143,6 +152,7 @@ export function EndScreen({
           onSavePlaylist={onSavePlaylist}
           isPlaylistSaved={isPlaylistSaved}
           deck={deck}
+          pendingYearCount={pendingYearCount}
         />
       </section>
     </main>

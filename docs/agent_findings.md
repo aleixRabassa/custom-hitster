@@ -2472,3 +2472,51 @@ can tell whether a modal panel over a live card is _usable_ on a phone — wheth
 legible enough to be reassuring rather than distracting, and whether the fourth control button
 crowds the bar's touch targets on the surface a thumb swipes. jsdom computes no layout, so all four
 are class-name assertions here. Add them to the iOS/Android checklist in `docs/development.md` §5.
+
+## 2026-08-07 — The PDF export waits for the year crawl; the link and the save do not
+
+Follow-up to yesterday's mid-game deck actions. The three actions are **not** equally safe to offer
+early, and the asymmetry is the finding:
+
+- **A share link is (playlist id + seed) and a save is (id + name).** Both are complete the moment a
+  deck exists, and both survive the years arriving afterwards, because whoever opens the link looks
+  the years up again from scratch.
+- **The PDF is the one artefact that is finished when it is made.** `selectPrintableCards` drops
+  every card without a year, so an export taken mid-crawl prints a deck that is quietly short — and
+  the omission is discoverable only by counting a stack of printed paper, after the ink. The old
+  `excludedCount` message named the count _after_ the download, which is the wrong side of the
+  press.
+
+So Print now **waits** rather than exporting or refusing. `pendingYearCount === 0` is the gate, and
+it is exactly equivalent to "every card in this deck can be printed" **because a lookup that finds
+nothing removes its card** (the 2026-08-05 reversal) rather than leaving it yearless — so the gate
+terminates even for a playlist MusicBrainz can only partly place.
+
+**Four things worth knowing before touching it.**
+
+1. **The wait is DERIVED, not stored.** The obvious shape is an `isWaiting` flag an effect clears
+   when the last year lands, and `react-hooks/set-state-in-effect` rejects it — correctly, since
+   clearing state from an effect is a cascading render and the state was redundant. What is stored
+   is `hasAskedToPrint`; `isWaitingForYears = hasAskedToPrint && pendingYearCount > 0`. The wait
+   therefore **ends by itself** on the render where the count reaches zero. The lint rule found a
+   real simplification, not a false positive.
+2. **The auto-export effect needs a ref guard, and for a non-obvious reason.** `hasAskedToPrint`
+   stays true after the handoff (nothing clears it), and `deck` is a new array identity on every
+   resolved year — so without `hasAutoExportedRef` a later re-render would export a second time.
+   Reset in `handlePrint` when a new wait begins.
+3. **`excludedCount` and `nothing-to-print` are still live branches**, not dead code left behind by
+   the gate. The gate waits for `year === undefined` to clear; `selectPrintableCards` also drops
+   `year === null`. A live deck holds no null years, but a **resumed pre-reversal save** does, so
+   the two conditions are not the same condition.
+4. **`Spinner` was extracted for the `data-motion` hook, not for the four class names.** A
+   hand-rolled second copy of that markup is one typo away from an element the reduced-motion block
+   does not match, and **nothing would fail** — jsdom evaluates no media query, so the miss is
+   invisible to every local check. `resolvedCount` also finally has a caller, through its new
+   complement `pendingYearCount`; it had been exported with tests and no consumer since 2026-08-05,
+   on the bet that a later phase would want a progress readout from the selector rather than
+   reinvent one in a component. That bet paid.
+
+**Unverified.** Nobody has watched the wait against a real crawl. The 1 req/s shared gate means a
+50-card deck is on the order of a minute, and whether that reads as "working" or as "hung" is a
+judgement no local test can make — it is the same class of question the preparing screen's
+"the rest fill in while you play" line exists to answer. Added to `docs/development.md` §5 as row 13.

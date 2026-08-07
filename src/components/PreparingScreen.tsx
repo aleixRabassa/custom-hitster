@@ -30,6 +30,7 @@
  * having resolved nothing at all. Nothing here may block on `resolvedCount > 0`.
  */
 
+import { Spinner } from './Spinner';
 import type { ReactNode } from 'react';
 
 export interface PreparingScreenProps {
@@ -54,21 +55,14 @@ export function PreparingScreen({ notice }: PreparingScreenProps) {
       */}
       <div role="status" className="flex flex-col items-center gap-3 text-center">
         {/*
-          A plain CSS spin, and under `prefers-reduced-motion: reduce` it is HIDDEN rather than
-          stopped (decision 7). A stationary spinner is a dead grey circle that reads as a hung
-          app, and this element is already `aria-hidden` -- so removing it costs nothing, because
-          the two lines below carry every piece of information it conveys. The claim survived the
-          removal of the resolved/total count, which decision 7 originally leaned on: "Dealing your
-          deck…" is itself the statement that work is in progress. The rule itself is in
-          `src/index.css`, keyed on `data-motion="spinner"`; no
-          component in this app reads the preference (decision 3), which is what stops the next
-          animation added from being silently unhandled.
+          Under `prefers-reduced-motion: reduce` this is HIDDEN rather than stopped (decision 7) --
+          `Spinner` holds the reasoning and the `data-motion` hook. What matters HERE is the
+          consequence: the two lines below have to carry every piece of information it conveys,
+          because a reduced-motion player sees no spinner at all. They do -- "Dealing your deck…" is
+          itself the statement that work is in progress, which is what let the resolved/total count
+          decision 7 originally leaned on be removed without weakening the claim.
         */}
-        <div
-          aria-hidden="true"
-          data-motion="spinner"
-          className="size-(--size-spinner) animate-spin rounded-full border-2 border-border-strong border-t-accent-bright"
-        />
+        <Spinner />
 
         <p className="text-lg font-medium">Dealing your deck…</p>
 

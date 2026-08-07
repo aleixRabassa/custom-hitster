@@ -78,6 +78,29 @@ bar is a leak surface beside an unflipped card, and "Keep this deck" is safe bec
 deck rather than the card. The cost is measured: **+4.8 kB gzip on the initial path**, because
 `DeckActions` becomes a shared chunk instead of living inside `index`.
 
+**The PDF export WAITS for the year crawl; the share link and the save do not** (2026-08-07). The
+asymmetry is the design, not an inconsistency: a link is (playlist id + seed) and a save is
+(id + name), both complete the moment a deck exists — **the PDF is the one artefact that is finished
+when it is made**, and `selectPrintableCards` drops every card without a year, so an export taken
+mid-crawl prints a deck that is quietly short and the omission is discoverable only by counting
+printed paper. So a press with lookups outstanding neither exports nor refuses: it shows a
+preparing-screen-shaped wait and exports itself when the last year lands. Three traps. **The wait is
+DERIVED (`hasAskedToPrint && pendingYearCount > 0`), never stored** — the obvious `isWaiting` flag
+cleared by an effect is what `react-hooks/set-state-in-effect` rejects, and the rule is right, so
+the wait ends by itself on the render where the count hits zero. **The auto-export effect still
+needs `hasAutoExportedRef`**, because `hasAskedToPrint` stays true after the handoff and `deck` is a
+new array identity on every resolved year. And **`excludedCount` / `nothing-to-print` are still live
+branches**: the gate waits for `year === undefined`, while `selectPrintableCards` also drops
+`year === null`, which only a resumed pre-reversal save holds. `pendingYearCount` is a selector
+beside the reducer and is the first caller `resolvedCount` has had since 2026-08-05.
+
+**`src/components/Spinner.tsx` exists for the `data-motion` hook, not for its four class names.**
+Under `prefers-reduced-motion: reduce` the spinner is HIDDEN rather than stopped, keyed on
+`data-motion="spinner"` in `src/index.css` — so a hand-rolled second copy is one typo away from an
+element the rule does not match, and **nothing would fail**: jsdom evaluates no media query. Both
+callers (`PreparingScreen`, `DeckActions`' wait) must keep saying everything the spinner conveys in
+the text beside it, because a reduced-motion player sees no spinner at all.
+
 **The end screen's second button says "Home", not "New playlist"** (renamed 2026-08-06). The landing
 screen is also where the saved-playlist library is and where a shared link is pasted, so the old
 label named one of three reasons to press it — and the only one the button does _not_ do. It touched

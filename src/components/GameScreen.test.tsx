@@ -38,6 +38,7 @@ function renderScreen(props: {
   onFlip?: () => void;
   onNext?: () => void;
   onSavePlaylist?: () => void;
+  pendingYearCount?: number;
   isPlayable?: boolean;
 }) {
   const element = (
@@ -61,6 +62,7 @@ function renderScreen(props: {
       shareOrigin="https://hitster.example/"
       onSavePlaylist={props.onSavePlaylist ?? vi.fn()}
       isPlaylistSaved={false}
+      pendingYearCount={props.pendingYearCount ?? 0}
     />
   );
 
@@ -335,6 +337,24 @@ describe('GameScreen', () => {
     ]) {
       expect(text).not.toContain(value);
     }
+  });
+
+  it('should make the print action wait for the deck mid-game', () => {
+    // Mid-game an outstanding crawl is the NORMAL state, which is what makes the 2026-08-07 gate
+    // worth having: the deck-actions panel is reachable long before the years are. The link and the
+    // save still work -- only the PDF waits, because it is the only one of the three that is
+    // finished when it is made.
+    render(renderScreen({ pendingYearCount: 4 }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Keep this deck' }));
+    fireEvent.click(screen.getByRole('button', { name: /print as pdf cards/i }));
+
+    expect(screen.queryByText(/waiting for the last years/i)).not.toBeNull();
+    expect(screen.queryByText(/4 cards are still looking up a year/i)).not.toBeNull();
+
+    // And the game is untouched behind it: cancelling puts the three actions back.
+    fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }));
+    expect(screen.queryByRole('button', { name: /copy share link/i })).not.toBeNull();
   });
 
   it('should leave the audio element sourceless for a card with no preview', () => {

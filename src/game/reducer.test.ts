@@ -6,6 +6,7 @@ import {
   gameReducer,
   initialGameState,
   isCurrentYearPending,
+  pendingYearCount,
   resolvedCount,
 } from './reducer';
 import { shuffleDeck } from './shuffle';
@@ -799,9 +800,10 @@ describe('gameReducer selectors', () => {
   it('should count completed lookups', () => {
     // Count only, deliberately: it may show a number but must never name a track or a year.
     //
-    // No caller renders it since the preparing screen's "N of M years found" line was removed on
-    // 2026-08-05, and it stays exported with its tests because a progress readout is an obvious
-    // thing for a later phase to want back -- from here rather than reinvented in a component.
+    // It went uncalled from the 2026-08-05 removal of the preparing screen's "N of M years found"
+    // line until 2026-08-07, when `pendingYearCount` -- its complement -- became the PDF export's
+    // gate. Kept exported through that gap for exactly the reason that happened: a progress readout
+    // is an obvious thing for a later phase to want back, from here rather than reinvented.
     let state = playing();
     expect(resolvedCount(state)).toBe(1);
 
@@ -832,10 +834,46 @@ describe('gameReducer selectors', () => {
     expect(next.deck).toHaveLength(state.deck.length - 1);
   });
 
+  it('should count the lookups still in flight', () => {
+    // The complement of `resolvedCount`, and the PDF export's gate: zero means every card in the
+    // deck carries a real year, because a lookup that finds nothing removes its card.
+    let state = playing();
+    expect(pendingYearCount(state)).toBe(state.deck.length - 1);
+
+    state = gameReducer(state, {
+      type: 'YEAR_RESOLVED',
+      cardId: state.deck[7]?.id ?? '',
+      year: 1984,
+      confidence: 'high',
+    });
+
+    expect(pendingYearCount(state)).toBe(state.deck.length - 2);
+  });
+
+  it('should reach zero pending when a lookup finds nothing, because the card leaves', () => {
+    // The case that makes the gate terminate. A null result does not linger as a pending card --
+    // it takes the card with it -- so a deck MusicBrainz can only partly place still finishes.
+    let state = playing([card('a'), card('b')], 'two');
+    expect(pendingYearCount(state)).toBe(1);
+
+    // By POSITION, not by id: `playing` resolves whichever card the shuffle put first, and which
+    // of the two that is depends on the seed.
+    state = gameReducer(state, {
+      type: 'YEAR_RESOLVED',
+      cardId: state.deck[1]?.id ?? '',
+      year: null,
+      confidence: 'none',
+    });
+
+    expect(pendingYearCount(state)).toBe(0);
+    expect(state.deck).toHaveLength(1);
+  });
+
   it('should be safe on an empty deck', () => {
     expect(currentCard(initialGameState)).toBeUndefined();
     expect(isCurrentYearPending(initialGameState)).toBe(false);
     expect(cardsRemaining(initialGameState)).toBe(0);
     expect(resolvedCount(initialGameState)).toBe(0);
+    expect(pendingYearCount(initialGameState)).toBe(0);
   });
 });

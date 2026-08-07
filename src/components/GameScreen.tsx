@@ -122,6 +122,13 @@ export interface GameScreenProps {
   /** True once this playlist is in the library. Turns the save button into its own confirmation. */
   isPlaylistSaved: boolean;
   /**
+   * Lookups still in flight, from `pendingYearCount`. The PDF export waits for it to reach zero.
+   *
+   * Mid-game this is the NORMAL case rather than an edge one -- the crawl runs for the whole
+   * session at one lookup a second -- which is exactly why the wait exists.
+   */
+  pendingYearCount: number;
+  /**
    * The notice banner, or null.
    *
    * Passed in as a NODE rather than as three booleans, because dismissal is container state
@@ -164,6 +171,7 @@ export function GameScreen({
   shareOrigin,
   onSavePlaylist,
   isPlaylistSaved,
+  pendingYearCount,
   notice,
 }: GameScreenProps) {
   const currentCard = deck[currentIndex];
@@ -374,6 +382,7 @@ export function GameScreen({
           // The live deck, so the sheet count and the export both reflect the years that have
           // arrived by the time the player presses. Nothing from it is rendered -- see `DeckActions`.
           deck={deck}
+          pendingYearCount={pendingYearCount}
           onClose={() => {
             setIsDeckActionsOpen(false);
           }}

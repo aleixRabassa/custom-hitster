@@ -36,6 +36,7 @@ function renderEnd(overrides: Partial<EndScreenProps> = {}) {
     isPlaylistSaved: false,
     // A resolved deck, so the export has something to print.
     deck: fixtureDeck.filter((card) => typeof card.year === 'number'),
+    pendingYearCount: 0,
     ...overrides,
   };
 

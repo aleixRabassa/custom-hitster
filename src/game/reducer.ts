@@ -379,3 +379,24 @@ export function cardsRemaining(state: GameState): number {
 export function resolvedCount(state: GameState): number {
   return state.deck.reduce((count, card) => (card.year === undefined ? count : count + 1), 0);
 }
+
+/**
+ * How many cards are still waiting on a lookup. The complement of `resolvedCount`.
+ *
+ * ===========================================================================
+ *  ZERO MEANS THE DECK IS PRINTABLE, AND THAT IS THE WHOLE REASON IT EXISTS.
+ *
+ *  A card whose lookup finds nothing is REMOVED from the deck (`YEAR_RESOLVED`),
+ *  so every card that survives to a finished crawl carries a real year. That
+ *  makes `pendingYearCount === 0` exactly equivalent to "every card in this deck
+ *  can be printed" -- which is what the PDF export waits for (2026-08-07). A
+ *  sheet exported earlier silently omits the cards whose year is still in flight,
+ *  and the omission is discoverable only by counting a printed deck.
+ *
+ *  Expressed as the complement rather than as its own reduce, so the two
+ *  selectors cannot drift into disagreeing about what `undefined` means.
+ * ===========================================================================
+ */
+export function pendingYearCount(state: GameState): number {
+  return state.deck.length - resolvedCount(state);
+}
