@@ -18,10 +18,10 @@
  *       query -- fetches each release group's `first-release-date`.
  *
  *  Request 2 exists because the search inlines whichever RELEASE matched, which
- *  is nearly always a reissue: filtering to official studio albums and taking
- *  the earliest inlined release date gives Billie Jean 2012, Bohemian Rhapsody
- *  2001, Sweet Child O' Mine 2018. The release GROUP's first-release-date is
- *  the album's original release date and gets all three right.
+ *  is nearly always a reissue: filtering to official original releases and
+ *  taking the earliest inlined release date gives Billie Jean 2012, Bohemian
+ *  Rhapsody 2001, Sweet Child O' Mine 2018. The release GROUP's
+ *  first-release-date is the original release date and gets all three right.
  *
  *  Because request 2 is one batched query rather than one lookup per candidate,
  *  THE COUNT STAYS AT TWO however large the pool -- decision 19a, which exists
@@ -34,7 +34,7 @@
  */
 
 import { primaryArtistGuess } from '../../shared/artists.js';
-import { DURATION_TOLERANCE_MS, isOfficialStudioAlbum } from '../../shared/year.js';
+import { DURATION_TOLERANCE_MS, isOfficialOriginalRelease } from '../../shared/year.js';
 import type { RecordingCandidate } from '../../shared/types.js';
 import type { RateLimitGate } from './rate-limit.js';
 
@@ -55,11 +55,23 @@ const SEARCH_LIMIT = 100;
  * How many release groups the second request will ask about.
  *
  * A hard bound so the request stays ONE request: everything beyond this is dropped rather
- * than paged. In practice the strict filter leaves 1-9 release groups even for the worst
- * pools, so the cap has never been reached on any measured track — it is a backstop, not a
- * routine truncation. 50 UUIDs is roughly 1.8 kB of query string, comfortably within limits.
+ * than paged. Measured 2026-08-04 at 1-9 release groups for the worst pools; admitting
+ * Singles and EPs on 2026-08-11 widened that, but not to anywhere near the cap — it is still
+ * a backstop rather than a routine truncation. 50 UUIDs is roughly 1.8 kB of query string,
+ * comfortably within limits. Raising it to 100 would still be one request, since
+ * `SEARCH_LIMIT` is 100; the `console.warn` below is what says whether that is needed.
  */
 const MAX_RELEASE_GROUPS = 50;
+
+/**
+ * Truncation order: albums first, then EPs, then singles.
+ *
+ * This is what makes the cap non-regressive by construction. Before Singles and EPs were
+ * eligible, only Albums competed for the 50 slots; ordering them first guarantees that
+ * every release group that survived the cap under the old rule still survives it, so the
+ * widening can add answers but never take one away. Anything not in the map sorts last.
+ */
+const RELEASE_GROUP_PRIORITY: Record<string, number> = { album: 0, ep: 1, single: 2 };
 
 /** MusicBrainz answers 503 for rate-limit rejection; one retry, after a pause. */
 const RETRY_DELAY_MS = 1_200;
@@ -194,22 +206,29 @@ function buildAttempts(input: YearLookupInput): string[] {
 }
 
 /**
- * The second request: one batched release-group search for every strict-eligible candidate.
+ * The second request: one batched release-group search for every candidate the top scoring
+ * rung would accept.
  *
- * Skipped entirely when nothing is eligible — a track heading for the relaxed tier should
- * not spend a request on it. If the gate is busy this DEGRADES rather than failing: the
- * candidates come back un-enriched, the strict pass finds nothing to date, and the caller
- * falls through to the relaxed tier. Losing accuracy beats discarding a request already
- * spent.
+ * Skipped entirely when nothing is eligible — a track heading for a lower rung should not
+ * spend a request on it. If the gate is busy this DEGRADES rather than failing: the
+ * candidates come back un-enriched, the `official-release` rung finds nothing to date, and
+ * the caller falls through to the next rung. Losing accuracy beats discarding a request
+ * already spent.
  */
 async function attachReleaseGroupDates(
   candidates: RecordingCandidate[],
   deps: MusicBrainzDeps,
 ): Promise<{ candidates: RecordingCandidate[]; requests: number }> {
+  const eligible = candidates.filter(
+    (candidate) => isOfficialOriginalRelease(candidate) && candidate.releaseGroupId,
+  );
+
+  // Sorted BEFORE the dedupe so the priority decides which copy of a repeated id is kept
+  // first, and `Set` insertion order carries that ordering through to the cap below.
   const ids = [
     ...new Set(
-      candidates
-        .filter((candidate) => isOfficialStudioAlbum(candidate) && candidate.releaseGroupId)
+      [...eligible]
+        .sort((a, b) => releaseGroupPriority(a) - releaseGroupPriority(b))
         .map((candidate) => candidate.releaseGroupId as string),
     ),
   ];
@@ -321,6 +340,11 @@ function normalizeRecordings(recordings: readonly unknown[]): RecordingCandidate
   }
 
   return candidates;
+}
+
+function releaseGroupPriority(candidate: RecordingCandidate): number {
+  const type = (candidate.releaseGroupPrimaryType ?? '').toLowerCase();
+  return RELEASE_GROUP_PRIORITY[type] ?? Object.keys(RELEASE_GROUP_PRIORITY).length;
 }
 
 /**

@@ -2869,3 +2869,84 @@ because what has to hold is the constant 8px of button visible outside the ring.
    was asked to change) and pins `button = card / 5`; `CardControls.test.tsx` pins the row's width,
    `justify-evenly`, and the ABSENCE of a `gap-*`. **Owed manually: one look at the square card at
    three widths, and one QR scan on the floor card**, where the code is ~140px.
+
+## 2026-08-11 — The year was the album's, not the song's: `primary-type: Album` was the bug
+
+Reported symptom: "a menudo el año es incorrecto, porque MusicBrainz devuelve el año de inclusión en
+el álbum, pero me interesa la primera fecha de salida", plus "los unconfirmed year también suelen
+fallar". Both had a precise cause and both were fixable inside MusicBrainz — no second provider, no
+new secret, and **no change to the two-requests-per-lookup cost**.
+
+**Cause 1, the wrong `high` years.** `shared/year.ts` filtered the strict pass to release groups with
+`primary-type: Album`. But a release group's `first-release-date` is the date of the RECORD, so for a
+song issued as a single first, the album date is the year the track was *included* on an album. The
+release-group filter was doing exactly what it was written to do and the answer was still wrong.
+Worse: a song never issued on a studio album had **no eligible release group at all** — every one was
+either a Single (excluded here) or a compilation (excluded by secondary type) — so it fell to the
+unfiltered pass. "Hey Jude" is that case.
+
+**Cause 2, the unreliable `low` years.** The relaxed pass applied **no release-group filter
+whatsoever**. Live takes, compilations, remixes, demos and bootlegs competed on equal terms. There
+was nothing between "official studio album" and "anything at all", so whenever the strict pass
+missed, the most misleading candidate in the pool was as eligible as the best one.
+
+**Built:** a three-rung ladder in `shared/year.ts` (`YEAR_TIER_ORDER`), walked by
+`api/_lib/resolve-year.ts`. Rung ① `official-release` = `primary-type` ∈ **Album / Single / EP**,
+`status: Official`, no excluded secondary type, dated by release-group `first-release-date` → `high`.
+Rung ② `studio-release` = the secondary-type exclusion and `status` ≠ Bootleg, nothing else → `low`.
+Rung ③ `unfiltered` = the old relaxed pass verbatim → `low`. All three are pure functions over the
+same already-fetched pool, so the ladder is free.
+
+**Why widening rung ① cannot overshoot.** Earliest-wins runs after the filter, so admitting more
+release groups can only move the answer earlier — which is the definition of "first release". A
+reissue single can never beat the album it postdates. Billie Jean has a January **1983** single over
+a November **1982** album and still resolves to 1982; that is asserted, not assumed.
+
+**Measured live against MusicBrainz, 2026-08-11 — 21 of 22 exact.** All 14 Phase 0 tracks unchanged
+(so the widening cost nothing), and 7 of the 8 new single-before-album tracks now correct where every
+one of them was previously off by a year or worse:
+
+| Track | Single | Album | Was | Now |
+| --- | --- | --- | --- | --- |
+| Creep / Radiohead | 1992-09 | 1993-02 | 1993 | **1992** |
+| Relax / Frankie Goes to Hollywood | 1983-10 | 1984-10 | 1984 | **1983** |
+| Under Pressure / Queen & David Bowie | 1981-10 | 1982-05 | 1982 | **1981** |
+| Firestarter / The Prodigy | 1996-03 | 1997-06 | 1997 | **1996** |
+| Mr. Brightside / The Killers | 2003-09 | 2004-06 | 2004 | **2003** |
+| Rolling in the Deep / Adele | 2010-11 | 2011-01 | 2011 | **2010** |
+| Hey Jude / The Beatles | 1968-08 | (none) | no eligible group | **1968** |
+
+**The twenty-second is a structural limitation, not a tuning failure — do not try to filter your way
+to it.** Depeche Mode's "Personal Jesus" resolves to 1990 (Violator) where the truth is the
+1989-08-29 single. MusicBrainz *has* that single release group, correctly dated. The pipeline cannot
+reach it because resolution is **recording**-scoped: the album version is 4:55 and the 1989 single
+carries a **3:46 edit**, a separate recording MBID. Verified by querying the recording search
+unbounded — the album recording never appears beside that release group, so the `dur:` bound is not
+what hides it and removing the bound would not help. Reaching it needs **work-level** resolution
+(MusicBrainz `work` relationships group every recording of one song), which is a much larger change.
+Pinned as `YEAR_LIMITATION_FIXTURES` with the wrong year asserted, so a future work-level lookup
+announces itself by failing that test.
+
+**Two mechanical things that were easy to miss.**
+
+1. `MAX_RELEASE_GROUPS = 50` truncates the second request, and Singles/EPs enlarge the pool competing
+   for those slots. The ids are now **sorted Album → EP → Single before the cap**, which makes
+   truncation non-regressive by construction: everything that survived the cap under the old rule
+   still survives it. The cap was left at 50 and its `console.warn` is what would say otherwise.
+2. **The fixtures had to be re-captured, all 22 of them.** The old captures carried Single candidates
+   with no `releaseGroupFirstReleaseDate`, because under the Album-only rule nothing had ever fetched
+   one. A fixture that cannot represent the new evidence cannot catch a regression in it — the
+   14-track suite passed *before* the re-capture, which is exactly the false comfort to watch for.
+
+`YEAR_CACHE_SCHEMA_VERSION` bumped **v2 → v3**. Necessary rather than merely required by the rule
+this time: the change alters answers already cached at `high`, which is the 30-day tier. Expect the
+first play of any playlist after deploy to re-resolve its whole deck against the global 1 req/s
+budget.
+
+**Not done, and deliberately.** No second provider — iTunes and Deezer report the album edition's
+date (the same disease as Spotify, useful for coverage but harmful for accuracy), and Discogs and
+Wikidata carry the right semantic but cost a new secret, adapter and rate limit. Also not done:
+using the recording's own `first-release-date` to override rung ①. It measures 10 of 13 alone and is
+wrong-*early* on "No Woman No Cry" (1973 vs 1974), so a blind `min()` trades one error for another.
+The open idea worth trying next is using it as a **disagreement detector** that downgrades confidence
+rather than changes the year.

@@ -1,6 +1,6 @@
 /**
- * The year lookup, orchestrated: clean the title, read the cache, gate the network, run the
- * strict pass, fall back to the relaxed pass, cache whatever came out.
+ * The year lookup, orchestrated: clean the title, read the cache, gate the network, walk the
+ * scoring ladder, fall back to the remix query, cache whatever came out.
  *
  * This lives beside the adapter rather than inside `api/year.ts` for the reason the plan
  * gives for keeping handlers thin — logic that grows in a handler is logic that cannot be
@@ -10,6 +10,7 @@
  */
 
 import {
+  YEAR_TIER_ORDER,
   cleanTrackTitle,
   pickBestRecording,
   stripRemixSuffix,
@@ -19,7 +20,7 @@ import { ttlFor } from './cache.js';
 import { fetchYearCandidates } from './musicbrainz.js';
 import type { YearCache } from './cache.js';
 import type { MusicBrainzDeps, MusicBrainzErrorCode } from './musicbrainz.js';
-import type { YearLookupResult, YearResult } from '../../shared/types.js';
+import type { RecordingCandidate, YearLookupResult, YearResult } from '../../shared/types.js';
 
 export interface ResolveYearInput {
   /** The RAW title, exactly as Spotify supplied it. Cleaning happens here. */
@@ -82,19 +83,13 @@ export async function resolveYear(
     return failure;
   }
 
-  // ---- Tiered resolution: strict, then relaxed, then an explicit null ----------
-  const scoringInput = { artist: input.artist, durationMs: input.durationMs };
-
-  let result: YearResult = pickBestRecording(candidates.candidates, {
-    ...scoringInput,
-    mode: 'strict',
+  // ---- Walk the scoring ladder, then fall back to an explicit null -------------
+  let result = runTiers(candidates.candidates, {
+    artist: input.artist,
+    durationMs: input.durationMs,
   });
 
-  if (result.year === null) {
-    result = pickBestRecording(candidates.candidates, { ...scoringInput, mode: 'relaxed' });
-  }
-
-  // ---- Third tier: ask about the underlying song of a remix --------------------
+  // ---- Last resort: ask about the underlying song of a remix -------------------
   if (result.year === null) {
     result = (await resolveViaRemixFallback(cleaned.title, input, deps)) ?? result;
   }
@@ -155,20 +150,37 @@ async function resolveViaRemixFallback(
   const fallback = await fetchYearCandidates({ title: baseTitle, artist: input.artist }, deps);
   if (!fallback.ok) return undefined;
 
-  const scoringInput = { artist: input.artist };
-
-  let result: YearResult = pickBestRecording(fallback.candidates, {
-    ...scoringInput,
-    mode: 'strict',
-  });
-
-  if (result.year === null) {
-    result = pickBestRecording(fallback.candidates, { ...scoringInput, mode: 'relaxed' });
-  }
+  const result = runTiers(fallback.candidates, { artist: input.artist });
 
   if (result.year === null) return undefined;
 
   return { year: result.year, confidence: 'low', source: result.source, viaTitle: baseTitle };
+}
+
+/**
+ * Walk `YEAR_TIER_ORDER` and stop at the first rung that yields a year.
+ *
+ * Free to run in full: `pickBestRecording()` is pure and the candidates are already fetched,
+ * so every rung reads the same in-memory pool and the lookup still costs exactly the two
+ * MusicBrainz requests `fetchYearCandidates()` spent. The rungs are ordered by how much the
+ * evidence is worth, so "the first one that answers" and "the best available answer" are the
+ * same thing — which is what lets each rung own its own confidence.
+ *
+ * Returns the LAST rung's failure when none answer, so the `reason` describes the widest
+ * search that was actually run rather than the narrowest.
+ */
+function runTiers(
+  candidates: readonly RecordingCandidate[],
+  scoringInput: { artist: string; durationMs?: number },
+): YearResult {
+  let result: YearResult = { year: null, confidence: 'none', reason: 'no-candidates' };
+
+  for (const tier of YEAR_TIER_ORDER) {
+    result = pickBestRecording(candidates, { ...scoringInput, tier });
+    if (result.year !== null) return result;
+  }
+
+  return result;
 }
 
 /** Shape a `YearResult` into the response body, adding what only the request knows. */

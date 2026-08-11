@@ -19,6 +19,7 @@ import type {
   TitleStripFlags,
   YearFailureReason,
   YearResult,
+  YearSource,
 } from './types';
 
 // ===========================================================================
@@ -243,8 +244,15 @@ export function stripRemixSuffix(title: string): string | undefined {
  * across all users.** Done deliberately, at the developer's instruction, to keep the rule
  * unconditional: a version that is only bumped when someone judges it necessary is a version
  * nobody can trust.
+ *
+ * **v3 (2026-08-11):** the tier ladder below. Singles and EPs now count toward the `high` tier,
+ * so a song issued as a single before its album resolves to the single's year instead of the
+ * album's, and the middle rung changed which candidates a `low` answer may be drawn from. Both
+ * change the ANSWER for entries already cached at `high`, which is the 30-day tier — so unlike
+ * v2 this bump is necessary rather than merely required by the rule. Same cost as before: the
+ * first play of any playlist after this ships re-resolves its whole deck.
  */
-export const YEAR_CACHE_SCHEMA_VERSION = 'v2';
+export const YEAR_CACHE_SCHEMA_VERSION = 'v3';
 
 /**
  * Lowercase, de-accent, drop punctuation, collapse whitespace.
@@ -295,18 +303,18 @@ export function yearCacheKey(artist: string, cleanedTitle: string): string {
 
 /**
  * ===========================================================================
- *  THE STRICT FILTER IS MEASURED, NOT ARBITRARY. DO NOT "SIMPLIFY" IT.
+ *  THE TIER FILTERS ARE MEASURED, NOT ARBITRARY. DO NOT "SIMPLIFY" THEM.
  *
  *  Phase 0 measured a naive top-scored-recording lookup at **~6% accurate**
  *  (1 of 18): MusicBrainz has no canonical recording per song, and dozens of
  *  bootlegs, live takes and reissues tie at the maximum relevance score.
  *
- *  Biasing the pool toward official studio albums -- primary type Album, no
+ *  Biasing the pool toward official original releases -- no
  *  Live/Compilation/Remix/DJ-mix secondary type, release status Official --
  *  was correct in all 12 Phase 0 cases it was tried on, and the full pipeline
  *  measured **12 of 13** known-tricky tracks exact on 2026-08-04.
  *
- *  TWO CONSTRAINTS THAT LOOK OPTIONAL AND ARE NOT:
+ *  THREE CONSTRAINTS THAT LOOK OPTIONAL AND ARE NOT:
  *
  *  1. The filter must NEVER use an album name. The Spotify embed endpoint has
  *     no album name at track level, so an album-name-dependent approach cannot
@@ -317,6 +325,11 @@ export function yearCacheKey(artist: string, cleanedTitle: string): string {
  *  2. The year comes from the release GROUP's first-release-date, never from
  *     the release date inlined in the search response. See the earliest-date
  *     note below.
+ *
+ *  3. `Single` and `EP` are ELIGIBLE for the top tier, and that is a 2026-08-11
+ *     reversal of `primary-type: Album` only. See the note on
+ *     `ELIGIBLE_PRIMARY_TYPES`. Narrowing it back to Album is the single change
+ *     that reintroduces the bug this ladder was built to fix.
  * ===========================================================================
  */
 
@@ -341,8 +354,45 @@ const EXCLUDED_SECONDARY_TYPES = new Set([
   'bootleg',
 ]);
 
-const REQUIRED_PRIMARY_TYPE = 'album';
+/**
+ * Release-group primary types the top tier will take a date from.
+ *
+ * ===========================================================================
+ *  THIS WAS `'album'` ALONE UNTIL 2026-08-11, AND THAT WAS THE BUG.
+ *
+ *  A release group's `first-release-date` is the date of the ALBUM. For a song
+ *  issued as a single before it appeared on one, the album date is the year the
+ *  track was INCLUDED on a record, not the year the song came out:
+ *
+ *      Creep / Radiohead            single 1992-09  ->  Pablo Honey 1993-02
+ *      Personal Jesus / Depeche Mode single 1989-08 ->  Violator    1990-03
+ *      Mr. Brightside / The Killers  single 2003-09 ->  Hot Fuss    2004-06
+ *
+ *  Worse, a song that was never on a studio album at all ("Hey Jude") has NO
+ *  eligible release group under an Album-only rule -- every one is either a
+ *  Single (excluded here) or a compilation (excluded by secondary type) -- so it
+ *  fell all the way to the unfiltered tier and reported `low` or nothing.
+ *
+ *  WHY WIDENING IS SAFE IN ONE DIRECTION ONLY: step 5 below is earliest-wins, so
+ *  adding release groups to the pool can only move the answer EARLIER or leave
+ *  it unchanged -- and earliest is the definition of "first release". A reissue
+ *  single can never beat the album it postdates, which is why Billie Jean stays
+ *  1982 despite its January 1983 single.
+ * ===========================================================================
+ */
+const ELIGIBLE_PRIMARY_TYPES = new Set(['album', 'single', 'ep']);
+
 const REQUIRED_RELEASE_STATUS = 'official';
+
+/**
+ * The one release status the middle tier still refuses.
+ *
+ * That tier drops the `Official` requirement so a promo pressing or an unmarked release can
+ * still date a song -- but `Bootleg` is a status rather than a secondary type in
+ * MusicBrainz's model, so without this the relaxation would quietly readmit exactly the
+ * bootlegs `EXCLUDED_SECONDARY_TYPES` is written to keep out.
+ */
+const EXCLUDED_RELEASE_STATUS = 'bootleg';
 
 /**
  * How far a candidate's recording length may sit from the track's own duration and still
@@ -363,17 +413,82 @@ export const DURATION_TOLERANCE_MS = 10_000;
 /** Nothing before the phonograph, and nothing announced further ahead than next year. */
 const MIN_PLAUSIBLE_YEAR = 1900;
 
+// ---------------------------------------------------------------------------
+//  THE TIER LADDER
+// ---------------------------------------------------------------------------
+
+export type YearTierId = 'official-release' | 'studio-release' | 'unfiltered';
+
+/**
+ * One rung: which candidates it will look at, where it reads a date from, and what it
+ * reports when it finds one.
+ *
+ * Every rung shares steps 1, 4 and 5 of `pickBestRecording()` -- artist plausibility, the
+ * duration preference and earliest-wins. Only the filter and the date source vary, which is
+ * what keeps "which rung answered" a statement about EVIDENCE rather than about scoring.
+ */
+interface YearTier {
+  readonly accepts: (candidate: RecordingCandidate) => boolean;
+  readonly dateOf: (candidate: RecordingCandidate) => string | undefined;
+  readonly confidence: 'high' | 'low';
+  readonly source: YearSource;
+}
+
+/**
+ * The rungs in order. `api/_lib/resolve-year.ts` walks this array and stops at the first one
+ * that yields a year.
+ *
+ * ===========================================================================
+ *  THE LADDER COSTS NOTHING EXTRA. ALL THREE RUNGS READ THE SAME POOL.
+ *
+ *  `pickBestRecording()` is pure and the candidates are already fetched, so
+ *  walking three rungs instead of two adds no MusicBrainz request. A lookup
+ *  still costs exactly two (see api/_lib/musicbrainz.ts).
+ *
+ *  WHY THERE IS A MIDDLE RUNG (added 2026-08-11). Before it, the ladder went
+ *  straight from "official original release" to NO FILTER AT ALL, and the
+ *  unfiltered rung let live takes, compilations, remixes, demos and bootlegs
+ *  compete on equal terms. That is why `low` answers were so often wrong: not
+ *  because the evidence was thin, but because nothing was ruling out the
+ *  evidence that is actively misleading. `studio-release` keeps the whole
+ *  secondary-type exclusion and only relaxes the two requirements that make the
+ *  top rung MISS -- the primary type and the Official status.
+ * ===========================================================================
+ */
+export const YEAR_TIER_ORDER: readonly YearTierId[] = [
+  'official-release',
+  'studio-release',
+  'unfiltered',
+];
+
+const YEAR_TIERS: Record<YearTierId, YearTier> = {
+  'official-release': {
+    accepts: isOfficialOriginalRelease,
+    dateOf: officialReleaseDate,
+    confidence: 'high',
+    source: 'release-group',
+  },
+  'studio-release': {
+    accepts: isStudioRelease,
+    dateOf: studioReleaseDate,
+    confidence: 'low',
+    source: 'release-group',
+  },
+  unfiltered: {
+    accepts: () => true,
+    dateOf: unfilteredDate,
+    confidence: 'low',
+    source: 'recording',
+  },
+};
+
 export interface PickBestRecordingOptions {
   /** The requested artist, RAW as Spotify supplied it. Normalized internally. */
   artist: string;
   /** The track's duration. `0` or omitted means unknown, and disables the duration preference. */
   durationMs?: number;
-  /**
-   * `strict` -- official studio albums only, dated by release-group first-release-date,
-   * reports `high`. `relaxed` -- no release-group filter, dated by recording
-   * first-release-date, reports `low`.
-   */
-  mode: 'strict' | 'relaxed';
+  /** Which rung of `YEAR_TIER_ORDER` to run. */
+  tier: YearTierId;
 }
 
 /**
@@ -386,12 +501,13 @@ export function pickBestRecording(
   candidates: readonly RecordingCandidate[],
   options: PickBestRecordingOptions,
 ): YearResult {
-  const { artist, durationMs, mode } = options;
+  const { artist, durationMs } = options;
+  const tier = YEAR_TIERS[options.tier];
 
   // ---- 1. Artist plausibility -------------------------------------------------
   // Phase 0 measured this as reliable: 0 of 6 cover-versus-original lookups
-  // cross-contaminated, so Cohen's "Hallelujah" and Buckley's stay apart. Applied in BOTH
-  // modes -- a relaxed year off by a decade is recoverable, a year taken from a different
+  // cross-contaminated, so Cohen's "Hallelujah" and Buckley's stay apart. Applied on EVERY
+  // rung -- a relaxed year off by a decade is recoverable, a year taken from a different
   // artist's song entirely is not.
   const requested = normalizeForCacheKey(artist);
   const byArtist = candidates.filter((candidate) =>
@@ -400,14 +516,14 @@ export function pickBestRecording(
 
   if (byArtist.length === 0) return failure('no-candidates');
 
-  // ---- 2. Mode filter ---------------------------------------------------------
-  const filtered = mode === 'strict' ? byArtist.filter(isOfficialStudioAlbum) : byArtist;
+  // ---- 2. Tier filter ---------------------------------------------------------
+  const filtered = byArtist.filter(tier.accepts);
   if (filtered.length === 0) return failure('no-dated-candidates');
 
   // ---- 3. Date extraction -----------------------------------------------------
   const dated: { candidate: RecordingCandidate; year: number; date: string }[] = [];
   for (const candidate of filtered) {
-    const date = mode === 'strict' ? strictDate(candidate) : relaxedDate(candidate);
+    const date = tier.dateOf(candidate);
     if (date === undefined) continue;
     const year = parseYear(date);
     // The implausibility guard doubles as the parse guard: a corrupt or unparseable date
@@ -443,11 +559,7 @@ export function pickBestRecording(
     if (compareDates(entry, best) < 0) best = entry;
   }
 
-  return {
-    year: best.year,
-    confidence: mode === 'strict' ? 'high' : 'low',
-    source: mode === 'strict' ? 'release-group' : 'recording',
-  };
+  return { year: best.year, confidence: tier.confidence, source: tier.source };
 }
 
 function failure(reason: YearFailureReason): YearResult {
@@ -455,7 +567,7 @@ function failure(reason: YearFailureReason): YearResult {
 }
 
 /**
- * The strict pass's date: the release GROUP's first-release-date, and nothing else.
+ * The `official-release` rung's date: the release GROUP's first-release-date, and nothing else.
  *
  * ===========================================================================
  *  NOT `candidate.releaseDate`. This is the single most reversion-prone line
@@ -477,21 +589,41 @@ function failure(reason: YearFailureReason): YearResult {
  *  requests instead of one (docs/agent_findings.md, 2026-08-04).
  * ===========================================================================
  */
-function strictDate(candidate: RecordingCandidate): string | undefined {
+function officialReleaseDate(candidate: RecordingCandidate): string | undefined {
   return nonEmpty(candidate.releaseGroupFirstReleaseDate);
 }
 
 /**
- * The relaxed pass's date: the recording's own first-release-date, falling back to the
+ * The `studio-release` rung's date: the release-group first-release-date where one was
+ * fetched, then the recording's own, then the inlined release date.
+ *
+ * The release-group date still leads, because it is the only one of the three that means
+ * "the album's original release" rather than "this pressing". But this rung accepts
+ * candidates the adapter did not spend its second request on, so for most of them the field
+ * is absent and the chain is what makes the rung useful at all.
+ *
+ * `releaseDate` sits LAST and is the reissue date the note above warns about. It is
+ * reachable only when a candidate has no first-release-date of either kind, and only on a
+ * rung that already reports `low` -- which is the honest place for a date this weak.
+ */
+function studioReleaseDate(candidate: RecordingCandidate): string | undefined {
+  return (
+    nonEmpty(candidate.releaseGroupFirstReleaseDate) ??
+    nonEmpty(candidate.recordingFirstReleaseDate) ??
+    nonEmpty(candidate.releaseDate)
+  );
+}
+
+/**
+ * The `unfiltered` rung's date: the recording's own first-release-date, falling back to the
  * release-group and release dates.
  *
- * The recording date comes first because the relaxed pass has, by definition, no
- * release-group filter to lean on, and a recording's first-release-date is at least
- * anchored to that specific performance. It is measurably worse than the strict pass --
- * off by a year on several Phase 0 tracks -- which is precisely what `low` confidence
- * communicates to Phase 6's review screen.
+ * The recording date comes first because this rung has, by definition, no release-group
+ * filter to lean on, and a recording's first-release-date is at least anchored to that
+ * specific performance. It is measurably worse than the top rung -- off by a year on several
+ * Phase 0 tracks -- which is precisely what `low` confidence communicates to the reveal side.
  */
-function relaxedDate(candidate: RecordingCandidate): string | undefined {
+function unfilteredDate(candidate: RecordingCandidate): string | undefined {
   return (
     nonEmpty(candidate.recordingFirstReleaseDate) ??
     nonEmpty(candidate.releaseGroupFirstReleaseDate) ??
@@ -506,17 +638,37 @@ function nonEmpty(value: string | undefined): string | undefined {
 }
 
 /**
- * The strict pass's release filter, exported because `api/_lib/musicbrainz.ts` needs the
+ * The `official-release` rung's filter, exported because `api/_lib/musicbrainz.ts` needs the
  * same predicate to decide which release groups are worth spending its second request on.
  *
  * One definition, two callers. If the adapter reimplemented this, it would enrich the wrong
- * release groups and the strict pass would silently find nothing to date -- a failure that
- * looks exactly like MusicBrainz having no data.
+ * release groups and the top rung would silently find nothing to date -- a failure that looks
+ * exactly like MusicBrainz having no data.
  */
-export function isOfficialStudioAlbum(candidate: RecordingCandidate): boolean {
-  if ((candidate.releaseGroupPrimaryType ?? '').toLowerCase() !== REQUIRED_PRIMARY_TYPE)
+export function isOfficialOriginalRelease(candidate: RecordingCandidate): boolean {
+  if (!ELIGIBLE_PRIMARY_TYPES.has((candidate.releaseGroupPrimaryType ?? '').toLowerCase()))
     return false;
   if ((candidate.releaseStatus ?? '').toLowerCase() !== REQUIRED_RELEASE_STATUS) return false;
+  return hasNoExcludedSecondaryType(candidate);
+}
+
+/**
+ * The `studio-release` rung's filter: the secondary-type exclusion, and nothing else except a
+ * refusal to read a bootleg.
+ *
+ * What it deliberately does NOT require is a primary type or `Official` status, because those
+ * two are what make the top rung miss: a song on an untyped release group, or one whose only
+ * pressing is a promo, still has a real first release. What it deliberately DOES keep is the
+ * live/compilation/remix/dj-mix/demo exclusion -- that is the difference between "thin
+ * evidence" and "actively misleading evidence", and conflating them is what made `low`
+ * answers unreliable before 2026-08-11.
+ */
+function isStudioRelease(candidate: RecordingCandidate): boolean {
+  if ((candidate.releaseStatus ?? '').toLowerCase() === EXCLUDED_RELEASE_STATUS) return false;
+  return hasNoExcludedSecondaryType(candidate);
+}
+
+function hasNoExcludedSecondaryType(candidate: RecordingCandidate): boolean {
   return !candidate.releaseGroupSecondaryTypes.some((type) =>
     EXCLUDED_SECONDARY_TYPES.has(type.trim().toLowerCase()),
   );

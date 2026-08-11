@@ -151,11 +151,13 @@ GET /api/year?title=…&artist=…&durationMs=…
            ▼
 ┌──────────────────────────────────────┐
 │ shared/year.ts  pickBestRecording()  │
-│  strict  → official studio album,    │──▶ high / release-group
-│            earliest group date       │
-│  relaxed → no group filter,          │──▶ low  / recording
-│            recording first-release   │
-│  neither → year: null + reason       │──▶ none
+│  ① official-release → Album|Single|  │──▶ high / release-group
+│     EP, Official, earliest group date│
+│  ② studio-release → secondary-type   │──▶ low  / release-group
+│     exclusion only, group ?? rec date│
+│  ③ unfiltered → no filter,           │──▶ low  / recording
+│     recording first-release          │
+│  none of them → year: null + reason  │──▶ none
 └──────────┬───────────────────────────┘
            ▼
    cache.set(…) — ALL THREE outcomes, one TTL per tier (30d / 7d / 1d)
@@ -164,6 +166,8 @@ GET /api/year?title=…&artist=…&durationMs=…
 ```
 
 Three orderings in that diagram are load-bearing and easy to "tidy" into bugs. **The cache is read before the gate**, so a replayed deck costs nothing and waits for nothing. **The second MusicBrainz call is batched**, so the request count is two regardless of whether the pool held 12 candidates or 842. **The year comes from the release GROUP's `first-release-date`, never from the release date inlined in the search response** — the latter is the reissue date and is wrong by decades (Billie Jean 2012, Bohemian Rhapsody 2001).
+
+A fourth thing is load-bearing and is a 2026-08-11 reversal: **rung ① accepts `Single` and `EP`, not just `Album`.** A release group's `first-release-date` is the date of the record, so an Album-only rung reports the year a song was *included on an album* rather than the year it came out — Creep 1993 instead of 1992, Mr. Brightside 2004 instead of 2003, and nothing at all for a song like "Hey Jude" that was never on a studio album. Widening is safe in one direction only, and that is why it is safe at all: the rung takes the **earliest** surviving date, so admitting more release groups can only move the answer earlier. A reissue single cannot beat the album it postdates, which is why Billie Jean is still 1982 despite its January 1983 single. The same change added rung ②, because before it the ladder went straight from "official original release" to **no filter at all** — that is what made `low` answers unreliable, since a live take or a bootleg dated the card whenever rung ① missed. Full measurement in [`agent_findings.md`](./agent_findings.md) (2026-08-11).
 
 ### The client game layer (`src/game/`) — built
 
@@ -837,7 +841,7 @@ If you are about to add a `SPOTIFY_CLIENT_ID`, read [`plans/plan.md`](./plans/pl
 
 Spotify reports the _album edition's_ date, which turns a 2011 remaster of Bohemian Rhapsody into a 2011 song. MusicBrainz's earliest release date for a recording is exactly the value Hitster needs. This makes year resolution a **core component**, not an enrichment pass.
 
-Phase 0 measured that a naive "top-scored recording" lookup is **~6% accurate** (1 of 18 tricky tracks), because MusicBrainz has no canonical recording per song — every bootleg, live take, and reissue is its own entity, and dozens tie at the maximum relevance score. The verified fix is to bias the candidate pool toward `release-group` entries with `primary-type: Album`, no Live/Compilation/Remix/DJ-mix `secondary-types`, and release `status: Official`. Two hard constraints on implementing it:
+Phase 0 measured that a naive "top-scored recording" lookup is **~6% accurate** (1 of 18 tricky tracks), because MusicBrainz has no canonical recording per song — every bootleg, live take, and reissue is its own entity, and dozens tie at the maximum relevance score. The verified fix is to bias the candidate pool toward `release-group` entries with an original-release `primary-type` (`Album`, `Single` or `EP`), no Live/Compilation/Remix/DJ-mix `secondary-types`, and release `status: Official`. Two hard constraints on implementing it:
 
 - **Titles must be stripped** of `- Remastered YYYY` / `- Remaster` / `- Live` / `(feat. X)` suffixes before querying. Remaster-suffixed titles returned **zero** results in every case tested — mandatory, not an optimization.
 - **The fix must not depend on the album name.** The embed endpoint carries no album name at track level, so filtering must use MusicBrainz-side signals only.
@@ -848,11 +852,15 @@ As built, the filter is that fix plus three things Phase 0 did not have, all mea
 - **`limit=100` and a `dur:[±10s]` bound on the query.** MusicBrainz ties dozens of candidates at the maximum score and orders them arbitrarily, so the original recording is often not on page one. At `limit=25` the same algorithm scores 2 of 13; the duration bound shrinks most pools below 100 outright.
 - **The filters run client-side, never in the Lucene query.** Pushing `primarytype:album AND status:official` into the query looks like the obvious optimisation and returns **zero** results for Hallelujah / Leonard Cohen.
 
-**Three confidence tiers, not one answer.** The strict pass reports `high`. When it finds nothing — 1 track in 14, always a huge candidate pool — a relaxed pass drops the release-group filters and reports `low`, which Phase 6 marks as unconfirmed on the card's revealed side. Only when that also fails does a card get `year: null` for manual entry. There is **no Spotify-year fallback**; the embed payload has no release date at track level, and earlier drafts of this file said otherwise in error.
+**A three-rung ladder, not one answer.** `official-release` reports `high`. When it finds nothing, `studio-release` keeps only the secondary-type exclusion and reports `low`, which the card's revealed side marks as unconfirmed; `unfiltered` is the last rung and reports `low` too. Only when all three fail does a card get `year: null` — and such a card is then **removed from the deck**. There is **no Spotify-year fallback**; the embed payload has no release date at track level, and earlier drafts of this file said otherwise in error.
 
-**Cache keys carry a `v1` schema segment** (`mbyear:v1:{artist}|{title}`) precisely so a change to any of the above can invalidate every previously cached year in one edit. Without it, improved scoring would be masked indefinitely by entries computed under the old logic.
+The middle rung was added on 2026-08-11 and it is the fix for unreliable `low` answers. Before it the ladder went from "official original release" straight to no filter at all, so a live take, a compilation or a bootleg dated the card whenever the top rung missed — the problem was not thin evidence but **actively misleading evidence**, and the middle rung is where that distinction is drawn.
 
-Full measurements are in [`plans/plan.md`](./plans/plan.md) §5 Phase 0 and [`agent_findings.md`](./agent_findings.md) (2026-08-04).
+**One limitation the ladder cannot reach, and it is structural.** Resolution is _recording_-scoped: the adapter finds recordings, then asks which release groups they appear on. That works whenever the single and the album share one master. It cannot work when the single is a **different recording** — Depeche Mode's "Personal Jesus" is 4:55 on Violator while the correctly-dated 1989 single carries a 3:46 edit, so no filter widening and no duration bound puts the two in one pool, and the card reads 1990. Reaching it needs work-level resolution (MusicBrainz `work` relationships group every recording of one song), which is a much larger change. It is pinned as `YEAR_LIMITATION_FIXTURES` in `shared/__fixtures__/year-candidates.ts` rather than left to be rediscovered.
+
+**Cache keys carry a schema segment** (`mbyear:v3:{artist}|{title}`) precisely so a change to any of the above can invalidate every previously cached year in one edit. Without it, improved scoring would be masked indefinitely by entries computed under the old logic — and a `high` entry lives 30 days, so the masking would outlast anyone's patience for checking whether a fix worked.
+
+Full measurements are in [`plans/plan.md`](./plans/plan.md) §5 Phase 0 and [`agent_findings.md`](./agent_findings.md) (2026-08-04 and 2026-08-11).
 
 ---
 

@@ -30,6 +30,7 @@ Several decisions in this repo look like mistakes and are not. If something seem
 | [`docs/plans/plan.phase-8-added-by.md`](./docs/plans/plan.phase-8-added-by.md)             | Phase 8, plan 3 — the "Added by" decision. Writes no code; resolved as won't-build                          |
 | [`docs/plans/plan.multi-playlist-core.md`](./docs/plans/plan.multi-playlist-core.md)       | Multi-playlist, plan 1 — the merge module, the widened state, both v2 storage formats, the link. **Built**   |
 | [`docs/plans/plan.multi-playlist-ui.md`](./docs/plans/plan.multi-playlist-ui.md)           | Multi-playlist, plan 2 — the landing rows, the fan-out hook, the container wiring, the labels. **Not built** |
+| [`docs/plans/plan.year-accuracy.md`](./docs/plans/plan.year-accuracy.md)                   | The tier ladder — Singles/EPs in the top rung, the graded middle rung, the re-captured fixtures. **Built**   |
 
 **Do not build ahead of the current phase.** The plan defers things deliberately. Current phase: **8, CODE COMPLETE.** Phases 1–7 are complete, all three Phase 8 plans are resolved, and the app is playable end to end, has a design surface, is installable, and fails legibly. `src/App.tsx` is the **real container** and the only caller of `useGameSession()`. Plan 2 built the shareable deck URL, the saved-playlist library, the printable PDF export and the audio reversal; plan 1 built the neon ring, the contrast re-audit, the PWA and the icon set; plan 3 resolved "Added by" as won't-build with no code. Note that plan 2 depended on plan 1 only **softly** and did not wait — so the PDF's print palette is deliberately its own and did not change when the screen was redesigned.
 
@@ -54,6 +55,39 @@ one and a deploy silently empties a curated library on the landing screen), **th
 ids on read while a stored session deliberately does not** (the cap governs INPUT; a saved session
 describes a deck that already exists), and **a link over the cap is rejected, never truncated**. Full
 reasoning in [`docs/architecture.md`](./docs/architecture.md) §3, "The combined deck".
+
+**`Single` and `EP` COUNT toward a `high` year as of 2026-08-11, and that reverses Phase 2's
+`primary-type: Album` rule — narrowing it back is the one edit that reintroduces the bug.** A release
+group's `first-release-date` is the date of the RECORD, so an Album-only filter answers "when was
+this track first put on an album", which is not the question the game asks: Creep read 1993 (single
+1992-09, _Pablo Honey_ 1993-02), Mr. Brightside read 2004, and a song never issued on a studio album
+had **no eligible release group at all** and fell through to the unfiltered pass ("Hey Jude").
+**Widening cannot overshoot, and that is the whole safety argument**: earliest-wins runs after the
+filter, so more release groups can only move the answer earlier — Billie Jean keeps 1982 despite its
+January **1983** single, asserted rather than assumed. The same change replaced `mode:
+'strict' | 'relaxed'` with a three-rung ladder (`YEAR_TIER_ORDER`, walked by `resolve-year.ts`),
+because the old relaxed pass applied **no release-group filter whatsoever** — live takes,
+compilations and bootlegs were as eligible as the original, which is why `low` answers were so often
+wrong. The new middle rung keeps the secondary-type exclusion and relaxes only the primary type and
+the `Official` status. **The ladder is free**: all three rungs are pure functions over the same
+already-fetched pool, so a lookup still costs exactly two MusicBrainz requests. Four things to know
+before touching any of it. **`isOfficialStudioAlbum` is now `isOfficialOriginalRelease`** and is
+still the one predicate shared with `api/_lib/musicbrainz.ts`. **The 50-id cap on request 2 now sorts
+Album → EP → Single before truncating**, which is what makes the widening non-regressive by
+construction. **`YEAR_CACHE_SCHEMA_VERSION` is `v3`** — necessary, not ceremonial, because the change
+alters answers cached at `high` for 30 days. And **all 22 fixtures were RE-CAPTURED**, because the
+old ones carried Single candidates with no `releaseGroupFirstReleaseDate` (nothing had ever fetched
+one) — so the 14-track suite passed both before and after the code change while being structurally
+incapable of testing it. Measured 21 of 22 exact live.
+
+**The twenty-second track is pinned as WRONG on purpose, and it is not a filtering problem.**
+`YEAR_LIMITATION_FIXTURES` holds "Personal Jesus" at ground truth 1989 with `resolvesTo: 1990`
+asserted. Year resolution is **recording**-scoped — the adapter finds recordings, then asks which
+release groups they appear on — and the album version is 4:55 while the correctly-dated 1989 single
+carries a **3:46 edit**, a separate recording MBID. Verified unbounded: the `dur:` bound is not what
+hides it, and removing the bound would not help. Reaching it needs **work-level** resolution, which
+is a much larger change. If you are about to "fix" this by loosening a filter, you are reasoning
+about the wrong entity. See [`docs/plans/plan.year-accuracy.md`](./docs/plans/plan.year-accuracy.md).
 
 **What is left in Phase 8 is entirely MANUAL VERIFICATION, and it is now the project's largest gap.** Nothing is waiting on a decision or on code. Everything automatable is automated, and the ceiling is genuinely low here — jsdom paints nothing, evaluates no media query, computes no layout and has no accessibility tree — so what remains needs a deployment, a printer, a phone and a screen reader. Scoped row by row in [`docs/development.md`](./docs/development.md) §5, gaps in its §8. **Run the screen-reader pass over one flip first**: it is the only check on the app's only live region, which is what makes the game's payoff audible at all, and it has now been carried by two phases without being run.
 

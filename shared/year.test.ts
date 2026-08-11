@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { YEAR_FIXTURES } from './__fixtures__/year-candidates';
+import { YEAR_FIXTURES, YEAR_LIMITATION_FIXTURES } from './__fixtures__/year-candidates';
 import {
   YEAR_CACHE_SCHEMA_VERSION,
   cleanTrackTitle,
@@ -273,7 +273,7 @@ describe('normalizeForCacheKey', () => {
     expect(key).toBe(`mbyear:${YEAR_CACHE_SCHEMA_VERSION}:queen|bohemian rhapsody`);
     // Pinned literally as well, so a bump has to be a DELIBERATE two-line change rather than
     // something that slips through because every assertion interpolated the constant.
-    expect(key.startsWith('mbyear:v2:')).toBe(true);
+    expect(key.startsWith('mbyear:v3:')).toBe(true);
   });
 });
 
@@ -296,8 +296,9 @@ function candidate(overrides: Partial<RecordingCandidate> = {}): RecordingCandid
   };
 }
 
-const STRICT = { artist: 'A Band', mode: 'strict' } as const;
-const RELAXED = { artist: 'A Band', mode: 'relaxed' } as const;
+const OFFICIAL = { artist: 'A Band', tier: 'official-release' } as const;
+const STUDIO = { artist: 'A Band', tier: 'studio-release' } as const;
+const UNFILTERED = { artist: 'A Band', tier: 'unfiltered' } as const;
 
 describe('pickBestRecording', () => {
   it('should prefer an official studio album over a live release', () => {
@@ -311,7 +312,7 @@ describe('pickBestRecording', () => {
         }),
         candidate({ recordingId: 'studio', releaseGroupFirstReleaseDate: '1975' }),
       ],
-      STRICT,
+      OFFICIAL,
     );
 
     // The live release is EARLIER and still loses -- the filter runs before the date compare.
@@ -331,7 +332,7 @@ describe('pickBestRecording', () => {
         }),
         candidate({ recordingId: 'studio', releaseGroupFirstReleaseDate: '1982' }),
       ],
-      STRICT,
+      OFFICIAL,
     );
 
     expect(result.year).toBe(1982);
@@ -361,7 +362,7 @@ describe('pickBestRecording', () => {
         }),
         candidate({ recordingId: 'studio', releaseGroupFirstReleaseDate: '1971' }),
       ],
-      STRICT,
+      OFFICIAL,
     );
 
     expect(result.year).toBe(1971);
@@ -384,7 +385,7 @@ describe('pickBestRecording', () => {
         }),
         candidate({ recordingId: 'studio', releaseGroupFirstReleaseDate: '1976' }),
       ],
-      STRICT,
+      OFFICIAL,
     );
 
     expect(result.year).toBe(1976);
@@ -410,7 +411,7 @@ describe('pickBestRecording', () => {
           releaseGroupFirstReleaseDate: '1991-09-24',
         }),
       ],
-      STRICT,
+      OFFICIAL,
     );
 
     expect(result.year).toBe(1975);
@@ -443,7 +444,7 @@ describe('pickBestRecording', () => {
           releaseGroupFirstReleaseDate: '1987-07-21',
         }),
       ],
-      STRICT,
+      OFFICIAL,
     );
 
     expect(result.year).toBe(1987);
@@ -466,7 +467,7 @@ describe('pickBestRecording', () => {
           releaseGroupFirstReleaseDate: '1975',
         }),
       ],
-      STRICT,
+      OFFICIAL,
     );
     expect(coarseFirst.year).toBe(1975);
 
@@ -483,7 +484,7 @@ describe('pickBestRecording', () => {
           releaseGroupFirstReleaseDate: '1970',
         }),
       ],
-      STRICT,
+      OFFICIAL,
     );
     expect(acrossYears.year).toBe(1969);
   });
@@ -506,7 +507,7 @@ describe('pickBestRecording', () => {
           releaseGroupFirstReleaseDate: '1974',
         }),
       ],
-      { artist: 'A Band', durationMs: 225_000, mode: 'strict' },
+      { artist: 'A Band', durationMs: 225_000, tier: 'official-release' },
     );
 
     expect(result.year).toBe(1974);
@@ -531,7 +532,7 @@ describe('pickBestRecording', () => {
           releaseGroupFirstReleaseDate: '1974',
         }),
       ],
-      { artist: 'A Band', durationMs: 225_000, mode: 'strict' },
+      { artist: 'A Band', durationMs: 225_000, tier: 'official-release' },
     );
 
     expect(result.year).toBe(1974);
@@ -555,7 +556,7 @@ describe('pickBestRecording', () => {
           releaseGroupFirstReleaseDate: '1994',
         }),
       ],
-      { artist: 'Jeff Buckley', mode: 'strict' },
+      { artist: 'Jeff Buckley', tier: 'official-release' },
     );
 
     expect(result.year).toBe(1994);
@@ -571,29 +572,89 @@ describe('pickBestRecording', () => {
           releaseGroupFirstReleaseDate: '1968',
         }),
       ],
-      { artist: 'Jimi Hendrix', mode: 'strict' },
+      { artist: 'Jimi Hendrix', tier: 'official-release' },
     );
 
     expect(result.year).toBe(1968);
   });
 
-  it('should return high confidence from strict mode', () => {
-    const result = pickBestRecording([candidate()], STRICT);
+  it('should take a single release group over the album that later carried the song', () => {
+    // THE 2026-08-11 FIX, stated as directly as it can be. This is the Creep / Personal Jesus
+    // / Mr. Brightside shape: the song came out as a single first, and the album's
+    // first-release-date is the year the track was INCLUDED on a record, not the year it was
+    // released. Under `primary-type: Album` alone the single was invisible and this returned
+    // 1993.
+    const result = pickBestRecording(
+      [
+        candidate({
+          recordingId: 'single',
+          releaseGroupId: 'rg-single',
+          releaseGroupPrimaryType: 'Single',
+          releaseGroupFirstReleaseDate: '1992-09-21',
+        }),
+        candidate({
+          recordingId: 'album',
+          releaseGroupId: 'rg-album',
+          releaseGroupFirstReleaseDate: '1993-02-22',
+        }),
+      ],
+      OFFICIAL,
+    );
+
+    expect(result).toEqual({ year: 1992, confidence: 'high', source: 'release-group' });
+  });
+
+  it('should accept an EP release group', () => {
+    const result = pickBestRecording(
+      [candidate({ releaseGroupPrimaryType: 'EP', releaseGroupFirstReleaseDate: '1979' })],
+      OFFICIAL,
+    );
+
+    expect(result.year).toBe(1979);
+    expect(result.confidence).toBe('high');
+  });
+
+  it('should not let a reissue single beat the album it postdates', () => {
+    // The other half of the widening, and the reason it is safe: earliest-wins means a later
+    // single can never win. Billie Jean's single is January 1983 over a November 1982 album,
+    // and the fixture suite pins that it still resolves to 1982.
+    const result = pickBestRecording(
+      [
+        candidate({
+          recordingId: 'album',
+          releaseGroupId: 'rg-album',
+          releaseGroupFirstReleaseDate: '1982-11-30',
+        }),
+        candidate({
+          recordingId: 'single',
+          releaseGroupId: 'rg-single',
+          releaseGroupPrimaryType: 'Single',
+          releaseGroupFirstReleaseDate: '1983-01-02',
+        }),
+      ],
+      OFFICIAL,
+    );
+
+    expect(result.year).toBe(1982);
+  });
+
+  it('should return high confidence from the official-release tier', () => {
+    const result = pickBestRecording([candidate()], OFFICIAL);
 
     expect(result).toEqual({ year: 1975, confidence: 'high', source: 'release-group' });
   });
 
-  it('should return low confidence from relaxed mode', () => {
-    // What lets Phase 6's reveal-side year UI flag a year as worth checking.
+  it('should return low confidence from the unfiltered tier', () => {
+    // What lets the reveal-side year UI flag a year as worth checking.
     const result = pickBestRecording(
       [candidate({ recordingFirstReleaseDate: '1975', releaseGroupFirstReleaseDate: undefined })],
-      RELAXED,
+      UNFILTERED,
     );
 
     expect(result).toEqual({ year: 1975, confidence: 'low', source: 'recording' });
   });
 
-  it('should return relaxed results when the strict filters exclude everything', () => {
+  it('should fall through to a lower tier when the official filters exclude everything', () => {
     // The tier transition -- the case the non-existent Spotify-year fallback was supposed
     // to handle. This is the "Like a Rolling Stone" shape.
     const candidates = [
@@ -604,29 +665,98 @@ describe('pickBestRecording', () => {
       }),
     ];
 
-    expect(pickBestRecording(candidates, STRICT)).toEqual({
+    expect(pickBestRecording(candidates, OFFICIAL)).toEqual({
       year: null,
       confidence: 'none',
       reason: 'no-dated-candidates',
     });
-    expect(pickBestRecording(candidates, RELAXED)).toEqual({
+    // The middle rung refuses it too -- a Live release group is misleading evidence, not thin
+    // evidence, and that distinction is the whole reason the rung exists.
+    expect(pickBestRecording(candidates, STUDIO)).toEqual({
+      year: null,
+      confidence: 'none',
+      reason: 'no-dated-candidates',
+    });
+    expect(pickBestRecording(candidates, UNFILTERED)).toEqual({
       year: 1966,
       confidence: 'low',
       source: 'recording',
     });
   });
 
+  it('should keep the secondary-type exclusion on the studio-release tier', () => {
+    // THE FIX FOR UNRELIABLE `low` ANSWERS. Before the middle rung existed, the ladder went
+    // straight from "official original release" to NO FILTER, so a live take or a compilation
+    // dated the card whenever the top rung missed. Each of these is EARLIER than the studio
+    // release and each must still lose.
+    const candidates = [
+      candidate({
+        recordingId: 'live',
+        releaseGroupId: 'rg-live',
+        releaseGroupSecondaryTypes: ['Live'],
+        recordingFirstReleaseDate: '1969',
+      }),
+      candidate({
+        recordingId: 'comp',
+        releaseGroupId: 'rg-comp',
+        releaseGroupSecondaryTypes: ['Compilation'],
+        recordingFirstReleaseDate: '1968',
+      }),
+      candidate({
+        recordingId: 'boot',
+        releaseGroupId: 'rg-boot',
+        releaseStatus: 'Bootleg',
+        recordingFirstReleaseDate: '1967',
+      }),
+      candidate({
+        recordingId: 'studio',
+        releaseGroupId: 'rg-studio',
+        // No release-group date: this candidate is exactly the kind the adapter did not spend
+        // its second request on, which is why the rung reads the recording date as well.
+        releaseGroupFirstReleaseDate: undefined,
+        releaseStatus: 'Promotion',
+        recordingFirstReleaseDate: '1971',
+      }),
+    ];
+
+    expect(pickBestRecording(candidates, STUDIO)).toEqual({
+      year: 1971,
+      confidence: 'low',
+      source: 'release-group',
+    });
+
+    // And the proof that the rung is doing the work: unfiltered takes the bootleg's 1967.
+    expect(pickBestRecording(candidates, UNFILTERED).year).toBe(1967);
+  });
+
+  it('should let the studio-release tier date a candidate the official tier refuses', () => {
+    // A promo pressing with no primary type at all. The top rung requires both, so before the
+    // middle rung this went straight to the unfiltered pass.
+    const result = pickBestRecording(
+      [
+        candidate({
+          releaseGroupPrimaryType: undefined,
+          releaseStatus: 'Promotion',
+          releaseGroupFirstReleaseDate: '1984',
+        }),
+      ],
+      STUDIO,
+    );
+
+    expect(result).toEqual({ year: 1984, confidence: 'low', source: 'release-group' });
+  });
+
   it('should return a null year with a reason when no candidate has a date', () => {
     // The reason must distinguish "nothing matched at all" from "things matched but none
     // were dated" -- the two point at completely different fixes.
-    expect(pickBestRecording([], RELAXED)).toEqual({
+    expect(pickBestRecording([], UNFILTERED)).toEqual({
       year: null,
       confidence: 'none',
       reason: 'no-candidates',
     });
 
     expect(
-      pickBestRecording([candidate({ artistCredit: 'Someone Else Entirely' })], RELAXED),
+      pickBestRecording([candidate({ artistCredit: 'Someone Else Entirely' })], UNFILTERED),
     ).toEqual({ year: null, confidence: 'none', reason: 'no-candidates' });
 
     expect(
@@ -638,7 +768,7 @@ describe('pickBestRecording', () => {
             releaseDate: undefined,
           }),
         ],
-        RELAXED,
+        UNFILTERED,
       ),
     ).toEqual({ year: null, confidence: 'none', reason: 'no-dated-candidates' });
   });
@@ -649,16 +779,16 @@ describe('pickBestRecording', () => {
     const nextYear = new Date().getUTCFullYear() + 1;
 
     expect(
-      pickBestRecording([candidate({ releaseGroupFirstReleaseDate: '1832' })], STRICT).year,
+      pickBestRecording([candidate({ releaseGroupFirstReleaseDate: '1832' })], OFFICIAL).year,
     ).toBeNull();
     expect(
-      pickBestRecording([candidate({ releaseGroupFirstReleaseDate: '2999' })], STRICT).year,
+      pickBestRecording([candidate({ releaseGroupFirstReleaseDate: '2999' })], OFFICIAL).year,
     ).toBeNull();
     expect(
-      pickBestRecording([candidate({ releaseGroupFirstReleaseDate: 'not-a-date' })], STRICT).year,
+      pickBestRecording([candidate({ releaseGroupFirstReleaseDate: 'not-a-date' })], OFFICIAL).year,
     ).toBeNull();
     expect(
-      pickBestRecording([candidate({ releaseGroupFirstReleaseDate: String(nextYear) })], STRICT)
+      pickBestRecording([candidate({ releaseGroupFirstReleaseDate: String(nextYear) })], OFFICIAL)
         .year,
     ).toBe(nextYear);
   });
@@ -669,23 +799,27 @@ describe('pickBestRecording', () => {
     // Billie Jean 1982 -> 2012, Bohemian Rhapsody 1975 -> 2001, Layla 1970 -> 1990.
     const result = pickBestRecording(
       [candidate({ releaseGroupFirstReleaseDate: '1982-11-30', releaseDate: '2012-09-18' })],
-      STRICT,
+      OFFICIAL,
     );
 
     expect(result.year).toBe(1982);
   });
 
-  it('should resolve each known-tricky Phase 0 track to its verified year', () => {
+  it('should resolve each known-tricky track to its verified year', () => {
     // THE ACCURACY TEST. Phase 0 measured a naive top-scored lookup at ~6% (1 of 18); this
     // suite is the evidence that the pipeline beats it, and the thing that catches a
-    // regression in scoring. Expected years are Phase 0 ground truth, not code output.
+    // regression in scoring. Expected years are ground truth, not code output.
+    //
+    // Every one resolves on the TOP rung, which is the second claim being made here: the
+    // seven single-before-album tracks are not rescued by a lower rung reporting `low`, they
+    // are answered with `high` confidence from a release group's own first-release-date.
     const failures: string[] = [];
 
     for (const fixture of YEAR_FIXTURES) {
       const result = pickBestRecording(fixture.candidates, {
         artist: fixture.artist,
         durationMs: fixture.durationMs,
-        mode: 'strict',
+        tier: 'official-release',
       });
 
       if (result.year !== fixture.expectedYear || result.confidence !== 'high') {
@@ -696,6 +830,28 @@ describe('pickBestRecording', () => {
     }
 
     expect(failures).toEqual([]);
-    expect(YEAR_FIXTURES).toHaveLength(14);
+    expect(YEAR_FIXTURES).toHaveLength(21);
+  });
+
+  it('should pin the year a recording-scoped lookup cannot reach', () => {
+    // NOT an aspiration. `resolvesTo` is what the ladder returns today and `expectedYear` is
+    // the truth it provably cannot get to: the 1989 single carries a different RECORDING from
+    // the album version, so no filter widening and no duration bound can put the two in one
+    // pool. See the block comment on `LimitationFixture`.
+    //
+    // Pinned so that a future work-level lookup announces itself by failing this test, rather
+    // than quietly agreeing with a number nobody re-checked.
+    for (const fixture of YEAR_LIMITATION_FIXTURES) {
+      const result = pickBestRecording(fixture.candidates, {
+        artist: fixture.artist,
+        durationMs: fixture.durationMs,
+        tier: 'official-release',
+      });
+
+      expect(result.year, fixture.key).toBe(fixture.resolvesTo);
+      expect(fixture.resolvesTo, fixture.key).not.toBe(fixture.expectedYear);
+    }
+
+    expect(YEAR_LIMITATION_FIXTURES).toHaveLength(1);
   });
 });

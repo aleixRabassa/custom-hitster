@@ -174,9 +174,13 @@ describe('resolveYear', () => {
     expect(cache.writes[0]?.key).toBe(yearCacheKey(TRACK.artist, NO_WOMAN_NO_CRY.title));
   });
 
-  it('should fall through to the relaxed tier when the strict pass finds nothing', async () => {
+  it('should fall through the tier ladder when the official-release rung finds nothing', async () => {
     // The tier transition -- the case the non-existent Spotify-year fallback was meant to
     // handle. `low` is what marks it for review rather than pretending it is solid.
+    //
+    // The release group here carries no excluded secondary type, so the STUDIO-RELEASE rung
+    // answers and the unfiltered one is never reached. That is the ladder working: before the
+    // middle rung existed this same pool was scored with no filter at all.
     const cache = recordingCache();
     const search = {
       ...undatedSearch,
@@ -200,7 +204,11 @@ describe('resolveYear', () => {
 
     expect(outcome.ok).toBe(true);
     if (!outcome.ok) return;
-    expect(outcome.result).toMatchObject({ year: 1966, confidence: 'low', source: 'recording' });
+    expect(outcome.result).toMatchObject({
+      year: 1966,
+      confidence: 'low',
+      source: 'release-group',
+    });
   });
 
   it('should cache a negative result with the shorter TTL', async () => {

@@ -184,6 +184,65 @@ describe('fetchYearCandidates', () => {
     ).toBe(true);
   });
 
+  it('should ask about single and EP release groups, albums first', async () => {
+    // Two assertions in one, because they are two halves of the same 2026-08-11 change.
+    //
+    // ELIGIBILITY: a Single release group must reach request 2, or the top scoring rung has
+    // no date for it and a song released as a single before its album still reports the
+    // album's year -- the bug this whole change exists to fix.
+    //
+    // ORDER: albums first, so `MAX_RELEASE_GROUPS` truncation stays non-regressive. Every
+    // release group that survived the cap when only Albums were eligible must still survive
+    // it now that singles compete for the same 50 slots.
+    const { fetch, urls } = stubFetch({
+      recording: {
+        recordings: [
+          {
+            id: 'rec-1',
+            title: 'A Song',
+            'artist-credit': [{ name: 'A Band' }],
+            releases: [
+              {
+                status: 'Official',
+                date: '1992-09-21',
+                'release-group': { id: 'rg-single', 'primary-type': 'Single' },
+              },
+              {
+                status: 'Official',
+                date: '1993-02-22',
+                'release-group': { id: 'rg-album', 'primary-type': 'Album' },
+              },
+              {
+                status: 'Official',
+                date: '1994-01-01',
+                'release-group': { id: 'rg-ep', 'primary-type': 'EP' },
+              },
+              // Excluded by secondary type, so it must not appear at all.
+              {
+                status: 'Official',
+                date: '1991-01-01',
+                'release-group': {
+                  id: 'rg-live',
+                  'primary-type': 'Album',
+                  'secondary-types': ['Live'],
+                },
+              },
+            ],
+          },
+        ],
+      },
+      releaseGroup: { 'release-groups': [] },
+    });
+
+    const result = await fetchYearCandidates({ title: 'A Song', artist: 'A Band' }, deps(fetch));
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const query = decodeURIComponent(new URL(urls[1] ?? '').searchParams.get('query') ?? '');
+    expect(query).toBe('rgid:(rg-album OR rg-ep OR rg-single)');
+  });
+
   it('should resolve the fixture track to its known-correct year end to end', async () => {
     // Adapter and scorer together, over a real captured response. This is the test that
     // fails if MusicBrainz changes shape -- the pure scoring tests would keep passing.
@@ -208,7 +267,7 @@ describe('fetchYearCandidates', () => {
       pickBestRecording(result.candidates, {
         artist: NO_WOMAN_NO_CRY.artist,
         durationMs: NO_WOMAN_NO_CRY.durationMs,
-        mode: 'strict',
+        tier: 'official-release',
       }),
     ).toEqual({ year: NO_WOMAN_NO_CRY.expectedYear, confidence: 'high', source: 'release-group' });
   });
@@ -379,7 +438,7 @@ describe('fetchYearCandidates', () => {
         pickBestRecording(result.candidates, {
           artist: NO_WOMAN_NO_CRY.artist,
           durationMs: NO_WOMAN_NO_CRY.durationMs,
-          mode: 'strict',
+          tier: 'official-release',
         }).year,
       ).toBeNull();
     } finally {
