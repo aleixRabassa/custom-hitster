@@ -30,14 +30,15 @@ describe('ExitConfirmDialog', () => {
     expect(document.getElementById('exit-confirm-title')?.textContent).toMatch(/end the game/i);
   });
 
-  it('should say what is lost rather than only asking whether the player is sure', () => {
-    // The whole reason to interrupt somebody is to tell them something they did not already know.
-    // `END` clears the saved session, so the shuffle, the position in the deck and every resolved
-    // year go with it -- and there is no undo anywhere in the app.
+  it('should say where the press leads rather than only asking whether the player is sure', () => {
+    // The whole reason to interrupt somebody is to tell them something they did not already know:
+    // the press ends the game and leaves the game screen. The longer version enumerating what
+    // `END` destroys (the shuffle, the position in the deck, every resolved year) was cut on
+    // purpose, so this asserts the destination and no longer looks for that copy.
     render(<ExitConfirmDialog onConfirm={vi.fn()} onCancel={vi.fn()} />);
 
     const body = document.getElementById('exit-confirm-description')?.textContent ?? '';
-    expect(body).toMatch(/lost/i);
+    expect(body).toMatch(/ends the game/i);
     expect(body).toMatch(/start screen/i);
   });
 

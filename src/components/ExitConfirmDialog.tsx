@@ -141,13 +141,13 @@ export function ExitConfirmDialog({ onConfirm, onCancel }: ExitConfirmDialogProp
         </h2>
 
         {/*
-          Says what is actually lost, in the player's terms. "Are you sure?" is the version that
-          tells somebody nothing they did not already know -- the reason to stop and read is that
-          the deck does not come back.
+          Says what the press actually does, in the player's terms -- "Are you sure?" is the
+          version that tells somebody nothing they did not already know. The sentence spelling out
+          that the deck, the position and the resolved years are gone was cut deliberately: it read
+          as a threat over what is a two-button choice the player can simply decline.
         */}
         <p id="exit-confirm-description" className="text-sm text-fg-secondary">
-          This ends the game and returns you to the start screen. The deck, your place in it and the
-          years found so far are all lost — there is no way back into this session.
+          This ends the game and returns you to the start screen.
         </p>
 
         {/*
