@@ -39,6 +39,7 @@
 
 import { useRef, useState } from 'react';
 
+import { Footer } from './Footer';
 import { MAX_DECK_PLAYLISTS } from '../game/deck-merge';
 import { playlistErrorMessage } from '../game/messages';
 import { savedDeckKey } from '../game/playlist-library';
@@ -256,7 +257,9 @@ export function LandingScreen({
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center gap-8 bg-page p-6 text-fg">
       <div className="flex flex-col items-center gap-2 text-center">
-        <h1 className="text-3xl font-semibold">Playlist Hitster</h1>
+        {/* The app's name. Renamed from "Playlist Hitster" on 2026-08-11 — `index.html`'s
+            `<title>` and `src/pwa/manifest.ts` carry the same string and must agree. */}
+        <h1 className="text-3xl font-semibold">Playlist Jitster</h1>
         <p className="max-w-content text-sm text-fg-secondary">
           Paste up to {MAX_DECK_PLAYLISTS} public Spotify playlist links to deal one deck. Scan a
           card to hear the song, then guess the year.
@@ -591,6 +594,9 @@ export function LandingScreen({
           ))}
         </ul>
       </section>
+
+      {/* The app's front door, so the one screen where a copyright line is expected. */}
+      <Footer />
     </main>
   );
 }

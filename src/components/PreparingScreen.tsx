@@ -30,6 +30,7 @@
  * having resolved nothing at all. Nothing here may block on `resolvedCount > 0`.
  */
 
+import { Footer } from './Footer';
 import { Spinner } from './Spinner';
 import type { ReactNode } from 'react';
 
@@ -79,6 +80,14 @@ export function PreparingScreen({ notice }: PreparingScreenProps) {
           The game starts as soon as the first card is ready — the rest fill in while you play.
         </p>
       </div>
+
+      {/*
+        Rendered here as well as on the landing and end screens, even though this screen lives for
+        about a second: leaving it out would make the copyright line FLICKER as the player moves
+        landing -> preparing -> back, which is more noticeable than the line itself. The game screen
+        is the one deliberate omission -- `Footer` explains why.
+      */}
+      <Footer />
     </main>
   );
 }

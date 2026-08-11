@@ -214,6 +214,29 @@ describe('CardControls', () => {
     }
   });
 
+  it('should draw the deck-actions control as the three-node share glyph', () => {
+    // Replaced the "out of a tray, upwards" export arrow on 2026-08-11 from a reference image the
+    // developer supplied. Pinned by SHAPE COUNT, which is the only thing jsdom can see and is
+    // enough to catch the two regressions that matter: the glyph being swapped back, and the links
+    // losing their `fill="none"` -- the icon is `filled`, so a link path without it paints the
+    // triangle its two ends imply and the mark becomes a solid wedge.
+    render(controls());
+
+    const button = screen.getByRole('button', { name: 'Keep this deck' });
+
+    expect(button.querySelectorAll('circle')).toHaveLength(3);
+
+    const links = Array.from(button.querySelectorAll('path'));
+    expect(links).toHaveLength(2);
+    for (const link of links) {
+      expect(link.getAttribute('fill')).toBe('none');
+    }
+
+    // `filled`, so the nodes are solid discs rather than three rings, which at this size read as
+    // noise. It is also what puts the stroke at 1.5 and keeps the links thinner than the nodes.
+    expect(button.querySelector('svg')?.getAttribute('fill')).toBe('currentColor');
+  });
+
   it('should render the pause icon in place of the play icon while playing', () => {
     // The toggle swaps the ICON as well as the label. Asserted through the path count because the
     // two icons have no accessible difference by design -- both labels are generic.

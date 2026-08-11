@@ -2950,3 +2950,85 @@ using the recording's own `first-release-date` to override rung ①. It measures
 wrong-*early* on "No Woman No Cry" (1973 vs 1974), so a blind `min()` trades one error for another.
 The open idea worth trying next is using it as a **disagreement detector** that downgrades confidence
 rather than changes the year.
+
+## 2026-08-11 — Five UI changes, and three of them exposed something the repo did not know
+
+Asked for in one message: move the card's scan caption below the card and dim it, centre and enlarge
+the QR, redraw the deck-actions icon from a supplied reference, add a copyright footer, rename the app
+to **"Playlist Jitster"**. Four of the five are ordinary. What is worth recording is the three
+discoveries.
+
+**1. The caption was the QR's ceiling, and moving it is what made the code bigger.** While "Scan to
+play the full song" was on the hidden face, the code shared the card's HEIGHT with it: `p-6` + `gap-6`
++ a 12px line is a fixed ~88px, so on the 240px floor card the ratio could not exceed 0.633 no matter
+how much width was spare. With one child on the face the only limit is the padding, on both axes
+equally (`r × 240 + 48 ≤ 240`, i.e. 0.8), so `--qr-display-size` went 7/12 → **3/4** — 288px at the
+card's ceiling, 180px at its floor, against 224/140 before. **3/4 rather than the 0.8 the arithmetic
+allows**, because the face is `overflow-hidden`: an over-large ratio CROPS the code rather than
+spilling it, and a cropped QR does not scan while still looking almost right. `QR_BITMAP_SIZE` had to
+go 224 → 288 with it (encoding below the displayed size upscales a QR and blurs the module edges a
+camera reads) and it is the one number in the app that multiplies by deck size — `qr-cache.ts` never
+evicts, and a deck is capped at 100 cards.
+
+The move also fixed a duplication nobody had counted: `CardStack` mounts `CardHiddenSide` a second
+time for the next card's back, so the sentence was in the document **twice per card**. That is now
+structurally impossible rather than hidden behind the back's `aria-hidden`, which still earns its
+place for the QR's `alt`.
+
+**2. A copyright footer is a year-shaped number on a pre-reveal surface, and three leak proxies caught
+it.** `LandingScreen.test.tsx` (twice) and `PreparingScreen.test.tsx` assert
+`not.toMatch(/\b(19|20)\d{2}\b/)` over the whole screen's text — a proxy for "no card's year can
+appear here" — and "Copyright © 2026-present" fails it. **The tests were right and the fix is not to
+loosen the pattern.** They now `.replace(COPYRIGHT_NOTICE, '')` before asserting, by exact string
+imported from the component: the one string known to be a constant is subtracted, and the proxy stays
+absolute for everything else. Loosening the regex to tolerate any `20xx` would have retired a leak
+check to accommodate a legal line.
+
+**3. Testing Library maps `<footer>` to `contentinfo` regardless of ancestry, so the spec rule cannot
+be asserted with a role query.** Per HTML-AAM a `<footer>` is `contentinfo` only when its nearest
+sectioning ancestor is the body; ours is always inside a screen's own `<main>`, so in a browser it is
+**not** a landmark — which is what we want, since a copyright line in the landmark list is noise. A
+test written as `expect(queryByRole('contentinfo')).toBeNull()` inside a `<main>` **fails against that
+correct component**. `Footer.test.tsx` now asserts the property the repo can keep — no explicit `role`
+attribute — and records the discrepancy, because the natural response to the failing query is to
+"fix" the component by adding `role="contentinfo"`, which would make the landmark real on three
+different screens.
+
+**Where the footer goes, and the two screens it is kept off.** There is no shell: every screen is its
+own `min-h-dvh justify-center` column, so a footer rendered once in `App.tsx` or `main.tsx` is a
+sibling of a full-viewport column and gives every screen a permanent scrollbar. It is therefore the
+last child of `<main>` on the **landing, preparing and end** screens. **Not the game screen** — that
+column is a height budget (`--card-height` is sized against the viewport so the HUD, card, caption and
+controls fit a phone), a footer costs ~40px of it, and the `mt-auto` variant is worse because auto
+margins beat `justify-center` and the card would stop being centred. **Not the crash screen** — the
+fallback is a `role="alert"`, so its whole subtree is announced and the copyright would be read out to
+someone being told the game crashed.
+
+**The rename's boundary is the interesting part of the rename.** "Playlist Hitster" → "Playlist
+Jitster" in `index.html`'s `<title>`, `manifest.name`/`short_name`, `LandingScreen`'s `<h1>` and
+README's heading. Renamed as well, because it is user-visible: **`pdfFileName`'s prefix**,
+`hitster-*.pdf` → `jitster-*.pdf`. Deliberately NOT renamed:
+
+- **`hitster:session:v1` and `hitster:library:v1`.** A renamed storage key is not read, so it silently
+  discards a saved game and a curated library — the exact failure the v1 lifts exist to avoid.
+- **Every "Hitster" that means the BOARD GAME** — `pdf-sheet.ts`'s 65 mm card, `reducer.ts` and
+  `messages.ts` on why a yearless card is dropped, `CardRevealSide`, README's "shop-bought Hitster
+  cards". Renaming those corrupts the reasoning rather than the branding.
+- **`custom-hitster`**: the package name, the repo directory, `MUSICBRAINZ_USER_AGENT`, `api/hello`'s
+  message, and the `https://hitster.example` origins in tests. None is user-visible branding and the
+  user agent is a string MusicBrainz has seen.
+
+**The icon.** `KeepDeckIcon` is now the three-node share glyph (nodes at (6.5,12), (17,6), (17,18),
+r=2.5; links stopping 2.5 units short of each centre so they meet the disc edge) instead of the
+export-arrow-out-of-a-tray. It uses `ControlIcon`'s `filled` variant because the reference's nodes are
+solid and three outlined rings read as noise at 20px — which means **the two link paths need an
+explicit `fill="none"`**, or the filled `<svg>` paints the triangle their four endpoints imply and the
+mark becomes a solid wedge. That is what `CardControls.test.tsx` pins, along with the shape counts.
+
+**Two unrelated observations while running the suite,** neither created by this work and both left in
+place. An untracked **`diag.json`** sits in the repo root — a dump of card titles, artists and
+durations — and its mtime advances during a test run, though nothing in the repo greps for that name;
+worth chasing before it is committed by accident, since it holds track data. And an untracked
+**`api/_lib/artistmatch.tmp.test.ts`** is present but is NOT collected by `vitest` (46 files, 748
+tests, with and without it), so it is a spike file rather than part of the suite. Neither is in
+`.gitignore`, which is why both show up in `git status`.

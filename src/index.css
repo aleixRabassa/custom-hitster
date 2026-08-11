@@ -329,36 +329,50 @@
   /*
    * The QR code's DISPLAYED edge length, fluid with the card.
    *
-   * 7/12 of the card's width -- 224px at the card's 384px ceiling and 140px at
-   * its 240px floor. Those two numbers are the whole reason for the ratio: it was
-   * 14/18 against a 288px-wide card, which displayed at 224px and 144px, so
-   * 2026-08-11's square card changed this fraction ONLY BECAUSE ITS DENOMINATOR
-   * CHANGED. The code is the same size on screen as it was before; the card grew
-   * around it. (It was 11/18 -- 176px, the Phase 6 value -- until the developer
-   * asked for a bigger code on 2026-08-05.)
+   * ===========================================================================
+   *  3/4 OF THE CARD, WHICH IS WHAT THE CAPTION LEAVING THE FACE BOUGHT.
    *
-   * 224px is also exactly `QR_BITMAP_SIZE` in `CardHiddenSide.tsx`, which is why
-   * that constant did not have to move with the card: encoding ABOVE the
-   * displayed size is harmless (the browser downsamples), encoding below it
-   * upscales a QR and blurs the module edges a camera is looking for. Raise this
-   * ratio and that constant has to follow.
+   *  The ratio has now been raised three times and each one is a different
+   *  reason, so here is the whole ladder: 11/18 (Phase 6) -> 14/18 on
+   *  2026-08-05, because the code is the only thing on the hidden face and the
+   *  only way to hear the whole song -> 7/12 the same day the card became
+   *  SQUARE, which was not a change of size at all (7/12 of the new 384px card
+   *  is the same 224px 14/18 of the old 288px one was -- only the denominator
+   *  moved) -> **3/4 now, which IS a change of size**, and it is available
+   *  because "Scan to play the full song" moved off the face to below the card.
    *
-   * THE BINDING CONSTRAINT IS NOW VERTICAL RATHER THAN HORIZONTAL, and that is
-   * what caps the ratio. On the 9/14 card it was `CardHiddenSide`'s `p-6` -- 24px
-   * a side, so 15/18 of the width was the widest a square could be. A square card
-   * has width to spare and the code shares the HEIGHT with the caption instead:
-   * the padding, the `gap-6` and the 12px line take a fixed ~88px, so the ratio
-   * has to satisfy `r * 240 + 88 <= 240` at the floor. 7/12 leaves 12px of slack
-   * there and 72px at the ceiling. 14/18 would have overflowed the floor card by
-   * ~35px, and `overflow-hidden` on the face would have CLIPPED THE CODE -- a
-   * silently unscannable card, not a visibly broken layout.
+   *  THE BINDING CONSTRAINT MOVED WITH IT, AND THAT IS THE POINT. While the
+   *  caption was on the face, the code shared the card's HEIGHT with it: the
+   *  padding, the `gap-6` and the 12px line took a fixed ~88px, so the ratio had
+   *  to satisfy `r * 240 + 88 <= 240` at the floor card -- 0.633 at the very
+   *  most, whatever the width had spare. With one child on the face the only
+   *  constraint is the padding, on both axes equally: `r * 240 + 48 <= 240`,
+   *  i.e. 0.8.
+   *
+   *  3/4 rather than that 0.8 ceiling, so the code keeps a visible margin
+   *  instead of sitting on the padding edge: it leaves card/8 a side, which is
+   *  48px at the card's ceiling and 30px at its floor. The reason to keep slack
+   *  is specific -- the face is `overflow-hidden`, so a ratio that overflows
+   *  CROPS the code rather than spilling it, and a cropped QR does not scan
+   *  while still looking almost right.
+   *
+   *  In pixels: 288px at the 384px card, 180px at the 240px one, against 224 /
+   *  140 before. Both ends are bigger, and the floor is still comfortably above
+   *  the ~144px that was scan-verified on a real phone on 2026-08-06.
+   *
+   *  288px is also exactly `QR_BITMAP_SIZE` in `CardHiddenSide.tsx`, which HAD
+   *  to be raised from 224 with this: encoding above the displayed size is
+   *  harmless (the browser downsamples), encoding below it upscales a QR and
+   *  blurs the module edges a camera is looking for. Raise this ratio again and
+   *  that constant has to follow, or the code silently gets softer.
+   * ===========================================================================
    *
    * The GENERATED bitmap's size is a different number and must stay one
    * (decision 4): `toDataURL` is asynchronous, so a generation size that tracked
    * the viewport would re-encode the code on every resize frame and flash the
    * placeholder while it did. `QrCode.tsx` takes the two separately.
    */
-  --qr-display-size: calc(var(--card-width) * 7 / 12);
+  --qr-display-size: calc(var(--card-width) * 3 / 4);
 
   /* --- Content column ---------------------------------------------------- */
 

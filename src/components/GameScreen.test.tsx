@@ -114,6 +114,56 @@ describe('GameScreen', () => {
     expect(container.querySelectorAll('audio')).toHaveLength(1);
   });
 
+  it('should render the scan instruction below the card, dimmed, in a colour that exists', () => {
+    // ===================================================================
+    //  THIS TEST MOVED HERE FROM `CardHiddenSide.test.tsx` on 2026-08-11,
+    //  with the line it is about: the caption is no longer on the card's
+    //  face, it is rendered below the card by this screen.
+    //
+    //  THE TYPO IT CATCHES WAS INVISIBLE TO EVERY OTHER CHECK. The line once
+    //  read `text-text-muted`. There is no `--color-text-muted` token -- the
+    //  app's is `--color-fg-muted` -- so Tailwind emitted NO rule, and with
+    //  no colour set anywhere up the chain the only text on the card's hidden
+    //  face rendered in the UA's near-black default on a near-black card.
+    //  Typecheck, lint, the build and every other test passed: an unknown
+    //  Tailwind colour utility is a silent no-op. So the assertion is that
+    //  the class is in the `text-fg*` family, which is the only one that
+    //  resolves to a foreground colour in this app.
+    //
+    //  It now also pins the DIMMING the developer asked for. `text-fg-muted`
+    //  rather than an `opacity-*` on top of `text-fg`: the token is the
+    //  app's audited dimmest text (6.12:1 on the page), and an opacity
+    //  modifier would drop it under the 4.5:1 floor Phase 8 established with
+    //  no number recorded anywhere. Asserting the exact token is what makes
+    //  "dimmer" a decision instead of a look.
+    //
+    //  jsdom paints nothing, so this cannot see that the line is dim or that
+    //  it sits below the card -- what it catches is the line losing its
+    //  colour, or being silently promoted back to full `text-fg`.
+    // ===================================================================
+    render(renderScreen({}));
+
+    const note = screen.getByText('Scan to play the full song');
+    expect(note.className).toContain('text-fg-muted');
+    expect(note.className).toMatch(/(?:^|\s)text-fg(?:-|\s|$)/);
+
+    // Exactly one, on a screen that renders the current card AND the next card's back. The
+    // sentence was in the document twice per card while it lived on the face.
+    expect(screen.getAllByText('Scan to play the full song')).toHaveLength(1);
+  });
+
+  it('should keep the scan instruction visible while the card is flipped', () => {
+    // Reproducing the face's old behaviour -- gone on a flip -- would remove a line from a
+    // CENTRED column, so the card itself would jump on every flip. The flip is a toggle, so the
+    // QR is one tap away and the sentence stays true.
+    const { rerender } = render(renderScreen({ isFlipped: true }));
+
+    expect(screen.queryByText('Scan to play the full song')).not.toBeNull();
+
+    rerender(renderScreen({ isFlipped: false }));
+    expect(screen.queryByText('Scan to play the full song')).not.toBeNull();
+  });
+
   it('should not stop audio when the card is flipped', () => {
     // ===================================================================
     //  THE 2026-08-06 REVERSAL, AND THE ONE ASSERTION THAT PINS IT.

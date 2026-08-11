@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { YEAR_FIXTURES, YEAR_LIMITATION_FIXTURES } from './__fixtures__/year-candidates';
 import {
   YEAR_CACHE_SCHEMA_VERSION,
+  YEAR_TIER_ORDER,
+  artistMatchesExact,
   cleanTrackTitle,
   normalizeForCacheKey,
   pickBestRecording,
@@ -273,7 +275,7 @@ describe('normalizeForCacheKey', () => {
     expect(key).toBe(`mbyear:${YEAR_CACHE_SCHEMA_VERSION}:queen|bohemian rhapsody`);
     // Pinned literally as well, so a bump has to be a DELIBERATE two-line change rather than
     // something that slips through because every assertion interpolated the constant.
-    expect(key.startsWith('mbyear:v3:')).toBe(true);
+    expect(key.startsWith('mbyear:v4:')).toBe(true);
   });
 });
 
@@ -560,6 +562,129 @@ describe('pickBestRecording', () => {
     );
 
     expect(result.year).toBe(1994);
+  });
+
+  it('should match a collaboration credit whose connector or order differs', () => {
+    // THE 2026-08-11 FIX. All four shapes are real credits from cards that were DROPPED from
+    // a real deck: Spotify joins collaborators with ", " while MusicBrainz uses a joinphrase,
+    // so the two disagree about the connector AND the order. Every one of these fails the
+    // exact rule's contiguous-run test.
+    //
+    // Note the last two are pure REORDERING, which is why normalising join words away while
+    // keeping contiguity was measured and rejected — it recovers only the middle two.
+    for (const [artist, credit] of [
+      ['Shakira, Burna Boy', 'Shakira x Burna Boy'],
+      ['Dave, Tems', 'Dave feat. Tems'],
+      ['Natanael Cano, Gabito Ballesteros', 'Natanael Cano feat. Gabito Ballesteros'],
+      ['Dave, Tems', 'Tems & Dave'],
+      ['Xavi, De La Rose', 'De La Rose & Xavi'],
+    ] as const) {
+      const result = pickBestRecording([candidate({ artistCredit: credit })], {
+        artist,
+        tier: 'official-release',
+      });
+
+      expect(result.year, `${artist} | ${credit}`).toBe(1975);
+      // Capped at `low` even on the top rung: the credit did not say what was asked for.
+      expect(result.confidence, `${artist} | ${credit}`).toBe('low');
+    }
+  });
+
+  it('should never report high confidence on any rung when the artist match was loosened', () => {
+    // Loops the exported ladder rather than naming rungs, so a fourth rung added later
+    // inherits the cap without anyone remembering to come back here.
+    for (const tier of YEAR_TIER_ORDER) {
+      const result = pickBestRecording([candidate({ artistCredit: 'Shakira feat. Burna Boy' })], {
+        artist: 'Shakira, Burna Boy',
+        tier,
+      });
+
+      expect(result.confidence, tier).not.toBe('high');
+    }
+  });
+
+  it('should treat the loose artist match as a fallback, never as a widening', () => {
+    // THE TEST THAT STOPS THE OBVIOUS SIMPLIFICATION. Collapsing `admitByArtist` into one
+    // union filter looks equivalent and is not: step 5 is earliest-wins, so the loose-only
+    // candidate's 1984 would beat the exact match's 1994 and the year would move.
+    const result = pickBestRecording(
+      [
+        candidate({
+          recordingId: 'exact',
+          releaseGroupId: 'rg-exact',
+          artistCredit: 'Jeff Buckley',
+          releaseGroupFirstReleaseDate: '1994',
+        }),
+        candidate({
+          recordingId: 'loose',
+          releaseGroupId: 'rg-loose',
+          artistCredit: 'Buckley Jeff',
+          releaseGroupFirstReleaseDate: '1984',
+        }),
+      ],
+      { artist: 'Jeff Buckley', tier: 'official-release' },
+    );
+
+    expect(result).toEqual({ year: 1994, confidence: 'high', source: 'release-group' });
+  });
+
+  it('should keep the loose artist match stingy', () => {
+    // The fallback fires exactly when the requested artist is unrecognisable in the pool, so
+    // a false positive puts a plausible WRONG year on a card whose whole content is the year.
+    // Both guards were measured to cost none of the five real recoveries above.
+    for (const [artist, credit, why] of [
+      // Guard 1 — two real words. "The <Noun>" is one word plus a free article.
+      ['The Band', 'The Steve Miller Band', 'article does not count toward the minimum'],
+      ['The Band', 'The E Street Band', 'article does not count toward the minimum'],
+      // Guard 2 — at most one word of slack. Modern credits reuse a tiny vocabulary.
+      ['Lil Baby', 'Lil Durk, Lil Uzi Vert & Baby Keem', 'scattered tokens in a long credit'],
+      ['Young Thug', 'Young Dolph, Key Glock & Slim Thug', 'scattered tokens in a long credit'],
+      // Still disjoint, so still excluded — the cover-versus-original guarantee is untouched.
+      ['Jeff Buckley', 'Leonard Cohen', 'token-disjoint names can never bridge'],
+    ] as const) {
+      const result = pickBestRecording([candidate({ artistCredit: credit })], {
+        artist,
+        tier: 'unfiltered',
+      });
+
+      expect(result, `${artist} | ${credit} — ${why}`).toEqual({
+        year: null,
+        confidence: 'none',
+        reason: 'no-candidates',
+      });
+    }
+  });
+
+  it('should pin that the loose artist match is order-blind', () => {
+    // The accepted trade-off, asserted as CURRENT BEHAVIOUR rather than pretended away: a
+    // token bag cannot tell "Alice Cooper" from "Cooper Alice". Pinned so that an
+    // order-sensitive rewrite announces itself by failing here instead of silently changing
+    // accuracy. It is bounded — it fires only for a card that was about to be dropped, and
+    // the answer is capped at `low`.
+    const result = pickBestRecording([candidate({ artistCredit: 'Cooper Alice' })], {
+      artist: 'Alice Cooper',
+      tier: 'official-release',
+    });
+
+    expect(result.year).toBe(1975);
+    expect(result.confidence).toBe('low');
+  });
+
+  it('should never reach the loose artist match on any accuracy fixture', () => {
+    // THE SAFETY PROPERTY, as a test rather than a claim. The loose pass runs only when the
+    // exact pool is empty, so proving every fixture has a non-empty exact pool proves this
+    // change cannot move any of the known-good years.
+    //
+    // Worth knowing WHY that is not circular: the fixtures were trimmed keeping candidates
+    // per accepted release group plus representatives of distinct EXCLUSION reasons, and
+    // "excluded by artist credit" was never one of them — so the accuracy suite is
+    // structurally blind to artist matching and cannot be the evidence here. This can.
+    for (const fixture of [...YEAR_FIXTURES, ...YEAR_LIMITATION_FIXTURES]) {
+      const requested = normalizeForCacheKey(fixture.artist);
+      const exact = fixture.candidates.filter((c) => artistMatchesExact(requested, c.artistCredit));
+
+      expect(exact.length, `${fixture.key}: exact pool must be non-empty`).toBeGreaterThan(0);
+    }
   });
 
   it('should match an artist credit that merely contains the requested name', () => {

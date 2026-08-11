@@ -168,9 +168,15 @@ export function sanitizeForPdf(text: string): string {
  *
  *  `sanitizeForPdf` KEEPS `É`, correctly -- WinAnsi can draw it. A filename
  *  cannot: the `[^a-z0-9]` filter below would then delete it outright, and
- *  "Éxitos Verano" became `hitster-xitos-verano.pdf` with the first letter of the
+ *  "Éxitos Verano" became `jitster-xitos-verano.pdf` with the first letter of the
  *  playlist silently missing. Measured by this module's own test.
  * ===========================================================================
+ *
+ * The `jitster-` prefix followed the app's rename on 2026-08-11 (it was `hitster-`). It is renamed
+ * because it is USER-VISIBLE -- it is the first thing in a downloads list -- which is exactly what
+ * separates it from the two `localStorage` keys, `hitster:session:v1` and `hitster:library:v1`, which
+ * keep their old names on purpose: a renamed key is not read, so it silently discards a saved game
+ * and a curated library. A filename has no such continuity to break.
  */
 export function pdfFileName(playlistName: string): string {
   const slug = sanitizeForPdf(playlistName)
@@ -181,5 +187,5 @@ export function pdfFileName(playlistName: string): string {
     .replace(/^-+|-+$/g, '')
     .slice(0, 60);
 
-  return `hitster-${slug === '' ? 'deck' : slug}.pdf`;
+  return `jitster-${slug === '' ? 'deck' : slug}.pdf`;
 }

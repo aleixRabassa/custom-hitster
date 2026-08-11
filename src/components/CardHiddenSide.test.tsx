@@ -65,27 +65,26 @@ describe('CardHiddenSide', () => {
     expect(screen.queryAllByRole('button')).toEqual([]);
   });
 
-  it('should give the scan instruction a colour that exists', async () => {
+  it('should render the QR and no text at all', async () => {
     // ===================================================================
-    //  THE TYPO THIS CATCHES WAS INVISIBLE TO EVERY OTHER CHECK.
+    //  THE CAPTION LEFT THIS FACE ON 2026-08-11 and is now rendered below
+    //  the card by `GameScreen`, which owns the assertions that used to be
+    //  here -- including the silent-colour canary (an unknown Tailwind
+    //  colour utility emits NO rule, and this exact line once shipped as
+    //  `text-text-muted`, rendering near-black on a near-black card).
     //
-    //  The line read `text-text-muted`. There is no `--color-text-muted`
-    //  token -- the app's is `--color-fg-muted` -- so Tailwind emitted NO
-    //  rule, and with no colour set anywhere up the chain (`bg-surface`
-    //  face, no `text-*` on `GameScreen`'s main) the only text on the card's
-    //  hidden face rendered in the UA's near-black default on a near-black
-    //  card. Typecheck, lint, the build and every other test here passed:
-    //  an unknown Tailwind colour utility is a silent no-op.
-    //
-    //  So this asserts the one property that distinguishes a real token from
-    //  a plausible-looking string: it has to be a `text-fg*` utility, which
-    //  is the only family that resolves to a foreground colour in this app.
+    //  Asserted by ABSENCE rather than left implicit, because the move is
+    //  what lets `--qr-display-size` be 3/4 of the card: re-adding any text
+    //  here re-imposes the vertical constraint the enlargement spent, and it
+    //  would put the sentence in the document TWICE per card again, since
+    //  `CardStack` mounts this component for the next card's back as well.
     // ===================================================================
-    render(<CardHiddenSide card={highConfidenceCard} />);
-    await screen.findByRole('img');
+    const { container } = render(<CardHiddenSide card={highConfidenceCard} />);
+    const image = await screen.findByRole('img');
 
-    const note = screen.getByText(/scan to play/i);
-    expect(note.className).toMatch(/(?:^|\s)text-fg(?:-|\s|$)/);
+    expect(image.getAttribute('src')).toContain(highConfidenceCard.id);
+    expect((container.textContent ?? '').trim()).toBe('');
+    expect(screen.queryByText(/scan to play/i)).toBeNull();
   });
 
   it('should not put a live region on the hidden side', async () => {

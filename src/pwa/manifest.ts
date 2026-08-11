@@ -54,14 +54,24 @@ export const PAGE_COLOR = '#0a0a0a';
  * is real -- the plugin fills in defaults for everything not named here.
  */
 export const manifest: Partial<ManifestOptions> = {
-  name: 'Playlist Hitster',
+  /**
+   * Renamed from "Playlist Hitster" on 2026-08-11 at the developer's request.
+   *
+   * A pure STRING change with no install consequence worth fearing: an installed PWA picks up a
+   * changed `name`/`short_name` when the manifest is re-fetched, and the icons, `start_url`, scope
+   * and `id`-by-default (the `start_url`) are untouched — so this is the same installed app under a
+   * new label rather than a second entry on the home screen. What it does NOT touch is anything
+   * persisted: `hitster:session:v1` and `hitster:library:v1` keep their names deliberately, because
+   * renaming a storage key silently empties a player's saved game and curated library.
+   */
+  name: 'Playlist Jitster',
 
   /**
    * Seven characters, and the length is the whole point of the field: `short_name` is
    * what a home-screen launcher has room for under an icon, and a label that overflows
-   * is truncated with an ellipsis rather than wrapped. "Playlist Hitster" would not fit.
+   * is truncated with an ellipsis rather than wrapped. "Playlist Jitster" would not fit.
    */
-  short_name: 'Hitster',
+  short_name: 'Jitster',
 
   description:
     'Deal a deck of cards from any public Spotify playlist, scan a card to hear the song, then guess the year it came out.',

@@ -340,15 +340,60 @@ export function GameScreen({
 
       <Hud cardsRemaining={cardsRemaining} playlistName={playlistName} />
 
-      <CardStack
-        deck={deck}
-        currentIndex={currentIndex}
-        isFlipped={isFlipped}
-        isYearPending={isYearPending}
-        onFlip={onFlip}
-        onNext={onNext}
-        isEnabled={isPlayable}
-      />
+      {/*
+        ===========================================================================
+         THE CARD AND ITS CAPTION ARE ONE GROUP, AND THE CAPTION USED TO BE ON THE
+         CARD'S FACE (moved out 2026-08-11, at the developer's request).
+
+         `gap-3` inside the group against the column's `gap-6` outside it is the
+         whole reason for the wrapper: the sentence has to read as belonging to the
+         card rather than as a third row between the card and its controls. Removing
+         the wrapper does not break anything, it just makes the caption float.
+
+         IT IS RENDERED UNCONDITIONALLY, INCLUDING WHILE THE CARD IS FLIPPED, and
+         both halves of that are deliberate. On the face it disappeared on a flip
+         for free -- the face rotated away -- and reproducing that with
+         `{isFlipped ? null : ...}` would REMOVE A LINE FROM A CENTRED COLUMN, so
+         the card itself would jump every time the player flipped it. Leaving it up
+         is also honest: the flip is a toggle, so the QR is one tap away.
+
+         NOT `aria-hidden`, and not duplicated either. The QR's own `alt` is "Scan
+         to play in Spotify", which says the same thing to a screen reader -- but
+         this line is 12px of visible instruction on the game's main surface, and
+         hiding it from assistive technology to avoid a near-duplicate would be
+         choosing which sighted-only detail to keep. `CardStack`'s BACK is the place
+         that must not repeat it, and it does not: the caption is no longer inside
+         `CardHiddenSide` at all, which is what stopped the sentence being in the
+         document twice per card.
+        ===========================================================================
+      */}
+      <div className="flex flex-col items-center gap-3">
+        <CardStack
+          deck={deck}
+          currentIndex={currentIndex}
+          isFlipped={isFlipped}
+          isYearPending={isYearPending}
+          onFlip={onFlip}
+          onNext={onNext}
+          isEnabled={isPlayable}
+        />
+
+        {/*
+          Generic, exactly as it was on the card: it says how a card is used and never anything
+          about the track, so it is safe on a screen showing an unflipped card.
+
+          `text-fg-muted` is the dimming the developer asked for, and it is a TOKEN rather than an
+          opacity utility for two reasons. An unknown colour utility in this app emits no rule at
+          all and fails silently -- which is exactly what happened to this very line once, when it
+          read `text-text-muted` and rendered near-black on a near-black card -- so the family is
+          asserted in `GameScreen.test.tsx`. And `--color-fg-muted` is the app's audited dimmest
+          text at 6.12:1 on `--color-page`, where stacking an `opacity-*` on top of a token would
+          take it under the 4.5:1 floor the Phase 8 contrast pass established, without recording a
+          number anywhere. It is dimmer than the `text-fg` it carried on the card because it is no
+          longer the only thing on a dark face: it sits under a glowing card on the page.
+        */}
+        <p className="text-xs text-fg-muted">Scan to play the full song</p>
+      </div>
 
       {/*
         OUTSIDE the stack, and that placement is a bug fix rather than a layout preference.

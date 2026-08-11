@@ -12,6 +12,7 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { COPYRIGHT_NOTICE } from './Footer';
 import { PreparingScreen } from './PreparingScreen';
 import { fixtureDeck } from './__fixtures__/cards';
 
@@ -111,7 +112,26 @@ describe('PreparingScreen', () => {
     //  helpful fails a test.
     // ===================================================================
     const { container } = render(<PreparingScreen />);
-    const text = container.textContent ?? '';
+
+    /*
+      ===================================================================
+       THE COPYRIGHT LINE IS SUBTRACTED, NOT TOLERATED, AND THAT MATTERS.
+
+       The footer added on 2026-08-11 contains "2026-present", so the
+       year-shaped-number proxy below started failing on it -- correctly: a
+       four-digit year appeared on a pre-reveal surface. It is not a leak
+       (nothing about it derives from a card; it is a module constant), but
+       the right response is to remove the one string that is KNOWN not to
+       be a year and keep the proxy absolute for everything else, rather
+       than to loosen the pattern so that any 20xx passes.
+
+       Removing it by exact-string match is what keeps that narrow: if the
+       footer ever renders something other than this constant, the
+       subtraction stops matching and the assertion goes back to seeing
+       every digit on the screen.
+      ===================================================================
+    */
+    const text = (container.textContent ?? '').replace(COPYRIGHT_NOTICE, '');
 
     for (const card of fixtureDeck) {
       expect(text).not.toContain(card.title);

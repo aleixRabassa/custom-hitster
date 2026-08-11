@@ -118,14 +118,17 @@ describe('Card', () => {
   it('should keep the hidden side mounted while flipped', async () => {
     // Both faces must exist for the 3D transform to have anything to rotate.
     //
-    // Asserted through the QR rather than through the controls, because the controls are no
-    // longer on this face -- they moved to `CardControls` when the card became tappable, since
-    // a pointer-up on a button inside the card was being read as a tap and flipping it.
+    // Asserted through the QR IMAGE, and as of 2026-08-11 that is the only way left: this face
+    // holds the code and nothing else. It was asserted through the controls until they moved to
+    // `CardControls` (a pointer-up on a button inside the card read as a tap and flipped it), then
+    // through `textContent !== ''` until the "Scan to play the full song" caption moved out to below
+    // the card -- which is what let the QR be enlarged to 3/4 of the card. There is no text on this
+    // face to fall back to, so the image's presence INSIDE the hidden face is the assertion.
     renderCard(true);
 
     const image = await screen.findByRole('img');
     expect(image.getAttribute('src')).toContain(highConfidenceCard.id);
-    expect(screen.getByTestId('card-hidden-face').textContent).not.toBe('');
+    expect(screen.getByTestId('card-hidden-face').contains(image)).toBe(true);
   });
 
   it('should apply the flipped transform only when flipped', () => {

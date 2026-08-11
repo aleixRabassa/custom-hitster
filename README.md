@@ -1,4 +1,4 @@
-# Playlist Hitster
+# Playlist Jitster
 
 Turn any public Spotify playlist link into a playable digital [Hitster](https://hitstergame.com/) deck. Paste a playlist URL, press Start, and get a shuffled deck of cards you play in the browser: each card shows only a QR code, and you tap to reveal the title, artist, and — the part the game is actually about — the song's **original** release year. Release years come from MusicBrainz rather than Spotify, because Spotify reports the _album edition's_ date, which turns a 2011 remaster of Bohemian Rhapsody into a 2011 song.
 

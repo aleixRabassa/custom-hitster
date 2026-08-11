@@ -208,7 +208,7 @@ export function truncatePlaylistName(name: string): string {
  *  holds none.
  *
  *  The `"+N more"` suffix goes through `pdfFileName`, which slugs it: "Rock
- *  Classics +2 more" becomes `hitster-rock-classics-2-more.pdf`. Checked
+ *  Classics +2 more" becomes `jitster-rock-classics-2-more.pdf`. Checked
  *  2026-08-07 (plan 1, open question 1) -- readable, and the `+` cannot reach a
  *  filesystem.
  *

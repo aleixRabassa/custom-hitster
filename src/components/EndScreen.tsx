@@ -23,6 +23,7 @@
  */
 
 import { DeckActions } from './DeckActions';
+import { Footer } from './Footer';
 import { truncatePlaylistName } from '../game/deck-merge';
 import type { Card, PlaylistSummary } from '../../shared/types';
 
@@ -193,6 +194,9 @@ export function EndScreen({
           pendingYearCount={pendingYearCount}
         />
       </section>
+
+      {/* The last screen of a session, and the other one a player reads rather than plays. */}
+      <Footer />
     </main>
   );
 }

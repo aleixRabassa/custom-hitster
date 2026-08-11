@@ -191,19 +191,47 @@ function PauseIcon() {
 }
 
 /**
- * Share / save / print, drawn as the standard "out of a box, upwards" export arrow.
+ * Share / save / print, drawn as the three-node share glyph: one node at mid-left, two on the
+ * right, joined by two links into a "<".
  *
- * Not a cluster of cards and not a three-dot overflow menu: what the button opens is the three ways
- * a deck LEAVES this session -- a link, the library, a sheet of paper -- and the export arrow is
- * the one pictogram every platform already spends that meaning on. The tray below the arrow is
- * open-topped for the same reason the exit door is: the shape has to read at 20px.
+ * ===========================================================================
+ *  IT WAS AN "OUT OF A TRAY, UPWARDS" EXPORT ARROW UNTIL 2026-08-11, and the
+ *  reasoning that chose that one is not wrong -- it is answered by a better
+ *  pictogram for the same meaning.
+ *
+ *  The old note said: not a cluster of cards and not a three-dot overflow menu,
+ *  because what the button opens is the three ways a deck LEAVES this session --
+ *  a link, the library, a sheet of paper -- and the export arrow is the one
+ *  pictogram every platform already spends that meaning on. All of that still
+ *  holds. The developer supplied the node glyph as the reference, and it is
+ *  strictly better on the same criteria: it is the Android/Material share mark,
+ *  so it carries "send this somewhere" at least as widely, and it does it with
+ *  three discs and two straight bars -- which survives 20px better than a tray
+ *  with an arrow inside it, where the arrowhead and the tray's walls compete for
+ *  the same few pixels.
+ *
+ *  FILLED, unlike Exit. The reference's nodes are solid, and that is also what
+ *  makes the glyph legible small: three outlined rings at this size read as
+ *  noise, while three discs read as three points. `filled` also drops the stroke
+ *  to 1.5, which is what keeps the two links visibly thinner than the nodes are
+ *  wide -- the proportion the reference has (bar ≈ 0.3 × node diameter).
+ * ===========================================================================
+ *
+ * The geometry, so a future edit does not have to re-derive it. Nodes at (6.5, 12), (17, 6) and
+ * (17, 18) with r = 2.5; the links stop 2.5 units short of each centre so they meet the disc EDGE
+ * rather than running through it -- `strokeLinecap="round"` then closes the last fraction of a unit.
+ * The glyph spans x 3.25..20.25 and y 2.75..21.25 once the stroke is counted, so it is centred in
+ * the 24-unit box on both axes and nothing touches the viewBox edge.
  */
 function KeepDeckIcon() {
   return (
-    <ControlIcon>
-      <path d="M12 3.5v11" />
-      <path d="m8.25 7.25 3.75-3.75 3.75 3.75" />
-      <path d="M5.5 13.5v5A1.5 1.5 0 0 0 7 20h10a1.5 1.5 0 0 0 1.5-1.5v-5" />
+    <ControlIcon filled>
+      <circle cx="6.5" cy="12" r="2.5" />
+      <circle cx="17" cy="6" r="2.5" />
+      <circle cx="17" cy="18" r="2.5" />
+      {/* fill="none" on the links: a filled open path would paint the triangle its ends imply. */}
+      <path d="M8.67 10.76 14.83 7.24" fill="none" />
+      <path d="M8.67 13.24 14.83 16.76" fill="none" />
     </ControlIcon>
   );
 }

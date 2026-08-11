@@ -167,7 +167,7 @@ GET /api/year?title=…&artist=…&durationMs=…
 
 Three orderings in that diagram are load-bearing and easy to "tidy" into bugs. **The cache is read before the gate**, so a replayed deck costs nothing and waits for nothing. **The second MusicBrainz call is batched**, so the request count is two regardless of whether the pool held 12 candidates or 842. **The year comes from the release GROUP's `first-release-date`, never from the release date inlined in the search response** — the latter is the reissue date and is wrong by decades (Billie Jean 2012, Bohemian Rhapsody 2001).
 
-A fourth thing is load-bearing and is a 2026-08-11 reversal: **rung ① accepts `Single` and `EP`, not just `Album`.** A release group's `first-release-date` is the date of the record, so an Album-only rung reports the year a song was *included on an album* rather than the year it came out — Creep 1993 instead of 1992, Mr. Brightside 2004 instead of 2003, and nothing at all for a song like "Hey Jude" that was never on a studio album. Widening is safe in one direction only, and that is why it is safe at all: the rung takes the **earliest** surviving date, so admitting more release groups can only move the answer earlier. A reissue single cannot beat the album it postdates, which is why Billie Jean is still 1982 despite its January 1983 single. The same change added rung ②, because before it the ladder went straight from "official original release" to **no filter at all** — that is what made `low` answers unreliable, since a live take or a bootleg dated the card whenever rung ① missed. Full measurement in [`agent_findings.md`](./agent_findings.md) (2026-08-11).
+A fourth thing is load-bearing and is a 2026-08-11 reversal: **rung ① accepts `Single` and `EP`, not just `Album`.** A release group's `first-release-date` is the date of the record, so an Album-only rung reports the year a song was _included on an album_ rather than the year it came out — Creep 1993 instead of 1992, Mr. Brightside 2004 instead of 2003, and nothing at all for a song like "Hey Jude" that was never on a studio album. Widening is safe in one direction only, and that is why it is safe at all: the rung takes the **earliest** surviving date, so admitting more release groups can only move the answer earlier. A reissue single cannot beat the album it postdates, which is why Billie Jean is still 1982 despite its January 1983 single. The same change added rung ②, because before it the ladder went straight from "official original release" to **no filter at all** — that is what made `low` answers unreliable, since a live take or a bootleg dated the card whenever rung ① missed. Full measurement in [`agent_findings.md`](./agent_findings.md) (2026-08-11).
 
 ### The client game layer (`src/game/`) — built
 
@@ -616,14 +616,59 @@ token string; `src/index.css.test.ts` asserts the derivation, that the width car
 (which is how "square" is pinned), and both viewport terms.
 
 **Two things downstream had to move with the shape, and one deliberately did not.**
-`--qr-display-size` went 14/18 → **7/12 of the card's width**, chosen so the code is displayed at the
-same 224px (ceiling) and ~140px (floor) it always was — the card grew around the code rather than the
-code growing with the card, which is what lets `QR_BITMAP_SIZE` stay at 224 and avoid upscaling a QR.
-Its binding constraint also moved from horizontal to **vertical**: a square face has width to spare,
-but the code shares the height with the caption, and `p-6` + `gap-6` + a 12px line take a fixed ~88px,
-so 14/18 would have overflowed the 240px floor card by ~35px and `overflow-hidden` would have _clipped
-the code_ — silently unscannable. `--ring-width` stayed at a fixed 2px, because a ring derived from the
-card's width would go sub-pixel on the small card and blur into its own bloom.
+`--qr-display-size` went 14/18 → **7/12 of the card's width**, chosen so the code was displayed at the
+same 224px (ceiling) and ~140px (floor) it always had been — the card grew around the code rather than
+the code growing with the card, which is what let `QR_BITMAP_SIZE` stay at 224 and avoid upscaling a
+QR. Its binding constraint also moved from horizontal to **vertical**: a square face has width to
+spare, but the code shared the height with the caption, and `p-6` + `gap-6` + a 12px line take a fixed
+~88px, so 14/18 would have overflowed the 240px floor card by ~35px and `overflow-hidden` would have
+_clipped the code_ — silently unscannable. `--ring-width` stayed at a fixed 2px, because a ring derived
+from the card's width would go sub-pixel on the small card and blur into its own bloom.
+
+**Later the same day the caption left the face, and that raised the ratio again — to 3/4.** With one
+child on the hidden face the vertical constraint above disappears and the only limit is the padding,
+equally on both axes: `r × 240 + 48 ≤ 240`, i.e. 0.8. **3/4 rather than that 0.8 ceiling**, so the code
+keeps a visible margin (card/8 a side — 48px at the ceiling, 30px at the floor) instead of sitting on
+the padding edge; the reason to keep slack is that the face is `overflow-hidden`, so an over-large
+ratio _crops_ the code rather than spilling it. In pixels the code went 224 → **288** at the ceiling and
+140 → **180** at the floor, and `QR_BITMAP_SIZE` had to follow to 288 — encoding below the displayed
+size upscales a QR and blurs the module edges a camera reads. It is the one number in the app that
+multiplies by deck size, since `qr-cache.ts` never evicts and a deck is capped at 100 cards.
+
+#### The scan caption sits below the card, not on it
+
+"Scan to play the full song" was the only text on the hidden face until 2026-08-11; `GameScreen` now
+renders it under the card, `text-fg-muted` rather than `text-fg`. Three things it bought beyond the
+look: the QR could grow into the space (above), the sentence stopped being in the document **twice per
+card** (`CardStack` mounts `CardHiddenSide` again for the next card's back), and the dimming happens on
+the page rather than on a card face. The dimming is a **token**, not an `opacity-*` on `text-fg`:
+`--color-fg-muted` is the audited dimmest text at 6.12:1 on `--color-page`, and an opacity modifier
+would push it under the 4.5:1 floor with no ratio recorded anywhere.
+
+It is rendered **unconditionally, including while the card is flipped**. On the face it disappeared on a
+flip for free, and reproducing that with `{isFlipped ? null : …}` would remove a line from a
+`justify-center` column — so the card itself would jump on every flip. The flip is a toggle, so the
+sentence stays true.
+
+#### The footer is on three screens, and the two omissions are the decision
+
+`src/components/Footer.tsx` renders the copyright line on the **landing, preparing and end** screens.
+There is no shell to hang it on: every screen is its own `min-h-dvh` centred column, so a footer
+rendered once in `App.tsx` or `main.tsx` would be a sibling of a full-viewport column and give every
+screen a permanent scrollbar. **The game screen is excluded** because its column is a height budget
+rather than a page — `--card-height` is sized against the viewport precisely so the HUD, card, caption
+and control bar fit a phone, and a footer spends ~40px of that on a line nobody reads mid-game (a
+`mt-auto` variant is worse: auto margins beat `justify-center`, so the card would stop being centred).
+**The crash screen is excluded** for a different reason: `ErrorBoundary`'s fallback is a `role="alert"`,
+so its whole subtree is announced, and a copyright line would be read out to a screen-reader user in
+the middle of being told the game crashed.
+
+Two non-obvious consequences. The `<footer>` sits inside each screen's `<main>`, so it is **not** a
+`contentinfo` landmark (the role needs the body as the nearest sectioning ancestor) — which is the
+intended outcome, and why it carries no explicit `role`. And its "2026-present" is a **year-shaped
+number on a pre-reveal surface**, which three leak-proxy tests caught immediately; they now subtract
+`COPYRIGHT_NOTICE` by exact string rather than loosening the `\b(19|20)\d{2}\b` pattern, so the proxy
+stays absolute for everything else.
 
 **One consequence reaches outside presentation.** `SWIPE_COMMIT_DISTANCE_PX` (96px) was chosen as a
 third of a 288px card, which is now not a size the card ever takes: the width runs 240px → 384px, so

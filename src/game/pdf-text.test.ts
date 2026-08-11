@@ -85,22 +85,22 @@ describe('sanitizeForPdf', () => {
 describe('pdfFileName', () => {
   it('should build an ASCII slug from the playlist name', () => {
     expect(pdfFileName('Éxitos Verano 2000s & 2010s')).toBe(
-      'hitster-exitos-verano-2000s-2010s.pdf',
+      'jitster-exitos-verano-2000s-2010s.pdf',
     );
-    expect(pdfFileName('This is Duki (all songs)')).toBe('hitster-this-is-duki-all-songs.pdf');
+    expect(pdfFileName('This is Duki (all songs)')).toBe('jitster-this-is-duki-all-songs.pdf');
   });
 
   it('should never produce an empty or path-bearing name', () => {
     // A filename reaches the OS, and `/` or `:` is rejected outright by some of them.
-    expect(pdfFileName('')).toBe('hitster-deck.pdf');
-    expect(pdfFileName('///')).toBe('hitster-deck.pdf');
-    expect(pdfFileName('夜に駆ける')).toBe('hitster-deck.pdf');
-    expect(pdfFileName('a/b:c')).toBe('hitster-a-b-c.pdf');
+    expect(pdfFileName('')).toBe('jitster-deck.pdf');
+    expect(pdfFileName('///')).toBe('jitster-deck.pdf');
+    expect(pdfFileName('夜に駆ける')).toBe('jitster-deck.pdf');
+    expect(pdfFileName('a/b:c')).toBe('jitster-a-b-c.pdf');
   });
 
   it('should bound the length', () => {
     const name = pdfFileName('x'.repeat(500));
 
-    expect(name.length).toBeLessThanOrEqual('hitster-.pdf'.length + 60);
+    expect(name.length).toBeLessThanOrEqual('jitster-.pdf'.length + 60);
   });
 });

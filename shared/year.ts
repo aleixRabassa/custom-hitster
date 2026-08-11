@@ -251,8 +251,16 @@ export function stripRemixSuffix(title: string): string | undefined {
  * change the ANSWER for entries already cached at `high`, which is the 30-day tier — so unlike
  * v2 this bump is necessary rather than merely required by the rule. Same cost as before: the
  * first play of any playlist after this ships re-resolves its whole deck.
+ *
+ * **v4 (2026-08-11):** the loose artist-match fallback in `admitByArtist()`. Required by the
+ * rule rather than necessary, and provably so: the fallback fires only when the exact pool is
+ * EMPTY, so any entry cached with a year proves the exact pool was non-empty and its answer
+ * cannot change. Only two classes can move — `none` entries (1-day TTL, which would wash out
+ * on their own) and remix-fallback `low` entries (7-day), where a track may now resolve on its
+ * ORIGINAL title before the remix rewrite is attempted. Bumped anyway, because a version that
+ * is only bumped when someone judges it necessary is a version nobody can trust.
  */
-export const YEAR_CACHE_SCHEMA_VERSION = 'v3';
+export const YEAR_CACHE_SCHEMA_VERSION = 'v4';
 
 /**
  * Lowercase, de-accent, drop punctuation, collapse whitespace.
@@ -413,6 +421,53 @@ export const DURATION_TOLERANCE_MS = 10_000;
 /** Nothing before the phonograph, and nothing announced further ahead than next year. */
 const MIN_PLAUSIBLE_YEAR = 1900;
 
+/**
+ * How hard we had to work to believe a credit names the artist that was asked for.
+ *
+ * `exact` is the rule that has always been here; `loose` is the order-independent fallback
+ * that runs only when `exact` admits nothing. See `admitByArtist()`.
+ */
+type ArtistMatch = 'exact' | 'loose';
+
+/**
+ * What each match strength can support. A loosened match can never report `high` -- the
+ * credit did not say what was asked for, and the card should carry the unconfirmed marker.
+ */
+const ARTIST_MATCH_CONFIDENCE: Record<ArtistMatch, 'high' | 'low'> = {
+  exact: 'high',
+  loose: 'low',
+};
+
+/**
+ * Articles that do not count toward the loose rule's two-token minimum.
+ *
+ * Multilingual because the playlists are: a Spanish or French definite article is exactly as
+ * free a token as an English one, and the whole point of the minimum is that a match must
+ * rest on two real words.
+ */
+const ARTIST_ARTICLES = new Set([
+  'the',
+  'a',
+  'an',
+  'el',
+  'la',
+  'los',
+  'las',
+  'le',
+  'les',
+  'der',
+  'die',
+  'das',
+  'il',
+  'lo',
+]);
+
+/** Real (non-article) words the shorter side must carry before a loose match is allowed. */
+const MIN_LOOSE_ARTIST_TOKENS = 2;
+
+/** Extra words the covering side may carry — one joinphrase, one middle name, and no more. */
+const ARTIST_TOKEN_SLACK = 1;
+
 // ---------------------------------------------------------------------------
 //  THE TIER LADDER
 // ---------------------------------------------------------------------------
@@ -426,11 +481,16 @@ export type YearTierId = 'official-release' | 'studio-release' | 'unfiltered';
  * Every rung shares steps 1, 4 and 5 of `pickBestRecording()` -- artist plausibility, the
  * duration preference and earliest-wins. Only the filter and the date source vary, which is
  * what keeps "which rung answered" a statement about EVIDENCE rather than about scoring.
+ *
+ * `maxConfidence` is a CEILING, not the reported value. Confidence is the weakest of every
+ * evidence axis (see `weakest()`), and the rung is only one of them -- the artist match is
+ * the other. The field is named for the ceiling rather than the answer so that a future
+ * reader cannot mistake it for what gets returned.
  */
 interface YearTier {
   readonly accepts: (candidate: RecordingCandidate) => boolean;
   readonly dateOf: (candidate: RecordingCandidate) => string | undefined;
-  readonly confidence: 'high' | 'low';
+  readonly maxConfidence: 'high' | 'low';
   readonly source: YearSource;
 }
 
@@ -465,19 +525,19 @@ const YEAR_TIERS: Record<YearTierId, YearTier> = {
   'official-release': {
     accepts: isOfficialOriginalRelease,
     dateOf: officialReleaseDate,
-    confidence: 'high',
+    maxConfidence: 'high',
     source: 'release-group',
   },
   'studio-release': {
     accepts: isStudioRelease,
     dateOf: studioReleaseDate,
-    confidence: 'low',
+    maxConfidence: 'low',
     source: 'release-group',
   },
   unfiltered: {
     accepts: () => true,
     dateOf: unfilteredDate,
-    confidence: 'low',
+    maxConfidence: 'low',
     source: 'recording',
   },
 };
@@ -509,10 +569,12 @@ export function pickBestRecording(
   // cross-contaminated, so Cohen's "Hallelujah" and Buckley's stay apart. Applied on EVERY
   // rung -- a relaxed year off by a decade is recoverable, a year taken from a different
   // artist's song entirely is not.
-  const requested = normalizeForCacheKey(artist);
-  const byArtist = candidates.filter((candidate) =>
-    artistMatches(requested, candidate.artistCredit),
-  );
+  //
+  // The artist filter sits OUTSIDE the ladder deliberately: it is the same pool on all three
+  // rungs, which makes artist identity the outer loop and release quality the inner one. That
+  // hierarchy is a hard invariant, not a sortable preference, which is why it is expressed as
+  // structure rather than as another rung.
+  const { pool: byArtist, match } = admitByArtist(candidates, normalizeForCacheKey(artist));
 
   if (byArtist.length === 0) return failure('no-candidates');
 
@@ -559,7 +621,19 @@ export function pickBestRecording(
     if (compareDates(entry, best) < 0) best = entry;
   }
 
-  return { year: best.year, confidence: tier.confidence, source: tier.source };
+  // Confidence is the WEAKEST of every evidence axis, never the rung's ceiling alone. Today
+  // there are two axes; the plan's next idea (a recording-date disagreement detector) would
+  // be a third, and adding it is adding an argument here rather than hunting return sites.
+  return {
+    year: best.year,
+    confidence: weakest(tier.maxConfidence, ARTIST_MATCH_CONFIDENCE[match]),
+    source: tier.source,
+  };
+}
+
+/** The weakest of the confidences given. One axis says `low` -> the answer is `low`. */
+function weakest(...values: readonly ('high' | 'low')[]): 'high' | 'low' {
+  return values.includes('low') ? 'low' : 'high';
 }
 
 function failure(reason: YearFailureReason): YearResult {
@@ -741,7 +815,7 @@ function isPlausibleYear(year: number): boolean {
 }
 
 /**
- * Does a MusicBrainz artist credit plausibly refer to the artist we asked for?
+ * Does a MusicBrainz artist credit CERTAINLY refer to the artist we asked for?
  *
  * Containment in EITHER direction, on whole words. Both directions are needed and both are
  * load-bearing: Spotify says "Jimi Hendrix" where MusicBrainz says "The Jimi Hendrix
@@ -752,8 +826,13 @@ function isPlausibleYear(year: number): boolean {
  * risk is a genuine prefix collision ("Queen" matching "Queen Latifah") on a track the two
  * both have a same-titled song for -- remote, and bounded by the fact that the search query
  * was already scoped by artist before these candidates existed.
+ *
+ * EXPORTED only so `shared/year.test.ts` can assert that no fixture in the accuracy suite
+ * ever reaches `artistMatchesLoose()`. That assertion is what makes "this change cannot move
+ * any of the known-good years" a test rather than a claim, so the export earns its keep.
+ * Nothing in `src/` or `api/` calls it -- `pickBestRecording()` is the only production path.
  */
-function artistMatches(normalizedRequest: string, artistCredit: string): boolean {
+export function artistMatchesExact(normalizedRequest: string, artistCredit: string): boolean {
   if (normalizedRequest === '') return true;
 
   const credit = normalizeForCacheKey(artistCredit);
@@ -766,4 +845,98 @@ function artistMatches(normalizedRequest: string, artistCredit: string): boolean
 /** Is `needle`'s token sequence a contiguous run inside `haystack`'s? */
 function containsTokenRun(haystack: string, needle: string): boolean {
   return ` ${haystack} `.includes(` ${needle} `);
+}
+
+/**
+ * Admit the exactly-matching pool; only when it is EMPTY, admit the loosely-matching one.
+ *
+ * ===========================================================================
+ *  A FALLBACK, NEVER A WIDENING. DO NOT "SIMPLIFY" INTO ONE UNION FILTER.
+ *
+ *  A union looks equivalent and is not. Step 5 is earliest-wins, so a single
+ *  loosely-matched candidate with an older date would beat every exactly-matched
+ *  one -- and step 4's duration preference is not monotone either (it narrows to
+ *  length-matching candidates only when that set is non-empty, so one admission
+ *  can collapse the pool to just it). A union can therefore move a year in BOTH
+ *  directions. The fallback shape cannot: when the exact pool is non-empty the
+ *  result is bit-identical to before this existed, and when it is empty every
+ *  rung already returned `no-candidates` and the card was dropped from the deck.
+ *  So this can only turn a null into a year -- never one year into another.
+ * ===========================================================================
+ */
+function admitByArtist(
+  candidates: readonly RecordingCandidate[],
+  normalizedRequest: string,
+): { pool: readonly RecordingCandidate[]; match: ArtistMatch } {
+  const exact = candidates.filter((c) => artistMatchesExact(normalizedRequest, c.artistCredit));
+  if (exact.length > 0) return { pool: exact, match: 'exact' };
+
+  // May still be empty, which is the same `no-candidates` the caller already handled.
+  return {
+    pool: candidates.filter((c) => artistMatchesLoose(normalizedRequest, c.artistCredit)),
+    match: 'loose',
+  };
+}
+
+/**
+ * The loose rule: the same tokens, in any order, with at most one word of slack.
+ *
+ * ===========================================================================
+ *  WHY ORDER-INDEPENDENCE IS REQUIRED, MEASURED 2026-08-11.
+ *
+ *  Spotify joins collaborators with ", " and MusicBrainz joins them with a
+ *  joinphrase, so the two disagree about both the CONNECTOR and the ORDER. The
+ *  exact rule needs a contiguous run and fails on every shape below; all four
+ *  were real cards dropped from a real deck:
+ *
+ *      Shakira, Burna Boy                 vs  Shakira x Burna Boy
+ *      Dave, Tems                         vs  Dave feat. Tems
+ *      Dave, Tems                         vs  Tems & Dave
+ *      Xavi, De La Rose                   vs  De La Rose & Xavi
+ *      Natanael Cano, Gabito Ballesteros  vs  Natanael Cano feat. Gabito Ballesteros
+ *
+ *  The cheaper fix of normalising join words away ("feat", "and", …) while
+ *  KEEPING contiguity was measured against these and recovers only two of the
+ *  four: it cannot touch reordering, which is half of the sample. Hence a token
+ *  bag rather than a token run. The price is that "Alice Cooper" now matches
+ *  "Cooper Alice", which is pinned as a test rather than pretended away.
+ *
+ *  Note what is NOT the reason: `normalizeForCacheKey` already maps "&", "+" and
+ *  "," to spaces, so punctuation-only differences matched before this existed.
+ *  Only WORD connectors and reordering were ever broken.
+ * ===========================================================================
+ *
+ * Two guards keep it stingy, because this fires exactly when the requested artist is
+ * unrecognisable in the pool -- so a false positive puts a plausible wrong year on a card
+ * whose whole content is the year. Both were measured to cost none of the five recoveries:
+ *
+ * 1. **At least two non-article tokens on the shorter side.** Without it a two-token request
+ *    like "The Band" degrades to one real word plus a free article and matches "The Steve
+ *    Miller Band", "The E Street Band" and every other "The <Noun> Band". Costs nothing: a
+ *    genuinely single-token request can never reach here anyway, because for one token a
+ *    subset and a contiguous run are the same test, so the exact rule already answered.
+ * 2. **At most one token of slack.** Modern credits reuse a tiny vocabulary -- "lil", "young",
+ *    "big", "baby", "dj" -- so "Lil Baby" is a token subset of "Lil Durk, Lil Uzi Vert & Baby
+ *    Keem". Bounding the extra words kills that while keeping "Kanye West" ~ "Kanye Omari
+ *    West" and every joinphrase above, which add exactly one word.
+ */
+function artistMatchesLoose(normalizedRequest: string, artistCredit: string): boolean {
+  if (normalizedRequest === '') return true;
+
+  const request = normalizedRequest.split(' ').filter(Boolean);
+  const credit = normalizeForCacheKey(artistCredit).split(' ').filter(Boolean);
+  if (credit.length === 0) return false;
+
+  const shorter = request.length <= credit.length ? request : credit;
+  if (shorter.filter((token) => !ARTIST_ARTICLES.has(token)).length < MIN_LOOSE_ARTIST_TOKENS) {
+    return false;
+  }
+
+  return coversWithinSlack(request, credit) || coversWithinSlack(credit, request);
+}
+
+/** Is every token of `needle` present in `haystack`, with at most `ARTIST_TOKEN_SLACK` spare? */
+function coversWithinSlack(needle: readonly string[], haystack: readonly string[]): boolean {
+  if (haystack.length - needle.length > ARTIST_TOKEN_SLACK) return false;
+  return needle.every((token) => haystack.includes(token));
 }

@@ -166,9 +166,14 @@ export function CardStack({
 
           /*
             Hidden from assistive technology, which is not a leak decision but a duplication one:
-            this face carries the same generic "Scan to play the full song" line as the card in
-            front of it, and announcing it twice per card says nothing about either. Sighted
-            players get the preload; nobody gets a second copy of the same sentence.
+            this face holds a QR whose `alt` is the same generic "Scan to play in Spotify" as the
+            card in front of it, and announcing it twice per card says nothing about either.
+            Sighted players get the preload; nobody gets a second copy of the same sentence.
+
+            It used to be TWO duplicated strings -- the caption "Scan to play the full song" was on
+            this face as well until 2026-08-11, when it moved out to sit below the card. That half of
+            the duplication is now structurally gone rather than hidden, which is the better fix;
+            this attribute still earns its place for the `alt`.
           */
           aria-hidden="true"
           /*

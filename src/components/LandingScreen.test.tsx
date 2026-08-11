@@ -12,6 +12,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { COPYRIGHT_NOTICE } from './Footer';
 import { LandingScreen, SUGGESTED_PLAYLISTS } from './LandingScreen';
 import { fixtureDeck } from './__fixtures__/cards';
 import { MAX_DECK_PLAYLISTS } from '../game/deck-merge';
@@ -479,7 +480,15 @@ describe('LandingScreen', () => {
     const { container } = renderLanding();
     for (let index = 1; index < MAX_DECK_PLAYLISTS; index += 1) pressAdd();
 
-    const text = container.textContent ?? '';
+    /*
+      The copyright line is SUBTRACTED by exact string, because the footer added on 2026-08-11
+      contains "2026-present" and the year-shaped proxy below caught it -- correctly, since a
+      four-digit year did appear on a pre-start surface. It is a module constant that derives from no
+      card, so the narrow fix is to remove that one known string and keep the proxy absolute for
+      everything else, rather than to loosen the pattern until any 20xx passes. If the footer ever
+      renders something else, this stops matching and the assertion sees every digit again.
+    */
+    const text = (container.textContent ?? '').replace(COPYRIGHT_NOTICE, '');
 
     for (const card of fixtureDeck) {
       expect(text).not.toContain(card.title);
@@ -550,8 +559,9 @@ describe('LandingScreen', () => {
 
       for (let index = 1; index < MAX_DECK_PLAYLISTS; index += 1) pressAdd();
 
-      expect(screen.getByText(`${MAX_DECK_PLAYLISTS} playlists is the maximum for one deck.`))
-        .not.toBeNull();
+      expect(
+        screen.getByText(`${MAX_DECK_PLAYLISTS} playlists is the maximum for one deck.`),
+      ).not.toBeNull();
     });
 
     it('should not render a remove button when there is only one row', () => {
@@ -651,9 +661,7 @@ describe('LandingScreen', () => {
         'https://open.spotify.com/playlist/2zmXlpkOMN92NlQaE2M62c',
       ]);
       // And the rows show what was submitted, which is how a player learns the shape of a link.
-      expect(rowInput(0).value).toBe(
-        'https://open.spotify.com/playlist/2zmXlpkOMN92NlQaE2M62c',
-      );
+      expect(rowInput(0).value).toBe('https://open.spotify.com/playlist/2zmXlpkOMN92NlQaE2M62c');
     });
 
     it('should submit every id of a saved multi-playlist deck', () => {
@@ -673,9 +681,7 @@ describe('LandingScreen', () => {
       ]);
       // And the form is visibly refilled with all three, in row order.
       expect(screen.getAllByRole('textbox')).toHaveLength(3);
-      expect(rowInput(2).value).toBe(
-        'https://open.spotify.com/playlist/37i9dQZF1DX0XUsuxWHRQd',
-      );
+      expect(rowInput(2).value).toBe('https://open.spotify.com/playlist/37i9dQZF1DX0XUsuxWHRQd');
     });
 
     it('should keep the library order it was given', () => {
@@ -765,7 +771,9 @@ describe('LandingScreen', () => {
       // The library stores a deck LABEL, which is the same class of data the suggestions show.
       // This is the assertion that fails if an entry ever grows a track list.
       const { container } = renderLanding({ savedPlaylists: SAVED });
-      const text = container.textContent ?? '';
+      // Subtracted for the reason given in the screen-level leak test above: the footer's
+      // "2026-present" is a year-shaped constant that derives from no card.
+      const text = (container.textContent ?? '').replace(COPYRIGHT_NOTICE, '');
 
       for (const card of fixtureDeck) {
         expect(text).not.toContain(card.title);

@@ -229,11 +229,14 @@ it and none was free**: the clamp governs the HEIGHT, so under 9/14 every term w
 term divided by 0.643. Floor `18rem → 15rem` (18rem of _width_ is 288px, and a 320px phone has 272px
 once `<main>`'s `p-6` is paid), ceiling `28rem → 24rem` (area within 15% of the old 288 × 448),
 `124vw → 80vw` (the same rule restated — 124vw of height _was_ 80vw of width once the ratio was
-applied). **`--qr-display-size` went 14/18 → 7/12, and its binding constraint changed axis**: a square
-face has width to spare but the code shares the HEIGHT with the caption, so `p-6` + `gap-6` + a 12px
-line take a fixed ~88px and 14/18 would have overflowed the floor card by ~35px — which
-`overflow-hidden` **crops rather than shows**, i.e. a silently unscannable card. 7/12 was picked so the
-displayed size is the 224px / ~140px it always was, which is why `QR_BITMAP_SIZE` stays 224.
+applied). **`--qr-display-size` went 14/18 → 7/12 → 3/4 in one day, and its binding constraint changed axis
+twice**: a square face has width to spare but the code SHARED THE HEIGHT with the caption, so `p-6` +
+`gap-6` + a 12px line took a fixed ~88px and 14/18 would have overflowed the floor card by ~35px —
+which `overflow-hidden` **crops rather than shows**, i.e. a silently unscannable card. 7/12 kept the
+displayed size at the 224px / ~140px it always was; then **the caption moved off the face** (below), the
+vertical constraint vanished, and 3/4 is what the padding alone allows with a visible margin left —
+**288px / 180px, and `QR_BITMAP_SIZE` had to follow 224 → 288**, because encoding below the displayed
+size upscales a QR and blurs the module edges a camera reads.
 `--ring-width` deliberately did **not** follow the card (a derived ring goes sub-pixel and blurs into
 its own bloom). One new hazard: **`--container-content` and the card's ceiling are now both 24rem**, so
 the three components capped at `--card-width` look mergeable with the reading measure — they agree at
@@ -251,6 +254,52 @@ at the ceiling is 76.8px so an upper term would be unreachable. `--size-control-
 and `--size-control-spinner` (`button - 1rem`, holding a constant 8px inset) are derived for the same
 reason. `--size-touch-target` is still applied beside the size and still catches a lowered token.
 `CardControls.test.tsx` asserts the row's width, `justify-evenly` and the **absence** of a `gap-*`.
+
+**THE HIDDEN FACE IS NOW THE QR AND LITERALLY NOTHING ELSE (2026-08-11).** "Scan to play the full
+song" is rendered by `GameScreen` BELOW the card, in `text-fg-muted`. Three things that buys, and the
+first is why the QR could grow: the caption was the code's **ceiling** (it shared the card's height
+with it); the sentence stopped being in the document **twice per card**, because `CardStack` mounts
+`CardHiddenSide` again for the next card's back; and the dimming happens on the page rather than on a
+card face. **The dimming is a TOKEN, never an `opacity-*` on `text-fg`** — `--color-fg-muted` is the
+audited 6.12:1 on `--color-page` and an opacity modifier would drop it under the 4.5:1 floor with no
+ratio recorded. It is rendered **unconditionally, including while flipped**: reproducing the face's
+old disappear-on-flip with `{isFlipped ? null : …}` removes a line from a `justify-center` column, so
+**the card would jump on every flip**. `CardHiddenSide.test.tsx` asserts the face has NO text at all,
+and the silent-colour canary (this line once shipped as `text-text-muted` and rendered near-black on
+near-black) moved to `GameScreen.test.tsx` with it.
+
+**The deck-actions icon is the three-node share glyph as of 2026-08-11, and it is `filled` — so its
+two link paths MUST carry `fill="none"`.** Otherwise the filled `<svg>` paints the triangle the four
+link endpoints imply and the mark becomes a solid wedge. `filled` rather than the outlined default
+because the reference's nodes are solid and three rings read as noise at 20px. The old export-arrow's
+rationale is not wrong, it is answered — see the comment above `KeepDeckIcon`. `aria-label` is
+unchanged ("Keep this deck"), and `CardControls.test.tsx` pins the shape counts and the `fill="none"`.
+
+**There is a copyright footer, it is on THREE screens, and both omissions are the decision
+(2026-08-11).** `src/components/Footer.tsx` renders on **landing, preparing and end**. There is no
+shell to hang it on — every screen is its own `min-h-dvh justify-center` column, so one footer in
+`App.tsx` or `main.tsx` is a sibling of a full-viewport column and gives every screen a permanent
+scrollbar. **Not the game screen**: that column is a height budget (`--card-height` exists so the HUD,
+card, caption and controls fit a phone) and a `mt-auto` variant is worse, because auto margins beat
+`justify-center` and the card stops being centred. **Not the crash screen**: `ErrorBoundary`'s fallback
+is a `role="alert"`, so its whole subtree is announced and the copyright would be read out to someone
+being told the game crashed. Two traps. The `<footer>` is inside each `<main>`, so it is **not** a
+`contentinfo` landmark and must not be given the role — and **Testing Library maps `footer` to
+`contentinfo` regardless of ancestry**, so a role query cannot check any of this (a `toBeNull()` was
+written first and failed against correct code). And its **"2026-present" is a year-shaped number on a
+pre-reveal surface**: three leak proxies asserting `not.toMatch(/\b(19|20)\d{2}\b/)` caught it, and they
+now subtract `COPYRIGHT_NOTICE` by exact string rather than loosening the pattern.
+
+**The app is "Playlist Jitster" as of 2026-08-11 — and the RENAME'S BOUNDARY is the part to know.**
+Renamed: `index.html`'s `<title>`, `manifest.name`/`short_name`, `LandingScreen`'s `<h1>`, README's
+heading, and `pdfFileName`'s prefix (`hitster-*.pdf` → `jitster-*.pdf`, because a downloads list is
+user-visible). **Never rename:** `hitster:session:v1` and `hitster:library:v1` (a renamed key is not
+read, so it silently discards a saved game and a curated library); every "Hitster" that means the
+BOARD GAME (`pdf-sheet.ts`'s 65 mm card, `reducer.ts` and `messages.ts` on dropping a yearless card,
+`CardRevealSide`, README's "shop-bought Hitster cards") — renaming those corrupts the reasoning; and
+`custom-hitster` as the package/repo name, in `MUSICBRAINZ_USER_AGENT`, in `api/hello`'s message and in
+the `https://hitster.example` test origins. The PWA ARTWORK is unaffected: the icons carry no wordmark,
+so "one identity everywhere" still holds under the new name.
 
 **Five developer decisions landed on 2026-08-05, after Phase 7 plan 1. Two of them reverse
 something `plan.md` had already resolved, so read these before "fixing" the code back:**
@@ -283,7 +332,7 @@ something `plan.md` had already resolved, so read these before "fixing" the code
 - The **lock-screen fix needs one re-check** on the phone: play, lock, confirm silence, unlock, confirm Play continues rather than restarting.
 - Phase 6: **progressive loading against a real preview deployment with Upstash configured** (step 15 of [`plan.phase-4-6-screens.md`](./docs/plans/plan.phase-4-6-screens.md), carried over from Phase 3) is not done. Nothing local models it: the shared cache and the 1 req/s gate are both backed by the Upstash variables, and without them the gate paces nothing. It also owes the **50-track cold-deck wall clock**, unmeasured since Phase 2, and a **count of `/api/year` requests under React 19 StrictMode** — `use-game-session.ts` has a double-crawl guard that nothing tests.
 - The two browser checks the 2026-08-05 decisions owed — **one swipe** for `popLayout`'s measurement (jsdom computes no layout, so it bails there no matter what the code does) and **one QR scan at the larger 14/18 size** — were both closed by the 2026-08-06 Android pass. **The square card of 2026-08-11 does not reopen the scan**, and that is by construction: the ratio went to 7/12 only because its denominator changed, so the code is displayed at the same 224px / ~140px it was scanned at.
-- The square card owes **three of the "three widths" rows** (2026-08-11): that the card is square at all three, that the control row's four gaps read as equal, and **one scan on the 240px floor card** — the face is `overflow-hidden`, so a QR that does not fit is cropped rather than visibly overflowing, and a cropped code fails to scan while looking almost right.
+- The square card and the enlarged QR owe **five of the "three widths" rows** (2026-08-11): that the card is square at all three, that the control row's four gaps read as equal, **one scan on the 240px floor card** (the face is `overflow-hidden`, so a QR that does not fit is cropped rather than visibly overflowing, and a cropped code fails to scan while looking almost right — and the enlargement has its least margin exactly there), that the relocated scan caption is legibly dim under a card with a bloom around it, and that the footer does not push Start off a 320px landing screen.
 - Phase 8: **nothing about the PDF export has been verified on paper.** The geometry, the pagination and the duplex mirror are unit-tested; the printer, the cut and a scan of a printed code are not. Six sharing/printing checks in [`docs/development.md`](./docs/development.md) §5.
 - Phase 7 (first half): **all four behavioural passes are outstanding** — reduced motion with the OS preference set, three widths, keyboard-only, and a screen reader over one flip — plus the before/after screenshot comparison. The environment is the reason, not the effort: jsdom has no media queries, no `matchMedia`, no layout and no a11y tree, so class-name assertions are the ceiling. **Prioritise the screen reader.** Checklists in [`docs/development.md`](./docs/development.md) §5, gaps in its §8.
 
