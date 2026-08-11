@@ -76,11 +76,16 @@
   --color-fg-muted: oklch(65% 0 none);
 
   /*
-   * NOT a contrast fix, and deliberately left failing. This is the `····`
-   * pending glyph only, which is `aria-hidden` decoration beside a text line
-   * that carries the whole meaning -- WCAG 1.4.3 exempts it, and raising it
-   * would be a visual change decision 1 reserves for Phase 8. Measured 1.94:1
-   * on `--color-surface-raised`.
+   * NOT a contrast fix, and deliberately left failing. Measured 1.94:1 on
+   * `--color-surface-raised`.
+   *
+   * CURRENTLY UNREFERENCED (2026-08-11). Its one consumer was the `····` pending
+   * glyph on the reveal face, which became a spinner -- so the exemption this
+   * comment records ("`aria-hidden` decoration beside a text line that carries
+   * the whole meaning", WCAG 1.4.3) no longer applies to anything. Kept because
+   * `@theme static` does not tree-shake and the next decorative glyph will want
+   * it; but it is NOT a general-purpose dim grey, and the exemption does not
+   * travel with it -- anything that is content needs 4.5:1.
    */
   --color-fg-decorative: oklch(43.9% 0 none); /* was neutral-600 */
 
@@ -346,6 +351,15 @@
   /* The preparing spinner's edge length. Exactly `size-8`, unchanged. */
   --size-spinner: 2rem;
 
+  /*
+   * The pending-year spinner on the reveal face, and the box that reserves its
+   * place. Deliberately EQUAL to `--text-year-pending` below: it replaced the
+   * `····` glyph that used to sit at that size (2026-08-11), and matching it is
+   * what keeps the year slot the same height in both states -- including under
+   * reduced motion, where the spinner is hidden and only the box is left.
+   */
+  --size-year-spinner: 3rem;
+
   /* --- Type scale -------------------------------------------------------- */
 
   /*
@@ -355,6 +369,12 @@
    */
   --text-year: 3.75rem;
   --text-year--line-height: 1;
+  /*
+   * Unreferenced since 2026-08-11 -- the `····` it sized is a spinner now. Kept
+   * as the RECORD OF THE HEIGHT: `--size-year-spinner` above is 3rem because
+   * this was, which is what keeps the year slot from resizing between states.
+   * Change them together or the card will jump on every reveal.
+   */
   --text-year-pending: 3rem;
   --text-year-pending--line-height: 1;
   --text-year-none: 1.875rem;
@@ -393,7 +413,7 @@
 
   /*
    * The control-bar icons' edge length, and the reason it is a token is that the
-   * four icons MUST agree.
+   * icons MUST agree.
    *
    * They were text characters -- ■ ▶ ❙❙ ↺ -- and their apparent size, weight and
    * baseline came from whichever font the OS resolved each codepoint in. ▶ came
@@ -401,14 +421,39 @@
    * ahead in the fallback chain it came out coloured. They are inline SVG now, so
    * a single length is what keeps them uniform; nothing about a glyph could be
    * made uniform from CSS.
+   *
+   * 1.75rem since 2026-08-11, up from 1.25rem. The bar dropped from four buttons
+   * to three when Restart went, and the remaining three were asked to be bigger.
    */
-  --size-control-icon: 1.25rem;
+  --size-control-icon: 1.75rem;
+
+  /*
+   * The control buttons' edge length. They are SQUARE, so with `rounded-full`
+   * this is a circle's diameter.
+   *
+   * Added 2026-08-11 with the enlargement. Before it the buttons had no size of
+   * their own at all -- `px-4 py-2` around a 1.25rem glyph, floored by
+   * `--size-touch-target`, so they were 44px because the FLOOR said so rather
+   * than because anything chose it. That is why "make the buttons bigger" had
+   * nowhere to be written down. `--size-touch-target` is still applied beside
+   * this and still does its job: if this token is ever lowered past 2.75rem the
+   * floor silently catches it, which is the correct failure.
+   */
+  --size-control-button: 3.5rem;
+
+  /*
+   * The Play button's buffering ring. Sits between the icon and the button edge
+   * so it reads as a ring AROUND the glyph rather than as a replacement for it --
+   * which matters because the glyph stays rendered underneath (reduced motion
+   * hides the spinner, and an empty button reads as broken).
+   */
+  --size-control-spinner: 2.5rem;
 
   --focus-ring-width: 2px;
   --focus-ring-offset: 2px;
 
   /*
-   * CONTRAST FIX 3 of 4. Play/Pause and Restart were `disabled:opacity-40`,
+   * CONTRAST FIX 3 of 4. Play/Pause was `disabled:opacity-40`,
    * which puts `--color-fg` at 3.46:1 over `--color-surface-raised` -- the
    * dimmest text in the app, on the exact card a player most wants to act on.
    * 0.6 measures 5.94:1 and is still plainly dimmer than an enabled control.

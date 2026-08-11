@@ -66,6 +66,7 @@
  * ===========================================================================
  */
 
+import { Spinner } from './Spinner';
 import type { Card } from '../../shared/types';
 
 export interface CardRevealSideProps {
@@ -110,13 +111,36 @@ function YearSlot({ card, isYearPending }: CardRevealSideProps) {
     return (
       <div className="flex flex-col items-center gap-2">
         {/*
-          `aria-hidden` decoration, and the one colour in the app deliberately left below 4.5:1
-          (1.94:1, measured). It is not content: the line beneath it carries the whole meaning, so
-          WCAG 1.4.3 exempts it and raising it would be a visual change Phase 8 owns.
+          ===================================================================
+           A SPINNER SINCE 2026-08-11. IT WAS FOUR STATIC DOTS -- `····` --
+           at `--text-year-pending`, which said "empty" rather than "working":
+           the one state on this face that is genuinely IN PROGRESS was the
+           only one drawn as something inert.
+
+           THE WRAPPER IS SIZED AND THE SPINNER IS NOT WHAT HOLDS THE SLOT
+           OPEN. `prefers-reduced-motion: reduce` HIDES the spinner outright
+           (`display: none` -- `Spinner` has the reasoning), so a bare spinner
+           here would collapse this slot to just the line below it and the
+           card's layout would jump between pending and resolved for those
+           players only. jsdom evaluates no media query, so nothing local
+           would catch that. The box keeps the height either way; it is the
+           `qr-placeholder` convention -- reserve the space, drop the motion.
+
+           NO `role="status"` ON EITHER NODE. The whole reveal is already one
+           live region (see the wrapper above), and a nested second one would
+           announce this card twice. `DeckActions` wraps its spinner in
+           `role="status"` because it is not inside one -- do not copy that
+           pattern here.
+
+           The announcement is unchanged: the spinner is `aria-hidden` exactly
+           as the dots were, so the line below remains the entire pending
+           announcement. It is asserted, and rewording it is the one edit that
+           breaks the app's only live region.
+          ===================================================================
         */}
-        <p className="text-year-pending font-bold text-fg-decorative" aria-hidden="true">
-          ····
-        </p>
+        <div className="flex size-(--size-year-spinner) items-center justify-center">
+          <Spinner sizeClassName="size-(--size-year-spinner)" />
+        </div>
         <p className="text-sm text-fg-secondary">Still looking up the year…</p>
       </div>
     );

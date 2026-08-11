@@ -83,7 +83,7 @@ reasoning in [`docs/architecture.md`](./docs/architecture.md) §3, "The combined
 
 **The app is only playable under `npx vercel dev`, never `pnpm dev`.** Vite serves `api/playlist.ts` as transpiled source with status 200, so pressing Start under `pnpm dev` shows the `unexpected-payload` error copy ("Spotify returned something we could not read"). That is the client behaving exactly as designed, not a bug — see [`docs/development.md`](./docs/development.md) §4.
 
-**The four controls are NOT on the card** (`src/components/CardControls.tsx`, rendered by `GameScreen` beside the stack), and putting them back would reintroduce a real bug: `gestureProps.onPointerUp` is bound to the card's outer element, so a pointer-up on a button inside the card is read as a tap and flips it — pressing Play revealed the answer. **Nothing interactive may be rendered inside `Card`.** Two tests assert the absence.
+**The three controls are NOT on the card** (`src/components/CardControls.tsx`, rendered by `GameScreen` beside the stack), and putting them back would reintroduce a real bug: `gestureProps.onPointerUp` is bound to the card's outer element, so a pointer-up on a button inside the card is read as a tap and flips it — pressing Play revealed the answer. **Nothing interactive may be rendered inside `Card`.** Two tests assert the absence.
 
 **An eighth decision landed on 2026-08-06 and it reverses half of plan 2's decision 7: the share
 link, the save and the PDF export are reachable MID-GAME.** They were on the end screen and
@@ -96,8 +96,9 @@ the pointer while **guard 4 in `GameScreen` suspends the window key handler**, e
 `ExitConfirmDialog` already did. Three things to know before editing any of it: **`DeckActions` is
 shared by both screens**, so a change to the copy or the buttons lands in two places at once and its
 tests live once, in `DeckActions.test.tsx`; **guard 4 is now an OR over two flags** and a third
-dialog must be added to it; and **`CardControls` has a fourth button**, which is why its
-`aria-label` list is asserted exactly (`['Exit game', 'Play', 'Restart', 'Keep this deck']`) — the
+dialog must be added to it; and **`CardControls` gained a button**, which is why its
+`aria-label` list is asserted exactly (now `['Exit game', 'Play', 'Keep this deck']`, since Restart
+was removed on 2026-08-11) — the
 bar is a leak surface beside an unflipped card, and "Keep this deck" is safe because it names the
 deck rather than the card. The cost is measured: **+4.8 kB gzip on the initial path**, because
 `DeckActions` becomes a shared chunk instead of living inside `index`.
@@ -138,9 +139,15 @@ reached before either dynamic import.
 **`src/components/Spinner.tsx` exists for the `data-motion` hook, not for its four class names.**
 Under `prefers-reduced-motion: reduce` the spinner is HIDDEN rather than stopped, keyed on
 `data-motion="spinner"` in `src/index.css` — so a hand-rolled second copy is one typo away from an
-element the rule does not match, and **nothing would fail**: jsdom evaluates no media query. Both
-callers (`PreparingScreen`, `DeckActions`' wait) must keep saying everything the spinner conveys in
-the text beside it, because a reduced-motion player sees no spinner at all.
+element the rule does not match, and **nothing would fail**: jsdom evaluates no media query. Every
+caller must keep saying everything the spinner conveys in the text beside it, because a
+reduced-motion player sees no spinner at all. **There are now four, and the two added on 2026-08-11
+are both inside a fixed-size box rather than free-standing**, because hiding a spinner that is the
+only thing in its container leaves an EMPTY container: the Play button keeps its Play/Pause icon
+rendered underneath the spinner, and the pending-year slot wraps it in a
+`size-(--size-year-spinner)` box so the card does not change height on reveal. `Spinner` takes
+`sizeClassName` and deliberately nothing else — a general `className` would let a caller pass
+`animate-none` and re-open the drift the component exists to close.
 
 **The end screen's second button says "Home", not "New playlist"** (renamed 2026-08-06). The landing
 screen is also where the saved-playlist library is and where a shared link is pasted, so the old

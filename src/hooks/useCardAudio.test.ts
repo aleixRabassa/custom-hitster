@@ -208,18 +208,37 @@ describe('useCardAudio', () => {
     ]);
   });
 
-  it('should reset currentTime to zero and play again on restart, without advancing', () => {
+  it('should rewind to zero on ended so the next play replays the track', () => {
+    // ===================================================================
+    //  THIS IS THE RESTART BUTTON'S BEHAVIOUR, MOVED (2026-08-11).
+    //
+    //  `restart()` was removed with the button it served. Play is now the
+    //  only way to hear a track twice, and a `play()` on an element parked
+    //  at the end of its media relies on the browser's implicit "seek to 0
+    //  first" convention to do anything at all -- which jsdom does not
+    //  implement and which is not worth depending on. Rewinding on `ended`
+    //  makes the replay explicit.
+    //
+    //  The src is deliberately untouched: this is the ONE rewind that is
+    //  not also a stop, so the loaded media stays and the replay costs no
+    //  second fetch.
+    // ===================================================================
     const { box } = renderAudioHook(highConfidenceCard.previewUrl);
     run(() => controls(box).play());
     box.element.currentTime = 20;
     calls = [];
 
-    run(() => controls(box).restart());
+    run(() => {
+      box.element.dispatchEvent(new Event('ended'));
+    });
 
     expect(box.element.currentTime).toBe(0);
-    expect(calls).toEqual([`play:${highConfidenceCard.previewUrl}`]);
-    // Restart is not Next: the src -- i.e. the card -- is untouched.
     expect(box.element.getAttribute('src')).toBe(highConfidenceCard.previewUrl);
+    expect(controls(box).isPlaying).toBe(false);
+
+    // And the replay itself works from there.
+    run(() => controls(box).play());
+    expect(calls).toEqual([`play:${highConfidenceCard.previewUrl}`]);
     expect(controls(box).isPlaying).toBe(true);
   });
 
@@ -313,6 +332,140 @@ describe('useCardAudio', () => {
     expect(box.element.getAttribute('src')).toBe(highConfidenceCard.previewUrl);
   });
 
+  it('should report loading from the press until sound actually starts', () => {
+    // `preload="none"` means the first press starts a cold fetch. jsdom leaves `readyState` at 0,
+    // which is exactly the cold case, so the spinner is expected here.
+    const { box } = renderAudioHook(highConfidenceCard.previewUrl);
+
+    expect(controls(box).isLoading).toBe(false);
+
+    run(() => controls(box).play());
+    expect(controls(box).isLoading).toBe(true);
+    // Intent is optimistic, so the button flips to Pause immediately -- the two are different
+    // facts, and the gap between them is the whole reason `isLoading` exists.
+    expect(controls(box).isPlaying).toBe(true);
+
+    // `playing` is the ONLY event that means audio is coming out. Not the play() promise, which
+    // resolves before the first sample on a cold element.
+    run(() => {
+      box.element.dispatchEvent(new Event('playing'));
+    });
+
+    expect(controls(box).isLoading).toBe(false);
+    expect(controls(box).isPlaying).toBe(true);
+  });
+
+  it('should ignore a pause event that arrives while a requested play is still loading', () => {
+    // ===================================================================
+    //  THIS IS THE "FIRST CLICK ON PLAY DOES NOTHING" REGRESSION TEST.
+    //
+    //  A `pause` event can land while a cold fetch is in flight -- the
+    //  element settling after a `src` swap, or a load being interrupted.
+    //  The handler used to clear `isPlaying` unconditionally, so the button
+    //  snapped back to "Play" while the audio was genuinely on its way. The
+    //  player pressed again, that second press was now a PAUSE, and the two
+    //  cancelled out -- which is why pressing twice made it worse.
+    //
+    //  Inverting the `wantsPlayRef` guard puts the bug straight back, and
+    //  nothing else in this suite would notice.
+    // ===================================================================
+    const { box } = renderAudioHook(highConfidenceCard.previewUrl);
+    run(() => controls(box).play());
+
+    run(() => {
+      box.element.dispatchEvent(new Event('pause'));
+    });
+
+    expect(controls(box).isPlaying).toBe(true);
+    expect(controls(box).isLoading).toBe(true);
+  });
+
+  it('should honour a pause event once the player has asked to stop', () => {
+    // The other half of the guard: a DELIBERATE pause lowers the intent first, so the same event
+    // is acted on. A guard that ignored every pause would leave the button stuck on "Pause".
+    const { box } = renderAudioHook(highConfidenceCard.previewUrl);
+    run(() => controls(box).play());
+    run(() => controls(box).pause());
+
+    run(() => {
+      box.element.dispatchEvent(new Event('pause'));
+    });
+
+    expect(controls(box).isPlaying).toBe(false);
+    expect(controls(box).isLoading).toBe(false);
+  });
+
+  it('should clear loading when the media errors rather than spinning forever', () => {
+    // A preview URL that 404s emits `error` and never `playing`. Without this the spinner would
+    // run for the rest of the card.
+    const { box } = renderAudioHook(highConfidenceCard.previewUrl);
+    run(() => controls(box).play());
+
+    run(() => {
+      box.element.dispatchEvent(new Event('error'));
+    });
+
+    expect(controls(box).isLoading).toBe(false);
+    expect(controls(box).isPlaying).toBe(false);
+  });
+
+  it('should show loading again when playback rebuffers mid-track', () => {
+    const { box } = renderAudioHook(highConfidenceCard.previewUrl);
+    run(() => controls(box).play());
+    run(() => {
+      box.element.dispatchEvent(new Event('playing'));
+    });
+    expect(controls(box).isLoading).toBe(false);
+
+    run(() => {
+      box.element.dispatchEvent(new Event('waiting'));
+    });
+
+    expect(controls(box).isLoading).toBe(true);
+  });
+
+  it('should not report loading for a waiting event nobody asked for', () => {
+    // `waiting` can fire while the element is idle. A spinner on a button the player has not
+    // pressed is a lie about what the app is doing.
+    const { box } = renderAudioHook(highConfidenceCard.previewUrl);
+
+    run(() => {
+      box.element.dispatchEvent(new Event('waiting'));
+    });
+
+    expect(controls(box).isLoading).toBe(false);
+  });
+
+  it('should clear loading on stop and on a card change', () => {
+    const { box, setUrl } = renderAudioHook(highConfidenceCard.previewUrl);
+    run(() => controls(box).play());
+    expect(controls(box).isLoading).toBe(true);
+
+    run(() => controls(box).stop());
+    expect(controls(box).isLoading).toBe(false);
+
+    run(() => controls(box).play());
+    expect(controls(box).isLoading).toBe(true);
+
+    setUrl('https://p.scdn.co/mp3-preview/next-card');
+    expect(controls(box).isLoading).toBe(false);
+  });
+
+  it('should clear loading when the document goes hidden', () => {
+    // The lock-screen rule from 2026-08-06. A phone locked mid-fetch must not come back to a
+    // spinning button.
+    const { box } = renderAudioHook(highConfidenceCard.previewUrl);
+    run(() => controls(box).play());
+
+    hide(true);
+    run(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+
+    expect(controls(box).isLoading).toBe(false);
+    expect(controls(box).isPlaying).toBe(false);
+  });
+
   it('should swallow a rejected play promise', async () => {
     // An AbortError is NORMAL when the src swaps mid-load, and blocked autoplay rejects too.
     // An uncaught rejection here would surface as an unhandled rejection rather than a
@@ -356,7 +509,7 @@ describe('useCardAudio', () => {
 
     const { box, setUrl } = renderAudioHook(highConfidenceCard.previewUrl);
     run(() => controls(box).play());
-    run(() => controls(box).restart());
+    run(() => controls(box).pause());
     setUrl('https://p.scdn.co/mp3-preview/next-card');
     run(() => controls(box).stop());
 

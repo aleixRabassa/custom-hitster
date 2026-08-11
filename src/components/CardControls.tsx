@@ -1,6 +1,25 @@
 /**
- * The four session controls -- Exit, Play/Pause, Restart, Keep this deck -- as a bar BESIDE the
- * card rather than on its face.
+ * The three session controls -- Exit, Play/Pause, Keep this deck -- as a bar BESIDE the card
+ * rather than on its face.
+ *
+ * ===========================================================================
+ *  THERE WAS A FOURTH, AND IT WAS REMOVED ON 2026-08-11: RESTART SONG.
+ *
+ *  It seeked to 0:00 and replayed. Two reasons it went, and the second is the
+ *  one that makes re-adding it a regression rather than a preference:
+ *
+ *  1. It was the only control that duplicated another one. A preview runs to its
+ *     natural end and `useCardAudio` now rewinds to 0:00 on `ended`, so Play IS
+ *     the replay -- pressing it on a finished track starts the song again. A
+ *     second button for the same outcome is a third of the bar spent twice.
+ *  2. The bar sits under a thumb that is mid-swipe. Fewer, bigger targets is the
+ *     whole point of the resize that landed with this, and Restart was the least
+ *     used of the four while being adjacent to Play.
+ *
+ *  The hook's `restart()` went with it rather than being left as dead API.
+ *  Reinstating the button means reinstating that too -- and re-checking the
+ *  `ended` rewind, which is where its behaviour now lives.
+ * ===========================================================================
  *
  * ===========================================================================
  *  THEY LIVE OUTSIDE THE CARD BECAUSE A BUTTON PRESS IS A TAP, AND A TAP IS A
@@ -41,13 +60,14 @@
  *
  * The same rule `CardHiddenSide` documents applies, for the same reason: this bar sits next to
  * an unflipped card. No label, `aria-label`, `title` or `data-*` attribute may derive from
- * `title`, `artist`, `year` or `durationMs`. All four names below are generic and asserted to
+ * `title`, `artist`, `year` or `durationMs`. All three names below are generic and asserted to
  * be exactly so -- including "Keep this deck", which names the DECK rather than the card.
  */
 
 import type { ReactNode } from 'react';
 
 import type { CardAudioControls } from '../hooks/useCardAudio';
+import { Spinner } from './Spinner';
 
 /**
  * Every button here carries the same utilities, so they live in one string. Only the glyph
@@ -62,13 +82,20 @@ import type { CardAudioControls } from '../hooks/useCardAudio';
  * `disabled:opacity-(--opacity-disabled)` replaces `disabled:opacity-40`, which put the glyph at
  * 3.46:1 against `--color-surface-raised` -- the dimmest text in the app, on the one card a player
  * most wants to act on. The token measures 5.94:1.
+ *
+ * `size-(--size-control-button)` (2026-08-11) replaced `px-4 py-2`. The buttons are now a fixed
+ * SQUARE -- with `rounded-full`, a circle -- rather than a pill sized by its padding, which is what
+ * lets three of them be visibly bigger without the row drifting off-centre. `touch-target` stays
+ * beside it and is not redundant: it is a `min-height`/`min-width` floor, so it keeps guaranteeing
+ * the WCAG 2.5.5 minimum if the button token is ever lowered.
  */
 const BUTTON_CLASSES =
-  'flex touch-target items-center justify-center rounded-full bg-surface-raised px-4 py-2 ' +
+  'relative flex touch-target size-(--size-control-button) items-center justify-center ' +
+  'rounded-full bg-surface-raised ' +
   'hover:bg-surface-raised-hover focus-visible:focus-ring ' +
   'disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)';
 
-/** Play/Pause and Restart: the app's ordinary foreground. */
+/** Play/Pause: the app's ordinary foreground. */
 const AUDIO_BUTTON_CLASSES = `${BUTTON_CLASSES} text-fg`;
 
 /**
@@ -83,7 +110,7 @@ const AUDIO_BUTTON_CLASSES = `${BUTTON_CLASSES} text-fg`;
 const EXIT_BUTTON_CLASSES = `${BUTTON_CLASSES} text-danger`;
 
 /**
- * The one `<svg>` wrapper all five icons share.
+ * The one `<svg>` wrapper all four icons share.
  *
  * ===========================================================================
  *  ICONS, NOT TEXT GLYPHS -- AND THAT IS WHAT MAKES THEM MATCH.
@@ -161,16 +188,6 @@ function PauseIcon() {
   );
 }
 
-/** Replays from 0:00, so the arrow turns BACK -- anticlockwise, not a clockwise "next". */
-function RestartIcon() {
-  return (
-    <ControlIcon>
-      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-      <path d="M3 3v5h5" />
-    </ControlIcon>
-  );
-}
-
 /**
  * Share / save / print, drawn as the standard "out of a box, upwards" export arrow.
  *
@@ -213,7 +230,7 @@ export interface CardControlsProps {
 }
 
 export function CardControls({ audio, onExit, onKeepDeck }: CardControlsProps) {
-  const { canPlay, isPlaying, play, pause, restart } = audio;
+  const { canPlay, isPlaying, isLoading, play, pause } = audio;
 
   return (
     <div className="flex flex-col items-center gap-2">
@@ -235,31 +252,43 @@ export function CardControls({ audio, onExit, onKeepDeck }: CardControlsProps) {
         {/*
           One button that toggles, not two. `aria-label` swaps with the state so a screen
           reader hears what the button will DO -- and both labels are generic.
+
+          IT IS DISABLED ONLY FOR A CARD WITH NO PREVIEW, NEVER WHILE LOADING. A press during a
+          cold fetch is the player asking to CANCEL, and it works: the button is showing Pause by
+          then, so the press pauses and lowers the intent. Disabling it during the wait is the
+          obvious-looking change that recreates the original bug in a new shape -- the press that
+          gets ignored just moves from the first one to the second.
+
+          `aria-busy` rather than a third label: the button's ACTION while loading is still
+          "pause", so changing the label would misdescribe it, and a name that changed under a
+          screen reader mid-press is worse than a busy state beside a stable one.
         */}
         <button
           type="button"
           onClick={isPlaying ? pause : play}
           disabled={!canPlay}
           aria-label={isPlaying ? 'Pause' : 'Play'}
+          aria-busy={isLoading}
           className={AUDIO_BUTTON_CLASSES}
         >
           {isPlaying ? <PauseIcon /> : <PlayIcon />}
-        </button>
 
-        {/* Restart replays from 0:00. It is NOT next-card -- that is a swipe. */}
-        <button
-          type="button"
-          onClick={restart}
-          disabled={!canPlay}
-          aria-label="Restart"
-          className={AUDIO_BUTTON_CLASSES}
-        >
-          <RestartIcon />
+          {/*
+            The icon above stays rendered UNDERNEATH this. Reduced motion hides the spinner
+            outright (`Spinner` has the reasoning), so a button whose only content were the
+            spinner would render as an empty circle -- the overlay keeps a glyph in it either way.
+            `pointer-events-none` so the ring never eats the press it is reporting on.
+          */}
+          {isLoading ? (
+            <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+              <Spinner sizeClassName="size-(--size-control-spinner)" />
+            </span>
+          ) : null}
         </button>
 
         {/*
           Last in the row, and never disabled: it depends on the DECK rather than on this card, so a
-          card with no preview -- which disables the two buttons before it -- has no bearing on it.
+          card with no preview -- which disables the button before it -- has no bearing on it.
           Furthest from Exit as well, which is the position a button a player presses on purpose
           should have when the one that destroys the session is at the other end.
         */}

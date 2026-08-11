@@ -20,9 +20,9 @@ function stubAudio(overrides: Partial<CardAudioControls> = {}): CardAudioControl
   return {
     canPlay: true,
     isPlaying: false,
+    isLoading: false,
     play: vi.fn(),
     pause: vi.fn(),
-    restart: vi.fn(),
     stop: vi.fn(),
     ...overrides,
   };
@@ -51,13 +51,10 @@ function controls(
 describe('CardControls', () => {
   afterEach(cleanup);
 
-  it('should disable play/pause and restart when the track has no preview', () => {
+  it('should disable play/pause when the track has no preview', () => {
     render(controls({ audio: stubAudio({ canPlay: false }) }));
 
     expect((screen.getByRole('button', { name: 'Play' }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole('button', { name: 'Restart' }) as HTMLButtonElement).disabled).toBe(
-      true,
-    );
   });
 
   it('should keep exit enabled when the track has no preview', () => {
@@ -80,13 +77,10 @@ describe('CardControls', () => {
     ).toBe(false);
   });
 
-  it('should enable play/pause and restart when the track has a preview', () => {
+  it('should enable play/pause when the track has a preview', () => {
     render(controls());
 
     expect((screen.getByRole('button', { name: 'Play' }) as HTMLButtonElement).disabled).toBe(
-      false,
-    );
-    expect((screen.getByRole('button', { name: 'Restart' }) as HTMLButtonElement).disabled).toBe(
       false,
     );
   });
@@ -109,16 +103,19 @@ describe('CardControls', () => {
     // "Play preview of …" edit. This bar sits beside an UNFLIPPED card, so it is a leak
     // surface exactly as the card's own face is.
     //
-    // "Keep this deck" is on the list for the same reason the other three are, and it passes the
+    // "Keep this deck" is on the list for the same reason the other two are, and it passes the
     // same test: it names the DECK, which the player chose, rather than the card, which they have
     // not seen yet.
+    //
+    // "Restart" left the list on 2026-08-11 when the button was removed -- `CardControls`' header
+    // has the reasoning, and Play now doubles as the replay.
     render(controls());
 
     const names = screen
       .getAllByRole('button')
       .map((button) => button.getAttribute('aria-label') ?? button.textContent);
 
-    expect(names).toEqual(['Exit game', 'Play', 'Restart', 'Keep this deck']);
+    expect(names).toEqual(['Exit game', 'Play', 'Keep this deck']);
   });
 
   it('should not leak the current track anywhere in the DOM', () => {
@@ -187,14 +184,19 @@ describe('CardControls', () => {
     //  jsdom renders none of this, so the assertion is at class-name level
     //  with the usual caveat: it proves each button holds one SVG carrying
     //  the shared size token, not that the result looks even. What it
-    //  catches is the regression that matters -- a fifth control, or a
+    //  catches is the regression that matters -- a fourth control, or a
     //  replacement icon, sized by hand. The deck-actions button added on
     //  2026-08-06 is exactly that case, and it went through `ControlIcon`.
+    //
+    //  NOTE this runs in the DEFAULT state, where the Play button holds no
+    //  spinner. The loading state deliberately puts a second element in that
+    //  button -- see the buffering tests below, which pin that the icon stays
+    //  beside it rather than being replaced.
     // ===================================================================
     render(controls());
 
     const buttons = screen.getAllByRole('button');
-    expect(buttons).toHaveLength(4);
+    expect(buttons).toHaveLength(3);
 
     for (const button of buttons) {
       // No text glyph left anywhere: a stray character beside an icon is how the old sizing
@@ -228,7 +230,7 @@ describe('CardControls', () => {
 
   it('should colour the exit control as the destructive one and leave the others alone', () => {
     // Exit is the only control here that ENDS something, and red is how it says so. The others
-    // must NOT pick the colour up: four red buttons signals nothing.
+    // must NOT pick the colour up: three red buttons signals nothing.
     //
     // `--color-danger` measures 5.7:1 on `--color-surface-raised`, comfortably past the 3:1 WCAG
     // 1.4.11 asks of a non-text indicator -- computed, not eyeballed, and not observable in jsdom.
@@ -236,7 +238,7 @@ describe('CardControls', () => {
 
     expect(screen.getByRole('button', { name: 'Exit game' }).className).toContain('text-danger');
 
-    for (const name of ['Play', 'Restart', 'Keep this deck']) {
+    for (const name of ['Play', 'Keep this deck']) {
       const button = screen.getByRole('button', { name });
       expect(button.className).toContain('text-fg');
       expect(button.className).not.toContain('text-danger');
@@ -245,13 +247,13 @@ describe('CardControls', () => {
 
   it('should give every control a focus-visible style', () => {
     // Class-name level, with the caveat spelled out in `LandingScreen.test.tsx`: it proves the
-    // utility is present, not that the ring is legible. What it catches is a fifth control added
+    // utility is present, not that the ring is legible. What it catches is a fourth control added
     // without one. `focus-visible` rather than `focus` so a mouse press on Play does not leave a
     // ring sitting on the card for the rest of the game.
     render(controls());
 
     const buttons = screen.getAllByRole('button');
-    expect(buttons).toHaveLength(4);
+    expect(buttons).toHaveLength(3);
     for (const button of buttons) {
       expect(button.className).toContain('focus-visible:focus-ring');
     }
@@ -272,19 +274,92 @@ describe('CardControls', () => {
     }
   });
 
-  it('should invoke play, pause, and restart on their controls', () => {
+  it('should size every control from the button token as well as the touch floor', () => {
+    // The enlargement of 2026-08-11. `touch-target` is a `min-*` FLOOR, so before this the buttons
+    // were 44px because the floor said so rather than because anything chose a size -- which is
+    // why "make them bigger" had nowhere to be written. Both are asserted: the token is the size,
+    // the floor is the guarantee, and dropping either is a silent regression in jsdom.
+    render(controls());
+
+    for (const button of screen.getAllByRole('button')) {
+      expect(button.className).toContain('size-(--size-control-button)');
+      expect(button.className).toContain('touch-target');
+    }
+  });
+
+  it('should invoke play and pause on the toggle', () => {
     const audio = stubAudio();
     const { rerender } = render(controls({ audio }));
 
     screen.getByRole('button', { name: 'Play' }).click();
     expect(audio.play).toHaveBeenCalledTimes(1);
 
-    screen.getByRole('button', { name: 'Restart' }).click();
-    expect(audio.restart).toHaveBeenCalledTimes(1);
-
     const playing = stubAudio({ isPlaying: true });
     rerender(controls({ audio: playing }));
     screen.getByRole('button', { name: 'Pause' }).click();
     expect(playing.pause).toHaveBeenCalledTimes(1);
+  });
+
+  it('should not render a restart control', () => {
+    // Removed 2026-08-11. Asserted by ABSENCE rather than left to the exhaustive-names test alone,
+    // because a re-added Restart would also need `useCardAudio.restart` back and the `ended` rewind
+    // re-checked -- this is the assertion that says the removal was a decision.
+    render(controls());
+
+    expect(screen.queryByRole('button', { name: 'Restart' })).toBeNull();
+  });
+
+  it('should show a spinner in the play button while the preview is loading', () => {
+    // The fix for "the first press on Play does nothing". The element is `preload="none"`, so the
+    // first press starts a cold fetch and there was no feedback for it at all.
+    const { container } = render(controls({ audio: stubAudio({ isPlaying: true, isLoading: true }) }));
+
+    const play = screen.getByRole('button', { name: 'Pause' });
+    expect(play.querySelector('[data-motion="spinner"]')).not.toBeNull();
+    // Nowhere else: the other two controls are not waiting on anything.
+    expect(container.querySelectorAll('[data-motion="spinner"]')).toHaveLength(1);
+  });
+
+  it('should render no spinner when the preview is not loading', () => {
+    const { container } = render(controls());
+
+    expect(container.querySelector('[data-motion="spinner"]')).toBeNull();
+  });
+
+  it('should keep the icon under the spinner so the button is never empty', () => {
+    // ===================================================================
+    //  THE REDUCED-MOTION TRAP, AND IT IS THE REASON THIS TEST EXISTS.
+    //
+    //  `prefers-reduced-motion: reduce` HIDES the spinner outright
+    //  (`display: none`, keyed on `data-motion="spinner"`) rather than
+    //  stopping it. A button whose only content was the spinner would
+    //  therefore render as a completely EMPTY circle for those players --
+    //  and jsdom evaluates no media query, so nothing else here could
+    //  catch it. Removing the node is how both existing spinner callers
+    //  test the same rule.
+    // ===================================================================
+    render(controls({ audio: stubAudio({ isPlaying: true, isLoading: true }) }));
+
+    const play = screen.getByRole('button', { name: 'Pause' });
+    play.querySelector('[data-motion="spinner"]')?.remove();
+
+    expect(play.querySelectorAll('svg')).toHaveLength(1);
+  });
+
+  it('should keep the play control pressable while loading', () => {
+    // "Always pressable" is the requirement, and disabling during the wait is the obvious-looking
+    // change that recreates the original bug one press later: the press that gets swallowed simply
+    // moves from the first to the second. A press here CANCELS, which is why it is `pause`.
+    // `isPlaying` is true alongside `isLoading`: the hook sets the intent optimistically on the
+    // press, so the button is already showing Pause while the fetch is in flight.
+    const audio = stubAudio({ isPlaying: true, isLoading: true });
+    render(controls({ audio }));
+
+    const play = screen.getByRole('button', { name: 'Pause' });
+    expect((play as HTMLButtonElement).disabled).toBe(false);
+    expect(play.getAttribute('aria-busy')).toBe('true');
+
+    play.click();
+    expect(audio.pause).toHaveBeenCalledTimes(1);
   });
 });

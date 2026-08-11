@@ -22,14 +22,35 @@
  *  nothing here -- but it is the reason both callers put a line of copy next to
  *  it rather than leaning on the spinner to say "working".
  * ===========================================================================
+ *
+ * ## `sizeClassName`, and why it is a size hole rather than a `className` hole
+ *
+ * The third caller (2026-08-11) is the Play button's buffering state, and a control button is
+ * 2.5rem across the whole bar -- the 2rem default would fill it edge to edge. So the SIZE is
+ * parameterised and nothing else is: the border, the roundness, `animate-spin` and above all
+ * `data-motion="spinner"` stay welded in, because the whole point of this component is that the
+ * reduced-motion hook cannot be forgotten. A general `className` prop would let a caller pass
+ * `animate-none` or drop the border and re-open exactly the drift this file exists to close.
+ *
+ * NOTE for the button caller specifically: because reduced motion HIDES this, a button whose only
+ * content is a spinner renders EMPTY. `CardControls` keeps the Play/Pause icon rendered underneath
+ * and overlays the spinner on top, so the button always has a glyph.
  */
 
-export function Spinner() {
+export interface SpinnerProps {
+  /**
+   * Tailwind size utility, e.g. `size-(--size-control-spinner)`. Defaults to the 2rem
+   * full-screen size both original callers use.
+   */
+  sizeClassName?: string;
+}
+
+export function Spinner({ sizeClassName = 'size-(--size-spinner)' }: SpinnerProps = {}) {
   return (
     <div
       aria-hidden="true"
       data-motion="spinner"
-      className="size-(--size-spinner) animate-spin rounded-full border-2 border-border-strong border-t-accent-bright"
+      className={`${sizeClassName} animate-spin rounded-full border-2 border-border-strong border-t-accent-bright`}
     />
   );
 }

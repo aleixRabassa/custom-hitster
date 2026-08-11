@@ -57,6 +57,33 @@ describe('CardRevealSide', () => {
     expect(screen.queryByText(/year unknown/i)).toBeNull();
   });
 
+  it('should draw the pending year as a spinner that survives reduced motion', () => {
+    // Replaced the static `····` glyph on 2026-08-11: the one state on this face that is actually
+    // in progress was the only one drawn as something inert.
+    //
+    // Two things are pinned beyond its presence, and both are invisible to jsdom otherwise:
+    //
+    // 1. NO SECOND LIVE REGION. The whole reveal is already one `role="status"`; a nested one
+    //    would announce the card twice. `getAllByRole` is exhaustive on purpose.
+    // 2. THE SLOT KEEPS ITS HEIGHT. Reduced motion `display: none`s the spinner, so the sized
+    //    wrapper -- not the spinner -- is what stops the card jumping between pending and
+    //    resolved. Removing the node is how the other spinner callers test the same rule.
+    const { container } = render(<CardRevealSide card={pendingYearCard} isYearPending={true} />);
+
+    const spinner = container.querySelector('[data-motion="spinner"]');
+    expect(spinner).not.toBeNull();
+    expect(spinner?.getAttribute('aria-hidden')).toBe('true');
+
+    expect(screen.getAllByRole('status')).toHaveLength(1);
+
+    const box = spinner?.parentElement;
+    spinner?.remove();
+    expect(box?.className).toContain('size-(--size-year-spinner)');
+
+    // The announcement is untouched by any of it -- this line is the whole pending announcement.
+    expect(screen.getByRole('status').textContent).toMatch(/still looking up the year/i);
+  });
+
   it('should not treat a null year as pending', () => {
     // `null` and `undefined` are different states, and `isYearPending` is false for `null`.
     // A component that tested `!card.year` would collapse them and show a spinner forever.

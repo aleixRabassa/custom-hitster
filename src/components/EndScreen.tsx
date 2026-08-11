@@ -23,6 +23,7 @@
  */
 
 import { DeckActions } from './DeckActions';
+import { truncatePlaylistName } from '../game/deck-merge';
 import type { Card, PlaylistSummary } from '../../shared/types';
 
 export interface EndScreenProps {
@@ -125,11 +126,15 @@ export function EndScreen({
 
           Names only -- see the `playlists` prop. A `<ul>` rather than a joined sentence, because
           five titles run together are unreadable and a list is what a screen reader can navigate.
+
+          Truncated through the same helper the label above uses (2026-08-11), so the two cannot
+          disagree about how long a playlist name is allowed to be -- this list sits directly under
+          a label whose first entry IS the first of these names.
         */}
         {playlists.length < 2 ? null : (
           <ul className="flex flex-col gap-0.5 text-xs text-fg-muted">
             {playlists.map((playlist) => (
-              <li key={playlist.id}>{playlist.name}</li>
+              <li key={playlist.id}>{truncatePlaylistName(playlist.name)}</li>
             ))}
           </ul>
         )}

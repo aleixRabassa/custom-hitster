@@ -191,6 +191,37 @@ describe('deckLabel', () => {
     );
   });
 
+  it('should cut a long playlist name at twenty characters', () => {
+    // 24 characters in, 20 plus an ellipsis out. A Spotify name can be 100, and before this only
+    // the HUD limited it -- in CSS, which the PDF filename and the saved library never see.
+    expect(deckLabel([playlist('one', 'Songs For The Long Drive')])).toBe('Songs For The Long D…');
+  });
+
+  it('should leave a name of exactly twenty characters alone', () => {
+    // The boundary is inclusive: 20 fits, so nothing is lost and no ellipsis is added.
+    const exactly = 'Twenty Characters!!!';
+    expect(exactly).toHaveLength(20);
+    expect(deckLabel([playlist('one', exactly)])).toBe(exactly);
+  });
+
+  it('should keep the count intact when the name is cut', () => {
+    // The cap applies to the NAME, never to the finished label. A label that lost its "+2 more"
+    // would claim a three-playlist deck is one playlist -- which is worse than a long string.
+    expect(
+      deckLabel([
+        playlist('one', 'Songs For The Long Drive'),
+        playlist('two', 'Disco'),
+        playlist('three'),
+      ]),
+    ).toBe('Songs For The Long D… +2 more');
+  });
+
+  it('should not leave a dangling space before the ellipsis', () => {
+    // The cut lands exactly on a space here ("Chill Vibes For You |Now"), so a slice without the
+    // `trimEnd` would render "Chill Vibes For You …" with a gap before the dots.
+    expect(deckLabel([playlist('one', 'Chill Vibes For You Now')])).toBe('Chill Vibes For You…');
+  });
+
   it('should return an empty string for no playlists', () => {
     // The `idle` case. This is what the dropped `playlist: null` sentinel used to cover, and a
     // caller rendering it gets `''` rather than a crash.

@@ -2686,3 +2686,94 @@ lesson being that a padded child inside a `gap`-ed flex column is spacing declar
 **Unverified.** Nothing here has been printed. A partial export's honesty is a claim about paper, and
 row 13 of `docs/development.md` §5 (watch the wait against a real crawl) now also covers pressing
 "Print so far" mid-crawl and counting what comes out.
+
+## 2026-08-11 — The Play button's "first click does nothing" was a `pause` EVENT, not a missing await
+
+Reported as "the first click on Play is often not detected". The reflex diagnosis is that
+`element.play()` needs awaiting, or that the element is not ready — both wrong, and the second one
+is a trap: `useCardAudio.play()` deliberately calls `play()` synchronously inside the click
+handler's own call stack, because the autoplay grant does not survive an `await`. Adding a
+`readyState` gate or a promise chain there would have broken mobile Safari to fix nothing.
+
+The actual mechanism is two separate faults that compounded:
+
+1. **No feedback for the cold fetch.** The element is `preload="none"` (deliberately — a 100-card
+   deck must not pull 100 previews), so the first press on any card starts a network fetch.
+   `setIsPlaying(true)` flipped the icon to Pause instantly and then nothing happened, audibly or
+   visually, for the length of the fetch. The press read as ignored.
+2. **`onPause` cleared the state unconditionally.** A `pause` event can arrive while that fetch is
+   in flight. The old handler set `isPlaying` false on any pause, so the button snapped back to
+   "Play" while the audio was genuinely still coming. The player then pressed again — and because
+   the toggle is `isPlaying ? pause : play`, that second press was a PAUSE, which aborted the
+   in-flight load. **This is why pressing twice made it worse rather than better**, which is the
+   detail that identifies the bug: a pure latency problem gets better when you wait or press again.
+
+Fix is `wantsPlayRef` (intent) held separately from `isPlaying` (state). `onPause` returns early
+while intent is true, so a pause nobody asked for is ignored; every deliberate stop — `pause()`,
+`stop()`, the visibility pause, `ended` — lowers the ref FIRST, which is what keeps those paths
+working. **The ordering is load-bearing**: lowering the ref after `element.pause()` races the event
+and leaves the button stuck on Pause.
+
+`isLoading` is now a separate returned value driven by real media events (`playing` clears it,
+`waiting` sets it, `error` clears it so a dead URL cannot spin forever). It is deliberately not
+`!isPlaying`: intent and audibility are different facts and the gap between them is the whole bug.
+Note `playing`, not the `play()` promise — the promise resolves before the first sample on a cold
+element, so gating the spinner on it would hide the spinner exactly when it is needed.
+
+Also removed: `restart()` and the Restart button. Its behaviour moved into the `ended` handler,
+which now rewinds `currentTime` to 0 so Play doubles as replay rather than depending on the
+browser's implicit seek-to-0-at-end convention. `src` is untouched there — the one rewind in the
+hook that is not also a stop, so the replay costs no second fetch.
+
+## 2026-08-11 — Reduced motion `display: none`s a spinner, so a spinner must never be the only thing in its box
+
+Two new `Spinner` call sites landed (the Play button's buffering state, and the pending-year slot on
+the reveal face) and both hit the same trap, which is worth stating as a rule because **nothing local
+can catch it**: jsdom evaluates no media query, so a component whose reduced-motion appearance is
+broken passes every check.
+
+`[data-motion='spinner'] { display: none }` removes the element from layout entirely — unlike
+`[data-motion='qr-placeholder']`, which only drops its `animation` and keeps its box. So:
+
+- A **button** whose only content is a spinner renders as a completely empty circle. `CardControls`
+  keeps the Play/Pause icon rendered underneath and overlays the spinner (`absolute inset-0`,
+  `pointer-events-none`), so a glyph is always present.
+- A **slot** whose height came from the spinner collapses. The pending-year spinner replaced a 3rem
+  `····` glyph, so it sits inside a `size-(--size-year-spinner)` box — the token is 3rem precisely
+  because `--text-year-pending` was, and the two must move together or the card changes height on
+  every reveal.
+
+Both are tested by `.remove()`ing the spinner node and asserting what survives, which is the pattern
+`PreparingScreen.test.tsx` and `DeckActions.test.tsx` already used.
+
+Second trap, specific to the year slot: **do not put `role="status"` on a spinner inside
+`CardRevealSide`.** The whole reveal is already one live region, and a nested second one announces
+the card twice. `DeckActions` wraps its spinner in `role="status"` only because it is not inside
+one. The pending announcement is unchanged by the swap — the `····` was already `aria-hidden`, so
+the "Still looking up the year…" line was and remains the entire announcement.
+
+Side effect worth knowing: `--color-fg-decorative` and `--text-year-pending` are now **unreferenced**.
+Both are kept (`@theme static` does not tree-shake) with comments saying so — `--color-fg-decorative`
+carried a documented WCAG 1.4.3 exemption at 1.94:1 that applied *because* its one consumer was
+`aria-hidden` decoration, and that exemption does not travel to a new consumer.
+
+## 2026-08-11 — Playlist names are truncated in the string, not in CSS
+
+`deckLabel()` now caps the first playlist's name at 20 characters via `truncatePlaylistName()`
+(`MAX_PLAYLIST_NAME_CHARS`). CSS truncation was rejected: only the HUD had `truncate`, and the other
+three consumers of this string have no width to overflow at all — it becomes a **PDF filename**
+through `pdfFileName()` and is written **verbatim into `localStorage`** by the saved-playlist
+library. A `text-ellipsis` fixes neither, and jsdom computes no layout so nothing local could prove
+it worked. A real `…` character is testable.
+
+The cap applies to the NAME, never to the finished label: a label that lost its `+2 more` would
+claim a three-playlist deck is one playlist. The HUD's `truncate` stays — 20 characters is a cap,
+not a width, and a narrow phone can still be too narrow for 20 glyphs.
+
+`trimEnd()` before appending `…` matters: a cut landing on a space renders "Chill Vibes For You …"
+with a visible gap. `…` survives the PDF path safely — `sanitizeForPdf` maps it to "..." for WinAnsi
+and `pdfFileName` then strips it to a hyphen.
+
+**The saved library stores `deckLabel()`'s output**, so entries are truncated on write and existing
+long entries in `localStorage` are left alone. Truncating those again at render would cut the
+`+N more` suffix off the end, which is the failure the cap is designed to avoid.

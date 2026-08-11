@@ -146,14 +146,60 @@ export function mergePlaylists(outcomes: readonly PlaylistOutcome[]): MergeOutco
 }
 
 /**
- * What to call a deck: the first playlist's name, plus a count of the rest.
+ * The longest a playlist name may be before it is cut with an ellipsis.
+ *
+ * A Spotify playlist name can be 100 characters, and a player who names one
+ * "Songs for the drive to my parents' house at christmas" gets exactly that on every surface that
+ * shows a deck. Only the HUD had CSS truncation, so the end screen's count line and the
+ * saved-library row both grew without limit.
+ */
+export const MAX_PLAYLIST_NAME_CHARS = 20;
+
+/**
+ * Cut a single playlist name to `MAX_PLAYLIST_NAME_CHARS`, with `…` when anything was lost.
+ *
+ * ===========================================================================
+ *  TRUNCATING IN THE STRING RATHER THAN IN CSS, AND THAT IS THE DECISION.
+ *
+ *  The obvious fix is `truncate` on the four surfaces, which is what the HUD
+ *  already does. It was not extended, for two reasons:
+ *
+ *  1. CSS truncation is invisible to the OTHER consumers. This string becomes a
+ *     PDF FILENAME through `pdfFileName`, and it is written verbatim into the
+ *     saved library in `localStorage` -- neither of which has a width to
+ *     overflow, so neither would ever be cut. Text truncation fixes all four
+ *     surfaces at once, from the one function that already exists to stop them
+ *     disagreeing.
+ *  2. `…` is a real character here, so the cut is TESTABLE. A `text-ellipsis`
+ *     is a rendering, and jsdom computes no layout -- nothing local could tell
+ *     you it worked.
+ *
+ *  THE HUD'S `truncate` STAYS ANYWAY. 20 characters is a cap, not a width: a
+ *  narrow phone can still be too narrow for 20 wide glyphs, and the two
+ *  mechanisms compose.
+ *
+ *  The ellipsis is the single character `…`, not three dots. `sanitizeForPdf`
+ *  already maps it to "..." for WinAnsi, and `pdfFileName` then strips it to a
+ *  hyphen -- so it cannot reach a filesystem, exactly as `+` cannot.
+ * ===========================================================================
+ */
+export function truncatePlaylistName(name: string): string {
+  const trimmed = name.trim();
+  if (trimmed.length <= MAX_PLAYLIST_NAME_CHARS) return trimmed;
+
+  // `trimEnd` so a cut landing on a space does not render as "Rock Classics …".
+  return `${trimmed.slice(0, MAX_PLAYLIST_NAME_CHARS).trimEnd()}…`;
+}
+
+/**
+ * What to call a deck: the first playlist's name, truncated, plus a count of the rest.
  *
  * ===========================================================================
  *  ONE FUNCTION, FOUR SURFACES, SO THEY CANNOT DISAGREE (decision 6).
  *
  *  The HUD, the end screen's count line, the PDF filename and the saved-library
- *  row all read this. Short enough for the HUD -- which already truncates a long
- *  name -- and it still names a deck the player recognises, which "3 playlists"
+ *  row all read this. Short enough for the HUD -- which also truncates in CSS --
+ *  and it still names a deck the player recognises, which "3 playlists"
  *  would not.
  *
  *  PLAYLIST-LEVEL DATA ONLY. A playlist title is the same class of string the
@@ -165,6 +211,11 @@ export function mergePlaylists(outcomes: readonly PlaylistOutcome[]): MergeOutco
  *  Classics +2 more" becomes `hitster-rock-classics-2-more.pdf`. Checked
  *  2026-08-07 (plan 1, open question 1) -- readable, and the `+` cannot reach a
  *  filesystem.
+ *
+ *  ONLY THE FIRST NAME IS TRUNCATED, BECAUSE ONLY THE FIRST NAME IS SHOWN. The
+ *  count is what stands in for the rest, and it must never be cut off -- a label
+ *  that lost its "+2 more" would claim the deck is one playlist. That is why the
+ *  cap applies to the NAME rather than to the finished label.
  * ===========================================================================
  *
  * Empty in for empty out, so a caller rendering an `idle` session gets `''` rather than a crash --
@@ -175,6 +226,7 @@ export function deckLabel(playlists: readonly PlaylistSummary[]): string {
   if (!first) return '';
 
   const others = playlists.length - 1;
+  const name = truncatePlaylistName(first.name);
 
-  return others === 0 ? first.name : `${first.name} +${others} more`;
+  return others === 0 ? name : `${name} +${others} more`;
 }
