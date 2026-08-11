@@ -99,6 +99,20 @@ function submit(value: string) {
 describe('LandingScreen', () => {
   afterEach(cleanup);
 
+  it('should host the footer: positioned, with the bottom band reserved', () => {
+    // The screen's half of `Footer`'s contract. This is the host where it matters most: the landing
+    // column is the one that OUTGROWS the viewport (nine suggestions plus a library), so `<main>`
+    // stretches past `min-h-dvh` and the absolutely positioned footer goes with it -- at the end of
+    // the scroll rather than hovering over it. Without `relative` here it would anchor to the
+    // viewport instead and float over the suggestions; without `pb-12` it would land on the last one.
+    const { container } = renderLanding();
+    const main = container.querySelector('main');
+
+    expect(main?.className).toContain('relative');
+    expect(main?.className).toContain('pb-12');
+    expect(container.querySelector('footer')?.className).toContain('absolute');
+  });
+
   it('should show an inline error for an unparseable URL without submitting', () => {
     // NOT submitted: the server would say the same thing, so a round trip would only add latency
     // in front of an identical sentence.

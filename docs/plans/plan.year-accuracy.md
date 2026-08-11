@@ -58,9 +58,11 @@ a year.
 | ② `studio-release`   | no excluded secondary type, `status` ≠ Bootleg                                           | release-group ?? recording ?? release date | `low` / `release-group`  |
 | ③ `unfiltered`       | everything (the old relaxed pass, verbatim)                                              | recording ?? release-group ?? release date | `low` / `recording`      |
 
-Steps 1 (artist plausibility), 4 (duration preference) and 5 (earliest wins) are unchanged and shared
-by every rung. **The ladder is free**: all three are pure functions over the same already-fetched
-pool, so a lookup still costs exactly two MusicBrainz requests.
+Steps 4 (duration preference) and 5 (earliest wins) are unchanged and shared by every rung; step 1
+(artist plausibility) is shared too but gained a second strength later the same day — see
+[Follow-up](#follow-up--the-artist-match-fallback-2026-08-11) below. **The ladder is free**: all three
+are pure functions over the same already-fetched pool, so a lookup still costs exactly two
+MusicBrainz requests.
 
 `isOfficialStudioAlbum` was renamed **`isOfficialOriginalRelease`** — the old name would now be a
 lie, and it is the predicate `api/_lib/musicbrainz.ts` shares to decide which release groups deserve
@@ -134,3 +136,93 @@ announces itself by failing the test.
 **No change to `shared/types.ts`** — `YearConfidence`, `YearSource` and `YearResult` all still
 describe the ladder exactly — and therefore no change to `year-client.ts`, `resolver.ts`,
 `reducer.ts`, `persistence.ts`, `CardRevealSide.tsx` or the cache TTL tiers.
+
+---
+
+## Follow-up — the artist-match fallback (2026-08-11)
+
+**Status: BUILT.** A second change, same day, addressing the other half of the original complaint:
+songs that resolved to **no year at all** and were therefore removed from the deck.
+
+### Why
+
+Diagnosed by running the whole pipeline over two real 50-track playlists:
+
+|                           | Today's Top Hits | Viva Latino |
+| ------------------------- | ---------------- | ----------- |
+| `high`                    | 46               | 33          |
+| `low`                     | 1                | 2           |
+| **`none` (card dropped)** | **3**            | **14**      |
+
+Of the 18 failures, **10 were MusicBrainz coverage gaps** (a pool of literally zero — 2025–26 regional
+Mexican and Latin urban releases nobody has entered yet; no algorithm change can touch those), and
+**5 were artist matching**. The exact rule needs one credit to be a contiguous whole-token run of the
+other, so a joinphrase or a reordering discards the entire pool:
+
+| Spotify              | MusicBrainz             | exact | join-word fix | token bag |
+| -------------------- | ----------------------- | ----- | ------------- | --------- |
+| `Shakira, Burna Boy` | `Shakira x Burna Boy`   | ✗     | ✗             | ✓         |
+| `Dave, Tems`         | `Dave feat. Tems`       | ✗     | ✓             | ✓         |
+| `Dave, Tems`         | `Tems & Dave`           | ✗     | ✗             | ✓         |
+| `Xavi, De La Rose`   | `De La Rose & Xavi`     | ✗     | ✗             | ✓         |
+| `Natanael Cano, …`   | `Natanael Cano feat. …` | ✗     | ✓             | ✓         |
+
+**The cheaper fix was measured and rejected.** Normalising join words (`feat`, `and`, `with`) away
+while KEEPING contiguity introduces no new false positives and looked strictly better — but it
+recovers only **2 of 4**, because half the sample is pure reordering. Order-independence is required.
+Note also what was never the problem: `normalizeForCacheKey` already maps `&`, `+` and `,` to spaces,
+so punctuation-only differences matched before any of this.
+
+### What was built — `shared/year.ts` only
+
+`admitByArtist()` returns `{ pool, match }`: the exactly-matching pool, or — **only when that is
+empty** — the loosely-matching one. `YearTier.confidence` became **`maxConfidence`** (a ceiling), and
+the single success return computes `weakest(tier.maxConfidence, ARTIST_MATCH_CONFIDENCE[match])`, so
+a loosened match can never report `high`. Adding a third evidence axis later (the recording-date
+disagreement detector, still open) is adding an argument, not hunting return sites.
+
+The loose rule is deliberately stingy: **≥2 non-article tokens** on the shorter side (else `The Band`
+matches `The Steve Miller Band`) and **≤1 word of slack** (else `Lil Baby` matches
+`Lil Durk, Lil Uzi Vert & Baby Keem`). Both were verified to cost none of the five recoveries.
+
+### The safety argument, which is structural rather than empirical
+
+A fallback, never a widening — and merging the two rules into one filter is the change that breaks
+it. Earliest-wins would hand the answer to any loosely-matched candidate with an older date, and
+`preferByDuration` is **not monotone** (it narrows to length-matching candidates only when that set
+is non-empty, so a single admission can collapse the pool to just it), so a union can move a year in
+**both** directions. The fallback shape cannot: exact pool non-empty → bit-identical to before; exact
+pool empty → every rung already returned `no-candidates` and the card was being dropped. **It can
+only turn a null into a year.**
+
+That matters because the fixtures cannot check it. **The accuracy suite is structurally blind to
+artist matching** — the trimming kept representatives of distinct exclusion reasons and "excluded by
+artist" was never one of them, so `pnpm test` passes identically with the whole rule reverted. Hence
+`artistMatchesExact` is exported for exactly one test: every accuracy fixture has a non-empty exact
+pool, which is what turns the argument above into an assertion.
+
+### Verified live
+
+All four previously-dropped cards now resolve — 2026 / 2025 / 2026 / 2025, all `low` — and every year
+agrees with what iTunes **and** Deezer independently report.
+
+`YEAR_CACHE_SCHEMA_VERSION` **v3 → v4**, required by the rule rather than necessary (only `none`
+entries and remix-fallback `low` entries can move).
+
+### Accepted trade-off
+
+**Order-blindness.** A token bag cannot tell `Alice Cooper` from `Cooper Alice`. Pinned as a test so
+an order-sensitive rewrite announces itself. Bounded three ways: it fires only for a card that was
+about to be deleted from the deck, the answer is capped at `low` and renders with the amber
+"Unconfirmed year", and the alternative outcome for that population is a missing card. If a fixture
+ever demonstrates harm, the cheapest hardening is to keep only the maximal-token-overlap group inside
+the loose branch — one `reduce`, no new concepts.
+
+### Still the dominant cause, and still unaddressed
+
+**10 of 18 failures were coverage**, not matching. MusicBrainz simply does not have those tracks.
+Measured: of the 18, **iTunes had 17 and Deezer had 17**. That reframes the earlier "no second
+provider" decision — the objection (stores report the album edition's date) is real for old catalogue
+and **irrelevant for the tracks MusicBrainz misses**, since a 2026 single has no reissue history. The
+two sources fail in opposite directions. Not built; needs verification of the matched title+artist
+before accepting, and the result would have to be `low`.

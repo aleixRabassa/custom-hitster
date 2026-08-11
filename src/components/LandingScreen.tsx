@@ -255,7 +255,13 @@ export function LandingScreen({
   };
 
   return (
-    <main className="flex min-h-dvh flex-col items-center justify-center gap-8 bg-page p-6 text-fg">
+    /*
+      `relative` and `pb-12` are the FOOTER'S CONTRACT, not decoration: `Footer` is
+      `absolute bottom-4`, so it anchors to this element and rides in the padding band this reserves.
+      Drop either and the line either escapes to the viewport or lands on the last suggestion.
+      `Footer.tsx` has the reasoning; `LandingScreen.test.tsx` asserts both classes.
+    */
+    <main className="relative flex min-h-dvh flex-col items-center justify-center gap-8 bg-page p-6 pb-12 text-fg">
       <div className="flex flex-col items-center gap-2 text-center">
         {/* The app's name. Renamed from "Playlist Hitster" on 2026-08-11 — `index.html`'s
             `<title>` and `src/pwa/manifest.ts` carry the same string and must agree. */}

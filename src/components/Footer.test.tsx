@@ -50,6 +50,34 @@ describe('Footer', () => {
     expect(footer?.className).toMatch(/(?:^|\s)text-fg(?:-|\s|$)/);
   });
 
+  it('should pin itself to the bottom of its host rather than sitting in the flow', () => {
+    // ===================================================================
+    //  THE FOOTER'S HALF OF A TWO-ENDED CONTRACT: this element positions
+    //  itself, and its host supplies `relative` and `pb-12`. Each screen's
+    //  own test holds the other end.
+    //
+    //  Out of flow rather than the textbook `mt-auto` sticky footer, and
+    //  the reason is specific to this app: every screen is a `min-h-dvh
+    //  flex flex-col justify-center` column, and an auto margin BEATS
+    //  `justify-content` -- the first `mt-auto` swallows the free space and
+    //  the screen's content stops being centred. `Footer.tsx` has the full
+    //  account.
+    //
+    //  jsdom computes no layout, so this cannot see where the line lands;
+    //  what it catches is somebody "simplifying" the positioning away,
+    //  which puts the footer back under the content in the middle of the
+    //  screen -- exactly the state the developer asked to change.
+    // ===================================================================
+    const { container } = render(<Footer />);
+
+    const footer = container.querySelector('footer');
+    expect(footer?.className).toContain('absolute');
+    expect(footer?.className).toContain('bottom-4');
+    // Full width, so `text-center` centres against the screen rather than against the text's own box.
+    expect(footer?.className).toContain('inset-x-0');
+    expect(footer?.className).toContain('text-center');
+  });
+
   it('should carry no explicit role of its own', () => {
     // ===================================================================
     //  A `<footer>` IS `contentinfo` ONLY WHEN ITS NEAREST SECTIONING

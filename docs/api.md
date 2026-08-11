@@ -165,15 +165,15 @@ Resolves ONE track's original release year from MusicBrainz, with a cache in fro
 }
 ```
 
-| Field          | Notes                                                                                                                                                                       |
-| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `year`         | The original release year, or `null` when nothing could be resolved. Phase 6 lets the player fill a null in by hand.                                                        |
-| `confidence`   | `high` (rung ① `official-release`), `low` (rung ② `studio-release` or rung ③ `unfiltered` — worth checking), `none` (no year). Consumed on the card's revealed side.        |
-| `source`       | `release-group` for rungs ① and ②, `recording` for rung ③. **Omitted** when `year` is null.                                                                                 |
-| `reason`       | `no-candidates` (the query matched nothing) or `no-dated-candidates` (matches existed, none dated). **Omitted** when a year was resolved. The two point at different fixes. |
-| `cached`       | `true` when the answer came from the year cache and cost no MusicBrainz request.                                                                                            |
-| `cleanedTitle` | The title actually queried, after suffix stripping. Returned deliberately: when a year looks wrong, the first question is always what was searched for.                     |
-| `stripped`     | Which suffix families were removed. **Diagnostic only** — a live-labelled track still resolves to the song's original year, because Hitster asks when the SONG came out.    |
+| Field          | Notes                                                                                                                                                                                                                    |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `year`         | The original release year, or `null` when nothing could be resolved. Phase 6 lets the player fill a null in by hand.                                                                                                     |
+| `confidence`   | The weakest of two axes: the rung (① `official-release` → `high`, ② and ③ → `low`) and the artist match (exact → `high`, loosened → `low`). So `low` means "worth checking" and `high` requires both. `none` is no year. |
+| `source`       | `release-group` for rungs ① and ②, `recording` for rung ③. **Omitted** when `year` is null.                                                                                                                              |
+| `reason`       | `no-candidates` (the query matched nothing) or `no-dated-candidates` (matches existed, none dated). **Omitted** when a year was resolved. The two point at different fixes.                                              |
+| `cached`       | `true` when the answer came from the year cache and cost no MusicBrainz request.                                                                                                                                         |
+| `cleanedTitle` | The title actually queried, after suffix stripping. Returned deliberately: when a year looks wrong, the first question is always what was searched for.                                                                  |
+| `stripped`     | Which suffix families were removed. **Diagnostic only** — a live-labelled track still resolves to the song's original year, because Hitster asks when the SONG came out.                                                 |
 
 **Both caches are tiered by confidence**, since a `high` year is a historical fact while a `none` is the result most likely to improve:
 
@@ -187,15 +187,17 @@ Resolves ONE track's original release year from MusicBrainz, with a cache in fro
 
 **There is no Spotify-year fallback**, contrary to what earlier drafts of this file and `plan.md` said: the embed payload carries no release date at track level (see `/api/playlist` above). The fallback is a three-rung MusicBrainz ladder instead, walked in order and stopping at the first rung that yields a year:
 
-| Rung | Accepts | Dated by | Reports |
-| --- | --- | --- | --- |
-| ① `official-release` | `primary-type` ∈ Album / Single / EP, `status: Official`, no excluded secondary type | release-group `first-release-date` | `high` / `release-group` |
-| ② `studio-release` | no excluded secondary type, `status` ≠ Bootleg | release-group ?? recording ?? release date | `low` / `release-group` |
-| ③ `unfiltered` | everything | recording ?? release-group ?? release date | `low` / `recording` |
+| Rung                 | Accepts                                                                              | Dated by                                   | Reports                  |
+| -------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------ | ------------------------ |
+| ① `official-release` | `primary-type` ∈ Album / Single / EP, `status: Official`, no excluded secondary type | release-group `first-release-date`         | `high` / `release-group` |
+| ② `studio-release`   | no excluded secondary type, `status` ≠ Bootleg                                       | release-group ?? recording ?? release date | `low` / `release-group`  |
+| ③ `unfiltered`       | everything                                                                           | recording ?? release-group ?? release date | `low` / `recording`      |
+
+A candidate must also pass the **artist filter**, which sits outside the ladder and produces the same pool on every rung. It has two strengths: an exact rule (whole-word containment), and — only when that admits nothing — a loose rule (same tokens, any order, at most one word of slack) that caps the result at `low`. That fallback exists because Spotify writes `Shakira, Burna Boy` where MusicBrainz writes `Shakira x Burna Boy`; it can only turn a `null` into a year, never one year into another.
 
 **The ladder is free.** All three rungs are pure functions over the same already-fetched candidate pool, so walking all three costs no extra MusicBrainz request. There is deliberately **no pre-Start year review screen** — the player pastes the playlist, so listing years before Start would spoil the deck; `confidence` is consumed on the card's revealed side instead (see [`plans/plan.md`](./plans/plan.md) §6).
 
-**Rung ① accepts `Single` and `EP`, and that is a 2026-08-11 reversal of an Album-only rule.** A release group's `first-release-date` is the date of the record, so an Album-only rung reports the year a song was *included on an album* rather than the year it came out — Creep 1993 instead of 1992, Mr. Brightside 2004 instead of 2003, nothing at all for a song never issued on a studio album. Widening cannot overshoot, because the rung takes the **earliest** surviving date: a reissue single can never beat the album it postdates, so Billie Jean is still 1982 despite its January 1983 single.
+**Rung ① accepts `Single` and `EP`, and that is a 2026-08-11 reversal of an Album-only rule.** A release group's `first-release-date` is the date of the record, so an Album-only rung reports the year a song was _included on an album_ rather than the year it came out — Creep 1993 instead of 1992, Mr. Brightside 2004 instead of 2003, nothing at all for a song never issued on a studio album. Widening cannot overshoot, because the rung takes the **earliest** surviving date: a reissue single can never beat the album it postdates, so Billie Jean is still 1982 despite its January 1983 single.
 
 **A lookup costs two MusicBrainz requests, and the second one is where the accuracy comes from.** The recording search inlines whichever _release_ matched, which is nearly always a reissue — filtering to official original releases and taking the earliest inlined release date gives Billie Jean **2012**, Bohemian Rhapsody **2001**, Sweet Child O' Mine **2018**. The second request is one **batched** `release-group?query=rgid:(… OR …)` lookup for each surviving group's `first-release-date`, which is the original release date and gets all three right. Because it is batched, the count stays at two however large the candidate pool. Measured 21 of 22 known-tricky tracks exact against a ~6% naive baseline; see [`agent_findings.md`](./agent_findings.md) (2026-08-04 and 2026-08-11) for the full method, the twenty-second track's structural limitation, and the things that look like tuning knobs and are not.
 

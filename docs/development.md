@@ -357,7 +357,7 @@ covers exactly what it covered before — it is **not** invalidated by the redes
 | The three control gaps read as EQUAL to the gaps at the card's edges              | Pending — **new 2026-08-11**, see below     |
 | The enlarged QR fits the face on the **240px floor card**, uncropped              | Pending — **new 2026-08-11**, see below     |
 | The scan caption sits under the card and is legibly dim, not invisible            | Pending — **new 2026-08-11**, see below     |
-| The footer does not push the landing screen's Start button off a 320px phone      | Pending — **new 2026-08-11**, see below     |
+| The footer sits at the bottom on a short screen and at the end of a long scroll   | Pending — **new 2026-08-11**, see below     |
 
 The landscape row is what the `62dvh` term in `--card-height` exists for; without it a landscape
 phone gets a card taller than its viewport ([`architecture.md`](./architecture.md) §3).
@@ -374,8 +374,12 @@ phone gets a card taller than its viewport ([`architecture.md`](./architecture.m
 > The caption row is about a contrast token doing its job on a surface it was not measured against:
 > `--color-fg-muted` is recorded at 6.12:1 on `--color-page`, but it sits directly under a card with a
 > neon bloom around it, and glow beside small dim text is a legibility question a ratio does not answer.
-> The footer row is the one place the footer can cost anything — the landing screen is the tallest
-> column in the app (nine suggestions plus a library), and the footer is the last child of it.
+> The footer row has **two cases and they are different code paths in effect**: on the preparing and
+> end screens the column is shorter than the viewport, so `<main>` is exactly `min-h-dvh` and the
+> absolutely positioned line lands at the bottom of the screen; on the landing screen at 320px the
+> column outgrows the viewport, so `<main>` stretches and the line lands at the end of the scroll
+> instead. Check both, and check that it never sits ON the last suggestion — the `pb-12` band is the
+> only thing separating them, and jsdom cannot see a pixel of it.
 
 > **The backs row was a measured failure and the geometry has now been replaced rather than retuned.**
 > At the card's 448px ceiling the two peeking backs peeked by **1.04px** and **2.08px** at the bottom and

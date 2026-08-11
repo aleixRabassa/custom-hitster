@@ -134,7 +134,7 @@ GET /api/year?title=…&artist=…&durationMs=…
 │ api/_lib/resolve-year.ts             │
 │  1. cleanTrackTitle()                │   "… - Remastered 2011" returns ZERO
 │                                      │   results verbatim, so this is mandatory
-│  2. cache.get(mbyear:v1:artist|title)│──▶ HIT: return, cached:true
+│  2. cache.get(mbyear:v4:artist|title)│──▶ HIT: return, cached:true
 │                                      │        NO gate, NO request
 │  3. MISS ▼                           │
 └──────────┬───────────────────────────┘
@@ -151,6 +151,7 @@ GET /api/year?title=…&artist=…&durationMs=…
            ▼
 ┌──────────────────────────────────────┐
 │ shared/year.ts  pickBestRecording()  │
+│  artist filter: exact, else LOOSE    │──▶ loose caps the answer at low
 │  ① official-release → Album|Single|  │──▶ high / release-group
 │     EP, Official, earliest group date│
 │  ② studio-release → secondary-type   │──▶ low  / release-group
@@ -663,6 +664,20 @@ and control bar fit a phone, and a footer spends ~40px of that on a line nobody 
 so its whole subtree is announced, and a copyright line would be read out to a screen-reader user in
 the middle of being told the game crashed.
 
+**It is pinned to the bottom out of flow, and that is a two-ended contract.** `Footer` is
+`absolute inset-x-0 bottom-4`; every host carries **`relative` and `pb-12`**, the footer rides in that
+reserved padding band (48px below the content box against a ~16px line, so it overlaps nothing), and
+each screen's test asserts both classes — the same shape of contract as `card-ring`, where the utility
+positions itself against an ancestor it does not create. The textbook `mt-auto` sticky footer does not
+work here: every screen is a `min-h-dvh flex flex-col justify-center` column, and **an auto margin beats
+`justify-content`** — the first `mt-auto` swallows the free space and the screen's content stops being
+centred, which is most visible on the preparing screen, whose content is a spinner and two lines.
+Making that approach work needs a second auto margin on the first child of every screen (fragile — the
+preparing screen's first child is a conditional notice) or a wrapper around all of each screen's
+children, changing their `gap-*` semantics. It is **not `fixed`**: on the landing screen, the one column
+that outgrows the viewport, the footer travels to the end of the scroll rather than floating over the
+suggestions.
+
 Two non-obvious consequences. The `<footer>` sits inside each screen's `<main>`, so it is **not** a
 `contentinfo` landmark (the role needs the body as the nearest sectioning ancestor) — which is the
 intended outcome, and why it carries no explicit `role`. And its "2026-present" is a **year-shaped
@@ -901,9 +916,15 @@ As built, the filter is that fix plus three things Phase 0 did not have, all mea
 
 The middle rung was added on 2026-08-11 and it is the fix for unreliable `low` answers. Before it the ladder went from "official original release" straight to no filter at all, so a live take, a compilation or a bootleg dated the card whenever the top rung missed — the problem was not thin evidence but **actively misleading evidence**, and the middle rung is where that distinction is drawn.
 
+**Confidence is the weakest of two evidence axes, not the rung alone** (2026-08-11). The artist filter sits _outside_ the ladder — it produces the same pool on all three rungs — and it has two strengths. The exact rule (containment on whole words) has always been there. When it admits **nothing**, a loose rule runs: the same tokens in any order, with at most one word of slack. A loosened match caps the answer at `low` however good the rung was, which is why `YearTier.confidence` is named **`maxConfidence`** — it is a ceiling, and `weakest()` computes the reported value.
+
+This is a fallback, never a widening, and the distinction is the whole safety argument. Merging the two rules into one filter looks equivalent and is not: earliest-wins would hand the answer to any loosely-matched candidate with an older date, and `preferByDuration` is not monotone either, so a union could move a year in **both** directions. The fallback shape can only turn a **null into a year** — when the exact pool is non-empty nothing changes at all, and when it is empty the card was being dropped from the deck anyway.
+
+Why it exists: Spotify joins collaborators with `", "` while MusicBrainz uses a joinphrase, so the two disagree about the connector _and_ the order — `Shakira, Burna Boy` vs `Shakira x Burna Boy`, `Xavi, De La Rose` vs `De La Rose & Xavi`. Measured on two real 50-track playlists, that was 5 of 18 total failures. Note what it is _not_: `normalizeForCacheKey` already maps `&`, `+` and `,` to spaces, so punctuation-only differences always matched. Only word connectors and reordering were broken — and because half the measured sample is reordering, normalising join words while keeping contiguity was measured and rejected at 2 of 4.
+
 **One limitation the ladder cannot reach, and it is structural.** Resolution is _recording_-scoped: the adapter finds recordings, then asks which release groups they appear on. That works whenever the single and the album share one master. It cannot work when the single is a **different recording** — Depeche Mode's "Personal Jesus" is 4:55 on Violator while the correctly-dated 1989 single carries a 3:46 edit, so no filter widening and no duration bound puts the two in one pool, and the card reads 1990. Reaching it needs work-level resolution (MusicBrainz `work` relationships group every recording of one song), which is a much larger change. It is pinned as `YEAR_LIMITATION_FIXTURES` in `shared/__fixtures__/year-candidates.ts` rather than left to be rediscovered.
 
-**Cache keys carry a schema segment** (`mbyear:v3:{artist}|{title}`) precisely so a change to any of the above can invalidate every previously cached year in one edit. Without it, improved scoring would be masked indefinitely by entries computed under the old logic — and a `high` entry lives 30 days, so the masking would outlast anyone's patience for checking whether a fix worked.
+**Cache keys carry a schema segment** (`mbyear:v4:{artist}|{title}`) precisely so a change to any of the above can invalidate every previously cached year in one edit. Without it, improved scoring would be masked indefinitely by entries computed under the old logic — and a `high` entry lives 30 days, so the masking would outlast anyone's patience for checking whether a fix worked.
 
 Full measurements are in [`plans/plan.md`](./plans/plan.md) §5 Phase 0 and [`agent_findings.md`](./agent_findings.md) (2026-08-04 and 2026-08-11).
 

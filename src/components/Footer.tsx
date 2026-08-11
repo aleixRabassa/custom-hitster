@@ -1,5 +1,43 @@
 /**
- * The copyright line, as a `contentinfo` landmark.
+ * The copyright line, pinned to the bottom of the screen.
+ *
+ * ===========================================================================
+ *  IT IS ABSOLUTELY POSITIONED IN ITS HOST'S BOTTOM PADDING, AND THE CONTRACT
+ *  IS THAT THE CALLER IS POSITIONED AND RESERVES THE BAND.
+ *
+ *  Every host must carry `relative` and `pb-12`. That is the same shape of
+ *  contract as `card-ring` in `src/index.css` -- the utility positions itself
+ *  against an ancestor it does not create -- and it is asserted at both ends:
+ *  `Footer.test.tsx` pins the classes here, and each screen's own test pins
+ *  `relative` and `pb-12` on its `<main>`. Drop `relative` from a screen and the
+ *  footer silently anchors to the nearest positioned ancestor or the viewport,
+ *  which is a bug nothing else would catch.
+ *
+ *  WHY OUT OF FLOW, when "put it last and give it `mt-auto`" is the textbook
+ *  sticky footer: every screen here is a `min-h-dvh flex flex-col
+ *  justify-center` column, and an auto margin BEATS `justify-content`. The
+ *  first `mt-auto` swallows all the free space, so the content stops being
+ *  centred and packs to the top -- most visible on the preparing screen, whose
+ *  content is a spinner and two lines. Making that work needs a second auto
+ *  margin on the first child of every screen (fragile: the preparing screen's
+ *  first child is a CONDITIONAL notice) or a wrapper element around all of each
+ *  screen's children, which changes their `gap-*` semantics. Positioning is one
+ *  class here and two on each host, and it moves nothing.
+ *
+ *  It rides in the PADDING because that band is already empty: `p-6` plus the
+ *  extra `pb-12` gives 48px below the content box, and a 12px line is ~16px
+ *  tall, so there is no overlap to guard against even at the 320px width where
+ *  the landing screen's column is tallest.
+ *
+ *  BOTTOM OF THE PAGE, WHICH IS THE BOTTOM OF THE SCREEN WHENEVER THE SCREEN IS
+ *  THE PAGE. On the landing screen -- the one column that outgrows the viewport,
+ *  with nine suggestions and a library -- `<main>` grows past `min-h-dvh` and
+ *  this goes with it, so it is at the end of the scroll rather than hovering
+ *  over it. `fixed` would keep it in view at all times, which is the other
+ *  reading of "always at the bottom"; it is deliberately not used, because a
+ *  copyright line floating over the suggestions a player is scrolling through
+ *  costs more than it gives.
+ * ===========================================================================
  *
  * ===========================================================================
  *  IT IS RENDERED ON THE LANDING, PREPARING AND END SCREENS -- AND THE TWO
@@ -73,7 +111,13 @@ export function Footer() {
       this component. `Footer.test.tsx` asserts the absence -- and records that Testing Library maps
       `footer` to `contentinfo` regardless of ancestry, so a role QUERY cannot be used to check any
       of this.
+
+      `absolute inset-x-0 bottom-4` -- OUT OF FLOW, and the header block explains why that is the one
+      arrangement of the four that keeps every screen's centring. It sits in the host's reserved
+      `pb-12` band, so it overlaps nothing.
     */
-    <footer className="text-center text-xs text-fg-muted">{COPYRIGHT_NOTICE}</footer>
+    <footer className="absolute inset-x-0 bottom-4 text-center text-xs text-fg-muted">
+      {COPYRIGHT_NOTICE}
+    </footer>
   );
 }

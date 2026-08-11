@@ -74,7 +74,7 @@ already-fetched pool, so a lookup still costs exactly two MusicBrainz requests. 
 before touching any of it. **`isOfficialStudioAlbum` is now `isOfficialOriginalRelease`** and is
 still the one predicate shared with `api/_lib/musicbrainz.ts`. **The 50-id cap on request 2 now sorts
 Album → EP → Single before truncating**, which is what makes the widening non-regressive by
-construction. **`YEAR_CACHE_SCHEMA_VERSION` is `v3`** — necessary, not ceremonial, because the change
+construction. **`YEAR_CACHE_SCHEMA_VERSION` is `v4`** — necessary, not ceremonial, because the change
 alters answers cached at `high` for 30 days. And **all 22 fixtures were RE-CAPTURED**, because the
 old ones carried Single candidates with no `releaseGroupFirstReleaseDate` (nothing had ever fetched
 one) — so the 14-track suite passed both before and after the code change while being structurally
@@ -88,6 +88,35 @@ carries a **3:46 edit**, a separate recording MBID. Verified unbounded: the `dur
 hides it, and removing the bound would not help. Reaching it needs **work-level** resolution, which
 is a much larger change. If you are about to "fix" this by loosening a filter, you are reasoning
 about the wrong entity. See [`docs/plans/plan.year-accuracy.md`](./docs/plans/plan.year-accuracy.md).
+
+**CONFIDENCE IS THE WEAKEST OF TWO AXES, NOT THE RUNG ALONE (2026-08-11), which is why
+`YearTier.confidence` is called `maxConfidence` — it is a CEILING.** The artist filter sits outside
+the ladder (same pool on all three rungs) and has two strengths: the exact rule that has always been
+there, and — **only when the exact rule admits NOTHING** — a loose one, the same tokens in any order
+with at most one word of slack. A loosened match caps the answer at `low` however good the rung was,
+computed by `weakest()` at `pickBestRecording`'s single success return. **It is a fallback, never a
+widening, and merging the two rules into one filter is the change that breaks it**: earliest-wins
+would hand the answer to any loosely-matched candidate with an older date, and `preferByDuration` is
+**not monotone** (it narrows to length-matching candidates only when that set is non-empty, so one
+admission can collapse the pool to just it) — so a union can move a year in **both** directions. The
+fallback shape provably cannot: exact pool non-empty → bit-identical to before; exact pool empty →
+every rung already returned `no-candidates` and the card was **dropped from the deck**. It can only
+turn a null into a year. `year.test.ts` pins that with a two-candidate exact-1994/loose-1984 case.
+**Why it exists**: Spotify joins collaborators with `", "` and MusicBrainz uses a joinphrase, so they
+disagree about the connector _and_ the order — measured 5 of 18 failures across two real 50-track
+playlists. **Note what it is NOT**: `normalizeForCacheKey` already maps `&`, `+` and `,` to spaces, so
+punctuation-only differences always matched; only word connectors and reordering were broken. The
+cheaper "normalise join words, keep contiguity" fix was measured and **rejected at 2 of 4**, because
+half the real sample is pure reordering (`Xavi, De La Rose` vs `De La Rose & Xavi`). Three more
+things: the loose rule is deliberately **stingy** (≥2 non-article tokens on the shorter side, ≤1 word
+of slack) because it fires exactly when the artist is unrecognisable, and a false positive puts a
+plausible **wrong** year on a card whose whole content is the year; it is **order-blind** by
+construction (`Alice Cooper` ~ `Cooper Alice`), pinned as a test rather than pretended away; and
+**`artistMatchesExact` is exported only for one test** — the guard asserting no accuracy fixture ever
+reaches the loose pass, which is what makes the safety argument a test instead of a claim. **The
+accuracy suite cannot check any of this**: the fixtures were trimmed keeping representatives of
+distinct exclusion reasons and "excluded by artist" was never one of them, so `pnpm test` passes
+identically with the artist rule reverted. Same false-comfort shape as the pre-2026-08-11 fixtures.
 
 **What is left in Phase 8 is entirely MANUAL VERIFICATION, and it is now the project's largest gap.** Nothing is waiting on a decision or on code. Everything automatable is automated, and the ceiling is genuinely low here — jsdom paints nothing, evaluates no media query, computes no layout and has no accessibility tree — so what remains needs a deployment, a printer, a phone and a screen reader. Scoped row by row in [`docs/development.md`](./docs/development.md) §5, gaps in its §8. **Run the screen-reader pass over one flip first**: it is the only check on the app's only live region, which is what makes the game's payoff audible at all, and it has now been carried by two phases without being run.
 
@@ -283,7 +312,13 @@ scrollbar. **Not the game screen**: that column is a height budget (`--card-heig
 card, caption and controls fit a phone) and a `mt-auto` variant is worse, because auto margins beat
 `justify-center` and the card stops being centred. **Not the crash screen**: `ErrorBoundary`'s fallback
 is a `role="alert"`, so its whole subtree is announced and the copyright would be read out to someone
-being told the game crashed. Two traps. The `<footer>` is inside each `<main>`, so it is **not** a
+being told the game crashed. **It is pinned to the bottom OUT OF FLOW and that is a two-ended
+contract**: `Footer` is `absolute inset-x-0 bottom-4`, every host must carry **`relative` and
+`pb-12`**, and each screen's test asserts both (same shape as `card-ring` — the caller is positioned).
+The textbook `mt-auto` sticky footer is what this replaced and it cannot work here: **an auto margin
+beats `justify-content`**, so the first `mt-auto` swallows the free space and the screen's content
+stops being centred. Not `fixed` either — on the landing screen it would float over the suggestions
+instead of ending the scroll. Two more traps. The `<footer>` is inside each `<main>`, so it is **not** a
 `contentinfo` landmark and must not be given the role — and **Testing Library maps `footer` to
 `contentinfo` regardless of ancestry**, so a role query cannot check any of this (a `toBeNull()` was
 written first and failed against correct code). And its **"2026-present" is a year-shaped number on a

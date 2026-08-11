@@ -39,6 +39,20 @@ describe('PreparingScreen', () => {
     expect(screen.getByRole('status').textContent).toMatch(/first card/i);
   });
 
+  it('should host the footer: positioned, with the bottom band reserved', () => {
+    // The screen's half of `Footer`'s contract -- the footer is `absolute bottom-4`, so this `<main>`
+    // must be `relative` and must reserve `pb-12`. This is also the screen that made the textbook
+    // `mt-auto` sticky footer unusable: its content is a spinner and two lines, so an auto margin
+    // eating the free space would leave them clinging to the top of an otherwise empty viewport.
+    const { container } = render(<PreparingScreen />);
+    const main = container.querySelector('main');
+
+    expect(main?.className).toContain('relative');
+    expect(main?.className).toContain('pb-12');
+    // And the column still centres its content, which is what the positioning bought.
+    expect(main?.className).toContain('justify-center');
+  });
+
   it('should render the notice it is given', () => {
     // Notices appear HERE as well as on the game screen: `preparing` can be shorter than the time
     // it takes to read a sentence, and the container owns the dismissal so it survives the

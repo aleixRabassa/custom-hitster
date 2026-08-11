@@ -114,7 +114,11 @@ export function EndScreen({
   pendingYearCount,
 }: EndScreenProps) {
   return (
-    <main className="flex min-h-dvh flex-col items-center justify-center gap-8 bg-page p-6 text-fg">
+    /*
+      `relative` + `pb-12` are `Footer`'s contract -- it is `absolute bottom-4` and rides in the band
+      this reserves. See `Footer.tsx`; `EndScreen.test.tsx` asserts both.
+    */
+    <main className="relative flex min-h-dvh flex-col items-center justify-center gap-8 bg-page p-6 pb-12 text-fg">
       <div className="flex flex-col items-center gap-2 text-center">
         <h1 className="text-3xl font-semibold">Deck finished</h1>
         <p className="text-sm text-fg-secondary">

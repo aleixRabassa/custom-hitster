@@ -47,7 +47,11 @@ export interface PreparingScreenProps {
 
 export function PreparingScreen({ notice }: PreparingScreenProps) {
   return (
-    <main className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-page p-6 text-fg">
+    /*
+      `relative` + `pb-12` are `Footer`'s contract -- it is `absolute bottom-4` and rides in the band
+      this reserves. See `Footer.tsx`; `PreparingScreen.test.tsx` asserts both.
+    */
+    <main className="relative flex min-h-dvh flex-col items-center justify-center gap-4 bg-page p-6 pb-12 text-fg">
       {notice}
 
       {/*

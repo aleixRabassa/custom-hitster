@@ -2630,7 +2630,7 @@ Same pattern as that file's existing input-label test.
 
 ---
 
-## 2026-08-07 — "Print so far": the year gate refuses a *silent* short deck, not a short deck
+## 2026-08-07 — "Print so far": the year gate refuses a _silent_ short deck, not a short deck
 
 Follow-up to this morning's year gate, from a complaint about the wait: the gate is right that an
 export taken mid-crawl prints a deck that is **quietly** short, and wrong if it is read as "a short
@@ -2754,7 +2754,7 @@ the "Still looking up the year…" line was and remains the entire announcement.
 
 Side effect worth knowing: `--color-fg-decorative` and `--text-year-pending` are now **unreferenced**.
 Both are kept (`@theme static` does not tree-shake) with comments saying so — `--color-fg-decorative`
-carried a documented WCAG 1.4.3 exemption at 1.94:1 that applied *because* its one consumer was
+carried a documented WCAG 1.4.3 exemption at 1.94:1 that applied _because_ its one consumer was
 `aria-hidden` decoration, and that exemption does not travel to a new consumer.
 
 ## 2026-08-11 — Playlist names are truncated in the string, not in CSS
@@ -2784,7 +2784,7 @@ long entries in `localStorage` are left alone. Truncating those again at render 
 player had not swiped and nothing about their card changed.
 
 **Cause:** `CardStack` keyed its `AnimatePresence` child on `` `${currentCard.id}:${currentIndex}` ``.
-`YEAR_RESOLVED` **removes** a card whose lookup found no year, and when the dropped card sat *behind*
+`YEAR_RESOLVED` **removes** a card whose lookup found no year, and when the dropped card sat _behind_
 the player the reducer shifts `currentIndex` back (`droppedBeforeCurrent`) so the player keeps
 looking at the same card. Same card, lower index — so the key changed, `AnimatePresence` read it as
 one child leaving and another arriving, and the card flew `EXIT_DISTANCE_PX` off the screen while an
@@ -2794,14 +2794,14 @@ swipes right. On a real playlist roughly a third of cards resolve yearless, so t
 seconds for the whole session.
 
 **Fix:** the key is now identity, never position — `cardPresenceKey()` returns
-`` `${id}:${occurrence}` ``, where `occurrence` is how many cards *before* the current one share its
+`` `${id}:${occurrence}` ``, where `occurrence` is how many cards _before_ the current one share its
 id. That is invariant under exactly the thing the index was not: `YEAR_RESOLVED` drops **every** card
 carrying the resolved id, never one copy, so a surviving card cannot have lost a same-id copy from in
 front of it. Drops anywhere else leave the string untouched. It still separates adjacent duplicate
 ids (`X:0` / `X:1`), which is the bug the index was added for — a bare-id key lets React reuse one
 element across an advance, and the flip state surviving that hands the player the answer.
 
-**Not fixed, and it is a different case:** when the player's *own* card is the one dropped, the deck
+**Not fixed, and it is a different case:** when the player's _own_ card is the one dropped, the deck
 closes up under them and a genuinely different card arrives, so the key changes and the exit
 animation plays. Suppressing that needs `AnimatePresence`'s `custom` prop plus a dynamic exit variant
 on `Card` (a removed child's props can no longer be updated), and it is arguable that the animation
@@ -2835,7 +2835,7 @@ down is everything that was quietly measured in that ratio:
   picked so the displayed size is the same 224px (ceiling) and ~140px (floor) it always was, which is
   also why `QR_BITMAP_SIZE` did not have to move: 7/12 × 384 = 224 exactly.
 - **`--ring-width` deliberately did NOT move** (fixed 2px: a width-derived ring goes sub-pixel on the
-  small card and blurs into its own bloom), and neither did `62dvh`, which now does *less* work than
+  small card and blurs into its own bloom), and neither did `62dvh`, which now does _less_ work than
   before — a square card of a given height is narrower than the 9/14 card was tall, so short
   viewports gain room rather than losing it.
 
@@ -2879,7 +2879,7 @@ new secret, and **no change to the two-requests-per-lookup cost**.
 
 **Cause 1, the wrong `high` years.** `shared/year.ts` filtered the strict pass to release groups with
 `primary-type: Album`. But a release group's `first-release-date` is the date of the RECORD, so for a
-song issued as a single first, the album date is the year the track was *included* on an album. The
+song issued as a single first, the album date is the year the track was _included_ on an album. The
 release-group filter was doing exactly what it was written to do and the answer was still wrong.
 Worse: a song never issued on a studio album had **no eligible release group at all** — every one was
 either a Single (excluded here) or a compilation (excluded by secondary type) — so it fell to the
@@ -2906,19 +2906,19 @@ a November **1982** album and still resolves to 1982; that is asserted, not assu
 (so the widening cost nothing), and 7 of the 8 new single-before-album tracks now correct where every
 one of them was previously off by a year or worse:
 
-| Track | Single | Album | Was | Now |
-| --- | --- | --- | --- | --- |
-| Creep / Radiohead | 1992-09 | 1993-02 | 1993 | **1992** |
-| Relax / Frankie Goes to Hollywood | 1983-10 | 1984-10 | 1984 | **1983** |
-| Under Pressure / Queen & David Bowie | 1981-10 | 1982-05 | 1982 | **1981** |
-| Firestarter / The Prodigy | 1996-03 | 1997-06 | 1997 | **1996** |
-| Mr. Brightside / The Killers | 2003-09 | 2004-06 | 2004 | **2003** |
-| Rolling in the Deep / Adele | 2010-11 | 2011-01 | 2011 | **2010** |
-| Hey Jude / The Beatles | 1968-08 | (none) | no eligible group | **1968** |
+| Track                                | Single  | Album   | Was               | Now      |
+| ------------------------------------ | ------- | ------- | ----------------- | -------- |
+| Creep / Radiohead                    | 1992-09 | 1993-02 | 1993              | **1992** |
+| Relax / Frankie Goes to Hollywood    | 1983-10 | 1984-10 | 1984              | **1983** |
+| Under Pressure / Queen & David Bowie | 1981-10 | 1982-05 | 1982              | **1981** |
+| Firestarter / The Prodigy            | 1996-03 | 1997-06 | 1997              | **1996** |
+| Mr. Brightside / The Killers         | 2003-09 | 2004-06 | 2004              | **2003** |
+| Rolling in the Deep / Adele          | 2010-11 | 2011-01 | 2011              | **2010** |
+| Hey Jude / The Beatles               | 1968-08 | (none)  | no eligible group | **1968** |
 
 **The twenty-second is a structural limitation, not a tuning failure — do not try to filter your way
 to it.** Depeche Mode's "Personal Jesus" resolves to 1990 (Violator) where the truth is the
-1989-08-29 single. MusicBrainz *has* that single release group, correctly dated. The pipeline cannot
+1989-08-29 single. MusicBrainz _has_ that single release group, correctly dated. The pipeline cannot
 reach it because resolution is **recording**-scoped: the album version is 4:55 and the 1989 single
 carries a **3:46 edit**, a separate recording MBID. Verified by querying the recording search
 unbounded — the album recording never appears beside that release group, so the `dur:` bound is not
@@ -2936,7 +2936,7 @@ announces itself by failing that test.
 2. **The fixtures had to be re-captured, all 22 of them.** The old captures carried Single candidates
    with no `releaseGroupFirstReleaseDate`, because under the Album-only rule nothing had ever fetched
    one. A fixture that cannot represent the new evidence cannot catch a regression in it — the
-   14-track suite passed *before* the re-capture, which is exactly the false comfort to watch for.
+   14-track suite passed _before_ the re-capture, which is exactly the false comfort to watch for.
 
 `YEAR_CACHE_SCHEMA_VERSION` bumped **v2 → v3**. Necessary rather than merely required by the rule
 this time: the change alters answers already cached at `high`, which is the 30-day tier. Expect the
@@ -2947,7 +2947,7 @@ budget.
 date (the same disease as Spotify, useful for coverage but harmful for accuracy), and Discogs and
 Wikidata carry the right semantic but cost a new secret, adapter and rate limit. Also not done:
 using the recording's own `first-release-date` to override rung ①. It measures 10 of 13 alone and is
-wrong-*early* on "No Woman No Cry" (1973 vs 1974), so a blind `min()` trades one error for another.
+wrong-_early_ on "No Woman No Cry" (1973 vs 1974), so a blind `min()` trades one error for another.
 The open idea worth trying next is using it as a **disagreement detector** that downgrades confidence
 rather than changes the year.
 
@@ -2960,15 +2960,16 @@ discoveries.
 
 **1. The caption was the QR's ceiling, and moving it is what made the code bigger.** While "Scan to
 play the full song" was on the hidden face, the code shared the card's HEIGHT with it: `p-6` + `gap-6`
-+ a 12px line is a fixed ~88px, so on the 240px floor card the ratio could not exceed 0.633 no matter
-how much width was spare. With one child on the face the only limit is the padding, on both axes
-equally (`r × 240 + 48 ≤ 240`, i.e. 0.8), so `--qr-display-size` went 7/12 → **3/4** — 288px at the
-card's ceiling, 180px at its floor, against 224/140 before. **3/4 rather than the 0.8 the arithmetic
-allows**, because the face is `overflow-hidden`: an over-large ratio CROPS the code rather than
-spilling it, and a cropped QR does not scan while still looking almost right. `QR_BITMAP_SIZE` had to
-go 224 → 288 with it (encoding below the displayed size upscales a QR and blurs the module edges a
-camera reads) and it is the one number in the app that multiplies by deck size — `qr-cache.ts` never
-evicts, and a deck is capped at 100 cards.
+
+- a 12px line is a fixed ~88px, so on the 240px floor card the ratio could not exceed 0.633 no matter
+  how much width was spare. With one child on the face the only limit is the padding, on both axes
+  equally (`r × 240 + 48 ≤ 240`, i.e. 0.8), so `--qr-display-size` went 7/12 → **3/4** — 288px at the
+  card's ceiling, 180px at its floor, against 224/140 before. **3/4 rather than the 0.8 the arithmetic
+  allows**, because the face is `overflow-hidden`: an over-large ratio CROPS the code rather than
+  spilling it, and a cropped QR does not scan while still looking almost right. `QR_BITMAP_SIZE` had to
+  go 224 → 288 with it (encoding below the displayed size upscales a QR and blurs the module edges a
+  camera reads) and it is the one number in the app that multiplies by deck size — `qr-cache.ts` never
+  evicts, and a deck is capped at 100 cards.
 
 The move also fixed a duplication nobody had counted: `CardStack` mounts `CardHiddenSide` a second
 time for the next card's back, so the sentence was in the document **twice per card**. That is now
@@ -2997,7 +2998,26 @@ different screens.
 **Where the footer goes, and the two screens it is kept off.** There is no shell: every screen is its
 own `min-h-dvh justify-center` column, so a footer rendered once in `App.tsx` or `main.tsx` is a
 sibling of a full-viewport column and gives every screen a permanent scrollbar. It is therefore the
-last child of `<main>` on the **landing, preparing and end** screens. **Not the game screen** — that
+last child of `<main>` on the **landing, preparing and end** screens.
+
+**4. "Put it at the bottom" could not be done with `mt-auto`, because AN AUTO MARGIN BEATS
+`justify-content`.** The footer first shipped in flow, which put it directly under the centred content
+— in the middle of the screen. The textbook sticky footer is `mt-auto` on the last child, and in a
+`min-h-dvh flex flex-col justify-center` column that margin consumes ALL the free space before
+`justify-content` sees any, so the content stops being centred and packs to the top. Most visible on
+the preparing screen (a spinner and two lines clinging to the top of an empty viewport). Making it work
+needs a second auto margin on the first child of every screen — fragile, since the preparing screen's
+first child is a **conditional** notice — or a wrapper around all of each screen's children, which
+changes their `gap-*` semantics.
+
+The answer was to take the footer OUT OF FLOW: `absolute inset-x-0 bottom-4`, riding in a `pb-12` band
+the host reserves, with `relative` on the host. Content centring is then untouched, there is no overlap
+(48px of padding against a ~16px line), and on the landing screen — the one column that outgrows the
+viewport — `<main>` stretches past `min-h-dvh` and the footer travels to the end of the scroll. **Not
+`fixed`**, which is the other reading of "always at the bottom of the screen": a copyright line
+hovering over the suggestions a player is scrolling costs more than it gives. It is the same
+caller-is-positioned contract as `card-ring`, and it is asserted at both ends for the same reason —
+drop `relative` from one screen and the line silently anchors to the viewport instead. **Not the game screen** — that
 column is a height budget (`--card-height` is sized against the viewport so the HUD, card, caption and
 controls fit a phone), a footer costs ~40px of it, and the `mt-auto` variant is worse because auto
 margins beat `justify-center` and the card would stop being centred. **Not the crash screen** — the
@@ -3032,3 +3052,95 @@ worth chasing before it is committed by accident, since it holds track data. And
 **`api/_lib/artistmatch.tmp.test.ts`** is present but is NOT collected by `vitest` (46 files, 748
 tests, with and without it), so it is a spike file rather than part of the suite. Neither is in
 `.gitignore`, which is why both show up in `git status`.
+
+## 2026-08-11 — Where blank cards actually come from: coverage, not scoring (and one real matching bug)
+
+Diagnosed the `none` population by running the whole pipeline over two real 50-track playlists via
+the embed endpoint. The split is genre-correlated and decisive:
+
+|                                         | Today's Top Hits | Viva Latino |
+| --------------------------------------- | ---------------- | ----------- |
+| `high`                                  | 46               | 33          |
+| `low`                                   | 1                | 2           |
+| **`none` — card DROPPED from the deck** | **3**            | **14**      |
+
+The 36% blank rate recorded on 2026-08-05 reproduces on Latin/urban and nearly vanishes on
+anglophone chart pop. Of the 18 failures across both:
+
+- **10 were MusicBrainz coverage gaps** — a candidate pool of literally **zero**. All 2025–26
+  regional Mexican / Latin urban. MusicBrainz is a volunteer archive and nobody has entered them.
+  **No algorithm change can touch these**, which is the single most useful thing this measurement
+  established.
+- **5 were artist matching**, and that is a real bug (below).
+- 1 `no-dated-candidates`, 2 transient upstream errors.
+
+### The matching bug
+
+`artistMatches` requires one credit to be a contiguous whole-token RUN of the other. Spotify joins
+collaborators with `", "`; MusicBrainz uses a joinphrase. So the two disagree about the connector
+**and** the order, and a mismatch discards the _entire_ pool — 22 perfectly good candidates for
+"Dai Dai", after which the card is removed from the deck.
+
+Real credits, measured live:
+
+| Spotify                             | MusicBrainz             | exact | join-word fix | token bag |
+| ----------------------------------- | ----------------------- | ----- | ------------- | --------- |
+| `Shakira, Burna Boy`                | `Shakira x Burna Boy`   | ✗     | ✗             | ✓         |
+| `Dave, Tems`                        | `Dave feat. Tems`       | ✗     | ✓             | ✓         |
+| `Dave, Tems`                        | `Tems & Dave`           | ✗     | ✗             | ✓         |
+| `Xavi, De La Rose`                  | `De La Rose & Xavi`     | ✗     | ✗             | ✓         |
+| `Natanael Cano, Gabito Ballesteros` | `Natanael Cano feat. …` | ✗     | ✓             | ✓         |
+
+**Two things that look true and are not.** First, this is _not_ a punctuation problem:
+`normalizeForCacheKey` already maps `&`, `+` and `,` to spaces, so `"Shakira, Burna Boy"` ~
+`"Shakira & Burna Boy"` matched before any of this. Only **word** connectors and **reordering** were
+ever broken. Second, the obvious cheap fix — normalise join words away while KEEPING contiguity,
+which introduces no new false positives — **was measured and recovers only 2 of 4**, because half the
+sample is pure reordering. That is the whole reason a token bag was necessary rather than merely
+convenient.
+
+### Built
+
+`admitByArtist()` in `shared/year.ts`: exact pool, or — only when it is **empty** — the loose pool
+(same tokens, any order, ≤1 word of slack, ≥2 non-article tokens on the shorter side).
+`YearTier.confidence` became **`maxConfidence`**, a ceiling; the single success return computes
+`weakest(tier.maxConfidence, ARTIST_MATCH_CONFIDENCE[match])`, so a loosened match can never report
+`high`. Cache version v3 → v4.
+
+**A fallback, never a widening — and the reason is not the obvious one.** Merging the rules into a
+single filter fails because earliest-wins would hand the answer to any loosely-matched candidate with
+an older date, _and_ because **`preferByDuration` is not monotone**: it narrows to length-matching
+candidates only when that set is non-empty, so one extra admission can collapse the pool to just it.
+A union can therefore move a year in **both** directions — the "widening can only move it earlier"
+argument that justified the Singles/EP change earlier the same day **does not transfer to the artist
+filter**. The fallback shape provably can only turn a null into a year.
+
+### The test-coverage trap, again
+
+**The 22-fixture accuracy suite is structurally blind to artist matching.** The current filter rejects
+**0 of 227** candidates across every fixture, because the trimming policy kept representatives of
+distinct _exclusion reasons_ and "excluded by artist credit" was never one of them. So `pnpm test`
+passes identically with the whole artist rule reverted — the same false-comfort shape as the
+pre-re-capture fixtures, and the same shape as the unknown-Tailwind-utility and missing-`.js`
+findings. `artistMatchesExact` is exported for exactly one test: that every accuracy fixture has a
+non-empty exact pool. That assertion is what turns the safety argument into a test.
+
+### Verified live
+
+All four previously-dropped cards resolve: 2026 / 2025 / 2026 / 2025, all `low`. Every year agrees
+with what **iTunes and Deezer independently report**.
+
+### The dominant cause is still open, and the earlier "no second provider" call deserves revisiting
+
+10 of 18 failures were coverage. Measured: of those 18 tracks, **iTunes had 17 and Deezer had 17**,
+both keyless. The objection recorded earlier the same day — stores report the album edition's date —
+is real for old catalogue and **irrelevant for exactly the tracks MusicBrainz misses**, because a
+2026 single has no reissue history. The two sources fail in opposite directions: MusicBrainz is an
+archive (strong on old catalogue, weak on new), a store is a catalogue of what is currently sold.
+**Caveat measured, not assumed:** the probe took the first search result without verifying it, and
+three tracks got conflicting years between the two stores (`MATCHA` — iTunes 2023 vs Deezer 2026),
+so some hits are the wrong song. Any implementation needs normalised title+artist verification and
+must report `low`.
+
+**Also measured and NOT worth building:** retrying the duration-bounded query unbounded when scoring
+fails. Recovered zero tracks.
