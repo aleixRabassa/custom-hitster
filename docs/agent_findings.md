@@ -2810,3 +2810,62 @@ is honest feedback there. Left alone deliberately.
 **Testing note:** jsdom cannot see the slide, so the regression tests in `CardStack.test.tsx` assert
 element **identity** across the rerender instead — the same element means no child left, which means
 no exit animation. Both fail against the old key.
+
+## 2026-08-11 — The card became square, and every number downstream of the 9/14 ratio had to move
+
+**What was asked:** three bigger control buttons, spaced so the gap between them equals the gap from
+the outer two to the card's sides, and a **square** card instead of a rectangular one.
+
+**The square card is one token, and it is the only part of the change that is one token.**
+`--card-width: calc(var(--card-height) * 9 / 14)` became `var(--card-height)`. What is worth writing
+down is everything that was quietly measured in that ratio:
+
+- **All three clamp terms.** The clamp governs the HEIGHT, so under 9/14 every term was implicitly a
+  width term divided by 0.643 — reuse them and the card is 1.56× wider than each was tuned for. The
+  floor went `18rem → 15rem` (18rem of _width_ is 288px, and a 320px phone has 272px once `<main>`'s
+  `p-6` is paid, so the old floor would have overflowed the viewport it exists to fit); the ceiling
+  went `28rem → 24rem` (keeps the area within 15% of the old 288 × 448); and `124vw → 80vw` is the
+  same rule restated, because 124vw of height _was_ 80vw of width once the ratio was applied.
+- **`--qr-display-size`, and its constraint changed AXIS.** On the 9/14 card the cap was horizontal:
+  `CardHiddenSide` is `p-6`, so 15/18 of the width was the widest square that fitted. A square face
+  has width to spare and the code shares the HEIGHT with the caption instead — `p-6` + `gap-6` + a
+  12px line take a fixed ~88px, so the ratio must satisfy `r * 240 + 88 <= 240` at the floor card.
+  **14/18 overflows the floor card by ~35px, and `overflow-hidden` on the face would have clipped the
+  QR rather than shown the overflow** — an unscannable card with no visible symptom. It is now 7/12,
+  picked so the displayed size is the same 224px (ceiling) and ~140px (floor) it always was, which is
+  also why `QR_BITMAP_SIZE` did not have to move: 7/12 × 384 = 224 exactly.
+- **`--ring-width` deliberately did NOT move** (fixed 2px: a width-derived ring goes sub-pixel on the
+  small card and blurs into its own bloom), and neither did `62dvh`, which now does *less* work than
+  before — a square card of a given height is narrower than the 9/14 card was tall, so short
+  viewports gain room rather than losing it.
+
+**The spacing request could not be met with a gap utility, and that is the interesting half.** `gap-3`
+sets the two INNER gaps and says nothing about the outer two, which were whatever centring a
+hug-width row inside the screen happened to leave — a number with no relation to the card at all. The
+row is now `w-(--card-width)` with **`justify-evenly`**, which splits the leftover width into four
+equal parts: the requirement holds by construction, at every viewport, and keeps holding when the
+button size changes.
+
+**So the button size decides how much leftover there is, and a literal cannot do it.**
+`--size-control-button: max(3.5rem, calc(var(--card-width) / 5))` makes each of the four gaps exactly
+`card / 10` — half a button — at every card size, where a fixed 3.5rem leaves 42px gaps at the ceiling
+and 18px at the floor, i.e. a different design at each end. `max()` rather than `clamp()`: the floor is
+what the buttons already measured so they can never get smaller, and `card / 5` at the card's ceiling is
+76.8px, so an upper term would be unreachable decoration. `--size-control-icon` and
+`--size-control-spinner` are now derived from the button for the same reason — a fixed 28px glyph
+rattles around inside a 77px circle — with the spinner as `button - 1rem` rather than a fraction,
+because what has to hold is the constant 8px of button visible outside the ring.
+
+**Two hazards this created for a future reader:**
+
+1. **`--container-content` (24rem) and the card's ceiling (24rem) are now the same number**, so `Hud`,
+   `NoticeBanner` and the control row look like they could take the reading measure instead of
+   `--card-width`. They agree at the ceiling and nowhere else — the card shrinks with the viewport and
+   the reading measure does not — so the swap silently reintroduces the overhang on every phone.
+2. **Nothing local can see any of this.** jsdom computes no layout, so the four equal gaps, the square,
+   and the QR's fit inside the floor card are all arithmetic here and class names in the tests.
+   `index.css.test.ts` pins the width as `var(--card-height)` with **no multiplier** (a
+   `calc(... * 9 / 14)` passes a naive "derives from the height" check while being the exact thing that
+   was asked to change) and pins `button = card / 5`; `CardControls.test.tsx` pins the row's width,
+   `justify-evenly`, and the ABSENCE of a `gap-*`. **Owed manually: one look at the square card at
+   three widths, and one QR scan on the floor card**, where the code is ~140px.

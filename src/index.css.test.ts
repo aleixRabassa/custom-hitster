@@ -280,14 +280,54 @@ describe('src/index.css', () => {
   it('should define the card geometry as one derived pair rather than two independent clamps', () => {
     // The duplication this plan removed was `h-[28rem] w-72` written out in both `Card.tsx` and
     // `CardStack.tsx`. The token version must not reintroduce the same hazard in a new place: if
-    // width and height were each clamped independently, the 9:14 ratio would hold at the two ends
-    // and drift everywhere between them. Deriving the width from the height is what makes the ratio
+    // width and height were each clamped independently, the ratio would hold at the two ends and
+    // drift everywhere between them. Deriving the width from the height is what makes the ratio
     // exact at every viewport, and it is the one property of the pair a future edit could silently
     // lose.
     expect(stylesheet).toMatch(/--card-height:\s*clamp\(/);
-    expect(stylesheet).toMatch(/--card-width:\s*calc\(\s*var\(--card-height\)/);
+
+    // SQUARE since 2026-08-11, and asserted as the ABSENCE of a multiplier: the width must be the
+    // height and nothing else. A `calc(... * 9 / 14)` -- the old value -- passes a "derives from
+    // the height" check while being the exact thing the developer asked to change, so the two
+    // properties are pinned by one regex that admits neither a factor nor an offset.
+    expect(stylesheet).toMatch(/--card-width:\s*var\(--card-height\)\s*;/);
+
     // A viewport-height term, which open question 4 resolved as necessary: without one, a phone in
-    // landscape gets a 448px card in a 375px viewport.
+    // landscape gets a card taller than its viewport. And a viewport-WIDTH term, which on a square
+    // card guards the axis the clamp does not name -- the height clamp now sets the width too, so
+    // without it a tall narrow phone gets a card wider than its screen.
     expect(stylesheet).toMatch(/--card-height:[^;]*dvh/);
+    expect(stylesheet).toMatch(/--card-height:[^;]*\dvw/);
+  });
+
+  it('should derive the control-button size from the card width above a fixed floor', () => {
+    // ===================================================================
+    //  THIS IS THE STYLESHEET END OF "the gaps between the buttons and the
+    //  gaps to the card's edges are the same" (asked for 2026-08-11).
+    //
+    //  `CardControls` holds the other end: a `w-(--card-width)` row with
+    //  `justify-evenly`, which splits the leftover width into four equal
+    //  parts. That alone satisfies the request at any button size -- what
+    //  this pins is that the leftover is a SENSIBLE amount at every
+    //  viewport. `button = card / 5` makes each of the four gaps exactly
+    //  `card / 10`, so the row is the same design at the 240px floor card
+    //  and at the 384px ceiling one. A fixed length gives 18px gaps at one
+    //  end and 42px at the other.
+    //
+    //  jsdom computes no layout, so nothing here can measure a gap. What it
+    //  catches is the regression that matters: somebody "simplifying" the
+    //  token back to a literal, which looks identical in every test and
+    //  silently reverts the spacing rule at every size but one.
+    // ===================================================================
+    expect(stylesheet).toMatch(
+      /--size-control-button:\s*max\(\s*3\.5rem\s*,\s*calc\(\s*var\(--card-width\)\s*\/\s*5\s*\)\s*\)/,
+    );
+
+    // Both derived from the button, so a glyph cannot rattle around inside a grown circle and the
+    // buffering ring cannot stop reading as a ring. `--size-control-icon` is half the button;
+    // `--size-control-spinner` is the button less a constant 8px a side, which is the property that
+    // has to hold rather than a proportion.
+    expect(stylesheet).toMatch(/--size-control-icon:\s*calc\(\s*var\(--size-control-button\)/);
+    expect(stylesheet).toMatch(/--size-control-spinner:\s*calc\(\s*var\(--size-control-button\)/);
   });
 });

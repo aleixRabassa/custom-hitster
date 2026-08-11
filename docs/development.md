@@ -353,9 +353,20 @@ covers exactly what it covered before — it is **not** invalidated by the redes
 | A long user-created playlist name truncates without pushing the count off the row | Pending                                     |
 | The landing screen's nine suggestions are usable at 320px                         | Pending                                     |
 | A phone in **landscape**: the card fits the short viewport                        | Pending                                     |
+| The card is **square** at all three widths, not merely square on a desktop        | Pending — **new 2026-08-11**, see below     |
+| The three control gaps read as EQUAL to the gaps at the card's edges              | Pending — **new 2026-08-11**, see below     |
+| The QR still fits the face on the **240px floor card**, uncropped                 | Pending — **new 2026-08-11**, see below     |
 
 The landscape row is what the `62dvh` term in `--card-height` exists for; without it a landscape
-phone gets a 448px card in a 375px viewport ([`architecture.md`](./architecture.md) §3).
+phone gets a card taller than its viewport ([`architecture.md`](./architecture.md) §3).
+
+> **The last three rows are 2026-08-11's, and every one of them is arithmetic until somebody looks.**
+> The card is square because `--card-width` is `var(--card-height)`, the four gaps are equal because the
+> control row is `w-(--card-width)` with `justify-evenly`, and the QR fits because 7/12 of the 240px
+> floor card plus the face's fixed ~88px of padding, gap and caption comes to 228px. jsdom computes no
+> layout, so none of that is observed anywhere — and the QR row is the one with a silent failure mode:
+> the face is `overflow-hidden`, so a code that does not fit is **cropped rather than overflowing**, and
+> a cropped QR does not scan while looking almost right. Scan it, do not just look at it.
 
 > **The backs row was a measured failure and the geometry has now been replaced rather than retuned.**
 > At the card's 448px ceiling the two peeking backs peeked by **1.04px** and **2.08px** at the bottom and

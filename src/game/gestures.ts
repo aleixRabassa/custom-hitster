@@ -56,12 +56,13 @@ export type CommitDirection = 'left' | 'right';
  * the viewport: the gesture is against the card, not against the window.
  *
  * ===========================================================================
- *  PHASE 7 MADE THE CARD FLUID, AND 288px IS NOW ONLY ITS CEILING.
+ *  PHASE 7 MADE THE CARD FLUID, AND 288px IS NO LONGER ANY OF ITS SIZES.
  *
- *  `--card-width` in `src/index.css` clamps down to 185px on a short viewport --
- *  a phone in landscape, or a small phone in portrait. At that end 96px is 52%
- *  of the card's width rather than 33%, so a commit takes a visibly longer drag
- *  on a small screen than on a large one.
+ *  `--card-width` in `src/index.css` runs from 240px to 384px since the card
+ *  became SQUARE on 2026-08-11 (it was 185px to 288px before that). So 96px is
+ *  40% of the card at the narrow end and 25% at the wide one, and the intended
+ *  third is reached at neither: a commit takes a visibly longer drag on a small
+ *  screen than on a large one.
  *
  *  NOT retuned here, because retuning it would be guessing twice instead of
  *  once. All five thresholds in this file are documented starting values that

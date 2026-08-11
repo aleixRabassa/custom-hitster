@@ -187,6 +187,37 @@ placeholder assertion into a mystery failure. That cache is read **during render
 effect: `useEffect` runs after paint, so an effect would still show one frame of the placeholder and
 the preload would buy nothing.
 
+**THE CARD IS SQUARE as of 2026-08-11, and the ratio it replaced was measured into four other
+numbers.** `--card-width` is now `var(--card-height)` with no multiplier — which is how
+`index.css.test.ts` pins "square", because a `calc(... * 9 / 14)` passes a naive "derives from the
+height" check while being the exact thing that was asked to change. **All three clamp terms moved with
+it and none was free**: the clamp governs the HEIGHT, so under 9/14 every term was implicitly a width
+term divided by 0.643. Floor `18rem → 15rem` (18rem of _width_ is 288px, and a 320px phone has 272px
+once `<main>`'s `p-6` is paid), ceiling `28rem → 24rem` (area within 15% of the old 288 × 448),
+`124vw → 80vw` (the same rule restated — 124vw of height _was_ 80vw of width once the ratio was
+applied). **`--qr-display-size` went 14/18 → 7/12, and its binding constraint changed axis**: a square
+face has width to spare but the code shares the HEIGHT with the caption, so `p-6` + `gap-6` + a 12px
+line take a fixed ~88px and 14/18 would have overflowed the floor card by ~35px — which
+`overflow-hidden` **crops rather than shows**, i.e. a silently unscannable card. 7/12 was picked so the
+displayed size is the 224px / ~140px it always was, which is why `QR_BITMAP_SIZE` stays 224.
+`--ring-width` deliberately did **not** follow the card (a derived ring goes sub-pixel and blurs into
+its own bloom). One new hazard: **`--container-content` and the card's ceiling are now both 24rem**, so
+the three components capped at `--card-width` look mergeable with the reading measure — they agree at
+the ceiling and nowhere else. Reasoning in [`docs/architecture.md`](./docs/architecture.md) §3.
+
+**The three controls are spaced against the CARD, and a `gap-*` on that row is a regression.** Also
+2026-08-11, asked for as "bigger, with the same separation between them and the card's sides". `gap-3`
+could not express it — it sets the two inner gaps and leaves the outer two to whatever centring a
+hug-width row happened to produce, a number unrelated to the card. The row is `w-(--card-width)` with
+**`justify-evenly`** (four equal parts of the leftover, so the rule holds by construction at every
+viewport), and the size is **`max(3.5rem, calc(var(--card-width) / 5))`** so each gap is exactly
+`card / 10` — half a button — at every card size, where a literal gives 42px gaps at the ceiling and
+18px at the floor. `max()` not `clamp()`: the floor is what the buttons already measured, and `card / 5`
+at the ceiling is 76.8px so an upper term would be unreachable. `--size-control-icon` (half the button)
+and `--size-control-spinner` (`button - 1rem`, holding a constant 8px inset) are derived for the same
+reason. `--size-touch-target` is still applied beside the size and still catches a lowered token.
+`CardControls.test.tsx` asserts the row's width, `justify-evenly` and the **absence** of a `gap-*`.
+
 **Five developer decisions landed on 2026-08-05, after Phase 7 plan 1. Two of them reverse
 something `plan.md` had already resolved, so read these before "fixing" the code back:**
 
@@ -217,7 +248,8 @@ something `plan.md` had already resolved, so read these before "fixing" the code
 - Phase 5: **the iOS half of the touch pass has still never been run** — the 2026-08-06 pass was Android only, so tap-versus-swipe under Safari, pull-to-refresh suppression, whether the card needs `select-none`, and whether audio starts from the first tap are all open. Checklist in [`docs/development.md`](./docs/development.md) §5.
 - The **lock-screen fix needs one re-check** on the phone: play, lock, confirm silence, unlock, confirm Play continues rather than restarting.
 - Phase 6: **progressive loading against a real preview deployment with Upstash configured** (step 15 of [`plan.phase-4-6-screens.md`](./docs/plans/plan.phase-4-6-screens.md), carried over from Phase 3) is not done. Nothing local models it: the shared cache and the 1 req/s gate are both backed by the Upstash variables, and without them the gate paces nothing. It also owes the **50-track cold-deck wall clock**, unmeasured since Phase 2, and a **count of `/api/year` requests under React 19 StrictMode** — `use-game-session.ts` has a double-crawl guard that nothing tests.
-- The two browser checks the 2026-08-05 decisions owed — **one swipe** for `popLayout`'s measurement (jsdom computes no layout, so it bails there no matter what the code does) and **one QR scan at the larger 14/18 size** — were both closed by the 2026-08-06 Android pass.
+- The two browser checks the 2026-08-05 decisions owed — **one swipe** for `popLayout`'s measurement (jsdom computes no layout, so it bails there no matter what the code does) and **one QR scan at the larger 14/18 size** — were both closed by the 2026-08-06 Android pass. **The square card of 2026-08-11 does not reopen the scan**, and that is by construction: the ratio went to 7/12 only because its denominator changed, so the code is displayed at the same 224px / ~140px it was scanned at.
+- The square card owes **three of the "three widths" rows** (2026-08-11): that the card is square at all three, that the control row's four gaps read as equal, and **one scan on the 240px floor card** — the face is `overflow-hidden`, so a QR that does not fit is cropped rather than visibly overflowing, and a cropped code fails to scan while looking almost right.
 - Phase 8: **nothing about the PDF export has been verified on paper.** The geometry, the pagination and the duplex mirror are unit-tested; the printer, the cut and a scan of a printed code are not. Six sharing/printing checks in [`docs/development.md`](./docs/development.md) §5.
 - Phase 7 (first half): **all four behavioural passes are outstanding** — reduced motion with the OS preference set, three widths, keyboard-only, and a screen reader over one flip — plus the before/after screenshot comparison. The environment is the reason, not the effort: jsdom has no media queries, no `matchMedia`, no layout and no a11y tree, so class-name assertions are the ceiling. **Prioritise the screen reader.** Checklists in [`docs/development.md`](./docs/development.md) §5, gaps in its §8.
 

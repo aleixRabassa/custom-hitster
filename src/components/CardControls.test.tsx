@@ -287,6 +287,37 @@ describe('CardControls', () => {
     }
   });
 
+  it('should space the row against the card rather than with a hand-set gap', () => {
+    // ===================================================================
+    //  THE 2026-08-11 SPACING REQUEST: the gap BETWEEN two buttons and the
+    //  gap from the outer two to the CARD'S SIDES must be the same.
+    //
+    //  `gap-3` could not express it -- it sets the two inner gaps and says
+    //  nothing about the outer two, which were whatever centring a
+    //  hug-width row in the screen happened to leave. `justify-evenly` on a
+    //  row that is exactly `--card-width` wide splits the leftover into
+    //  four equal parts, so the requirement holds by construction and keeps
+    //  holding when the button token changes.
+    //
+    //  jsdom computes no layout, so this is class-name level with the usual
+    //  caveat: it cannot measure that the four gaps are equal. It catches
+    //  the two edits that would break the rule while looking tidier -- a
+    //  `gap-*` put back on the row, or the row's width dropped back to
+    //  hug-content. The stylesheet end (button = card/5) is pinned in
+    //  `src/index.css.test.ts`.
+    // ===================================================================
+    const { container } = render(controls());
+
+    const outer = container.firstElementChild as HTMLElement;
+    expect(outer.className).toContain('w-(--card-width)');
+
+    const row = screen.getByRole('button', { name: 'Play' }).parentElement;
+    expect(row?.className).toContain('w-full');
+    expect(row?.className).toContain('justify-evenly');
+    // A gap utility here would reintroduce the asymmetry: two gaps set by hand, two left over.
+    expect(row?.className ?? '').not.toMatch(/(?:^|\s)gap-/);
+  });
+
   it('should invoke play and pause on the toggle', () => {
     const audio = stubAudio();
     const { rerender } = render(controls({ audio }));
@@ -312,7 +343,9 @@ describe('CardControls', () => {
   it('should show a spinner in the play button while the preview is loading', () => {
     // The fix for "the first press on Play does nothing". The element is `preload="none"`, so the
     // first press starts a cold fetch and there was no feedback for it at all.
-    const { container } = render(controls({ audio: stubAudio({ isPlaying: true, isLoading: true }) }));
+    const { container } = render(
+      controls({ audio: stubAudio({ isPlaying: true, isLoading: true }) }),
+    );
 
     const play = screen.getByRole('button', { name: 'Pause' });
     expect(play.querySelector('[data-motion="spinner"]')).not.toBeNull();

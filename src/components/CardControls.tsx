@@ -83,9 +83,11 @@ import { Spinner } from './Spinner';
  * 3.46:1 against `--color-surface-raised` -- the dimmest text in the app, on the one card a player
  * most wants to act on. The token measures 5.94:1.
  *
- * `size-(--size-control-button)` (2026-08-11) replaced `px-4 py-2`. The buttons are now a fixed
- * SQUARE -- with `rounded-full`, a circle -- rather than a pill sized by its padding, which is what
- * lets three of them be visibly bigger without the row drifting off-centre. `touch-target` stays
+ * `size-(--size-control-button)` (2026-08-11) replaced `px-4 py-2`. The buttons are a SQUARE --
+ * with `rounded-full`, a circle -- rather than a pill sized by its padding, which is what lets
+ * three of them be visibly bigger without the row drifting off-centre. The token is `card / 5`
+ * above a 3.5rem floor, so the buttons grow with the card and the row's spacing below stays the
+ * same design at every viewport; `src/index.css` carries that arithmetic. `touch-target` stays
  * beside it and is not redundant: it is a `min-height`/`min-width` floor, so it keeps guaranteeing
  * the WCAG 2.5.5 minimum if the button token is ever lowered.
  */
@@ -233,8 +235,31 @@ export function CardControls({ audio, onExit, onKeepDeck }: CardControlsProps) {
   const { canPlay, isPlaying, isLoading, play, pause } = audio;
 
   return (
-    <div className="flex flex-col items-center gap-2">
-      <div className="flex items-center gap-3">
+    /*
+      ===========================================================================
+       THE ROW IS EXACTLY AS WIDE AS THE CARD, AND THE SPACING IS `justify-evenly`
+       RATHER THAN A GAP. Asked for on 2026-08-11: the gap between two buttons and
+       the gap from the outer two to the CARD'S SIDES have to be the same.
+
+       `gap-3` could not express that. It sets the two inner gaps and says nothing
+       about the outer two, which were whatever centring a hug-width row inside the
+       screen happened to leave -- a number that changed with the button size and
+       had no relation to the card at all.
+
+       `space-evenly` divides the leftover width into four equal parts: one before
+       the first button, one between each pair, one after the last. So the
+       requirement is met by construction at every viewport, and it stays met when
+       the button token changes, which no hand-set gap would.
+
+       `w-(--card-width)` is what makes "the sides of the card" mean anything here,
+       and it is the same alignment convention `Hud` and `NoticeBanner` follow --
+       everything in this column lines up with the card's edges rather than with
+       the viewport's. The missing-preview note inherits the width too, which is
+       why it carries `text-center`: at the 240px floor card it wraps.
+      ===========================================================================
+    */
+    <div className="flex w-(--card-width) flex-col items-center gap-2">
+      <div className="flex w-full items-center justify-evenly">
         {/*
           Exit is never disabled. A player must always be able to leave, including on a card
           whose audio does not work -- which is precisely the card they are most likely to
@@ -305,7 +330,7 @@ export function CardControls({ audio, onExit, onKeepDeck }: CardControlsProps) {
       {canPlay ? null : (
         // Generic on purpose: it says the preview is missing, never which track it is missing
         // for. The QR still works, so this is a note rather than an error.
-        <p className="text-xs text-fg-muted">No preview available — scan to play</p>
+        <p className="text-xs text-fg-muted text-center">No preview available — scan to play</p>
       )}
     </div>
   );

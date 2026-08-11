@@ -81,7 +81,8 @@ export const manifest: Partial<ManifestOptions> = {
    * `theme_color` colours, which would make that field pointless.
    *
    * No `orientation` field, deliberately (open question 4, decided 2026-08-06). Phase 7's
-   * `--card-height: clamp(18rem, min(62dvh, 124vw), 28rem)` exists precisely so a short
+   * `--card-height` clamp -- `clamp(15rem, min(62dvh, 80vw), 24rem)` since the card became
+   * square -- exists precisely so a short
    * wide viewport gets a smaller card instead of an overflowing one, so landscape is a
    * supported layout rather than a tolerated one -- and locking it would override a player
    * who rotated their phone on purpose.

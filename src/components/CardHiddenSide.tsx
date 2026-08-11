@@ -53,16 +53,21 @@ export interface CardHiddenSideProps {
  * The bitmap the QR is encoded at, in pixels.
  *
  * Sized for the LARGEST the code is ever displayed at, which is 224px — `--qr-display-size` is
- * 14/18 of the card's width and the card's width tops out at 288px. Fixed, and it stays fixed
+ * 7/12 of the card's width and the card's width tops out at 384px. Fixed, and it stays fixed
  * (Phase 7 decision 4): the displayed size became fluid, the generated one must not follow it,
  * because `toDataURL` is asynchronous and a viewport-derived size would re-encode on every frame
  * of a resize. Downscaling a finished code in CSS is free.
  *
  * **This number has to move with `--qr-display-size`, and it is the direction that matters.**
- * It was 176 while the code displayed at 11/18; the code is now 14/18, so a 176px bitmap would be
- * scaled UP by 27% and a QR is exactly the kind of image that must not be — upscaling blurs the
- * module edges a camera is looking for. Encoding above the displayed size is harmless (the browser
- * downsamples), encoding below it is not.
+ * It was 176 while the code displayed at 11/18 of a 288px card; the code then went to 14/18, so a
+ * 176px bitmap would have been scaled UP by 27% and a QR is exactly the kind of image that must not
+ * be — upscaling blurs the module edges a camera is looking for. Encoding above the displayed size
+ * is harmless (the browser downsamples), encoding below it is not.
+ *
+ * **The square card of 2026-08-11 did not move it, and that is arithmetic rather than luck:** the
+ * ratio went to 7/12 precisely so 7/12 of the new 384px ceiling is the same 224px the old 14/18 of
+ * 288px was. If either the ratio or the card's ceiling is raised, recompute their product and raise
+ * this with it.
  */
 const QR_BITMAP_SIZE = 224;
 

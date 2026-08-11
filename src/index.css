@@ -242,10 +242,11 @@
   /*
    * Ring width, and it is one value for the live card and the backs both.
    *
-   * 2px, which has to stay CRISP at both ends of the card's clamp -- 288px wide
-   * at the ceiling and 185px at the floor. A ring derived from the card's width
-   * would be sub-pixel on the small card and would blur into the bloom, which is
-   * the opposite of a neon edge.
+   * 2px, which has to stay CRISP at both ends of the card's clamp -- 384px wide
+   * at the ceiling and 240px at the floor since the card became square. A ring
+   * derived from the card's width would be sub-pixel on the small card and would
+   * blur into the bloom, which is the opposite of a neon edge. (It is also why
+   * this token did not move with the card: a fixed 2px is fixed at any card size.)
    */
   --ring-width: 2px;
 
@@ -274,63 +275,90 @@
 
   /*
    * ===========================================================================
-   *  ONE PAIR OF TOKENS, CONSUMED BY BOTH `Card` AND `CardStack`.
+   *  ONE PAIR OF TOKENS, CONSUMED BY BOTH `Card` AND `CardStack` -- AND SINCE
+   *  2026-08-11 THE PAIR IS SQUARE.
    *
    *  Those two files each carried `h-[28rem] w-72` and the two literals were
-   *  REQUIRED to match -- the stack's peeking backs are `absolute inset-0` on a
-   *  wrapper sized by the second pair, so a change to one and not the other
-   *  silently misaligns the deck. Nothing enforced it. This is that pair.
+   *  REQUIRED to match -- the stack's back is `absolute inset-0` on a wrapper
+   *  sized by this pair, so a change to one and not the other silently
+   *  misaligns the deck. Nothing enforced it. This is that pair.
    *
-   *  HEIGHT is the primary term and WIDTH is derived from it, rather than the
-   *  other way round, because height is what actually runs out: the card shares
-   *  a `min-h-dvh` column with the HUD, the notice and the control bar. Deriving
-   *  the width preserves the 9:14 ratio the Phase 6 pair implied (288 × 448)
-   *  through every viewport, which a clamp on each axis independently would not.
+   *  HEIGHT is still the primary term and WIDTH is still derived from it, rather
+   *  than the other way round, because height is what actually runs out: the card
+   *  shares a `min-h-dvh` column with the HUD, the notice and the control bar.
+   *  The developer asked for a square card on 2026-08-11, so the factor is now 1
+   *  instead of 9/14 -- written as a bare `var()` rather than by repeating the
+   *  clamp, because two independent clamps would hold the ratio at the two ends
+   *  and drift everywhere between them. `index.css.test.ts` asserts the width is
+   *  exactly the height with no multiplier, which is how "square" is pinned.
    *
-   *  The three terms of the clamp:
+   *  ALL THREE NUMBERS OF THE CLAMP MOVED WITH THE RATIO, and none of them was
+   *  free: the clamp governs the height, so under 9/14 every term was implicitly
+   *  a width term divided by 0.643. Reusing them would make the card 1.56x wider
+   *  than each was tuned for.
    *
-   *    18rem   floor. 288px tall / 185px wide -- small, but a 320×568 phone in
-   *            landscape has 375px of height for everything.
-   *    62dvh   the fluid middle. `dvh`, not `vh`: open question 4 asked whether
-   *            a short wide viewport needs a viewport-height term, and it does.
-   *            Without one, a phone in landscape gets a 448px card in a 375px
-   *            viewport. `dvh` also survives a mobile browser's collapsing
-   *            address bar, which `vh` does not.
-   *    124vw   the narrow-viewport guard. 124vw of height is 80vw of width once
-   *            the ratio is applied, so the card can never exceed 80% of a very
-   *            narrow-but-tall viewport. Inside `min()` rather than as a second
-   *            clamp so the ratio still holds when this term wins.
-   *    28rem   ceiling. Exactly the Phase 6 height, so a desktop card is
-   *            unchanged and does not become a billboard.
+   *    15rem   floor, was 18rem. 240px square. The old floor was 288 tall and
+   *            185 WIDE; keeping 18rem would make the card 288px wide, and
+   *            `GameScreen`'s `<main>` is `p-6` -- so a 320px phone has 272px to
+   *            give and the floor would overflow the viewport it exists to fit.
+   *            240px sits inside the 80vw term below at any viewport of 300px or
+   *            more, so the two never fight.
+   *    62dvh   the fluid middle, UNCHANGED, and it now does less work than it
+   *            did: a square card of a given height is narrower than the 9/14
+   *            card was tall, so a short viewport gets room back rather than
+   *            losing it. `dvh`, not `vh`: open question 4 asked whether a short
+   *            wide viewport needs a viewport-height term, and it does. `dvh`
+   *            also survives a mobile browser's collapsing address bar.
+   *    80vw    the narrow-viewport guard, was 124vw. The SAME RULE restated for
+   *            the new ratio: 124vw of height was 80vw of width once 9/14 was
+   *            applied, and on a square card 80vw of height IS 80vw of width.
+   *            Inside `min()` rather than as a second clamp so one term still
+   *            governs both axes.
+   *    24rem   ceiling, was 28rem. 384px square, against the old 288 x 448. Area
+   *            is within 15% of the old card, so it reads as the same object at a
+   *            new shape rather than as a billboard -- and it is what lets
+   *            `--qr-display-size` below keep the code's exact displayed size.
    *
-   *  At 412×915 and at every desktop size this resolves to exactly 288 × 448 --
-   *  the pre-change values. It is only below roughly 723px of viewport height
-   *  that the card starts to shrink, which is the point.
+   *  At every desktop size this resolves to 384 x 384; it is only below roughly
+   *  620px of viewport height (or 480px of width) that the card starts to shrink.
    * ===========================================================================
    */
-  --card-height: clamp(18rem, min(62dvh, 124vw), 28rem);
-  --card-width: calc(var(--card-height) * 9 / 14);
+  --card-height: clamp(15rem, min(62dvh, 80vw), 24rem);
+  --card-width: var(--card-height);
 
   /*
    * The QR code's DISPLAYED edge length, fluid with the card.
    *
-   * 14/18 of the card's width -- 224px at the card's 288px ceiling. It was 11/18
-   * (176px, the Phase 6 value) until the developer asked for a bigger code on
-   * 2026-08-05: the QR is the only thing on the hidden face and the only way to
-   * hear the full song, so it is the one element on that face worth filling it.
+   * 7/12 of the card's width -- 224px at the card's 384px ceiling and 140px at
+   * its 240px floor. Those two numbers are the whole reason for the ratio: it was
+   * 14/18 against a 288px-wide card, which displayed at 224px and 144px, so
+   * 2026-08-11's square card changed this fraction ONLY BECAUSE ITS DENOMINATOR
+   * CHANGED. The code is the same size on screen as it was before; the card grew
+   * around it. (It was 11/18 -- 176px, the Phase 6 value -- until the developer
+   * asked for a bigger code on 2026-08-05.)
    *
-   * 14/18 is the practical ceiling rather than a taste: `CardHiddenSide` is
-   * `p-6`, which is 24px a side, so the widest a square can be inside a 288px
-   * card is 240px -- 15/18. Leaving one eighteenth of slack keeps the code off
-   * the padding edge at every viewport, and the same ratio applied to the 18rem
-   * floor is a 224 * 18/28 = 144px code, still comfortably scannable.
+   * 224px is also exactly `QR_BITMAP_SIZE` in `CardHiddenSide.tsx`, which is why
+   * that constant did not have to move with the card: encoding ABOVE the
+   * displayed size is harmless (the browser downsamples), encoding below it
+   * upscales a QR and blurs the module edges a camera is looking for. Raise this
+   * ratio and that constant has to follow.
+   *
+   * THE BINDING CONSTRAINT IS NOW VERTICAL RATHER THAN HORIZONTAL, and that is
+   * what caps the ratio. On the 9/14 card it was `CardHiddenSide`'s `p-6` -- 24px
+   * a side, so 15/18 of the width was the widest a square could be. A square card
+   * has width to spare and the code shares the HEIGHT with the caption instead:
+   * the padding, the `gap-6` and the 12px line take a fixed ~88px, so the ratio
+   * has to satisfy `r * 240 + 88 <= 240` at the floor. 7/12 leaves 12px of slack
+   * there and 72px at the ceiling. 14/18 would have overflowed the floor card by
+   * ~35px, and `overflow-hidden` on the face would have CLIPPED THE CODE -- a
+   * silently unscannable card, not a visibly broken layout.
    *
    * The GENERATED bitmap's size is a different number and must stay one
    * (decision 4): `toDataURL` is asynchronous, so a generation size that tracked
    * the viewport would re-encode the code on every resize frame and flash the
    * placeholder while it did. `QrCode.tsx` takes the two separately.
    */
-  --qr-display-size: calc(var(--card-width) * 14 / 18);
+  --qr-display-size: calc(var(--card-width) * 7 / 12);
 
   /* --- Content column ---------------------------------------------------- */
 
@@ -340,8 +368,15 @@
    *
    * `Hud` and `NoticeBanner` do NOT use this: they sit directly above the card
    * and are supposed to line up with it, which at `max-w-sm` (24rem) against a
-   * card of 18rem they never did. They take `--card-width` instead. See the
-   * plan's execution note 2.
+   * card of 18rem they never did. They take `--card-width` instead, and
+   * `CardControls`' row does too. See the plan's execution note 2.
+   *
+   * THE SQUARE CARD MADE THAT LOOK LIKE A COINCIDENCE WORTH COLLAPSING, AND IT IS
+   * NOT: the card's clamp now tops out at 24rem, exactly this value, so on a
+   * desktop the two are the same number. They agree at the ceiling and nowhere
+   * else -- the card shrinks with the viewport and this does not -- so swapping
+   * `--card-width` for `--container-content` on those three would silently
+   * reintroduce the overhang on every phone.
    */
   --container-content: 24rem;
 
@@ -412,6 +447,44 @@
   --size-touch-target: 2.75rem;
 
   /*
+   * The control buttons' edge length. They are SQUARE, so with `rounded-full`
+   * this is a circle's diameter.
+   *
+   * ===========================================================================
+   *  DERIVED FROM THE CARD'S WIDTH, AND THAT COUPLING IS THE REQUIREMENT RATHER
+   *  THAN a convenience.
+   *
+   *  The developer asked (2026-08-11) for three bigger buttons spaced so that the
+   *  gap BETWEEN them equals the gap from the outer two to the card's edges.
+   *  `CardControls` gets the spacing itself for free -- the row is
+   *  `w-(--card-width)` with `justify-evenly`, which splits the leftover space
+   *  into four equal parts -- but "equal" is only worth having if the leftover is
+   *  a sane amount at every viewport, and that is this token's job:
+   *
+   *    button = card / 5  ->  leftover = card * 2/5  ->  each of the four gaps is
+   *    card / 10, i.e. exactly half a button, at EVERY card size.
+   *
+   *  A fixed length cannot do that. At the 384px card a fixed 3.5rem leaves 42px
+   *  gaps and at the 240px floor it leaves 18px, so the row's rhythm would be a
+   *  different design at each end.
+   *
+   *  `max()` and not `clamp()`: the floor is 3.5rem, which is what the buttons
+   *  measured before this change, so they can never get SMALLER than they already
+   *  were on a small phone (card/5 is 48px at the 240px floor). There is
+   *  deliberately no upper term -- card/5 at the card's own 24rem ceiling is
+   *  76.8px, so a maximum would be unreachable decoration.
+   *
+   *  The row always fits: below a 280px card the button is the 3.5rem floor and
+   *  3 x 56 = 168px, and above it 3 x card/5 is three fifths of the row.
+   *
+   *  `--size-touch-target` is still applied beside this in `CardControls` and
+   *  still does its job -- if this token is ever lowered past 2.75rem, the floor
+   *  silently catches it, which is the correct failure.
+   * ===========================================================================
+   */
+  --size-control-button: max(3.5rem, calc(var(--card-width) / 5));
+
+  /*
    * The control-bar icons' edge length, and the reason it is a token is that the
    * icons MUST agree.
    *
@@ -422,32 +495,27 @@
    * a single length is what keeps them uniform; nothing about a glyph could be
    * made uniform from CSS.
    *
-   * 1.75rem since 2026-08-11, up from 1.25rem. The bar dropped from four buttons
-   * to three when Restart went, and the remaining three were asked to be bigger.
+   * HALF THE BUTTON, derived rather than written, since the buttons became fluid
+   * on 2026-08-11. It was 1.25rem in a 44px button and then 1.75rem in a 56px one
+   * -- both a hair under half -- and a fixed length in a growing button is how a
+   * 28px glyph ends up rattling around inside a 77px circle. One half keeps the
+   * glyph-to-button proportion the enlargement was judged at.
    */
-  --size-control-icon: 1.75rem;
-
-  /*
-   * The control buttons' edge length. They are SQUARE, so with `rounded-full`
-   * this is a circle's diameter.
-   *
-   * Added 2026-08-11 with the enlargement. Before it the buttons had no size of
-   * their own at all -- `px-4 py-2` around a 1.25rem glyph, floored by
-   * `--size-touch-target`, so they were 44px because the FLOOR said so rather
-   * than because anything chose it. That is why "make the buttons bigger" had
-   * nowhere to be written down. `--size-touch-target` is still applied beside
-   * this and still does its job: if this token is ever lowered past 2.75rem the
-   * floor silently catches it, which is the correct failure.
-   */
-  --size-control-button: 3.5rem;
+  --size-control-icon: calc(var(--size-control-button) / 2);
 
   /*
    * The Play button's buffering ring. Sits between the icon and the button edge
    * so it reads as a ring AROUND the glyph rather than as a replacement for it --
    * which matters because the glyph stays rendered underneath (reduced motion
    * hides the spinner, and an empty button reads as broken).
+   *
+   * Expressed as the button MINUS 1rem rather than as a fraction of it, because
+   * what has to stay constant is the 8px of button left visible outside the ring:
+   * a proportional ring would grow its inset with the button and stop reading as
+   * a ring at the card's ceiling. 2.5rem in a 3.5rem button is where the pair
+   * started, and this is that same 8px, held.
    */
-  --size-control-spinner: 2.5rem;
+  --size-control-spinner: calc(var(--size-control-button) - 1rem);
 
   --focus-ring-width: 2px;
   --focus-ring-offset: 2px;

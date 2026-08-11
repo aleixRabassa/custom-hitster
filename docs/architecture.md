@@ -569,8 +569,12 @@ Five things about it are load-bearing:
   below.
 - **Two tokens cap a column, and which one a component takes is a real decision.**
   `--container-content` (24rem) is a reading measure for the landing, end and preparing screens.
-  `--card-width` caps `Hud` and `NoticeBanner`, because those two sit directly above the card and are
-  supposed to line up with it — at `max-w-sm` against an 18rem card they never did.
+  `--card-width` caps `Hud` and `NoticeBanner` and now sizes `CardControls`' row, because those three
+  sit directly above or below the card and are supposed to line up with it — at `max-w-sm` against an
+  18rem card they never did. **The square card made the two look mergeable and they are not:** the
+  card's clamp tops out at 24rem, exactly `--container-content`, so on a desktop the numbers coincide —
+  and they coincide at the ceiling and nowhere else, because the card shrinks with the viewport and the
+  reading measure does not.
 
 #### The card's geometry is one derived pair, and that fixed a latent bug
 
@@ -580,30 +584,74 @@ a card resized without its wrapper leaves the backs the old size and the deck st
 Nothing enforced it.
 
 ```css
---card-height: clamp(18rem, min(62dvh, 124vw), 28rem);
---card-width: calc(var(--card-height) * 9 / 14);
+--card-height: clamp(15rem, min(62dvh, 80vw), 24rem);
+--card-width: var(--card-height); /* SQUARE since 2026-08-11 */
 ```
 
 **Height is the primary term and width is derived from it**, which is the opposite of the obvious
 arrangement and matters twice. Height is what actually runs out — the card shares a `min-h-dvh`
-column with the HUD, the notice and the control bar — and deriving the width holds the 9:14 ratio the
-Phase 6 pair implied (288 × 448) at _every_ viewport, where clamping each axis independently would
-preserve it at the two ends and drift everywhere between.
+column with the HUD, the notice and the control bar — and deriving the width holds the ratio at
+_every_ viewport, where clamping each axis independently would preserve it at the two ends and drift
+everywhere between.
 
-The `62dvh` term exists because a clamp on width alone puts a 448px card in a landscape phone's
-375px viewport; `dvh` rather than `vh` also survives a collapsing mobile address bar. The `124vw`
-term guards the narrow-but-tall case (124vw of height is 80vw of width once the ratio is applied) and
-sits **inside `min()`** rather than as a second clamp so the ratio still holds when it wins.
+The `62dvh` term exists because a clamp on width alone puts an over-tall card in a landscape phone's
+375px viewport; `dvh` rather than `vh` also survives a collapsing mobile address bar. The `80vw`
+term guards the narrow-but-tall case and sits **inside `min()`** rather than as a second clamp so one
+term still governs both axes when it wins.
 
-It resolves to exactly 288 × 448 — the pre-Phase-7 values — on every desktop and on most phones. Only
-below roughly 723px of viewport height does the card shrink at all. `CardStack.test.tsx` asserts the
-two elements carry the same token string; `src/index.css.test.ts` asserts the derivation and the
-`dvh` term.
+**The card became square on 2026-08-11 at the developer's request, and all three clamp terms moved
+with the ratio.** They had to: the clamp governs the height, so under 9/14 every term was implicitly a
+width term divided by 0.643, and reusing them makes the card 1.56× wider than each was tuned for. The
+floor went 18rem → **15rem** because 18rem of _width_ (288px) does not fit a 320px phone once
+`GameScreen`'s `p-6` is paid; the ceiling went 28rem → **24rem**, which keeps the card's area within
+15% of the old 288 × 448 and reads as the same object at a new shape rather than as a billboard; and
+`124vw` → **80vw** is the same rule restated (124vw of height _was_ 80vw of width once 9/14 was
+applied). It resolves to 384 × 384 on every desktop, and only below roughly 620px of viewport height —
+or 480px of width — does the card shrink. `CardStack.test.tsx` asserts the two elements carry the same
+token string; `src/index.css.test.ts` asserts the derivation, that the width carries **no multiplier**
+(which is how "square" is pinned), and both viewport terms.
+
+**Two things downstream had to move with the shape, and one deliberately did not.**
+`--qr-display-size` went 14/18 → **7/12 of the card's width**, chosen so the code is displayed at the
+same 224px (ceiling) and ~140px (floor) it always was — the card grew around the code rather than the
+code growing with the card, which is what lets `QR_BITMAP_SIZE` stay at 224 and avoid upscaling a QR.
+Its binding constraint also moved from horizontal to **vertical**: a square face has width to spare,
+but the code shares the height with the caption, and `p-6` + `gap-6` + a 12px line take a fixed ~88px,
+so 14/18 would have overflowed the 240px floor card by ~35px and `overflow-hidden` would have _clipped
+the code_ — silently unscannable. `--ring-width` stayed at a fixed 2px, because a ring derived from the
+card's width would go sub-pixel on the small card and blur into its own bloom.
 
 **One consequence reaches outside presentation.** `SWIPE_COMMIT_DISTANCE_PX` (96px) was chosen as a
-third of a 288px card. 288px is now only the card's ceiling, so at the floor the same 96px is 52% of
-its width — a commit takes a longer drag on a small screen. It is deliberately **not** retuned; see
-§3's gesture subsection and [`development.md`](./development.md) §8.
+third of a 288px card, which is now not a size the card ever takes: the width runs 240px → 384px, so
+the same 96px is 40% of the card at one end and 25% at the other. It is deliberately **not** retuned;
+see §3's gesture subsection and [`development.md`](./development.md) §8.
+
+#### The control bar is spaced against the card, not with a gap
+
+The three controls were asked (2026-08-11) to be bigger and to sit so that **the gap between two
+buttons equals the gap from the outer two to the card's edges**. `gap-3` could not express that: it
+sets the two inner gaps and says nothing about the outer two, which were whatever centring a
+hug-width row inside the screen happened to leave — a number unrelated to the card. The row is now
+`w-(--card-width)` with **`justify-evenly`**, which splits the leftover width into four equal parts,
+so the rule holds by construction and keeps holding when the button size changes.
+
+That leaves the button size to decide how much leftover there is, and it is derived rather than
+literal:
+
+```css
+--size-control-button: max(3.5rem, calc(var(--card-width) / 5));
+--size-control-icon: calc(var(--size-control-button) / 2);
+--size-control-spinner: calc(var(--size-control-button) - 1rem);
+```
+
+`card / 5` makes each of the four gaps exactly `card / 10` — half a button — at every card size,
+where a fixed length gives 42px gaps at the ceiling and 18px at the floor, i.e. a different design at
+each end. `max()` rather than `clamp()`: the floor is the 3.5rem the buttons already measured, so they
+can never get _smaller_ than they were, and `card / 5` at the card's own ceiling is 76.8px, so an upper
+term would be unreachable decoration. `--size-touch-target` is still applied beside the size and still
+does its job as a `min-*` floor. The icon is half the button so a glyph cannot rattle around inside a
+grown circle; the spinner is the button _less a constant 8px a side_, because what has to hold is that
+it reads as a ring **around** the glyph rather than a proportion of it.
 
 #### Reduced motion is two declarations for four animation surfaces
 
