@@ -55,6 +55,48 @@ import { CardHiddenSide } from './CardHiddenSide';
 import { useCardGestures } from '../hooks/useCardGestures';
 import type { Card as CardData } from '../../shared/types';
 
+/**
+ * The `AnimatePresence` key for the card in play: WHICH CARD IT IS, never where it sits.
+ *
+ * ===========================================================================
+ *  THIS USED TO BE `${card.id}:${currentIndex}` AND THAT KEYED THE EXIT
+ *  ANIMATION TO THE YEAR CRAWL. DO NOT PUT THE INDEX BACK.
+ *
+ *  A lookup that finds no year REMOVES its card from the deck (`gameReducer`,
+ *  `YEAR_RESOLVED`), and when the dropped card sat BEHIND the player the
+ *  reducer shifts `currentIndex` back so the player keeps looking at the same
+ *  card. Nothing the player can see has changed -- but a key built from the
+ *  index changed, so `AnimatePresence` saw one child leave and another arrive:
+ *  the card flew 600px off the screen and an IDENTICAL card took its place,
+ *  in whichever direction the last swipe happened to set. Mid-game, on a real
+ *  playlist where roughly a third of the cards resolve yearless, that fires
+ *  every few seconds and reads as the deck sliding away on its own.
+ *
+ *  The occurrence ordinal is what replaces the index, and it is stable across
+ *  exactly the thing the index was not: `YEAR_RESOLVED` drops EVERY card
+ *  carrying the resolved id, never one copy of it. So if the current card is
+ *  still here, no card sharing its id was dropped, and the number of them in
+ *  front of it cannot have changed. A drop anywhere else in the deck leaves
+ *  this string untouched, which is the whole point.
+ *
+ *  It still does the job the index was added for -- see the duplicate-id test
+ *  in `CardStack.test.tsx`. A playlist may hold the same track twice, so two
+ *  ADJACENT cards can share an id, and a key of the bare id would let React
+ *  reuse one element for both: advancing from copy A to copy B would be a
+ *  no-op with no exit animation, and the flip state could survive the advance
+ *  and hand the player the answer. Two copies of one id are `X:0` and `X:1`.
+ * ===========================================================================
+ */
+function cardPresenceKey(deck: CardData[], currentIndex: number, currentCard: CardData): string {
+  let occurrence = 0;
+
+  for (let index = 0; index < currentIndex; index += 1) {
+    if (deck[index]?.id === currentCard.id) occurrence += 1;
+  }
+
+  return `${currentCard.id}:${occurrence}`;
+}
+
 export interface CardStackProps {
   /** The shuffled deck, straight from `GameState.deck`. */
   deck: CardData[];
@@ -188,7 +230,9 @@ export function CardStack({
       */}
       <AnimatePresence initial={false} mode="popLayout">
         <Card
-          key={`${currentCard.id}:${currentIndex}`}
+          // Identity, not position -- see `cardPresenceKey`. An index here is what made a
+          // resolved year elsewhere in the deck throw the player's own card off the screen.
+          key={cardPresenceKey(deck, currentIndex, currentCard)}
           card={currentCard}
           isFlipped={isFlipped}
           isYearPending={isYearPending}

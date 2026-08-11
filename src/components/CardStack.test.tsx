@@ -303,8 +303,9 @@ describe('CardStack', () => {
     //  the element is reused rather than remounted -- the flip state
     //  could survive the advance and show the answer immediately.
     //
-    //  Keying on id PLUS deck index is what prevents it. This test proves
-    //  the advance actually remounts.
+    //  Keying on the id PLUS the card's occurrence ordinal among cards
+    //  sharing it is what prevents it. This test proves the advance
+    //  actually remounts.
     // ===================================================================
     const deck = [duplicateIdCardA, duplicateIdCardB];
 
@@ -328,5 +329,67 @@ describe('CardStack', () => {
     // this asserts on identity rather than on a count.
     const inners = [...container.querySelectorAll('[data-testid="card-inner"]')];
     expect(inners.some((inner) => inner !== firstInner)).toBe(true);
+  });
+
+  it('should keep the same element when a yearless card is dropped from behind the player', () => {
+    // ===================================================================
+    //  THE REGRESSION. `YEAR_RESOLVED` removes a card whose lookup found
+    //  no year, and one dropped from BEHIND the player takes `currentIndex`
+    //  back with it -- same card in play, lower index. While the key
+    //  carried that index, `AnimatePresence` read the shift as a card
+    //  change and threw the player's own card 600px off the screen
+    //  mid-game, replacing it with an identical one.
+    //
+    //  Element IDENTITY is the assertion because it is the exact thing
+    //  `AnimatePresence` keys on: the same element means no child left,
+    //  which means no exit animation. jsdom cannot see the slide itself.
+    // ===================================================================
+    const deck = [highConfidenceCard, noYearCard, lowConfidenceCard];
+
+    const { rerender, container } = renderStack(deck, 2);
+    const before = container.querySelector('[data-testid="card-inner"]');
+
+    // `noYearCard` resolves yearless and leaves the deck. The player stays on `lowConfidenceCard`,
+    // which is now at index 1 -- exactly what the reducer dispatches.
+    rerender(
+      <CardStack
+        deck={[highConfidenceCard, lowConfidenceCard]}
+        currentIndex={1}
+        isFlipped={false}
+        isYearPending={false}
+        onFlip={vi.fn()}
+        onNext={vi.fn()}
+        isEnabled
+      />,
+    );
+
+    const inners = [...container.querySelectorAll('[data-testid="card-inner"]')];
+    expect(inners).toEqual([before]);
+  });
+
+  it('should keep the same element when a duplicated card is dropped from behind the player', () => {
+    // The occurrence ordinal's own edge, and the reason it is safe: `YEAR_RESOLVED` drops EVERY
+    // card carrying the resolved id, so a surviving card can never lose a same-id copy from in
+    // front of it. The card in play is the SECOND copy of its id, so its ordinal is 1 -- and the
+    // drop happens in front of both copies, which is why it stays 1.
+    const deck = [noYearCard, highConfidenceCard, duplicateIdCardA, duplicateIdCardB];
+
+    const { rerender, container } = renderStack(deck, 3);
+    const before = container.querySelector('[data-testid="card-inner"]');
+
+    rerender(
+      <CardStack
+        deck={[highConfidenceCard, duplicateIdCardA, duplicateIdCardB]}
+        currentIndex={2}
+        isFlipped={false}
+        isYearPending={false}
+        onFlip={vi.fn()}
+        onNext={vi.fn()}
+        isEnabled
+      />,
+    );
+
+    const inners = [...container.querySelectorAll('[data-testid="card-inner"]')];
+    expect(inners).toEqual([before]);
   });
 });

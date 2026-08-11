@@ -2777,3 +2777,36 @@ and `pdfFileName` then strips it to a hyphen.
 **The saved library stores `deckLabel()`'s output**, so entries are truncated on write and existing
 long entries in `localStorage` are left alone. Truncating those again at render would cut the
 `+N more` suffix off the end, which is the failure the cap is designed to avoid.
+
+## 2026-08-11 — The deck slid away by itself mid-game, and the cause was the `AnimatePresence` key
+
+**Symptom:** partway through a game, cards were seen sliding off to the right for no reason. The
+player had not swiped and nothing about their card changed.
+
+**Cause:** `CardStack` keyed its `AnimatePresence` child on `` `${currentCard.id}:${currentIndex}` ``.
+`YEAR_RESOLVED` **removes** a card whose lookup found no year, and when the dropped card sat *behind*
+the player the reducer shifts `currentIndex` back (`droppedBeforeCurrent`) so the player keeps
+looking at the same card. Same card, lower index — so the key changed, `AnimatePresence` read it as
+one child leaving and another arriving, and the card flew `EXIT_DISTANCE_PX` off the screen while an
+identical one mounted in its place. The direction is whatever the last swipe left in `exitDirection`
+(sticky state in `useCardGestures`), which is why it reads as "sliding to the right" for a player who
+swipes right. On a real playlist roughly a third of cards resolve yearless, so this fires every few
+seconds for the whole session.
+
+**Fix:** the key is now identity, never position — `cardPresenceKey()` returns
+`` `${id}:${occurrence}` ``, where `occurrence` is how many cards *before* the current one share its
+id. That is invariant under exactly the thing the index was not: `YEAR_RESOLVED` drops **every** card
+carrying the resolved id, never one copy, so a surviving card cannot have lost a same-id copy from in
+front of it. Drops anywhere else leave the string untouched. It still separates adjacent duplicate
+ids (`X:0` / `X:1`), which is the bug the index was added for — a bare-id key lets React reuse one
+element across an advance, and the flip state surviving that hands the player the answer.
+
+**Not fixed, and it is a different case:** when the player's *own* card is the one dropped, the deck
+closes up under them and a genuinely different card arrives, so the key changes and the exit
+animation plays. Suppressing that needs `AnimatePresence`'s `custom` prop plus a dynamic exit variant
+on `Card` (a removed child's props can no longer be updated), and it is arguable that the animation
+is honest feedback there. Left alone deliberately.
+
+**Testing note:** jsdom cannot see the slide, so the regression tests in `CardStack.test.tsx` assert
+element **identity** across the rerender instead — the same element means no child left, which means
+no exit animation. Both fail against the old key.
