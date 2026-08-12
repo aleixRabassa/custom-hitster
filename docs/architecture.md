@@ -521,7 +521,7 @@ Comments in that file are **shipped bytes** — it is the blocking request on th
 
 - **`meta description`** — a Lighthouse SEO item and the text a link preview shows. It describes what the app does and names the one constraint a visitor needs in advance: the playlist has to be public.
 - **`meta theme-color`, `#0a0a0a`** — colours the browser chrome on a phone, which is the device this game is played on; without it the near-black app sits under a light grey address bar. It is **the one duplicated colour literal in the app**, because `index.html` is not processed by Tailwind and a `meta` content attribute cannot hold a `var()`. It must be updated by hand when `--color-page` changes, which Phase 8's redesign will do.
-- **`link rel="icon"`, a 240×240 WebP of 20,610 bytes** — replacing a 1254×1254 PNG of **1,262,175 bytes**, which was downloaded on every visit and was six times the entire JavaScript payload. **That single asset was costing 6.2 s of LCP** (see `development.md` §8). There is deliberately no PNG fallback: every browser that can run this app reads a WebP favicon, and a second `<link>` would reintroduce a request whose only purpose is a tab icon elsewhere. If one is ever needed, add a _small_ PNG.
+- **`link rel="icon"`, a 320×320 WebP of 10,716 bytes** (240×240 / 20,610 bytes when this was written; regrown to 320 on 2026-08-12 because the same file is now the landing screen's `<h1>`, displayed at 128px) — replacing a 1254×1254 PNG of **1,262,175 bytes**, which was downloaded on every visit and was six times the entire JavaScript payload. **That single asset was costing 6.2 s of LCP** (see `development.md` §8). There is deliberately no PNG fallback: every browser that can run this app reads a WebP favicon, and a second `<link>` would reintroduce a request whose only purpose is a tab icon elsewhere. If one is ever needed, add a _small_ PNG.
 
 ### The token layer and the motion strategy (`src/index.css`) — built
 
@@ -842,6 +842,9 @@ src/pwa/manifest.test.ts   A `node` test over the installability-critical fields
 vite.config.ts             VitePWA(...) — workbox options and the update strategy
 public/pwa-*.png           192, 512 and a separate 512 maskable
 public/apple-touch-icon.png  180. iOS ignores the manifest's icons entirely
+public/logo.webp           320. The favicon AND the landing screen's <h1>
+docs/assets/logo.png       The 1254 master every one of the above derives
+                           from. In docs/ because public/ ships and precaches
 ```
 
 **The manifest is a module, not a literal in the plugin call**, for the same reason as every other
@@ -870,14 +873,26 @@ Four decisions carry the design:
 - **`devOptions` is absent**, so neither `pnpm dev` nor `npx vercel dev` registers a worker. A service
   worker in development is a caching-bug generator, and this repo's dev story (§5) is delicate enough.
 
-**The icon set comes from the pre-`5e178f6` `logo.png`**, the 1254 × 1254 card-stack wordmark, which is
-also the mark the design mockup draws in its header. `logo.webp` was regenerated from the same source
-so the browser tab and the home screen are one identity; it came out at 10,376 bytes, **smaller** than
-the 20,610 it replaced. The four PNGs add 278 kB and none is fetched before first paint. **The maskable
-variant is its own file**, with the artwork at 84% of the canvas so its content radius (204.9px) sits
-inside the 80% safe circle (204.8px) — a full-bleed 512 relabelled `maskable` validates cleanly and
-gets cropped on every round-icon launcher. Provenance and byte counts are in
-[`agent_findings.md`](./agent_findings.md); **never restore a large icon to the favicon slot.**
+**The icon set comes from `docs/assets/logo.png`** — a 1254 × 1254 card-stack neon wordmark, supplied
+by the developer on 2026-08-12 and replacing the pre-`5e178f6` artwork the set was generated from
+until then. Every shipped image is derived from it, which is what keeps the browser tab, the home
+screen and the landing screen's `<h1>` one identity; the 2026-08-06 finding records what happens when
+they drift. **The master lives in `docs/`, not in `public/`, and that placement is load-bearing**:
+everything in `public/` is copied into `dist/` _and precached by the service worker_, so a 1.2 MB
+master there would be downloaded by every install — it is the same file, at the same size, that cost
+6.2 s of LCP as a favicon. Keeping it in the repo at all is the other half: the previous source
+survived only in git history, and recovering it was a whole step of Phase 8 plan 1.
+
+Derived, all by `LANCZOS` downscale from that master, each PNG written both RGB-optimised and
+256-colour palette-quantised with the smaller kept: `logo.webp` 320 (10,716 bytes), `pwa-192x192.png`
+(25,240), `pwa-512x512.png` (131,253), `apple-touch-icon.png` 180 (22,609),
+`pwa-maskable-512x512.png` (80,349). The PNGs total 259 kB and none is fetched before first paint.
+**The maskable variant is its own file**, with the artwork at **73.1%** of the canvas — measured, not
+guessed: the lit content reaches 109.4% of the half-edge on this artwork (the neon bloom runs past the
+card into the corners), so that is the scale at which every lit pixel falls inside the 80% safe circle.
+A full-bleed 512 relabelled `maskable` validates cleanly and gets cropped on every round-icon launcher.
+Provenance and byte counts are in [`agent_findings.md`](./agent_findings.md); **never restore a large
+icon to the favicon slot.**
 
 `vercel.json` needed no change: the SPA rewrite's `[^.]*` term cannot match a path containing a dot, so
 `/sw.js`, `/manifest.webmanifest`, `/registerSW.js` and the icons all serve as files. That was checked

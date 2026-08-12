@@ -3144,3 +3144,79 @@ must report `low`.
 
 **Also measured and NOT worth building:** retrying the duration-bounded query unbounded when scoring
 fails. Recovered zero tracks.
+
+---
+
+## 2026-08-12 — The landing screen's redesign, and the icon identity regenerated from a new master
+
+Two developer requests, one session. Neither changed any behaviour: no reducer action, no prop, no
+storage format, no request.
+
+### `justify-center` on the landing `<main>` had been doing NOTHING for two phases
+
+The developer asked for the inputs and Start to sit in the middle of the screen. `<main>` already
+read `min-h-dvh flex flex-col justify-center` — and centred nothing, because **`justify-content`
+only spends free space and this column has never had any**: nine suggestions plus a saved library
+push it past the viewport on every device. The class was true, load-bearing-looking, and inert.
+
+Fixed by giving the centring to a **hero `<section>` with its own viewport-sized minimum**
+(`min-h-[88dvh]`, holding the logo, the sentence and the form) and removing `justify-center` from
+`<main>`. The vertical padding moved with it — `px-6` on `<main>`, `py-6` on the hero — so the
+hero's minimum is the viewport exactly rather than the viewport plus 3rem it cannot see.
+
+**`88dvh`, not `100dvh`, is a deliberate 12% of nothing:** at a full viewport the next section
+starts exactly at the fold, so on a desktop there is no evidence anything is below it — and the
+suggestions are the one-click demo path for a visitor with no playlist of their own, i.e. the thing
+that must not become undiscoverable when it stops being a main element. At 88 the next heading
+peeks. `LandingScreen.test.tsx` pins the arrangement, including the **absence** of `justify-center`
+on `<main>`, because putting it back looks harmless and would centre nothing.
+
+The suggestions themselves went from nine full-width `bg-surface` rows to a two-column grid
+(one column on a phone) with no filled surface and `text-xs`. What a press does is unchanged.
+
+### The `<h1>` is an image now, and the `alt` is the half that can silently break
+
+`<h1><img alt="" /></h1>` renders identically to the correct thing and leaves the document's one
+top-level heading with **no accessible name**. So the test asserts the name, not the element.
+
+### The logo said HITSTER while the app was called Jitster
+
+Found while wiring the image in: `public/logo.webp` still carried the **"PLAYLIST HITSTER"**
+wordmark, from the 2026-08-06 "one identity everywhere" resolution — and the app was renamed to
+**Playlist Jitster** on 2026-08-11, a rename whose recorded boundary said "the PWA artwork is
+unaffected: the icons carry no wordmark". **They do.** Nobody had looked at the picture; the rename
+was reasoned about as a string change and the artwork was assumed to be the card stack alone. This
+is the 2026-08-06 finding's exact shape (`logo.png` and `logo.webp` were different artwork and
+nothing recorded it) recurring in the other direction, and it survived a day because **no check in
+this repo has ever opened an image**.
+
+Overtaken by events rather than fixed in code: the developer supplied new artwork the same day,
+twice, and the second version is what shipped. It carries the JITSTER wordmark, so the `alt`, the
+`<title>`, `manifest.name` and the picture finally all say one thing.
+
+### The whole icon identity was regenerated, and the master is deliberately not in `public/`
+
+`docs/assets/logo.png` (1254 × 1254, 1,285,649 bytes) is the master; `logo.webp` 320,
+`pwa-192x192`, `pwa-512x512`, `pwa-maskable-512x512` and `apple-touch-icon` are all `LANCZOS`
+downscales of it, each PNG written twice (RGB-optimised, and 256-colour palette) with the smaller
+kept. Totals in [`architecture.md`](./architecture.md) §3.
+
+**Why `docs/` and not `public/`:** everything in `public/` is copied to `dist/` **and precached by
+the service worker**, so a 1.2 MB master there is downloaded by every install. That is the same
+file at the same size as the `public/logo.png` that cost **6.2 s of LCP** in Phase 7. Keeping it in
+the repo at all is the other half of the lesson: the previous master survived only in git history,
+and recovering it was a whole step of Phase 8 plan 1.
+
+**The maskable scale is measured, not inherited.** The old value (84% of the canvas) was correct for
+the old artwork. On this one the lit content reaches **109.4%** of the half-edge — the neon bloom
+runs past the card into the corners — so the square scales to **73.1%** for every lit pixel to fall
+inside the 80% safe circle. Copying the 84% forward would have cropped the glow on every round-icon
+launcher, and no local check would have said so.
+
+### Still unverified, and not verifiable here
+
+Nothing in this repo renders a pixel: jsdom applies no stylesheet and computes no layout, so the
+centring, the 88dvh peek, the two-column grid and the logo's legibility at 128px are all
+**class-name assertions only**. The "three widths" row in [`development.md`](./development.md) §5
+now also owes: the hero centred at 320 / 768 / 1280, the suggestions grid at each, and one look at
+the icon on a real home screen (the maskable crop is the part a desktop cannot show).

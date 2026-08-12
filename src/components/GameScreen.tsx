@@ -54,6 +54,18 @@
  * does: it is a property of this screen being on screen. It also gates the key handler below, which
  * is the non-obvious half -- see guard 4.
  *
+ * ## The platform back press is an in-app control, and MOUNTING THIS SCREEN IS THE SCOPING
+ *
+ * `useBackNavigation` pushes one history entry while this component is on screen and turns a back
+ * press into the same exit REQUEST the Exit button makes -- or, with a dialog up, into closing that
+ * dialog. Do not go looking for a `status === 'playing'` check anywhere: this screen is rendered
+ * exactly while the status is `playing`, so the interception's lifetime is the mount's, and every
+ * other screen keeps Android's default behaviour by construction rather than by an exclusion list.
+ *
+ * It exists because a TWA has no history entry to go back to, so the gesture closed the activity
+ * outright -- bypassing the confirmation invisibly, since the session survives in `localStorage` and
+ * a relaunch resumes. The two files carry the reasoning; nothing about it lives here.
+ *
  * ## The deck actions are reachable mid-game as of 2026-08-06
  *
  * `CardControls` has a fourth button that opens `DeckActionsDialog` -- the share link, the save and
@@ -73,6 +85,7 @@ import { CardStack } from './CardStack';
 import { DeckActionsDialog } from './DeckActionsDialog';
 import { ExitConfirmDialog } from './ExitConfirmDialog';
 import { Hud } from './Hud';
+import { useBackNavigation } from '../hooks/useBackNavigation';
 import { useCardAudio } from '../hooks/useCardAudio';
 import type { Card as CardData } from '../../shared/types';
 
@@ -320,6 +333,29 @@ export function GameScreen({
   const handleExitCancelled = () => {
     setIsExitConfirmOpen(false);
   };
+
+  /**
+   * The platform back press, routed through the SAME handlers the on-screen controls use.
+   *
+   * `handleExitRequest`, not `handleExitConfirmed` -- back asks exactly as the Exit button asks,
+   * so there is one confirmation rather than two paths to the same irreversible action. It is
+   * called here, below the handlers, because that is where they exist; the hook itself attaches
+   * its listener once and reads whatever the latest render passed.
+   *
+   * GUARD 4 NEEDS NO CHANGE, and that was verified rather than assumed: it gates the window key
+   * handler on the two dialog flags, and this adds no third dialog -- back either closes one of
+   * those two or opens the exit confirmation, so the OR above still covers everything that puts a
+   * backdrop over the card.
+   */
+  useBackNavigation({
+    isDeckActionsOpen,
+    isExitConfirmOpen,
+    onCloseDeckActions: () => {
+      setIsDeckActionsOpen(false);
+    },
+    onCloseExitConfirm: handleExitCancelled,
+    onRequestExit: handleExitRequest,
+  });
 
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center gap-6 bg-page p-6">

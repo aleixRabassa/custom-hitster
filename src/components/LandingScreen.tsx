@@ -260,46 +260,114 @@ export function LandingScreen({
       `absolute bottom-4`, so it anchors to this element and rides in the padding band this reserves.
       Drop either and the line either escapes to the viewport or lands on the last suggestion.
       `Footer.tsx` has the reasoning; `LandingScreen.test.tsx` asserts both classes.
-    */
-    <main className="relative flex min-h-dvh flex-col items-center justify-center gap-8 bg-page p-6 pb-12 text-fg">
-      <div className="flex flex-col items-center gap-2 text-center">
-        {/* The app's name. Renamed from "Playlist Hitster" on 2026-08-11 — `index.html`'s
-            `<title>` and `src/pwa/manifest.ts` carry the same string and must agree. */}
-        <h1 className="text-3xl font-semibold">Playlist Jitster</h1>
-        <p className="max-w-content text-sm text-fg-secondary">
-          Paste up to {MAX_DECK_PLAYLISTS} public Spotify playlist links to deal one deck. Scan a
-          card to hear the song, then guess the year.
-        </p>
-      </div>
 
-      <form
-        className="flex w-full max-w-content flex-col gap-3"
-        onSubmit={(event) => {
-          // The page must not navigate: this is a single-page app and a real form submission
-          // would reload it back to `idle`, throwing away the session that is being started.
-          event.preventDefault();
-          submitRows(rows);
-        }}
-      >
-        {rows.map((row, index) => (
-          /*
+      =============================================================================
+       NO `justify-center` HERE ANY MORE, AND THAT IS THE WHOLE LAYOUT CHANGE
+       (2026-08-12).
+
+       This column has ALWAYS outgrown the viewport -- nine suggestions plus a
+       library -- so `justify-center` on it centred nothing: it only applies to the
+       free space of a container that has some, and this one never did. The
+       centring the developer asked for now lives on the HERO section below, which
+       carries its own viewport-sized minimum, and everything after it is
+       explicitly the second screenful.
+
+       The vertical padding moved with it: `px-6` here and `py-6` on the hero, so
+       the hero's minimum height is the viewport EXACTLY (border-box) rather than
+       the viewport plus 3rem of padding it cannot see.
+      =============================================================================
+    */
+    <main className="relative flex min-h-dvh flex-col items-center gap-10 bg-page px-6 pb-12 text-fg">
+      {/*
+        ===========================================================================
+         THE HERO: THE LOGO, THE ONE SENTENCE, AND THE FORM -- CENTRED IN THE
+         VIEWPORT.
+
+         `88dvh` rather than `100dvh` ON PURPOSE. At a full viewport the next
+         section starts exactly at the fold, so on a desktop there is nothing at
+         all below the form and no reason to believe there is more -- and the
+         suggestions are the one-click demo path for a first-time visitor with no
+         playlist of their own, i.e. the thing that must not become undiscoverable
+         when it stops being a main element. At 88 the next heading peeks, which is
+         the cheapest possible affordance and costs the centring ~6dvh of offset.
+
+         It is a MINIMUM, so five rows plus five error messages simply make it
+         taller and push the rest down; nothing is ever clipped.
+        ===========================================================================
+      */}
+      <section className="flex min-h-[88dvh] w-full max-w-content flex-col items-center justify-center gap-8 py-6">
+        <div className="flex flex-col items-center gap-3 text-center">
+          {/*
+            ===================================================================
+             THE LOGO IS THE HEADING (2026-08-12), REPLACING THE TEXT WORDMARK.
+
+             The `<h1>` stays -- it is still the document's one top-level heading
+             and the landmark a screen-reader user lands on -- and the `alt` is
+             the APP'S NAME, so the accessible name is exactly the string
+             `index.html`'s `<title>` and `src/pwa/manifest.ts` carry. An empty
+             `alt` here would leave the h1 nameless.
+
+             The artwork carries the wordmark, so the `alt` and the picture say
+             the same thing -- which they did NOT while `logo.webp` still read
+             "HITSTER" against an app renamed to Jitster. The 2026-08-12 logo
+             fixed that, and it is the reason the identity was regenerated
+             rather than merely reused.
+
+             `width`/`height` are the intrinsic 320 x 320 of the file, set as
+             attributes so the box is reserved before the image decodes: this is
+             the largest element on the app's front door and a late-arriving
+             logo would shove the form it is centred with. Displayed at 128px,
+             which is 2.5x on a retina phone. Never swap this for one of the
+             `pwa-*.png` icons: they are the same artwork at 512px and 128 kB,
+             on the one screen every visitor pays for -- and the full 1254px
+             master is in `docs/assets/`, deliberately outside `public/`,
+             because everything in `public/` ships AND is precached.
+            ===================================================================
+          */}
+          <h1>
+            <img
+              src="/logo.webp"
+              alt="Playlist Jitster"
+              width={320}
+              height={320}
+              fetchPriority="high"
+              className="size-32"
+            />
+          </h1>
+          <p className="max-w-content text-sm text-fg-secondary">
+            Paste up to {MAX_DECK_PLAYLISTS} public Spotify playlist links to deal one deck. Scan a
+            card to hear the song, then guess the year.
+          </p>
+        </div>
+
+        <form
+          className="flex w-full flex-col gap-3"
+          onSubmit={(event) => {
+            // The page must not navigate: this is a single-page app and a real form submission
+            // would reload it back to `idle`, throwing away the session that is being started.
+            event.preventDefault();
+            submitRows(rows);
+          }}
+        >
+          {rows.map((row, index) => (
+            /*
             Keyed on the row's own id, NEVER on the index -- see `PlaylistRow`. The visible
             NUMBERING is positional and does renumber when a row is removed, which is correct: it
             names where the box is on screen, while the key names which box it is.
           */
-          <div key={row.id} className="flex flex-col gap-1">
-            <div className="flex items-end gap-2">
-              <label className="flex flex-1 flex-col gap-1 text-sm">
-                {/*
+            <div key={row.id} className="flex flex-col gap-1">
+              <div className="flex items-end gap-2">
+                <label className="flex flex-1 flex-col gap-1 text-sm">
+                  {/*
                   The first row keeps Phase 6's wording; later rows are numbered, so every input on
                   the screen has a UNIQUE accessible name. Five boxes all called "Playlist link"
                   are five boxes a screen-reader user cannot tell apart, and one query in the tests
                   would match all of them.
                 */}
-                <span className="text-fg-secondary">
-                  {index === 0 ? 'Playlist link' : `Playlist link ${index + 1}`}
-                </span>
-                {/*
+                  <span className="text-fg-secondary">
+                    {index === 0 ? 'Playlist link' : `Playlist link ${index + 1}`}
+                  </span>
+                  {/*
                   ===============================================================
                    NO `aria-label` ON THESE INPUTS, AND ADDING ONE BACK IS A
                    DEFECT.
@@ -320,23 +388,23 @@ export function LandingScreen({
                    ever comes back.
                   ===============================================================
                 */}
-                <input
-                  type="text"
-                  value={row.value}
-                  onChange={(event) => {
-                    const { value } = event.target;
-                    // Only THIS row's error is cleared. An error about the previous value sitting
-                    // beside a half-typed new one reads as an error about what is currently in the
-                    // box -- and clearing all five would wipe messages about boxes nobody touched.
-                    setRows((current) =>
-                      current.map((candidate) =>
-                        candidate.id === row.id ? { id: candidate.id, value } : candidate,
-                      ),
-                    );
-                  }}
-                  placeholder="https://open.spotify.com/playlist/…"
-                  aria-invalid={row.errorCode !== undefined}
-                  /*
+                  <input
+                    type="text"
+                    value={row.value}
+                    onChange={(event) => {
+                      const { value } = event.target;
+                      // Only THIS row's error is cleared. An error about the previous value sitting
+                      // beside a half-typed new one reads as an error about what is currently in the
+                      // box -- and clearing all five would wipe messages about boxes nobody touched.
+                      setRows((current) =>
+                        current.map((candidate) =>
+                          candidate.id === row.id ? { id: candidate.id, value } : candidate,
+                        ),
+                      );
+                    }}
+                    placeholder="https://open.spotify.com/playlist/…"
+                    aria-invalid={row.errorCode !== undefined}
+                    /*
                     `aria-describedby` pointed at this row's error WHILE ONE EXISTS, and undefined
                     otherwise -- a describedby naming an element that is not in the document is a
                     dangling reference some screen readers report as an error.
@@ -346,22 +414,22 @@ export function LandingScreen({
                     player who tabbed back to the field heard "invalid" and no explanation. This is
                     what makes the reason available on focus as well as at the moment it arrives.
                   */
-                  aria-describedby={row.errorCode === undefined ? undefined : rowErrorId(row.id)}
-                  /*
+                    aria-describedby={row.errorCode === undefined ? undefined : rowErrorId(row.id)}
+                    /*
                     `autoComplete="off"` and `spellCheck={false}`: this is a URL, and a spell-check
                     underline plus an autofill dropdown over a pasted link is noise.
                     `inputMode="url"` gets the right phone keyboard, which matters because a phone
                     is the primary device.
                   */
-                  autoComplete="off"
-                  spellCheck={false}
-                  inputMode="url"
-                  disabled={isLoading}
-                  className="rounded-lg border border-border-strong bg-surface px-3 py-2 text-fg placeholder:text-fg-muted focus-visible:focus-ring disabled:opacity-(--opacity-disabled)"
-                />
-              </label>
+                    autoComplete="off"
+                    spellCheck={false}
+                    inputMode="url"
+                    disabled={isLoading}
+                    className="rounded-lg border border-border-strong bg-surface px-3 py-2 text-fg placeholder:text-fg-muted focus-visible:focus-ring disabled:opacity-(--opacity-disabled)"
+                  />
+                </label>
 
-              {/*
+                {/*
                 Only once there is something to remove. A lone row with a remove button beside it
                 offers an action that cannot do anything -- the form always has at least one box.
 
@@ -370,23 +438,23 @@ export function LandingScreen({
                 screen-reader user no way to tell which one they are on. The ✕ is `aria-hidden`
                 decoration -- same split as `NoticeBanner`'s Dismiss.
               */}
-              {rows.length === 1 ? null : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setRows((current) => current.filter((candidate) => candidate.id !== row.id));
-                  }}
-                  disabled={isLoading}
-                  aria-label={`Remove playlist ${index + 1}`}
-                  className="touch-target rounded-lg border border-border px-3 text-fg-muted hover:border-border-strong hover:text-fg focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)"
-                >
-                  <span aria-hidden="true">✕</span>
-                </button>
-              )}
-            </div>
+                {rows.length === 1 ? null : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRows((current) => current.filter((candidate) => candidate.id !== row.id));
+                    }}
+                    disabled={isLoading}
+                    aria-label={`Remove playlist ${index + 1}`}
+                    className="touch-target rounded-lg border border-border px-3 text-fg-muted hover:border-border-strong hover:text-fg focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)"
+                  >
+                    <span aria-hidden="true">✕</span>
+                  </button>
+                )}
+              </div>
 
-            {row.errorCode === undefined ? null : (
-              /*
+              {row.errorCode === undefined ? null : (
+                /*
                 `role="alert"` so the message is announced rather than only drawn -- a player using
                 a screen reader otherwise gets no signal that a submission failed at all. The copy
                 comes from the client-side map; the server's own `message` field is deliberately
@@ -395,14 +463,14 @@ export function LandingScreen({
                 The `id` is the other half of this input's `aria-describedby`. Both exist only
                 while there is an error, so the reference is never dangling.
               */
-              <p id={rowErrorId(row.id)} role="alert" className="text-sm text-danger">
-                {playlistErrorMessage(row.errorCode)}
-              </p>
-            )}
-          </div>
-        ))}
+                <p id={rowErrorId(row.id)} role="alert" className="text-sm text-danger">
+                  {playlistErrorMessage(row.errorCode)}
+                </p>
+              )}
+            </div>
+          ))}
 
-        {/*
+          {/*
           The "+". `type="button"`, so it cannot submit the form it lives inside.
 
           =============================================================================
@@ -428,49 +496,49 @@ export function LandingScreen({
            the half that must not be dropped with it -- and the layout barely moves.
           =============================================================================
         */}
-        {!canAddRow ? null : (
-          <button
-            type="button"
-            onClick={() => {
-              setRows((current) => [...current, ...makeRows([''])]);
-            }}
-            disabled={isLoading}
-            className="touch-target flex w-full items-center gap-2 rounded-lg border border-dashed border-border px-3 py-2 text-sm text-fg-secondary hover:border-border-strong hover:bg-surface hover:text-fg focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)"
-          >
-            <span aria-hidden="true">+</span>
-            Add another playlist
-          </button>
-        )}
+          {!canAddRow ? null : (
+            <button
+              type="button"
+              onClick={() => {
+                setRows((current) => [...current, ...makeRows([''])]);
+              }}
+              disabled={isLoading}
+              className="touch-target flex w-full items-center gap-2 rounded-lg border border-dashed border-border px-3 py-2 text-sm text-fg-secondary hover:border-border-strong hover:bg-surface hover:text-fg focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)"
+            >
+              <span aria-hidden="true">+</span>
+              Add another playlist
+            </button>
+          )}
 
-        {/*
+          {/*
           A control that VANISHES with no explanation reads as broken just as a dead one does, so the
           cap says itself out loud in the space the "+" left. Not a `role="alert"`: nothing failed,
           and reaching five playlists is not an error.
         */}
-        {canAddRow ? null : (
-          <p className="text-xs text-fg-muted">
-            {MAX_DECK_PLAYLISTS} playlists is the maximum for one deck.
-          </p>
-        )}
+          {canAddRow ? null : (
+            <p className="text-xs text-fg-muted">
+              {MAX_DECK_PLAYLISTS} playlists is the maximum for one deck.
+            </p>
+          )}
 
-        <button
-          type="submit"
-          // Disabled while loading, which is what stops a double submission dealing two decks.
-          // `usePlaylist` aborts the first request anyway, so this is the visible half of a
-          // guarantee the hook already makes.
-          disabled={isLoading}
-          /*
+          <button
+            type="submit"
+            // Disabled while loading, which is what stops a double submission dealing two decks.
+            // `usePlaylist` aborts the first request anyway, so this is the visible half of a
+            // guarantee the hook already makes.
+            disabled={isLoading}
+            /*
             `text-on-accent` rather than `text-white`, and that is a contrast fix rather than a
             rename: white on `--color-accent` measured 3.67:1, a 1.4.3 failure on the app's
             primary action at 16px. The background is unchanged; only the label darkens, to
             5.40:1 at rest and 8.03:1 on hover.
           */
-          className="touch-target rounded-lg bg-accent px-4 py-2 font-medium text-on-accent hover:bg-accent-hover focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)"
-        >
-          {isLoading ? 'Loading…' : 'Start'}
-        </button>
+            className="touch-target rounded-lg bg-accent px-4 py-2 font-medium text-on-accent hover:bg-accent-hover focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)"
+          >
+            {isLoading ? 'Loading…' : 'Start'}
+          </button>
 
-        {/*
+          {/*
           THE CONTAINER'S SLOT, AND IT IS NOT A ROW'S (decision 4). It describes the REQUEST -- a
           batch in which not one playlist loaded, or `no-years-found` from the session after a deck
           was dealt and every year lookup came back empty. Neither belongs under an input: the
@@ -480,12 +548,13 @@ export function LandingScreen({
           same reason a row's message has one -- otherwise a screen-reader user gets no signal that
           a submission failed at all.
         */}
-        {errorCode === undefined ? null : (
-          <p role="alert" className="text-sm text-danger">
-            {playlistErrorMessage(errorCode)}
-          </p>
-        )}
-      </form>
+          {errorCode === undefined ? null : (
+            <p role="alert" className="text-sm text-danger">
+              {playlistErrorMessage(errorCode)}
+            </p>
+          )}
+        </form>
+      </section>
 
       {/*
         ===================================================================
@@ -501,10 +570,17 @@ export function LandingScreen({
          does -- `spotifyPlaylistUrl(id)` through `submit`, which fills the input
          as well. There is no second entry into the session for a saved
          playlist.
+
+         BELOW THE HERO SINCE 2026-08-12, with the suggestions: the developer
+         asked for the inputs and Start to sit in the middle of the screen, and
+         anything rendered between the form and the fold moves them off it by
+         however many decks happen to be saved -- a centring that depends on the
+         player's history is not a centring. It keeps its full row shape, unlike
+         the suggestions below, because these ARE the player's own.
         ===================================================================
       */}
       {savedPlaylists.length === 0 ? null : (
-        <section className="flex w-full max-w-content flex-col gap-2">
+        <section className="flex w-full max-w-content flex-col gap-2 sm:max-w-2xl">
           <h2 className="text-sm text-fg-secondary">Your playlists</h2>
 
           <ul className="flex flex-col gap-2">
@@ -566,10 +642,29 @@ export function LandingScreen({
         </section>
       )}
 
-      <section className="flex w-full max-w-content flex-col gap-2">
-        <h2 className="text-sm text-fg-secondary">Or try one of these</h2>
+      {/*
+        ===========================================================================
+         SECONDARY BY POSITION *AND* BY WEIGHT (2026-08-12).
 
-        <ul className="flex flex-col gap-2">
+         These were full-width `bg-surface` rows directly under the form, which
+         made nine of them the visual bulk of the app's front door -- the developer's
+         note was that they are not a main element. They are now below the fold, in
+         a two-column grid on anything wider than a phone, with no filled surface
+         and quieter type. What did NOT change is what a press does: still one
+         click into a game, which is the entire reason they exist.
+
+         The heading dims to `text-fg-muted` -- the app's audited 6.12:1 -- rather
+         than taking an `opacity-*` on the brighter token, for the reason
+         `Footer.tsx` gives: an opacity modifier puts a real contrast ratio nowhere
+         in the repo.
+        ===========================================================================
+      */}
+      <section className="flex w-full max-w-content flex-col gap-3 sm:max-w-2xl">
+        <h2 className="text-center text-xs tracking-wide text-fg-muted uppercase">
+          Or try one of these
+        </h2>
+
+        <ul className="grid gap-2 sm:grid-cols-2">
           {SUGGESTED_PLAYLISTS.map((playlist) => (
             <li key={playlist.id}>
               <button
@@ -590,9 +685,9 @@ export function LandingScreen({
                   would be the last thing a mouse user saw of the landing screen. With
                   `focus-visible` a click leaves no ring and a Tab still shows one.
                 */
-                className="flex w-full touch-target items-baseline justify-between gap-3 rounded-lg border border-border bg-surface px-3 py-2 text-left hover:border-border-strong focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)"
+                className="flex h-full w-full touch-target items-baseline justify-between gap-3 rounded-lg border border-border px-3 py-2 text-left hover:border-border-strong hover:bg-surface focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)"
               >
-                <span className="text-sm">{playlist.label}</span>
+                <span className="text-xs text-fg-secondary">{playlist.label}</span>
                 {/* Genre/era only. Never a track, an artist or a year -- see the header block. */}
                 <span className="text-xs text-fg-muted">{playlist.blurb}</span>
               </button>

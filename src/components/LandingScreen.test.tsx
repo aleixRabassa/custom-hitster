@@ -113,6 +113,61 @@ describe('LandingScreen', () => {
     expect(container.querySelector('footer')?.className).toContain('absolute');
   });
 
+  it('should render the logo as the level-1 heading, named after the app', () => {
+    // ===================================================================
+    //  THE HEADING IS AN IMAGE NOW (2026-08-12), AND THE `alt` IS THE HALF
+    //  THAT CAN SILENTLY GO WRONG.
+    //
+    //  `<h1><img alt="" /></h1>` renders identically and leaves the
+    //  document's one top-level heading with NO accessible name -- a
+    //  screen-reader user lands on an unnamed heading and the app has no
+    //  title at all. So the name is asserted, not just the element.
+    //
+    //  It is also the string `index.html`'s `<title>` and
+    //  `src/pwa/manifest.ts` carry; all three must agree.
+    // ===================================================================
+    renderLanding();
+
+    const heading = screen.getByRole('heading', { level: 1 });
+    expect(heading.textContent).toBe('');
+    expect(screen.getByRole('img', { name: 'Playlist Jitster' })).toBe(
+      heading.querySelector('img'),
+    );
+    // Reserved before it decodes: this is the biggest element on the app's front door, and a
+    // late-arriving logo would shove the form it is centred with.
+    const logo = heading.querySelector('img');
+    expect(logo?.getAttribute('src')).toBe('/logo.webp');
+    expect(logo?.getAttribute('width')).toBe('320');
+    expect(logo?.getAttribute('height')).toBe('320');
+  });
+
+  it('should centre the form in the viewport with the suggestions below it', () => {
+    // ===================================================================
+    //  A CLASS-NAME ASSERTION, AND THE USUAL CAVEAT: jsdom computes no
+    //  layout, so this cannot prove anything is centred. What it pins is the
+    //  ARRANGEMENT that made the centring possible at all -- the hero owns a
+    //  viewport-sized minimum and `<main>` does not centre.
+    //
+    //  `justify-center` on `<main>` is the specific regression: it was there
+    //  for two phases doing NOTHING, because this column always outgrows the
+    //  viewport (nine suggestions plus a library) and `justify-content` only
+    //  spends free space. Putting it back would look harmless and would not
+    //  centre anything.
+    //
+    //  The row in `development.md` §5 is what actually checks the result.
+    // ===================================================================
+    const { container } = renderLanding();
+    const main = container.querySelector('main');
+    const hero = main?.querySelector('section');
+
+    expect(main?.className).not.toContain('justify-center');
+    expect(hero?.className).toContain('justify-center');
+    expect(hero?.className).toContain('min-h-[88dvh]');
+    // The form is inside the hero; the suggestions are a later sibling of it, i.e. below the fold.
+    expect(hero?.querySelector('form')).not.toBeNull();
+    expect(screen.getByText('Or try one of these').closest('section')).not.toBe(hero);
+  });
+
   it('should show an inline error for an unparseable URL without submitting', () => {
     // NOT submitted: the server would say the same thing, so a round trip would only add latency
     // in front of an identical sentence.
