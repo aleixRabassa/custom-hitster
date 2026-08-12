@@ -67,6 +67,7 @@
 import type { ReactNode } from 'react';
 
 import type { CardAudioControls } from '../hooks/useCardAudio';
+import { COPY } from '../game/copy';
 import { Spinner } from './Spinner';
 
 /**
@@ -296,7 +297,7 @@ export function CardControls({ audio, onExit, onKeepDeck }: CardControlsProps) {
         <button
           type="button"
           onClick={onExit}
-          aria-label="Exit game"
+          aria-label={COPY.controls.exit}
           className={EXIT_BUTTON_CLASSES}
         >
           <ExitIcon />
@@ -320,7 +321,7 @@ export function CardControls({ audio, onExit, onKeepDeck }: CardControlsProps) {
           type="button"
           onClick={isPlaying ? pause : play}
           disabled={!canPlay}
-          aria-label={isPlaying ? 'Pause' : 'Play'}
+          aria-label={isPlaying ? COPY.controls.pause : COPY.controls.play}
           aria-busy={isLoading}
           className={AUDIO_BUTTON_CLASSES}
         >
@@ -348,7 +349,7 @@ export function CardControls({ audio, onExit, onKeepDeck }: CardControlsProps) {
         <button
           type="button"
           onClick={onKeepDeck}
-          aria-label="Keep this deck"
+          aria-label={COPY.controls.keepDeck}
           className={AUDIO_BUTTON_CLASSES}
         >
           <KeepDeckIcon />
@@ -358,7 +359,7 @@ export function CardControls({ audio, onExit, onKeepDeck }: CardControlsProps) {
       {canPlay ? null : (
         // Generic on purpose: it says the preview is missing, never which track it is missing
         // for. The QR still works, so this is a note rather than an error.
-        <p className="text-xs text-fg-muted text-center">No preview available — scan to play</p>
+        <p className="text-xs text-fg-muted text-center">{COPY.controls.noPreview}</p>
       )}
     </div>
   );

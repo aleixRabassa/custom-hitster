@@ -34,6 +34,7 @@
  * so it cannot reappear on the next card (decision 9).
  */
 
+import { COPY } from '../game/copy';
 import { MAX_EMBED_TRACKS } from '../../shared/constants';
 
 export interface NoticeBannerProps {
@@ -81,40 +82,26 @@ export function NoticeBanner({
   if (truncated) {
     // "A playlist", not "this playlist": a combined deck can be truncated because ONE of five hit
     // the cap, and `MergedDeck.truncated` is an OR that does not say which.
-    notices.push(
-      `A playlist may have more tracks than shown — only the first ${MAX_EMBED_TRACKS} of it could be loaded.`,
-    );
+    notices.push(COPY.notice.truncated(MAX_EMBED_TRACKS));
   }
 
   if (skippedCount > 0) {
     // Pluralised, because "1 tracks" in a message about data quality undermines the message.
-    notices.push(
-      skippedCount === 1
-        ? '1 track could not be read and was left out.'
-        : `${skippedCount} tracks could not be read and were left out.`,
-    );
+    notices.push(COPY.notice.skippedTracks(skippedCount));
   }
 
   if (failedPlaylistCount > 0) {
-    notices.push(
-      failedPlaylistCount === 1
-        ? '1 playlist could not be loaded and was left out.'
-        : `${failedPlaylistCount} playlists could not be loaded and were left out.`,
-    );
+    notices.push(COPY.notice.failedPlaylists(failedPlaylistCount));
   }
 
   // Only for a COMBINED deck. One playlist is the case the whole app had before this feature, and
   // its size was never worth a line -- saying it now would put a banner on a screen that had none.
   if (loadedPlaylistCount > 1) {
-    notices.push(
-      `${deckSize} cards from ${loadedPlaylistCount} playlists, shuffled into one deck.`,
-    );
+    notices.push(COPY.notice.combinedDeck(deckSize, loadedPlaylistCount));
   }
 
   if (yearLookupsUnavailable) {
-    notices.push(
-      'Years are unavailable on this deployment, so cards will not show one. The deck is still playable — scan a card to hear the song.',
-    );
+    notices.push(COPY.notice.yearsUnavailable);
   }
 
   // The common case: nothing applies, so nothing renders. Returning null rather than an empty
@@ -153,7 +140,7 @@ export function NoticeBanner({
       <button
         type="button"
         onClick={onDismiss}
-        aria-label="Dismiss notice"
+        aria-label={COPY.notice.dismiss}
         className="-my-1 flex shrink-0 touch-target items-center justify-center rounded text-warning-glyph hover:text-warning-text focus-visible:focus-ring"
       >
         ✕

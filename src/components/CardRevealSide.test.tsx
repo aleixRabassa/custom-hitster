@@ -6,6 +6,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { CardRevealSide } from './CardRevealSide';
+import { COPY } from '../game/copy';
 import {
   highConfidenceCard,
   lowConfidenceCard,
@@ -24,8 +25,8 @@ describe('CardRevealSide', () => {
     expect(screen.queryByText('1975')).not.toBeNull();
     // No marker: this year is trusted, and hedging every year would make the marker
     // meaningless on the ones that need it.
-    expect(screen.queryByText(/unconfirmed/i)).toBeNull();
-    expect(screen.queryByText(/check this one/i)).toBeNull();
+    expect(screen.queryByText(COPY.card.yearUnconfirmed)).toBeNull();
+    expect(screen.queryByText(COPY.card.yearUnknownDetail)).toBeNull();
   });
 
   it('should render the year with an unconfirmed marker for low confidence', () => {
@@ -34,7 +35,7 @@ describe('CardRevealSide', () => {
     render(<CardRevealSide card={lowConfidenceCard} isYearPending={false} />);
 
     expect(screen.queryByText('1979')).not.toBeNull();
-    expect(screen.queryByText(/unconfirmed/i)).not.toBeNull();
+    expect(screen.queryByText(COPY.card.yearUnconfirmed)).not.toBeNull();
   });
 
   it('should prompt the player to check the year for none confidence', () => {
@@ -42,19 +43,19 @@ describe('CardRevealSide', () => {
     // as unconfirmed -- there is no year at all.
     render(<CardRevealSide card={noYearCard} isYearPending={false} />);
 
-    expect(screen.queryByText(/year unknown/i)).not.toBeNull();
-    expect(screen.queryByText(/check this one yourself/i)).not.toBeNull();
-    expect(screen.queryByText(/unconfirmed/i)).toBeNull();
+    expect(screen.queryByText(COPY.card.yearUnknown)).not.toBeNull();
+    expect(screen.queryByText(COPY.card.yearUnknownDetail)).not.toBeNull();
+    expect(screen.queryByText(COPY.card.yearUnconfirmed)).toBeNull();
   });
 
   it('should render a pending indicator when the year is undefined', () => {
     render(<CardRevealSide card={pendingYearCard} isYearPending={true} />);
 
-    expect(screen.queryByText(/still looking up the year/i)).not.toBeNull();
+    expect(screen.queryByText(COPY.card.yearPending)).not.toBeNull();
     // And crucially NOT the `none` wording: this year is coming, so telling the player to go
     // and check it themselves would be wrong.
-    expect(screen.queryByText(/check this one yourself/i)).toBeNull();
-    expect(screen.queryByText(/year unknown/i)).toBeNull();
+    expect(screen.queryByText(COPY.card.yearUnknownDetail)).toBeNull();
+    expect(screen.queryByText(COPY.card.yearUnknown)).toBeNull();
   });
 
   it('should draw the pending year as a spinner that survives reduced motion', () => {
@@ -81,7 +82,7 @@ describe('CardRevealSide', () => {
     expect(box?.className).toContain('size-(--size-year-spinner)');
 
     // The announcement is untouched by any of it -- this line is the whole pending announcement.
-    expect(screen.getByRole('status').textContent).toMatch(/still looking up the year/i);
+    expect(screen.getByRole('status').textContent).toContain(COPY.card.yearPending);
   });
 
   it('should not treat a null year as pending', () => {
@@ -89,8 +90,8 @@ describe('CardRevealSide', () => {
     // A component that tested `!card.year` would collapse them and show a spinner forever.
     render(<CardRevealSide card={noYearCard} isYearPending={false} />);
 
-    expect(screen.queryByText(/still looking up the year/i)).toBeNull();
-    expect(screen.queryByText(/year unknown/i)).not.toBeNull();
+    expect(screen.queryByText(COPY.card.yearPending)).toBeNull();
+    expect(screen.queryByText(COPY.card.yearUnknown)).not.toBeNull();
   });
 
   it('should render the artist string verbatim without splitting it', () => {
@@ -146,11 +147,11 @@ describe('CardRevealSide', () => {
     // no number are announced as well. A region that only existed on a resolved year would leave a
     // screen-reader player with silence on a third of an ordinary deck.
     render(<CardRevealSide card={noYearCard} isYearPending={false} />);
-    expect(screen.getByRole('status').textContent).toMatch(/year unknown/i);
+    expect(screen.getByRole('status').textContent).toContain(COPY.card.yearUnknown);
 
     cleanup();
 
     render(<CardRevealSide card={pendingYearCard} isYearPending={true} />);
-    expect(screen.getByRole('status').textContent).toMatch(/still looking up the year/i);
+    expect(screen.getByRole('status').textContent).toContain(COPY.card.yearPending);
   });
 });

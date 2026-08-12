@@ -10,6 +10,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { DeckActionsDialog } from './DeckActionsDialog';
+import { COPY } from '../game/copy';
 import { fixtureDeck } from './__fixtures__/cards';
 import type { DeckActionsDialogProps } from './DeckActionsDialog';
 
@@ -41,7 +42,7 @@ describe('DeckActionsDialog', () => {
 
     const dialog = screen.getByRole('dialog');
     expect(dialog.getAttribute('aria-modal')).toBe('true');
-    expect(screen.getByText('Keep this deck')).not.toBeNull();
+    expect(screen.getByText(COPY.deckActionsDialog.title)).not.toBeNull();
   });
 
   it('should focus the first action rather than the close button', () => {
@@ -51,7 +52,7 @@ describe('DeckActionsDialog', () => {
     // for would be the only hostility on offer.
     renderDialog();
 
-    expect(document.activeElement?.textContent).toMatch(/copy share link/i);
+    expect(document.activeElement?.textContent).toBe(COPY.deckActions.copyLink);
   });
 
   it('should close on Escape', () => {
@@ -80,7 +81,7 @@ describe('DeckActionsDialog', () => {
     const onClose = vi.fn();
     renderDialog({ onClose });
 
-    fireEvent.click(screen.getByRole('button', { name: /back to the game/i }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.deckActionsDialog.close }));
 
     expect(onClose).toHaveBeenCalledTimes(1);
   });
@@ -100,24 +101,24 @@ describe('DeckActionsDialog', () => {
     const panel = screen.getByRole('dialog');
     const names = () => document.activeElement?.textContent ?? '';
 
-    expect(names()).toMatch(/copy share link/i);
+    expect(names()).toContain(COPY.deckActions.copyLink);
 
     fireEvent.keyDown(panel, { key: 'Tab' });
-    expect(names()).toMatch(/save this playlist/i);
+    expect(names()).toContain(COPY.deckActions.save);
 
     fireEvent.keyDown(panel, { key: 'Tab' });
-    expect(names()).toMatch(/print as pdf cards/i);
+    expect(names()).toContain(COPY.deckActions.print);
 
     fireEvent.keyDown(panel, { key: 'Tab' });
-    expect(names()).toMatch(/back to the game/i);
+    expect(names()).toContain(COPY.deckActionsDialog.close);
 
     // Wraps rather than escaping.
     fireEvent.keyDown(panel, { key: 'Tab' });
-    expect(names()).toMatch(/copy share link/i);
+    expect(names()).toContain(COPY.deckActions.copyLink);
 
     // And backwards from the first element lands on the last.
     fireEvent.keyDown(panel, { key: 'Tab', shiftKey: true });
-    expect(names()).toMatch(/back to the game/i);
+    expect(names()).toContain(COPY.deckActionsDialog.close);
   });
 
   it('should skip a disabled control in the cycle', () => {
@@ -128,7 +129,7 @@ describe('DeckActionsDialog', () => {
     const panel = screen.getByRole('dialog');
     fireEvent.keyDown(panel, { key: 'Tab' });
 
-    expect(document.activeElement?.textContent).toMatch(/print as pdf cards/i);
+    expect(document.activeElement?.textContent).toBe(COPY.deckActions.print);
   });
 
   it('should give focus back to the opener when it unmounts', () => {

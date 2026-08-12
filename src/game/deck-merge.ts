@@ -29,6 +29,7 @@
  * ===========================================================================
  */
 
+import { COPY } from './copy';
 import type { PlaylistClientErrorCode, PlaylistOutcome } from './playlist-client';
 import type { Card, PlaylistSummary } from '../../shared/types';
 
@@ -188,7 +189,7 @@ export function truncatePlaylistName(name: string): string {
   if (trimmed.length <= MAX_PLAYLIST_NAME_CHARS) return trimmed;
 
   // `trimEnd` so a cut landing on a space does not render as "Rock Classics …".
-  return `${trimmed.slice(0, MAX_PLAYLIST_NAME_CHARS).trimEnd()}…`;
+  return `${trimmed.slice(0, MAX_PLAYLIST_NAME_CHARS).trimEnd()}${COPY.deck.nameEllipsis}`;
 }
 
 /**
@@ -228,5 +229,5 @@ export function deckLabel(playlists: readonly PlaylistSummary[]): string {
   const others = playlists.length - 1;
   const name = truncatePlaylistName(first.name);
 
-  return others === 0 ? name : `${name} +${others} more`;
+  return COPY.deck.label(name, others);
 }

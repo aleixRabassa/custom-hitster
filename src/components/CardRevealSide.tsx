@@ -66,6 +66,7 @@
  * ===========================================================================
  */
 
+import { COPY } from '../game/copy';
 import { Spinner } from './Spinner';
 import type { Card } from '../../shared/types';
 
@@ -141,7 +142,7 @@ function YearSlot({ card, isYearPending }: CardRevealSideProps) {
         <div className="flex size-(--size-year-spinner) items-center justify-center">
           <Spinner sizeClassName="size-(--size-year-spinner)" />
         </div>
-        <p className="text-sm text-fg-secondary">Still looking up the year…</p>
+        <p className="text-sm text-fg-secondary">{COPY.card.yearPending}</p>
       </div>
     );
   }
@@ -149,8 +150,8 @@ function YearSlot({ card, isYearPending }: CardRevealSideProps) {
   if (card.year === null || card.year === undefined) {
     return (
       <div className="flex flex-col items-center gap-2">
-        <p className="text-year-none font-bold text-fg-heading">Year unknown</p>
-        <p className="text-sm text-warning">Check this one yourself</p>
+        <p className="text-year-none font-bold text-fg-heading">{COPY.card.yearUnknown}</p>
+        <p className="text-sm text-warning">{COPY.card.yearUnknownDetail}</p>
       </div>
     );
   }
@@ -171,7 +172,7 @@ function YearSlot({ card, isYearPending }: CardRevealSideProps) {
         token's own comment in `src/index.css` carries the full argument.
       */}
       <p className="text-year font-bold tracking-tight text-fg-year">{card.year}</p>
-      {isUnconfirmed ? <p className="text-sm text-warning">Unconfirmed year</p> : null}
+      {isUnconfirmed ? <p className="text-sm text-warning">{COPY.card.yearUnconfirmed}</p> : null}
     </div>
   );
 }

@@ -13,6 +13,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { CardControls } from './CardControls';
 import { highConfidenceCard } from './__fixtures__/cards';
+import { COPY } from '../game/copy';
 import type { CardAudioControls } from '../hooks/useCardAudio';
 
 /** A stub `useCardAudio` return value. `canPlay` is the only interesting axis here. */
@@ -54,7 +55,9 @@ describe('CardControls', () => {
   it('should disable play/pause when the track has no preview', () => {
     render(controls({ audio: stubAudio({ canPlay: false }) }));
 
-    expect((screen.getByRole('button', { name: 'Play' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(
+      (screen.getByRole('button', { name: COPY.controls.play }) as HTMLButtonElement).disabled,
+    ).toBe(true);
   });
 
   it('should keep exit enabled when the track has no preview', () => {
@@ -62,9 +65,9 @@ describe('CardControls', () => {
     // exactly the card a player wants to leave.
     render(controls({ audio: stubAudio({ canPlay: false }) }));
 
-    expect((screen.getByRole('button', { name: 'Exit game' }) as HTMLButtonElement).disabled).toBe(
-      false,
-    );
+    expect(
+      (screen.getByRole('button', { name: COPY.controls.exit }) as HTMLButtonElement).disabled,
+    ).toBe(false);
   });
 
   it('should keep the deck actions enabled when the track has no preview', () => {
@@ -73,28 +76,28 @@ describe('CardControls', () => {
     render(controls({ audio: stubAudio({ canPlay: false }) }));
 
     expect(
-      (screen.getByRole('button', { name: 'Keep this deck' }) as HTMLButtonElement).disabled,
+      (screen.getByRole('button', { name: COPY.controls.keepDeck }) as HTMLButtonElement).disabled,
     ).toBe(false);
   });
 
   it('should enable play/pause when the track has a preview', () => {
     render(controls());
 
-    expect((screen.getByRole('button', { name: 'Play' }) as HTMLButtonElement).disabled).toBe(
-      false,
-    );
+    expect(
+      (screen.getByRole('button', { name: COPY.controls.play }) as HTMLButtonElement).disabled,
+    ).toBe(false);
   });
 
   it('should note a missing preview without naming the track', () => {
     render(controls({ audio: stubAudio({ canPlay: false }) }));
 
-    expect(screen.queryByText(/no preview available/i)).not.toBeNull();
+    expect(screen.queryByText(COPY.controls.noPreview)).not.toBeNull();
   });
 
   it('should not render the missing-preview note when a preview exists', () => {
     render(controls());
 
-    expect(screen.queryByText(/no preview available/i)).toBeNull();
+    expect(screen.queryByText(COPY.controls.noPreview)).toBeNull();
   });
 
   it('should give the controls generic accessible names', () => {
@@ -115,7 +118,7 @@ describe('CardControls', () => {
       .getAllByRole('button')
       .map((button) => button.getAttribute('aria-label') ?? button.textContent);
 
-    expect(names).toEqual(['Exit game', 'Play', 'Keep this deck']);
+    expect(names).toEqual([COPY.controls.exit, COPY.controls.play, COPY.controls.keepDeck]);
   });
 
   it('should not leak the current track anywhere in the DOM', () => {
@@ -140,8 +143,8 @@ describe('CardControls', () => {
   it('should name the toggle Pause while playing', () => {
     render(controls({ audio: stubAudio({ isPlaying: true }) }));
 
-    expect(screen.queryByRole('button', { name: 'Pause' })).not.toBeNull();
-    expect(screen.queryByRole('button', { name: 'Play' })).toBeNull();
+    expect(screen.queryByRole('button', { name: COPY.controls.pause })).not.toBeNull();
+    expect(screen.queryByRole('button', { name: COPY.controls.play })).toBeNull();
   });
 
   it('should invoke the exit callback on exit', () => {
@@ -151,7 +154,7 @@ describe('CardControls', () => {
     const onExit = vi.fn();
     render(controls({ onExit }));
 
-    screen.getByRole('button', { name: 'Exit game' }).click();
+    screen.getByRole('button', { name: COPY.controls.exit }).click();
 
     expect(onExit).toHaveBeenCalledTimes(1);
   });
@@ -163,7 +166,7 @@ describe('CardControls', () => {
     const audio = stubAudio();
     render(controls({ audio, onKeepDeck }));
 
-    screen.getByRole('button', { name: 'Keep this deck' }).click();
+    screen.getByRole('button', { name: COPY.controls.keepDeck }).click();
 
     expect(onKeepDeck).toHaveBeenCalledTimes(1);
     expect(audio.pause).not.toHaveBeenCalled();
@@ -222,7 +225,7 @@ describe('CardControls', () => {
     // triangle its two ends imply and the mark becomes a solid wedge.
     render(controls());
 
-    const button = screen.getByRole('button', { name: 'Keep this deck' });
+    const button = screen.getByRole('button', { name: COPY.controls.keepDeck });
 
     expect(button.querySelectorAll('circle')).toHaveLength(3);
 
@@ -243,12 +246,16 @@ describe('CardControls', () => {
     const { rerender } = render(controls());
 
     // Play is one filled triangle.
-    expect(screen.getByRole('button', { name: 'Play' }).querySelectorAll('path')).toHaveLength(1);
+    expect(
+      screen.getByRole('button', { name: COPY.controls.play }).querySelectorAll('path'),
+    ).toHaveLength(1);
 
     rerender(controls({ audio: stubAudio({ isPlaying: true }) }));
 
     // Pause is two bars.
-    expect(screen.getByRole('button', { name: 'Pause' }).querySelectorAll('rect')).toHaveLength(2);
+    expect(
+      screen.getByRole('button', { name: COPY.controls.pause }).querySelectorAll('rect'),
+    ).toHaveLength(2);
   });
 
   it('should colour the exit control as the destructive one and leave the others alone', () => {
@@ -259,9 +266,11 @@ describe('CardControls', () => {
     // 1.4.11 asks of a non-text indicator -- computed, not eyeballed, and not observable in jsdom.
     render(controls());
 
-    expect(screen.getByRole('button', { name: 'Exit game' }).className).toContain('text-danger');
+    expect(screen.getByRole('button', { name: COPY.controls.exit }).className).toContain(
+      'text-danger',
+    );
 
-    for (const name of ['Play', 'Keep this deck']) {
+    for (const name of [COPY.controls.play, COPY.controls.keepDeck]) {
       const button = screen.getByRole('button', { name });
       expect(button.className).toContain('text-fg');
       expect(button.className).not.toContain('text-danger');
@@ -334,7 +343,7 @@ describe('CardControls', () => {
     const outer = container.firstElementChild as HTMLElement;
     expect(outer.className).toContain('w-(--card-width)');
 
-    const row = screen.getByRole('button', { name: 'Play' }).parentElement;
+    const row = screen.getByRole('button', { name: COPY.controls.play }).parentElement;
     expect(row?.className).toContain('w-full');
     expect(row?.className).toContain('justify-evenly');
     // A gap utility here would reintroduce the asymmetry: two gaps set by hand, two left over.
@@ -345,22 +354,13 @@ describe('CardControls', () => {
     const audio = stubAudio();
     const { rerender } = render(controls({ audio }));
 
-    screen.getByRole('button', { name: 'Play' }).click();
+    screen.getByRole('button', { name: COPY.controls.play }).click();
     expect(audio.play).toHaveBeenCalledTimes(1);
 
     const playing = stubAudio({ isPlaying: true });
     rerender(controls({ audio: playing }));
-    screen.getByRole('button', { name: 'Pause' }).click();
+    screen.getByRole('button', { name: COPY.controls.pause }).click();
     expect(playing.pause).toHaveBeenCalledTimes(1);
-  });
-
-  it('should not render a restart control', () => {
-    // Removed 2026-08-11. Asserted by ABSENCE rather than left to the exhaustive-names test alone,
-    // because a re-added Restart would also need `useCardAudio.restart` back and the `ended` rewind
-    // re-checked -- this is the assertion that says the removal was a decision.
-    render(controls());
-
-    expect(screen.queryByRole('button', { name: 'Restart' })).toBeNull();
   });
 
   it('should show a spinner in the play button while the preview is loading', () => {
@@ -370,7 +370,7 @@ describe('CardControls', () => {
       controls({ audio: stubAudio({ isPlaying: true, isLoading: true }) }),
     );
 
-    const play = screen.getByRole('button', { name: 'Pause' });
+    const play = screen.getByRole('button', { name: COPY.controls.pause });
     expect(play.querySelector('[data-motion="spinner"]')).not.toBeNull();
     // Nowhere else: the other two controls are not waiting on anything.
     expect(container.querySelectorAll('[data-motion="spinner"]')).toHaveLength(1);
@@ -396,7 +396,7 @@ describe('CardControls', () => {
     // ===================================================================
     render(controls({ audio: stubAudio({ isPlaying: true, isLoading: true }) }));
 
-    const play = screen.getByRole('button', { name: 'Pause' });
+    const play = screen.getByRole('button', { name: COPY.controls.pause });
     play.querySelector('[data-motion="spinner"]')?.remove();
 
     expect(play.querySelectorAll('svg')).toHaveLength(1);
@@ -411,7 +411,7 @@ describe('CardControls', () => {
     const audio = stubAudio({ isPlaying: true, isLoading: true });
     render(controls({ audio }));
 
-    const play = screen.getByRole('button', { name: 'Pause' });
+    const play = screen.getByRole('button', { name: COPY.controls.pause });
     expect((play as HTMLButtonElement).disabled).toBe(false);
     expect(play.getAttribute('aria-busy')).toBe('true');
 

@@ -86,6 +86,7 @@ import { DeckActionsDialog } from './DeckActionsDialog';
 import { ExitConfirmDialog } from './ExitConfirmDialog';
 import { Footer } from './Footer';
 import { Hud } from './Hud';
+import { COPY } from '../game/copy';
 import { useBackNavigation } from '../hooks/useBackNavigation';
 import { useCardAudio } from '../hooks/useCardAudio';
 import type { Card as CardData } from '../../shared/types';
@@ -447,7 +448,7 @@ export function GameScreen({
           number anywhere. It is dimmer than the `text-fg` it carried on the card because it is no
           longer the only thing on a dark face: it sits under a glowing card on the page.
         */}
-        <p className="text-xs text-fg-muted">Scan to play the full song</p>
+        <p className="text-xs text-fg-muted">{COPY.game.scanCaption}</p>
       </div>
 
       {/*

@@ -2,6 +2,7 @@
 
 import { describe, expect, it } from 'vitest';
 
+import { COPY } from './copy';
 import { pdfFileName, sanitizeForPdf } from './pdf-text';
 
 describe('sanitizeForPdf', () => {
@@ -84,18 +85,24 @@ describe('sanitizeForPdf', () => {
 
 describe('pdfFileName', () => {
   it('should build an ASCII slug from the playlist name', () => {
+    // The slug is what this module owns; the `jitster-` wrapper around it is copy, so it comes
+    // from `COPY.pdf.fileName` at both ends and can be renamed without touching these cases.
     expect(pdfFileName('Éxitos Verano 2000s & 2010s')).toBe(
-      'jitster-exitos-verano-2000s-2010s.pdf',
+      COPY.pdf.fileName('exitos-verano-2000s-2010s'),
     );
-    expect(pdfFileName('This is Duki (all songs)')).toBe('jitster-this-is-duki-all-songs.pdf');
+    expect(pdfFileName('This is Duki (all songs)')).toBe(
+      COPY.pdf.fileName('this-is-duki-all-songs'),
+    );
   });
 
   it('should never produce an empty or path-bearing name', () => {
     // A filename reaches the OS, and `/` or `:` is rejected outright by some of them.
-    expect(pdfFileName('')).toBe('jitster-deck.pdf');
-    expect(pdfFileName('///')).toBe('jitster-deck.pdf');
-    expect(pdfFileName('夜に駆ける')).toBe('jitster-deck.pdf');
-    expect(pdfFileName('a/b:c')).toBe('jitster-a-b-c.pdf');
+    expect(pdfFileName('')).toBe(COPY.pdf.fileName(''));
+    expect(pdfFileName('///')).toBe(COPY.pdf.fileName(''));
+    expect(pdfFileName('夜に駆ける')).toBe(COPY.pdf.fileName(''));
+    expect(pdfFileName('a/b:c')).toBe(COPY.pdf.fileName('a-b-c'));
+    // The empty slug really does become a name rather than `jitster-.pdf`.
+    expect(COPY.pdf.fileName('')).not.toBe(COPY.pdf.fileName('deck-name'));
   });
 
   it('should bound the length', () => {

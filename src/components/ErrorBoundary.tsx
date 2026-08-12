@@ -53,6 +53,7 @@
 import { Component } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
 
+import { COPY } from '../game/copy';
 import { clearSession } from '../game/persistence';
 import type { StorageLike } from '../game/persistence';
 
@@ -140,17 +141,14 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
         className="flex min-h-dvh flex-col items-center justify-center gap-6 bg-page p-6 text-fg"
       >
         <div className="flex max-w-content flex-col gap-3 text-center">
-          <h1 className="text-2xl font-semibold">Something went wrong</h1>
+          <h1 className="text-2xl font-semibold">{COPY.errorBoundary.heading}</h1>
 
           {/*
             GENERIC, and it stays generic. No message, no stack, no code -- see the header block.
             It says what happened, what to try, and where a developer should look, which is
             everything that can be said without quoting the error.
           */}
-          <p className="text-sm text-fg-secondary">
-            The game hit an unexpected problem and had to stop. Reloading usually fixes it. Details
-            were written to the browser console.
-          </p>
+          <p className="text-sm text-fg-secondary">{COPY.errorBoundary.body}</p>
         </div>
 
         {/*
@@ -163,7 +161,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
             onClick={this.handleReload}
             className="touch-target rounded-lg bg-accent px-4 py-2 font-medium text-on-accent hover:bg-accent-hover focus-visible:focus-ring"
           >
-            Reload
+            {COPY.errorBoundary.reload}
           </button>
 
           <div className="flex flex-col gap-1">
@@ -172,7 +170,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
               onClick={this.handleStartOver}
               className="touch-target rounded-lg border border-border-strong px-4 py-2 font-medium text-fg hover:border-border-hover focus-visible:focus-ring"
             >
-              Start over
+              {COPY.errorBoundary.startOver}
             </button>
 
             {/*
@@ -182,10 +180,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
               short label goes on the control and the cost goes underneath it, where it is still
               read out with the button by a screen reader following the same reading order.
             */}
-            <p className="text-xs text-fg-muted">
-              Clears the saved game first. Use this if reloading keeps failing — any game in
-              progress is lost.
-            </p>
+            <p className="text-xs text-fg-muted">{COPY.errorBoundary.startOverDetail}</p>
           </div>
         </div>
       </main>

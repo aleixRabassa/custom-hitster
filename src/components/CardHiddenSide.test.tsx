@@ -14,6 +14,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CardHiddenSide } from './CardHiddenSide';
+import { COPY } from '../game/copy';
 import { highConfidenceCard, noPreviewCard } from './__fixtures__/cards';
 import { clearQrCache } from '../game/qr-cache';
 
@@ -84,7 +85,7 @@ describe('CardHiddenSide', () => {
 
     expect(image.getAttribute('src')).toContain(highConfidenceCard.id);
     expect((container.textContent ?? '').trim()).toBe('');
-    expect(screen.queryByText(/scan to play/i)).toBeNull();
+    expect(screen.queryByText(COPY.game.scanCaption)).toBeNull();
   });
 
   it('should not put a live region on the hidden side', async () => {

@@ -66,6 +66,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 
+import { COPY } from '../game/copy';
 import { qrCacheKey, readQrCache, writeQrCache } from '../game/qr-cache';
 import { loadQrcode } from '../game/qrcode-loader';
 
@@ -95,7 +96,7 @@ export interface QrCodeProps {
   alt?: string;
 }
 
-const DEFAULT_ALT = 'Scan to play in Spotify';
+const DEFAULT_ALT = COPY.qr.alt;
 
 /**
  * The memoized `import('qrcode')` moved to `src/game/qrcode-loader.ts` on 2026-08-06, when the PDF

@@ -14,6 +14,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GameScreen } from './GameScreen';
+import { COPY } from '../game/copy';
 import { highConfidenceCard, lowConfidenceCard, noPreviewCard } from './__fixtures__/cards';
 import { clearQrCache } from '../game/qr-cache';
 import { resetBackNavigationTraversals } from '../hooks/useBackNavigation';
@@ -137,7 +138,7 @@ describe('GameScreen', () => {
     // the copyright line falls for someone tabbing through an open modal.
     const { container } = render(renderScreen({}));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Keep this deck' }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.controls.keepDeck }));
 
     const footer = container.querySelector('footer');
     const dialog = container.querySelector('[role="dialog"]');
@@ -192,13 +193,13 @@ describe('GameScreen', () => {
     // ===================================================================
     render(renderScreen({}));
 
-    const note = screen.getByText('Scan to play the full song');
+    const note = screen.getByText(COPY.game.scanCaption);
     expect(note.className).toContain('text-fg-muted');
     expect(note.className).toMatch(/(?:^|\s)text-fg(?:-|\s|$)/);
 
     // Exactly one, on a screen that renders the current card AND the next card's back. The
     // sentence was in the document twice per card while it lived on the face.
-    expect(screen.getAllByText('Scan to play the full song')).toHaveLength(1);
+    expect(screen.getAllByText(COPY.game.scanCaption)).toHaveLength(1);
   });
 
   it('should keep the scan instruction visible while the card is flipped', () => {
@@ -207,10 +208,10 @@ describe('GameScreen', () => {
     // QR is one tap away and the sentence stays true.
     const { rerender } = render(renderScreen({ isFlipped: true }));
 
-    expect(screen.queryByText('Scan to play the full song')).not.toBeNull();
+    expect(screen.queryByText(COPY.game.scanCaption)).not.toBeNull();
 
     rerender(renderScreen({ isFlipped: false }));
-    expect(screen.queryByText('Scan to play the full song')).not.toBeNull();
+    expect(screen.queryByText(COPY.game.scanCaption)).not.toBeNull();
   });
 
   it('should not stop audio when the card is flipped', () => {
@@ -228,7 +229,7 @@ describe('GameScreen', () => {
     // ===================================================================
     const { rerender } = render(renderScreen({}));
 
-    screen.getByRole('button', { name: 'Play' }).click();
+    screen.getByRole('button', { name: COPY.controls.play }).click();
     expect(calls).toContain(`play:${highConfidenceCard.previewUrl}`);
 
     calls = [];
@@ -245,7 +246,7 @@ describe('GameScreen', () => {
   it('should stop audio when the card changes', () => {
     const { rerender } = render(renderScreen({}));
 
-    screen.getByRole('button', { name: 'Play' }).click();
+    screen.getByRole('button', { name: COPY.controls.play }).click();
     calls = [];
 
     rerender(renderScreen({ card: lowConfidenceCard }));
@@ -266,15 +267,15 @@ describe('GameScreen', () => {
     const onExit = vi.fn();
     render(renderScreen({ onExit }));
 
-    screen.getByRole('button', { name: 'Play' }).click();
+    screen.getByRole('button', { name: COPY.controls.play }).click();
     calls = [];
 
     // `fireEvent`, not `.click()`, for anything that opens or answers the dialog: opening it is a
     // React state change, and only `fireEvent` wraps the dispatch in `act()` so the re-render has
     // flushed by the next line. The audio presses above stay on `.click()` -- they run through a
     // ref to the media element and change no React state.
-    fireEvent.click(screen.getByRole('button', { name: 'Exit game' }));
-    fireEvent.click(screen.getByRole('button', { name: 'End game' }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.controls.exit }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.exitDialog.confirm }));
 
     expect(calls).toContain(`pause:${highConfidenceCard.previewUrl}`);
     expect(onExit).toHaveBeenCalledTimes(1);
@@ -298,10 +299,10 @@ describe('GameScreen', () => {
     const onExit = vi.fn();
     render(renderScreen({ onExit }));
 
-    screen.getByRole('button', { name: 'Play' }).click();
+    screen.getByRole('button', { name: COPY.controls.play }).click();
     calls = [];
 
-    fireEvent.click(screen.getByRole('button', { name: 'Exit game' }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.controls.exit }));
 
     expect(onExit).not.toHaveBeenCalled();
     expect(calls).toEqual([]);
@@ -312,13 +313,13 @@ describe('GameScreen', () => {
     const onExit = vi.fn();
     render(renderScreen({ onExit }));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Exit game' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Keep playing' }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.controls.exit }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.exitDialog.cancel }));
 
     expect(onExit).not.toHaveBeenCalled();
     expect(screen.queryByRole('dialog')).toBeNull();
     // And the game is still operable rather than left in a half-exited state.
-    expect(screen.queryByRole('button', { name: 'Play' })).not.toBeNull();
+    expect(screen.queryByRole('button', { name: COPY.controls.play })).not.toBeNull();
   });
 
   it('should ignore the game keys while the exit dialog is open', () => {
@@ -339,7 +340,7 @@ describe('GameScreen', () => {
     const onNext = vi.fn();
     render(renderScreen({ onFlip, onNext }));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Exit game' }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.controls.exit }));
 
     fireEvent.keyDown(window, { key: 'ArrowRight' });
     fireEvent.keyDown(window, { key: ' ' });
@@ -348,7 +349,7 @@ describe('GameScreen', () => {
     expect(onFlip).not.toHaveBeenCalled();
 
     // And they work again once the dialog is gone -- the guard is a suspension, not a teardown.
-    fireEvent.click(screen.getByRole('button', { name: 'Keep playing' }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.exitDialog.cancel }));
     fireEvent.keyDown(window, { key: 'ArrowRight' });
 
     expect(onNext).toHaveBeenCalledTimes(1);
@@ -370,13 +371,13 @@ describe('GameScreen', () => {
     const onNext = vi.fn();
     render(renderScreen({ onFlip, onNext }));
 
-    screen.getByRole('button', { name: 'Play' }).click();
+    screen.getByRole('button', { name: COPY.controls.play }).click();
     calls = [];
 
-    fireEvent.click(screen.getByRole('button', { name: 'Keep this deck' }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.controls.keepDeck }));
 
     expect(screen.queryByRole('dialog')).not.toBeNull();
-    expect(screen.queryByRole('button', { name: /copy share link/i })).not.toBeNull();
+    expect(screen.queryByRole('button', { name: COPY.deckActions.copyLink })).not.toBeNull();
     // The preview keeps playing: the player is sharing a deck, not leaving the game.
     expect(calls).toEqual([]);
     expect(onFlip).not.toHaveBeenCalled();
@@ -391,7 +392,7 @@ describe('GameScreen', () => {
     const onNext = vi.fn();
     render(renderScreen({ onFlip, onNext }));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Keep this deck' }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.controls.keepDeck }));
 
     fireEvent.keyDown(window, { key: 'ArrowRight' });
     fireEvent.keyDown(window, { key: ' ' });
@@ -400,7 +401,7 @@ describe('GameScreen', () => {
     expect(onFlip).not.toHaveBeenCalled();
 
     // And they work again once it is closed -- the guard is a suspension, not a teardown.
-    fireEvent.click(screen.getByRole('button', { name: /back to the game/i }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.deckActionsDialog.close }));
     fireEvent.keyDown(window, { key: 'ArrowRight' });
 
     expect(onNext).toHaveBeenCalledTimes(1);
@@ -409,11 +410,11 @@ describe('GameScreen', () => {
   it('should close the deck actions on Escape and leave the game playable', () => {
     render(renderScreen({}));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Keep this deck' }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.controls.keepDeck }));
     fireEvent.keyDown(window, { key: 'Escape' });
 
     expect(screen.queryByRole('dialog')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Play' })).not.toBeNull();
+    expect(screen.queryByRole('button', { name: COPY.controls.play })).not.toBeNull();
   });
 
   it('should not leak the current card through the deck actions', () => {
@@ -426,7 +427,7 @@ describe('GameScreen', () => {
     // ===================================================================
     const { container } = render(renderScreen({}));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Keep this deck' }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.controls.keepDeck }));
 
     const text = container.textContent ?? '';
     for (const value of [
@@ -445,15 +446,15 @@ describe('GameScreen', () => {
     // finished when it is made.
     render(renderScreen({ pendingYearCount: 4 }));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Keep this deck' }));
-    fireEvent.click(screen.getByRole('button', { name: /print as pdf cards/i }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.controls.keepDeck }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
 
-    expect(screen.queryByText(/waiting for the last years/i)).not.toBeNull();
-    expect(screen.queryByText(/4 cards are still looking up a year/i)).not.toBeNull();
+    expect(screen.queryByText(COPY.deckActions.waitingHeading)).not.toBeNull();
+    expect(screen.queryByText(COPY.deckActions.waitingDetail(4))).not.toBeNull();
 
     // And the game is untouched behind it: cancelling puts the three actions back.
-    fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }));
-    expect(screen.queryByRole('button', { name: /copy share link/i })).not.toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.cancel }));
+    expect(screen.queryByRole('button', { name: COPY.deckActions.copyLink })).not.toBeNull();
   });
 
   it('should leave the audio element sourceless for a card with no preview', () => {
@@ -463,7 +464,9 @@ describe('GameScreen', () => {
 
     const audio = screen.getByTestId('session-audio') as HTMLAudioElement;
     expect(audio.hasAttribute('src')).toBe(false);
-    expect((screen.getByRole('button', { name: 'Play' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(
+      (screen.getByRole('button', { name: COPY.controls.play }) as HTMLButtonElement).disabled,
+    ).toBe(true);
   });
 
   it('should not preload media', () => {
@@ -575,7 +578,7 @@ describe('GameScreen keyboard controls', () => {
     const onFlip = vi.fn();
     render(renderScreen({ onFlip }));
 
-    screen.getByRole('button', { name: 'Play' }).focus();
+    screen.getByRole('button', { name: COPY.controls.play }).focus();
 
     fireEvent.keyDown(window, { key: ' ' });
 
@@ -589,7 +592,7 @@ describe('GameScreen keyboard controls', () => {
     const onNext = vi.fn();
     render(renderScreen({ onNext }));
 
-    screen.getByRole('button', { name: 'Play' }).focus();
+    screen.getByRole('button', { name: COPY.controls.play }).focus();
 
     fireEvent.keyDown(window, { key: 'ArrowRight' });
 
@@ -722,14 +725,14 @@ describe('GameScreen back navigation', () => {
     await pressBack();
 
     expect(screen.queryByRole('dialog')).not.toBeNull();
-    expect(screen.queryByRole('button', { name: 'End game' })).not.toBeNull();
+    expect(screen.queryByRole('button', { name: COPY.exitDialog.confirm })).not.toBeNull();
     expect(onExit).not.toHaveBeenCalled();
 
     // And it is the SAME dialog the button opens, so cancelling returns to the same card rather
     // than to a second, parallel confirmation.
-    fireEvent.click(screen.getByRole('button', { name: 'Keep playing' }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.exitDialog.cancel }));
     expect(screen.queryByRole('dialog')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Play' })).not.toBeNull();
+    expect(screen.queryByRole('button', { name: COPY.controls.play })).not.toBeNull();
     expect(onExit).not.toHaveBeenCalled();
   });
 
@@ -740,22 +743,22 @@ describe('GameScreen back navigation', () => {
     const onExit = vi.fn();
     render(renderScreen({ onExit }));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Exit game' }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.controls.exit }));
     expect(screen.queryByRole('dialog')).not.toBeNull();
 
     await pressBack();
 
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(onExit).not.toHaveBeenCalled();
-    expect(screen.queryByRole('button', { name: 'Play' })).not.toBeNull();
+    expect(screen.queryByRole('button', { name: COPY.controls.play })).not.toBeNull();
   });
 
   it('should close the deck actions on a back press and leave the game playable', async () => {
     const onExit = vi.fn();
     render(renderScreen({ onExit }));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Keep this deck' }));
-    expect(screen.queryByRole('button', { name: /copy share link/i })).not.toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: COPY.controls.keepDeck }));
+    expect(screen.queryByRole('button', { name: COPY.deckActions.copyLink })).not.toBeNull();
 
     await pressBack();
 
@@ -763,7 +766,7 @@ describe('GameScreen back navigation', () => {
     // precedence in `backNavigationAction` arriving through the real screen.
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(onExit).not.toHaveBeenCalled();
-    expect(screen.queryByRole('button', { name: 'Play' })).not.toBeNull();
+    expect(screen.queryByRole('button', { name: COPY.controls.play })).not.toBeNull();
   });
 
   it('should keep intercepting a second back press', async () => {
@@ -774,7 +777,7 @@ describe('GameScreen back navigation', () => {
     render(renderScreen({ onExit }));
 
     await pressBack();
-    fireEvent.click(screen.getByRole('button', { name: 'Keep playing' }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.exitDialog.cancel }));
 
     await pressBack();
 

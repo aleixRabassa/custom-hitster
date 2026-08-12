@@ -56,6 +56,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { Spinner } from './Spinner';
+import { COPY } from '../game/copy';
 import { buildDeckLink } from '../game/deck-link';
 import { sheetsForDeck, usePdfExport } from '../hooks/usePdfExport';
 import type { PdfExportState } from '../hooks/usePdfExport';
@@ -176,11 +177,11 @@ function ExportMessage({ state }: { state: PdfExportState }) {
     >
       {state.status === 'done'
         ? state.excludedCount === 0
-          ? 'PDF downloaded'
-          : `PDF downloaded — ${state.excludedCount} ${state.excludedCount === 1 ? 'card' : 'cards'} left out, no year yet`
+          ? COPY.deckActions.exportDone
+          : COPY.deckActions.exportDonePartial(state.excludedCount)
         : state.status === 'nothing-to-print'
-          ? 'No card has a year yet, so there is nothing to print'
-          : 'Could not build the PDF'}
+          ? COPY.deckActions.exportEmpty
+          : COPY.deckActions.exportFailed}
     </p>
   );
 }
@@ -358,7 +359,7 @@ export function DeckActions({
         <div role="status" className="flex flex-col items-center gap-3">
           <Spinner />
 
-          <p className="text-sm font-medium text-fg">Waiting for the last years…</p>
+          <p className="text-sm font-medium text-fg">{COPY.deckActions.waitingHeading}</p>
 
           {/*
             Says what the wait actually is, in the same spirit as the preparing screen's second
@@ -366,8 +367,7 @@ export function DeckActions({
             here is a rough number of seconds -- which is the only honest expectation available.
           */}
           <p className="max-w-narrow text-xs text-fg-muted">
-            {pendingYearCount === 1 ? '1 card is' : `${pendingYearCount} cards are`} still looking
-            up a year.
+            {COPY.deckActions.waitingDetail(pendingYearCount)}
           </p>
         </div>
 
@@ -402,8 +402,8 @@ export function DeckActions({
             className={BUTTON_CLASSES}
           >
             {pdf.status === 'working'
-              ? `Building PDF… ${pdf.completed}/${pdf.total}`
-              : 'Print so far'}
+              ? COPY.deckActions.printing(pdf.completed, pdf.total)
+              : COPY.deckActions.printPartial}
           </button>
 
           {/*
@@ -419,7 +419,7 @@ export function DeckActions({
             }}
             className={BUTTON_CLASSES}
           >
-            Cancel
+            {COPY.deckActions.cancel}
           </button>
         </div>
 
@@ -435,7 +435,7 @@ export function DeckActions({
   return (
     <div className="flex flex-col gap-3">
       <button type="button" onClick={handleCopy} className={BUTTON_CLASSES}>
-        Copy share link
+        {COPY.deckActions.copyLink}
       </button>
 
       {/*
@@ -448,8 +448,7 @@ export function DeckActions({
         that has to be read and believed, and a slash in it reads as boilerplate.
       */}
       <p className="text-center text-xs text-fg-muted">
-        {playlistIds.length === 1 ? 'Same playlist' : 'Same playlists'}, same shuffle — the years
-        are looked up again, so the deck can differ slightly
+        {COPY.deckActions.shareCaption(playlistIds.length)}
       </p>
 
       <button
@@ -463,7 +462,7 @@ export function DeckActions({
         disabled={isPlaylistSaved}
         className={BUTTON_CLASSES}
       >
-        {isPlaylistSaved ? 'Saved to your playlists' : 'Save this playlist'}
+        {isPlaylistSaved ? COPY.deckActions.saved : COPY.deckActions.save}
       </button>
 
       <button
@@ -476,8 +475,8 @@ export function DeckActions({
         className={BUTTON_CLASSES}
       >
         {pdf.status === 'working'
-          ? `Building PDF… ${pdf.completed}/${pdf.total}`
-          : 'Print as PDF cards'}
+          ? COPY.deckActions.printing(pdf.completed, pdf.total)
+          : COPY.deckActions.print}
       </button>
 
       {/*
@@ -496,8 +495,8 @@ export function DeckActions({
       */}
       <p className="text-center text-xs text-fg-muted">
         {isDeckResolved
-          ? `${sheets === 1 ? '1 A4 sheet' : `${sheets} A4 sheets`}, 12 cards each — print double-sided on the long edge`
-          : `${pendingYearCount === 1 ? '1 card is' : `${pendingYearCount} cards are`} still looking up a year — printing waits for them all`}
+          ? COPY.deckActions.sheetSummary(sheets)
+          : COPY.deckActions.printWaitsForYears(pendingYearCount)}
       </p>
 
       <ExportMessage state={pdf} />
@@ -510,12 +509,10 @@ export function DeckActions({
       {copyState === 'idle' ? null : (
         <div role="status" className="flex flex-col gap-2">
           {copyState === 'copied' ? (
-            <p className="text-center text-xs text-fg-secondary">Link copied</p>
+            <p className="text-center text-xs text-fg-secondary">{COPY.deckActions.linkCopied}</p>
           ) : (
             <>
-              <p className="text-center text-xs text-warning">
-                Could not copy automatically — here is the link
-              </p>
+              <p className="text-center text-xs text-warning">{COPY.deckActions.linkCopyFailed}</p>
               {/*
                 `readOnly` and not a `<p>`: a text input can be selected with one keystroke and
                 is reachable by a keyboard, which is what makes this a real fallback rather than
@@ -525,7 +522,7 @@ export function DeckActions({
                 type="text"
                 readOnly
                 value={failedLink ?? ''}
-                aria-label="Share link"
+                aria-label={COPY.deckActions.shareLinkFieldLabel}
                 onFocus={(event) => event.currentTarget.select()}
                 className="rounded-lg border border-border bg-surface px-3 py-2 text-xs text-fg focus-visible:focus-ring"
               />

@@ -30,6 +30,7 @@
 import { useEffect, useRef } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 
+import { COPY } from '../game/copy';
 import { DeckActions } from './DeckActions';
 import type { DeckActionsProps } from './DeckActions';
 
@@ -145,7 +146,7 @@ export function DeckActionsDialog({ onClose, ...deckActions }: DeckActionsDialog
         className="flex w-full max-w-content flex-col gap-4 rounded-lg border border-border-strong bg-surface p-5 text-fg"
       >
         <h2 id="deck-actions-title" className="text-lg font-semibold">
-          Keep this deck
+          {COPY.deckActionsDialog.title}
         </h2>
 
         <DeckActions {...deckActions} />
@@ -159,7 +160,7 @@ export function DeckActionsDialog({ onClose, ...deckActions }: DeckActionsDialog
           onClick={onClose}
           className="touch-target rounded-lg border border-border-strong px-4 py-2 font-medium text-fg hover:border-border-hover focus-visible:focus-ring"
         >
-          Back to the game
+          {COPY.deckActionsDialog.close}
         </button>
       </div>
     </div>

@@ -3466,8 +3466,9 @@ throw.
 `https://open.spotify.com/embed/playlist/{id}` with a browser `User-Agent`, extracting
 `__NEXT_DATA__` and reading `props.pageProps.state.data.entity` — the same path
 `api/_lib/spotify-embed.ts` takes. Per id it reports `uri === spotify:playlist:{id}`, `name`,
-`subtitle` (the owner), `trackList.length` and how many entries lack `audioPreview.url`. All twelve
-ids passed. **Labels are now readable renderings of the titles, not the titles verbatim**, because
+`subtitle` (the owner), `trackList.length` and how many entries lack `audioPreview.url`. Every id in
+the set passed, including the replacement for the duplicate above — which the same script confirmed
+is a genuinely different playlist rather than a second name for one already listed. **Labels are now readable renderings of the titles, not the titles verbatim**, because
 real titles carry emoji, trailing punctuation and the occasional typo — so a label that differs from
 `entity.name` is the design, and this supersedes the two older "label capitalisation mismatch" notes
 above.
@@ -3477,3 +3478,87 @@ personal.** On 2026-08-12 one row was removed precisely for being user-owned; la
 user-owned rows were added at the developer's request. The trade is accepted, not overlooked: an
 owner can make one private at any time and the player then meets `not-found-or-private` on a row the
 app itself suggested. That is what makes the re-verification a recurring chore rather than a one-off.
+
+## 2026-08-12 — Copy was centralised into `src/game/copy.ts`; six pure-wording assertions were deleted rather than converted
+
+The developer asked for the app's text to be freely editable without breaking tests ("elimina todos
+los tests que checkean textos concretos o usa variables globales para ellos"). Every user-facing
+string in `src/` now lives in `src/game/copy.ts` as `COPY.*`, components render it, and the tests
+assert against the same constants.
+
+**Scale, for anyone wondering whether it was worth it.** Before this, the wording was pinned in
+roughly 200 assertions across eighteen test files — whole sentences (`toContain('1 playlist could
+not be loaded and was left out.')`), accessible names (`{ name: /copy share link/i }`), aria-labels
+(`'Dismiss notice'`), and format-coupled regexes (`/\d+ cards? left/` with the number extracted back
+out of the match). The suite passed identically before and after, which is the point: none of those
+assertions was about behaviour, and all of them made rewording expensive.
+
+**Three conversions that were not mechanical, and are the pattern for the next one:**
+
+1. **A count read back out of a rendered line.** `App.test.tsx` extracted the HUD's remaining count
+   with `/(\d+) cards? left/`. That regex IS the copy. It is now `cardsLeftInHud()`, which asks
+   `COPY.hud.cardsLeft(n)` which `n` produces the line on screen — counting **downward** from 500,
+   because `cardsLeft(2)` ("2 cards left") is a substring of `cardsLeft(12)`.
+2. **"Is the export running?"** was `queryByText(/building pdf/i)`. The label is
+   `COPY.deckActions.printing(done, total)`, whose counts a caller does not know. Rewritten as a
+   question about the **button's identity** instead: a button still wearing `COPY.deckActions.print`
+   is exactly the claim "no export started", with no sentence pinned anywhere. Where both labels are
+   acceptable, the `name` option takes a **predicate over the two strings** rather than a regex
+   alternation.
+3. **"The banner names no failed playlist."** Was the absence of a quote mark and of `'left out:'`.
+   Now an **equality over the `<li>` list** against the copy constants: a name cannot appear in a
+   set of lines that are exactly those constants, and the constants take only numbers.
+
+**Six assertions were DELETED, because they check wording that no constant can express.** Recorded
+here because each was load-bearing enough to be written up in `AGENTS.md`, and deleting them is the
+part of this change that loses something:
+
+- `DeckActions.test.tsx` — the two `not.toMatch(/same deck/i)` checks on the share caption. The rule
+  ("a link promises the same playlist and shuffle, never the same deck") is now a comment block on
+  `COPY.deckActions.shareCaption`.
+- `EndScreen.test.tsx` — `{ name: /new playlist/i }` absent. The Home button's own
+  `{ name: COPY.end.home }` query fails on any rename, which is the half worth keeping.
+- `CardControls.test.tsx` — `{ name: 'Restart' }` absent. The exhaustive `expect(names).toEqual([...])`
+  above it already fails if a fourth control appears.
+- `LandingScreen.test.tsx` — `not.toContain('our side')` on the `empty-playlist` message. Replaced by
+  asserting the two messages are **not the same string**, which is what the bug actually was.
+- `messages.test.ts` — seven substring checks (`'private'`, `'deleted'`, `'no tracks'`, `'our side'`,
+  `'years'`, `'try a playlist'`, `'offline'`). Replaced by **"every code has a sentence of its own"**
+  (`new Set(messages).size === ALL_CODES.length`), which is the property they were defending —
+  `empty-playlist` rendering the `unexpected-payload` apology is exactly a two-codes-one-sentence bug,
+  and it shipped once.
+
+**Two things that stayed out of the module and should stay out.** `messages.ts` keeps the error map:
+`Record<StartFailureCode, string>` makes a new code fail the typecheck, and that exhaustiveness is
+what a loose object would cost. `index.html` and `src/pwa/manifest.ts` cannot import it at all — the
+first is shipped bytes on the critical path, the second is read by `vite.config.ts` at build time.
+
+## 2026-08-12 — `getByText` reads only an element's DIRECT text-node children, which is why the split footer needed `textContent`
+
+Pulling "Aleix Rabassa" into its own `<span>` (to carry the accent colour) broke
+`screen.getByText(COPYRIGHT_NOTICE)` — Testing Library's default matcher runs over `getNodeText()`,
+which concatenates only the **direct** child text nodes, so the `<footer>` matched
+`"Copyright © 2026-present . All rights reserved."` with the name missing. `textContent` (which does
+descend) is what `Footer.test.tsx` now asserts on.
+
+Worth knowing beyond the footer: **the leak proofs were unaffected**, because they already read
+`container.textContent`. So the three screens that subtract `COPYRIGHT_NOTICE` from their text before
+asserting no year-shaped number remains kept working — but only because the three parts concatenate
+with **no separator**. A stray space between them would make that subtraction miss and the proofs
+would fail on `PreparingScreen`/`EndScreen`/`LandingScreen`, reading as a leak in a screen that has
+none. That is the property `Footer.test.tsx`'s first test now pins.
+
+## 2026-08-12 — The accent is now used as TEXT in one place; contrast measured at 5.13:1
+
+`--color-accent` (`oklch(59.6% 0.145 163.225)`, emerald-600) had only ever been a filled background,
+with `--color-on-accent` existing precisely because white on it measured 3.67:1. The footer's author
+name is the first place it is a text colour. Computed on `--color-page` (`#0a0a0a`): the accent's
+relative luminance is 0.2223 against the page's 0.00304, giving **5.13:1** — past the 4.5:1 floor
+that applies, since the footer is `text-xs` (12px, so not large text).
+
+Two consequences. This is the usage that **fails first** if the accent token is ever darkened, and
+nothing in the repo would catch it — jsdom computes no colour, so `Footer.test.tsx` can only assert
+the class name. And the class name assertion is not padding: an unknown Tailwind colour utility in
+this app emits **no rule at all**, so `text-accent-green` or `text-emerald` would leave the name
+rendering in the inherited `text-fg-muted` with all four checks green. Verified in the built CSS —
+`dist/assets/*.css` contains `.text-accent{color:var(--color-accent)}`.

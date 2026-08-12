@@ -1,39 +1,73 @@
 /**
  * @vitest-environment jsdom
  *
- * The copyright line's own tests. Three of them, and each one guards a different way this
- * two-line component could go quietly wrong.
+ * The copyright line's own tests. Each one guards a different way this small component could go
+ * quietly wrong -- and none of them knows what the line SAYS: the wording comes from
+ * `COPY.footer`, so it is the developer's to reword without touching this file.
  */
 
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { Footer, COPYRIGHT_NOTICE } from './Footer';
+import { Footer } from './Footer';
+import { COPY } from '../game/copy';
 
 describe('Footer', () => {
   // Not automatic in this repo: Testing Library only registers its own `afterEach(cleanup)` when
   // Vitest globals are on, and this project imports `describe`/`it`/`expect` explicitly.
   afterEach(cleanup);
 
-  it('should render the copyright notice exactly as specified', () => {
+  it('should render the whole copyright notice as one uninterrupted string', () => {
     // ===================================================================
-    //  ASSERTED CHARACTER FOR CHARACTER, INCLUDING THE `©` AND THE
-    //  "2026-present".
+    //  ASSERTED AGAINST `COPY.footer.notice`, NEVER AGAINST A LITERAL. The
+    //  wording, the year range and the author are the developer's to change
+    //  in `src/game/copy.ts` without a test standing in the way.
     //
-    //  A copyright line is the one string in the app where a well-meaning
-    //  edit is a legal change rather than a copy change -- "(c)" for "©",
-    //  a hardcoded single year, or a rephrased "All rights reserved" all
-    //  look like tidying. The literal `©` is also the only non-ASCII
-    //  character on these screens, so this doubles as the canary for an
-    //  encoding regression in the build.
+    //  WHAT THIS STILL PINS IS THE THING THE 2026-08-12 SPLIT COULD BREAK.
+    //  The line is no longer one text node: the author's name was pulled into
+    //  its own `<span>` to carry the accent colour, so the element now has
+    //  three children. The property that must survive that is that they
+    //  CONCATENATE with no separator -- `textContent` is still exactly the
+    //  notice, character for character, including the `©` and the spaces
+    //  either side of the name.
+    //
+    //  It is not a cosmetic concern. Three leak proofs (`PreparingScreen`,
+    //  `EndScreen`, `LandingScreen`) subtract this exact string from a
+    //  screen's `textContent` before asserting no year-shaped number is left,
+    //  and "2026-present" is year-shaped. A stray space between the parts
+    //  makes that subtraction miss and the proofs fail somewhere else
+    //  entirely, reading as a leak in a screen that has none.
+    //
+    //  `getByText` CANNOT CHECK THIS and was the assertion here until the
+    //  split: its default matcher reads only an element's DIRECT text-node
+    //  children, so it saw "Copyright © 2026-present . All rights reserved."
+    //  with the name missing. Measured -- it is why this reads `textContent`.
     // ===================================================================
-    render(<Footer />);
+    const { container } = render(<Footer />);
 
-    expect(
-      screen.getByText('Copyright © 2026-present Aleix Rabassa. All rights reserved.'),
-    ).not.toBeNull();
-    // The constant and the rendered text cannot drift, which is the point of exporting it.
-    expect(COPYRIGHT_NOTICE).toBe('Copyright © 2026-present Aleix Rabassa. All rights reserved.');
+    expect(container.querySelector('footer')?.textContent).toBe(COPY.footer.notice);
+  });
+
+  it('should render the author in the accent colour, inside the same line', () => {
+    // ===================================================================
+    //  THE ONE PLACE `--color-accent` IS USED AS TEXT RATHER THAN AS A FILLED
+    //  BACKGROUND, asked for on 2026-08-12 ("the standard green of the app").
+    //
+    //  `text-accent` is asserted for the reason every colour class in this
+    //  repo is: an unknown Tailwind colour utility emits NO rule at all and
+    //  fails silently -- `text-accent-green` or `text-emerald` would leave the
+    //  name rendering in the inherited `text-fg-muted` with all four checks
+    //  green. That shipped once already, on the card's hidden face.
+    //
+    //  The measurement that made this safe is in `Footer.tsx`: 5.13:1 on
+    //  `--color-page`, which clears the 4.5:1 floor for 12px text. jsdom
+    //  computes no colour, so the class name is the whole of the grip.
+    // ===================================================================
+    const { container } = render(<Footer />);
+
+    const author = container.querySelector('footer span');
+    expect(author?.textContent).toBe(COPY.footer.author);
+    expect(author?.className).toContain('text-accent');
   });
 
   it('should render as a footer element with a colour that exists', () => {

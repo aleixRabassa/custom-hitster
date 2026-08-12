@@ -29,6 +29,8 @@
  * ===========================================================================
  */
 
+import { COPY } from './copy';
+
 /**
  * Typographic characters that have a plain-ASCII equivalent worth preferring.
  *
@@ -187,5 +189,5 @@ export function pdfFileName(playlistName: string): string {
     .replace(/^-+|-+$/g, '')
     .slice(0, 60);
 
-  return `jitster-${slug === '' ? 'deck' : slug}.pdf`;
+  return COPY.pdf.fileName(slug);
 }

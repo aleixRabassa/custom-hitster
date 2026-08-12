@@ -32,6 +32,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { QrCode } from './QrCode';
+import { COPY } from '../game/copy';
 import { highConfidenceCard } from './__fixtures__/cards';
 import { clearQrCache } from '../game/qr-cache';
 
@@ -117,7 +118,7 @@ describe('QrCode', () => {
       expect(attribute.value).not.toContain(String(highConfidenceCard.year));
     }
 
-    expect(image.getAttribute('alt')).toBe('Scan to play in Spotify');
+    expect(image.getAttribute('alt')).toBe(COPY.qr.alt);
   });
 
   it('should not be draggable, so a swipe starting on the code moves the card', async () => {

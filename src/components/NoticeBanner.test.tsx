@@ -9,6 +9,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { NoticeBanner } from './NoticeBanner';
+import { COPY } from '../game/copy';
 import { MAX_EMBED_TRACKS } from '../../shared/constants';
 
 function renderBanner(props: Partial<Parameters<typeof NoticeBanner>[0]> = {}) {
@@ -45,11 +46,10 @@ describe('NoticeBanner', () => {
     renderBanner({ truncated: true });
 
     const text = screen.getByTestId('notice-banner').textContent ?? '';
-    // The number comes from the shared constant, so the copy cannot drift from the actual cap.
+    // Built from the shared constant at both ends, so the sentence cannot drift from the actual
+    // cap -- which is the one thing about this notice that is not the copy's to change.
+    expect(text).toContain(COPY.notice.truncated(MAX_EMBED_TRACKS));
     expect(text).toContain(String(MAX_EMBED_TRACKS));
-    // "MAY have more" -- it cannot promise more than that, because the payload carries no total,
-    // no offset and no `hasMore`, so 100 tracks returned is indistinguishable from 100 tracks held.
-    expect(text).toMatch(/may have more/i);
 
     cleanup();
     renderBanner({ truncated: false });
@@ -64,16 +64,18 @@ describe('NoticeBanner', () => {
 
     cleanup();
     renderBanner({ skippedCount: 3 });
-    expect(screen.getByTestId('notice-banner').textContent).toContain('3 tracks');
+    expect(screen.getByTestId('notice-banner').textContent).toContain(COPY.notice.skippedTracks(3));
   });
 
   it('should use the singular for exactly one skipped track', () => {
     // "1 tracks could not be read" undermines a message about data quality.
     renderBanner({ skippedCount: 1 });
 
+    // Pinned as "the singular form, whatever it is": the two strings must not be the same, which
+    // is the shape a `${n} tracks` template with no branch would produce.
     const text = screen.getByTestId('notice-banner').textContent ?? '';
-    expect(text).toContain('1 track could not be read');
-    expect(text).not.toContain('1 tracks');
+    expect(text).toContain(COPY.notice.skippedTracks(1));
+    expect(COPY.notice.skippedTracks(1)).not.toBe(COPY.notice.skippedTracks(2));
   });
 
   it('should render the years-unavailable notice from game state', () => {
@@ -81,10 +83,9 @@ describe('NoticeBanner', () => {
     // The one notice derived from game state rather than from the fetch.
     renderBanner({ yearLookupsUnavailable: true });
 
-    const text = (screen.getByTestId('notice-banner').textContent ?? '').toLowerCase();
-    expect(text).toContain('years are unavailable');
-    // And it must say the deck still works, because it does -- the QR is always live.
-    expect(text).toContain('still playable');
+    expect(screen.getByTestId('notice-banner').textContent ?? '').toContain(
+      COPY.notice.yearsUnavailable,
+    );
   });
 
   it('should render all five notices together', () => {
@@ -109,16 +110,16 @@ describe('NoticeBanner', () => {
     renderBanner({ failedPlaylistCount: 1, deckSize: 180, loadedPlaylistCount: 4 });
 
     const text = screen.getByTestId('notice-banner').textContent ?? '';
-    expect(text).toContain('1 playlist could not be loaded and was left out.');
-    // Singular throughout, because "1 playlists ... were left out" undermines the sentence.
-    expect(text).not.toContain('1 playlists');
+    expect(text).toContain(COPY.notice.failedPlaylists(1));
+    // Singular and plural are genuinely different sentences, not one template with an `s` on it.
+    expect(COPY.notice.failedPlaylists(1)).not.toBe(COPY.notice.failedPlaylists(2));
   });
 
   it('should report several playlists that could not be loaded', () => {
     renderBanner({ failedPlaylistCount: 3, deckSize: 90, loadedPlaylistCount: 2 });
 
     expect(screen.getByTestId('notice-banner').textContent).toContain(
-      '3 playlists could not be loaded and were left out.',
+      COPY.notice.failedPlaylists(3),
     );
   });
 
@@ -128,7 +129,7 @@ describe('NoticeBanner', () => {
     renderBanner({ deckSize: 214, loadedPlaylistCount: 3 });
 
     expect(screen.getByTestId('notice-banner').textContent).toContain(
-      '214 cards from 3 playlists, shuffled into one deck.',
+      COPY.notice.combinedDeck(214, 3),
     );
   });
 
@@ -152,11 +153,20 @@ describe('NoticeBanner', () => {
     */
     renderBanner({ failedPlaylistCount: 2, deckSize: 60, loadedPlaylistCount: 3 });
 
-    const text = screen.getByTestId('notice-banner').textContent ?? '';
-    expect(text).toContain('2 playlists could not be loaded');
-    // No quoting, no colon-then-list: the shapes a name would arrive in.
-    expect(text).not.toMatch(/["“”]/);
-    expect(text).not.toContain('left out:');
+    /*
+      Asserted as EQUALITY over the whole list rather than as the absence of a quote mark or a
+      "left out:" -- a name cannot appear in a set of lines that are exactly the copy constants,
+      and every one of those constants takes only numbers, so there is nowhere for one to come
+      from. Same claim the old wording checks made, without pinning any wording.
+
+      The list rather than the banner's `textContent`, because the container also holds the
+      Dismiss ✕.
+    */
+    const lines = Array.from(
+      screen.getByTestId('notice-banner').querySelectorAll('li'),
+      (item) => item.textContent,
+    );
+    expect(lines).toEqual([COPY.notice.failedPlaylists(2), COPY.notice.combinedDeck(60, 3)]);
   });
 
   it('should invoke the dismiss callback', () => {
@@ -164,7 +174,7 @@ describe('NoticeBanner', () => {
     // split is what stops the banner reappearing on every card.
     const { onDismiss } = renderBanner({ truncated: true });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Dismiss notice' }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.notice.dismiss }));
 
     expect(onDismiss).toHaveBeenCalledTimes(1);
   });
@@ -178,7 +188,7 @@ describe('NoticeBanner', () => {
     // Class-name level, with the caveat given in full in `LandingScreen.test.tsx`.
     renderBanner({ truncated: true });
 
-    const dismiss = screen.getByRole('button', { name: 'Dismiss notice' });
+    const dismiss = screen.getByRole('button', { name: COPY.notice.dismiss });
     expect(dismiss.className).toContain('touch-target');
     expect(dismiss.className).toContain('focus-visible:focus-ring');
   });
@@ -210,6 +220,6 @@ describe('NoticeBanner', () => {
     const names = screen
       .getAllByRole('button')
       .map((button) => button.getAttribute('aria-label') ?? button.textContent);
-    expect(names).toEqual(['Dismiss notice']);
+    expect(names).toEqual([COPY.notice.dismiss]);
   });
 });

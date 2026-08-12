@@ -61,16 +61,6 @@ describe('PLAYLIST_ERROR_MESSAGES', () => {
     }
   });
 
-  it('should cover both possibilities for not-found-or-private honestly', () => {
-    // Spotify gives no signal that separates private from deleted, so the copy must not claim
-    // to know which. Asserted because "This playlist is private" is the tempting shorter wording
-    // and it is a guess presented as a fact.
-    const message = PLAYLIST_ERROR_MESSAGES['not-found-or-private'].toLowerCase();
-
-    expect(message).toContain('private');
-    expect(message).toContain('deleted');
-  });
-
   it('should not give offline and network the same sentence', () => {
     // ===================================================================
     //  THE FAILURE MODE OF ADDING A CODE IS COPY-PASTING ITS COPY.
@@ -83,40 +73,28 @@ describe('PLAYLIST_ERROR_MESSAGES', () => {
     //  exhaustiveness tests above, since both would be non-empty strings.
     // ===================================================================
     expect(PLAYLIST_ERROR_MESSAGES['offline']).not.toBe(PLAYLIST_ERROR_MESSAGES['network']);
-    // And the offline sentence has to actually say so, rather than hedging like `network` does.
-    expect(PLAYLIST_ERROR_MESSAGES['offline'].toLowerCase()).toContain('offline');
   });
 
-  it('should blame neither the link nor us for empty-playlist', () => {
-    // Two situations reach this code -- an empty playlist, and one whose every track was skipped --
-    // so the copy has to fit both. "That playlist is empty" is the tempting short version and it is
-    // wrong for the second: a player whose tracks were all unplayable would go and check a link
-    // that is perfectly fine. It also must not be the `unexpected-payload` apology, which is what
-    // this case USED to render.
-    const message = PLAYLIST_ERROR_MESSAGES['empty-playlist'].toLowerCase();
+  it('should give every code a sentence of its own', () => {
+    // ===================================================================
+    //  THE GENERAL FORM OF THE TEST ABOVE, AND WHAT REPLACED SEVEN
+    //  WORDING ASSERTIONS.
+    //
+    //  Those seven each pinned a phrase -- "private", "deleted", "no
+    //  tracks", "our side", "try a playlist" -- which made the sentences
+    //  expensive to reword and therefore rarely reworded. The property they
+    //  were really defending is this one: a code exists BECAUSE it is a
+    //  distinct situation, so two codes sharing one sentence means one of
+    //  them is telling the player something that is not about their case.
+    //  `empty-playlist` rendering the `unexpected-payload` apology is
+    //  exactly that bug, and it shipped.
+    //
+    //  This holds through any rewrite. What each sentence SAYS is the
+    //  developer's, and `messages.ts` carries the reasoning per code.
+    // ===================================================================
+    const messages = ALL_CODES.map((code) => PLAYLIST_ERROR_MESSAGES[code]);
 
-    expect(message).toContain('no tracks');
-    expect(message).not.toContain('our side');
-  });
-
-  it('should not blame the playlist for no-years-found', () => {
-    // The playlist is usually fine here — MusicBrainz simply does not know the recordings, and an
-    // obscure or very new playlist is the ordinary way to get here. So the copy has to name the
-    // database rather than imply a bad link, and it must not be confusable with `empty-playlist`,
-    // which is a genuinely unplayable playlist.
-    const message = PLAYLIST_ERROR_MESSAGES['no-years-found'];
-
-    expect(message.toLowerCase()).toContain('years');
-    expect(message).not.toBe(PLAYLIST_ERROR_MESSAGES['empty-playlist']);
-    // And it explains rather than only reporting: without a suggestion the player has nothing to do
-    // differently, and the app looks broken instead of limited.
-    expect(message.toLowerCase()).toContain('try a playlist');
-  });
-
-  it('should tell the player it is our fault for unexpected-payload', () => {
-    // The one code that is a bug on our side rather than a problem with their link -- including
-    // the `pnpm dev` case. Sending them off to check their link would waste their time.
-    expect(PLAYLIST_ERROR_MESSAGES['unexpected-payload'].toLowerCase()).toContain('our side');
+    expect(new Set(messages).size).toBe(ALL_CODES.length);
   });
 });
 

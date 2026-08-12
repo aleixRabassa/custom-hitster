@@ -12,6 +12,7 @@ import { cleanup, render, screen, fireEvent } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { EndScreen } from './EndScreen';
+import { COPY } from '../game/copy';
 import { fixtureDeck } from './__fixtures__/cards';
 import type { EndScreenProps } from './EndScreen';
 import type { PlaylistSummary } from '../../shared/types';
@@ -80,24 +81,15 @@ describe('EndScreen', () => {
   it('should render cards played and both actions', () => {
     renderEnd();
 
-    expect(screen.getByText(/42 cards played/i)).not.toBeNull();
-    expect(screen.queryByRole('button', { name: /play again/i })).not.toBeNull();
-    expect(screen.queryByRole('button', { name: /^home$/i })).not.toBeNull();
-  });
-
-  it('should name the way back "Home" rather than after a playlist', () => {
-    // Renamed on 2026-08-06. The landing screen is also where the saved-playlist library is and
-    // where a shared link is pasted, so "New playlist" named one of three reasons to press it --
-    // and it was the only reason the button did NOT create.
-    renderEnd();
-
-    expect(screen.queryByRole('button', { name: /new playlist/i })).toBeNull();
+    expect(screen.getByText(COPY.end.cardsPlayed(42, 'Rock Classics'))).not.toBeNull();
+    expect(screen.queryByRole('button', { name: COPY.end.restart })).not.toBeNull();
+    expect(screen.queryByRole('button', { name: COPY.end.home })).not.toBeNull();
   });
 
   it('should use the singular for a one-card deck', () => {
     renderEnd({ cardsPlayed: 1 });
 
-    expect(screen.getByText(/1 card played/i)).not.toBeNull();
+    expect(screen.getByText(COPY.end.cardsPlayed(1, 'Rock Classics'))).not.toBeNull();
   });
 
   it('should invoke restart and home callbacks', () => {
@@ -105,10 +97,10 @@ describe('EndScreen', () => {
     const onHome = vi.fn();
     renderEnd({ onRestart, onHome });
 
-    fireEvent.click(screen.getByRole('button', { name: /play again/i }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.end.restart }));
     expect(onRestart).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(screen.getByRole('button', { name: /^home$/i }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.end.home }));
     expect(onHome).toHaveBeenCalledTimes(1);
   });
 
@@ -117,7 +109,7 @@ describe('EndScreen', () => {
     // order. It does not -- `start` with no seed generates a fresh one.
     const { container } = renderEnd();
 
-    expect(container.textContent ?? '').toMatch(/new order/i);
+    expect(container.textContent ?? '').toContain(COPY.end.restartDetail);
   });
 
   it('should mount the deck actions', () => {
@@ -126,9 +118,9 @@ describe('EndScreen', () => {
     // the child while the two navigation buttons keep working.
     renderEnd();
 
-    expect(screen.queryByRole('button', { name: /copy share link/i })).not.toBeNull();
-    expect(screen.queryByRole('button', { name: /save this playlist/i })).not.toBeNull();
-    expect(screen.queryByRole('button', { name: /print as pdf cards/i })).not.toBeNull();
+    expect(screen.queryByRole('button', { name: COPY.deckActions.copyLink })).not.toBeNull();
+    expect(screen.queryByRole('button', { name: COPY.deckActions.save })).not.toBeNull();
+    expect(screen.queryByRole('button', { name: COPY.deckActions.print })).not.toBeNull();
   });
 
   it('should give every action a focus-visible style', () => {
@@ -157,7 +149,7 @@ describe('EndScreen', () => {
       playlistIds: THREE_PLAYLISTS.map((playlist) => playlist.id),
     });
 
-    expect(screen.getByText(/42 cards played from Rock Classics \+2 more/i)).not.toBeNull();
+    expect(screen.getByText(COPY.end.cardsPlayed(42, 'Rock Classics +2 more'))).not.toBeNull();
   });
 
   it('should list every playlist the deck came from', () => {

@@ -13,6 +13,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ExitConfirmDialog } from './ExitConfirmDialog';
+import { COPY } from '../game/copy';
 import { fixtureDeck } from './__fixtures__/cards';
 
 describe('ExitConfirmDialog', () => {
@@ -27,7 +28,7 @@ describe('ExitConfirmDialog', () => {
     expect(dialog.getAttribute('aria-modal')).toBe('true');
     expect(dialog.getAttribute('aria-labelledby')).toBe('exit-confirm-title');
     expect(dialog.getAttribute('aria-describedby')).toBe('exit-confirm-description');
-    expect(document.getElementById('exit-confirm-title')?.textContent).toMatch(/end the game/i);
+    expect(document.getElementById('exit-confirm-title')?.textContent).toBe(COPY.exitDialog.title);
   });
 
   it('should say where the press leads rather than only asking whether the player is sure', () => {
@@ -38,8 +39,7 @@ describe('ExitConfirmDialog', () => {
     render(<ExitConfirmDialog onConfirm={vi.fn()} onCancel={vi.fn()} />);
 
     const body = document.getElementById('exit-confirm-description')?.textContent ?? '';
-    expect(body).toMatch(/ends the game/i);
-    expect(body).toMatch(/start screen/i);
+    expect(body).toBe(COPY.exitDialog.body);
   });
 
   it('should confirm only on the confirm button', () => {
@@ -47,7 +47,7 @@ describe('ExitConfirmDialog', () => {
     const onCancel = vi.fn();
     render(<ExitConfirmDialog onConfirm={onConfirm} onCancel={onCancel} />);
 
-    screen.getByRole('button', { name: 'End game' }).click();
+    screen.getByRole('button', { name: COPY.exitDialog.confirm }).click();
 
     expect(onConfirm).toHaveBeenCalledTimes(1);
     expect(onCancel).not.toHaveBeenCalled();
@@ -58,7 +58,7 @@ describe('ExitConfirmDialog', () => {
     const onCancel = vi.fn();
     render(<ExitConfirmDialog onConfirm={onConfirm} onCancel={onCancel} />);
 
-    screen.getByRole('button', { name: 'Keep playing' }).click();
+    screen.getByRole('button', { name: COPY.exitDialog.cancel }).click();
 
     expect(onCancel).toHaveBeenCalledTimes(1);
     expect(onConfirm).not.toHaveBeenCalled();
@@ -103,7 +103,9 @@ describe('ExitConfirmDialog', () => {
     // ===================================================================
     render(<ExitConfirmDialog onConfirm={vi.fn()} onCancel={vi.fn()} />);
 
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Keep playing' }));
+    expect(document.activeElement).toBe(
+      screen.getByRole('button', { name: COPY.exitDialog.cancel }),
+    );
   });
 
   it('should keep Tab inside the dialog', () => {
@@ -112,8 +114,8 @@ describe('ExitConfirmDialog', () => {
     // they can neither see nor click.
     render(<ExitConfirmDialog onConfirm={vi.fn()} onCancel={vi.fn()} />);
 
-    const cancel = screen.getByRole('button', { name: 'Keep playing' });
-    const confirm = screen.getByRole('button', { name: 'End game' });
+    const cancel = screen.getByRole('button', { name: COPY.exitDialog.cancel });
+    const confirm = screen.getByRole('button', { name: COPY.exitDialog.confirm });
 
     fireEvent.keyDown(cancel, { key: 'Tab' });
     expect(document.activeElement).toBe(confirm);

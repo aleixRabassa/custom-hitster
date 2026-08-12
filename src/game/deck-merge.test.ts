@@ -8,6 +8,7 @@
 
 import { describe, expect, it } from 'vitest';
 
+import { COPY } from './copy';
 import { MAX_DECK_PLAYLISTS, deckLabel, mergePlaylists } from './deck-merge';
 import type { PlaylistOutcome } from './playlist-client';
 import type { Card, PlaylistSummary } from '../../shared/types';
@@ -182,19 +183,21 @@ describe('deckLabel', () => {
     // recognises -- which "3 playlists" would not.
     expect(
       deckLabel([playlist('one', 'Rock Classics'), playlist('two', 'Disco'), playlist('three')]),
-    ).toBe('Rock Classics +2 more');
+    ).toBe(COPY.deck.label('Rock Classics', 2));
   });
 
   it('should label two playlists in the singular count', () => {
     expect(deckLabel([playlist('one', 'Rock Classics'), playlist('two', 'Disco')])).toBe(
-      'Rock Classics +1 more',
+      COPY.deck.label('Rock Classics', 1),
     );
   });
 
   it('should cut a long playlist name at twenty characters', () => {
     // 24 characters in, 20 plus an ellipsis out. A Spotify name can be 100, and before this only
     // the HUD limited it -- in CSS, which the PDF filename and the saved library never see.
-    expect(deckLabel([playlist('one', 'Songs For The Long Drive')])).toBe('Songs For The Long D…');
+    expect(deckLabel([playlist('one', 'Songs For The Long Drive')])).toBe(
+      `Songs For The Long D${COPY.deck.nameEllipsis}`,
+    );
   });
 
   it('should leave a name of exactly twenty characters alone', () => {
@@ -213,13 +216,15 @@ describe('deckLabel', () => {
         playlist('two', 'Disco'),
         playlist('three'),
       ]),
-    ).toBe('Songs For The Long D… +2 more');
+    ).toBe(COPY.deck.label(`Songs For The Long D${COPY.deck.nameEllipsis}`, 2));
   });
 
   it('should not leave a dangling space before the ellipsis', () => {
     // The cut lands exactly on a space here ("Chill Vibes For You |Now"), so a slice without the
     // `trimEnd` would render "Chill Vibes For You …" with a gap before the dots.
-    expect(deckLabel([playlist('one', 'Chill Vibes For You Now')])).toBe('Chill Vibes For You…');
+    expect(deckLabel([playlist('one', 'Chill Vibes For You Now')])).toBe(
+      `Chill Vibes For You${COPY.deck.nameEllipsis}`,
+    );
   });
 
   it('should return an empty string for no playlists', () => {

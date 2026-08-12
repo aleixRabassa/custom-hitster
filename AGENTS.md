@@ -34,6 +34,29 @@ Several decisions in this repo look like mistakes and are not. If something seem
 
 **Do not build ahead of the current phase.** The plan defers things deliberately. Current phase: **8, CODE COMPLETE.** Phases 1–7 are complete, all three Phase 8 plans are resolved, and the app is playable end to end, has a design surface, is installable, and fails legibly. `src/App.tsx` is the **real container** and the only caller of `useGameSession()`. Plan 2 built the shareable deck URL, the saved-playlist library, the printable PDF export and the audio reversal; plan 1 built the neon ring, the contrast re-audit, the PWA and the icon set; plan 3 resolved "Added by" as won't-build with no code. Note that plan 2 depended on plan 1 only **softly** and did not wait — so the PDF's print palette is deliberately its own and did not change when the screen was redesigned.
 
+**EVERY SENTENCE THE PLAYER READS LIVES IN `src/game/copy.ts` AS OF 2026-08-12, AND THE RULE HAS TWO
+ENDS: A COMPONENT RENDERS `COPY.*`, AND A TEST ASSERTS AGAINST `COPY.*`. Neither may hold a
+literal.** The wording of the app used to be pinned in ~200 places across eighteen test files —
+`getByText` with a full sentence, `getByRole('button', { name: /copy share link/i })`,
+`toContain('1 playlist could not be loaded and was left out.')` — so rewording one button meant
+hunting its literal through the suite, and **copy that is expensive to change is copy that stops
+being edited**. Routing both ends through one constant keeps the BEHAVIOUR asserted while making the
+WORDS free: change a string and no test fails, because no test ever knew what it said. Four things
+to know. **A value that varies is a FUNCTION, never a template a caller assembles** —
+`COPY.hud.cardsLeft(n)` owns its own pluralisation, so a test can ask for the exact string the
+component will render, and `App.test.tsx`'s `cardsLeftInHud()` reads the count BACK through it
+rather than with a regex over the sentence. **`messages.ts` deliberately stays where it is**: it is
+already one keyed map, typed `Record<StartFailureCode, string>` so a new code fails the typecheck,
+and that exhaustiveness is what folding it into a loose object would cost. **`index.html` and
+`src/pwa/manifest.ts` are outside the rule** — the first is shipped bytes on the critical path, the
+second is read by `vite.config.ts` at BUILD time, so neither can import a runtime module; `COPY.app.name`
+is the value to copy from by hand. And **six assertions were DELETED rather than converted**, all of
+them pure-wording checks with no constant to point at: the `/same deck/i` and `/new playlist/i` and
+`Restart` absences, the `'our side'` phrase check, and `messages.test.ts`'s seven `toContain('private')`
+-style substring assertions — replaced by "every code has a sentence of its own", which is the
+property those were really defending and which survives any rewrite. Full reasoning in the module's
+own header; the deletions are logged in [`docs/agent_findings.md`](./docs/agent_findings.md).
+
 **A DECK IS NOW 1..5 PLAYLISTS, and plan 1 of 2 is built (2026-08-07) — so the tree is green but the
 FEATURE IS HALF LANDED.** Everything below React exists: `src/game/deck-merge.ts` (the merge, the
 dedupe, the notice aggregation, the failure ordering, `deckLabel()` and `MAX_DECK_PLAYLISTS`),
@@ -132,7 +155,7 @@ identically with the artist rule reverted. Same false-comfort shape as the pre-2
 
 **Everything plan 2 built is a caller change: the reducer, `GameState` and the persistence format are untouched.** Three new pure modules in `src/game/` (`deck-link.ts`, `playlist-library.ts`, `pdf-sheet.ts` + `pdf-text.ts`), one new hook (`src/hooks/usePdfExport.ts`), and the shared `src/game/qrcode-loader.ts`. **Which subtree each landed in was the usual decision, and the rule is "put it where it can be tested":** `deck-link.ts` takes a query STRING rather than reading `location`, `playlist-library.ts` takes an injected `StorageLike` exactly as `persistence.ts` does, and `pdf-sheet.ts` holds every millimetre as arithmetic over numbers — the same decision/binding split as `gestures.ts` and `resolver.ts`, for the same reason: **getting the duplex column mirror wrong pairs every printed card with the wrong answer and is discoverable only by printing and cutting.** The binding halves are `App.tsx`, `EndScreen.tsx` and `usePdfExport.ts`. See [`docs/architecture.md`](./docs/architecture.md) §3.
 
-**A shared link promises "same playlist, same shuffle", NEVER "the same deck", and the copy is the feature.** Yearless cards are dropped at play time and editorial playlists refresh their tracks, so the seeded shuffle is exact while its input is not. `EndScreen.test.tsx` asserts the phrase "same deck" is absent. Also load-bearing: a **saved session outranks a link** (opening an old one must not discard a game in progress), a malformed link is the plain landing screen with **no error**, and `App.tsx` **never touches the address bar** — no `pushState`, no `replaceState`. That rule is still true **of `App.tsx`** and is not the whole story any more: see the back-press block below, and do not delete the `pushState` in `useBackNavigation.ts` on the strength of this sentence. The link effect deliberately has **no "already submitted" ref**: such a guard survives StrictMode's simulated unmount, whose cleanup has already aborted the request it was recording, so the app would sit on the landing screen forever. That is measured and written up in [`docs/agent_findings.md`](./docs/agent_findings.md) (2026-08-06).
+**A shared link promises "same playlist, same shuffle", NEVER "the same deck", and the copy is the feature.** Yearless cards are dropped at play time and editorial playlists refresh their tracks, so the seeded shuffle is exact while its input is not. The rule now lives as a comment on `COPY.deckActions.shareCaption`; the test that asserted the phrase "same deck" was absent went with the 2026-08-12 copy centralisation, because it is the one kind of assertion `COPY` cannot express. Also load-bearing: a **saved session outranks a link** (opening an old one must not discard a game in progress), a malformed link is the plain landing screen with **no error**, and `App.tsx` **never touches the address bar** — no `pushState`, no `replaceState`. That rule is still true **of `App.tsx`** and is not the whole story any more: see the back-press block below, and do not delete the `pushState` in `useBackNavigation.ts` on the strength of this sentence. The link effect deliberately has **no "already submitted" ref**: such a guard survives StrictMode's simulated unmount, whose cleanup has already aborted the request it was recording, so the app would sit on the landing screen forever. That is measured and written up in [`docs/agent_findings.md`](./docs/agent_findings.md) (2026-08-06).
 
 **THE ANDROID BACK PRESS IS AN IN-APP CONTROL AS OF 2026-08-12, SO THERE IS EXACTLY ONE `pushState` IN
 THE APP AND IT IS NOT IN `App.tsx`.** `GameScreen` calls `useBackNavigation`, which pushes ONE history
@@ -243,7 +266,7 @@ rendered underneath the spinner, and the pending-year slot wraps it in a
 screen is also where the saved-playlist library is and where a shared link is pasted, so the old
 label named one of three reasons to press it — and the only one the button does _not_ do. It touched
 no state, because `EndedView` was already phrased as the **destination** `'landing'` rather than as
-a reason; `EndScreen.test.tsx` asserts the old label is absent.
+a reason. The test asserting the old label was absent went with the 2026-08-12 copy centralisation — the button's own `{ name: COPY.end.home }` query fails on any rename, which is the half that was worth keeping.
 
 **A sixth developer decision landed on 2026-08-06, and it reverses a Phase 4 checkbox: the song
 keeps playing when the card is FLIPPED.** Audio now stops on exactly two things — the card
@@ -356,7 +379,7 @@ instead of ending the scroll. Two more traps. The `<footer>` is inside each `<ma
 `contentinfo` regardless of ancestry**, so a role query cannot check any of this (a `toBeNull()` was
 written first and failed against correct code). And its **"2026-present" is a year-shaped number on a
 pre-reveal surface**: three leak proxies asserting `not.toMatch(/\b(19|20)\d{2}\b/)` caught it, and they
-now subtract `COPYRIGHT_NOTICE` by exact string rather than loosening the pattern.
+now subtract `COPYRIGHT_NOTICE` by exact string rather than loosening the pattern. **That string now lives in `src/game/copy.ts`** (re-exported from `Footer.tsx` for its importers), and since 2026-08-12 the author's name is a `<span className="text-accent">` inside the same line — the app's one use of the accent as TEXT, measured at 5.13:1 on `--color-page`. The three parts concatenate with **no separator**, so `<footer>`'s `textContent` is still the notice character for character; break that and the leak proxies fail on screens that have no leak. `getByText` cannot see it (its matcher reads only DIRECT text-node children), which is why `Footer.test.tsx` reads `textContent`.
 
 **The app is "Playlist Jitster" as of 2026-08-11 — and the RENAME'S BOUNDARY is the part to know.**
 Renamed: `index.html`'s `<title>`, `manifest.name`/`short_name`, `LandingScreen`'s `<h1>`, README's
@@ -436,6 +459,7 @@ something `plan.md` had already resolved, so read these before "fixing" the code
 - **pnpm only.** Don't add `package-lock.json` or `yarn.lock`; keep `pnpm-lock.yaml` committed.
 - **`engines.node` is `24.x` and deliberately does not match local Node.** Don't "fix" it. The `Unsupported engine` install warning is expected.
 - **Prettier owns formatting.** No hand-formatting, no stylistic ESLint rules.
+- **The copy surface is `src/game/copy.ts`, exactly as the design surface is the `@theme static` block.** A component renders `COPY.*` and a test asserts against `COPY.*`; a user-facing literal in either is the thing to catch in review, for the same reason a stray `bg-neutral-900` is — copy is reworded by changing one value, and a literal is invisible to that. Templated strings are functions so pluralisation cannot drift. `messages.ts` keeps the error map (its `Record<StartFailureCode, string>` exhaustiveness is the point); `index.html` and `src/pwa/manifest.ts` are outside the rule and copy `COPY.app.name` by hand.
 - **Tailwind v4 is CSS-first** — no `tailwind.config.js`. **The design surface is the `@theme static` block in `src/index.css`**, which is where a v3 reader would look for that config file: every colour, dimension, duration and interaction minimum in the app is named there. **A new component consumes tokens rather than inventing literals** — a colour written as `bg-neutral-900` instead of `bg-surface` is the thing to catch in review, because Phase 8 redesigns by changing token values and a stray literal is invisible to that. `focus-ring` and `touch-target` are `@utility` composites in the same file; every interactive element gets `focus-visible:focus-ring`.
 - **An unknown Tailwind colour utility is a SILENT no-op, and all four checks pass either way.** `text-text-muted` against a theme defining `--color-fg-muted` emits **no rule at all** — no warning, no build error. It shipped once: the only text on the card's hidden face lost its colour and rendered near-black on a near-black card while typecheck, lint, test and build stayed green. When adding or renaming a token, grep the built CSS (`dist/assets/*.css`) for the utility, and prefer a class-name assertion in the component's test — `CardHiddenSide.test.tsx` has one.
 - **`@theme static`, not bare `@theme`.** A plain `@theme` tree-shakes any token no generated utility references, which silently kills the ones consumed only through `h-(--card-height)`-style arbitrary values, through an `@utility`, or from inside the `prefers-reduced-motion` block.

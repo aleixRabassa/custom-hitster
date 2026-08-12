@@ -30,6 +30,7 @@
  * having resolved nothing at all. Nothing here may block on `resolvedCount > 0`.
  */
 
+import { COPY } from '../game/copy';
 import { Footer } from './Footer';
 import { Spinner } from './Spinner';
 import type { ReactNode } from 'react';
@@ -70,7 +71,7 @@ export function PreparingScreen({ notice }: PreparingScreenProps) {
         */}
         <Spinner />
 
-        <p className="text-lg font-medium">Dealing your deck…</p>
+        <p className="text-lg font-medium">{COPY.preparing.heading}</p>
 
         {/*
           Sets the expectation honestly: the wait is one lookup, not the whole deck.
@@ -81,9 +82,7 @@ export function PreparingScreen({ notice }: PreparingScreenProps) {
           the sentence stays: it is the only thing on the screen that says the game is about to
           start rather than that a long job is running.
         */}
-        <p className="max-w-narrow text-xs text-fg-muted">
-          The game starts as soon as the first card is ready — the rest fill in while you play.
-        </p>
+        <p className="max-w-narrow text-xs text-fg-muted">{COPY.preparing.detail}</p>
       </div>
 
       {/*

@@ -33,6 +33,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ErrorBoundary } from './ErrorBoundary';
+import { COPY } from '../game/copy';
 import { highConfidenceCard } from './__fixtures__/cards';
 import { SESSION_STORAGE_KEY, SESSION_VERSION } from '../game/persistence';
 import type { StorageLike } from '../game/persistence';
@@ -86,7 +87,7 @@ describe('ErrorBoundary', () => {
     );
 
     expect(screen.getByText('the game')).not.toBeNull();
-    expect(screen.queryByText(/something went wrong/i)).toBeNull();
+    expect(screen.queryByText(COPY.errorBoundary.heading)).toBeNull();
   });
 
   it('should render fallback copy when a child throws', () => {
@@ -96,10 +97,10 @@ describe('ErrorBoundary', () => {
       </ErrorBoundary>,
     );
 
-    expect(screen.getByRole('heading', { name: /something went wrong/i })).not.toBeNull();
+    expect(screen.getByRole('heading', { name: COPY.errorBoundary.heading })).not.toBeNull();
     // Both recovery paths are offered. A crash screen with no way out is a white page with text.
-    expect(screen.getByRole('button', { name: 'Reload' })).not.toBeNull();
-    expect(screen.getByRole('button', { name: 'Start over' })).not.toBeNull();
+    expect(screen.getByRole('button', { name: COPY.errorBoundary.reload })).not.toBeNull();
+    expect(screen.getByRole('button', { name: COPY.errorBoundary.startOver })).not.toBeNull();
   });
 
   it('should not render the error message or stack', () => {
@@ -160,7 +161,7 @@ describe('ErrorBoundary', () => {
       </ErrorBoundary>,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start over' }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.errorBoundary.startOver }));
 
     expect(storage.map.has(SESSION_STORAGE_KEY)).toBe(false);
     // And it still reloads: clearing the save without reloading would leave the crash screen up
@@ -180,7 +181,7 @@ describe('ErrorBoundary', () => {
       </ErrorBoundary>,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Reload' }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.errorBoundary.reload }));
 
     expect(storage.map.has(SESSION_STORAGE_KEY)).toBe(true);
     expect(reload).toHaveBeenCalledTimes(1);
@@ -196,7 +197,7 @@ describe('ErrorBoundary', () => {
       </ErrorBoundary>,
     );
 
-    expect(screen.getByRole('alert').textContent).toMatch(/game in progress is lost/i);
+    expect(screen.getByRole('alert').textContent).toContain(COPY.errorBoundary.startOverDetail);
   });
 
   it('should announce itself rather than only draw', () => {

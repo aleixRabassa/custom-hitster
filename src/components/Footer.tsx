@@ -101,16 +101,14 @@
  * history has the full story) -- `Footer.test.tsx` asserts the class for exactly that reason.
  */
 
+import { COPY } from '../game/copy';
+
 /**
- * The exact string the developer asked for, as a constant so the test and the render cannot drift.
- *
- * The `©` is written literally, which is the convention in this repo already -- `—` and `…` appear
- * as literal characters in several components -- and is safe because every source file is UTF-8 and
- * Vite emits UTF-8. **It would NOT be safe on the PDF path**: `sanitizeForPdf` exists in
- * `src/game/pdf-text.ts` because jsPDF's standard fonts are WinAnsi-encoded, so a character outside
- * that set becomes mojibake in a printed deck. This string is screen-only and never reaches it.
+ * Re-exported for the leak proofs, which subtract this exact string from a screen's `textContent`
+ * before asserting no year-shaped number is left. It lives in `src/game/copy.ts` with every other
+ * sentence in the app; the alias is here because that is where its importers already look.
  */
-export const COPYRIGHT_NOTICE = 'Copyright © 2026-present Aleix Rabassa. All rights reserved.';
+export { COPYRIGHT_NOTICE } from '../game/copy';
 
 export function Footer() {
   return (
@@ -133,7 +131,37 @@ export function Footer() {
       above and below; the two numbers move together or not at all.
     */
     <footer className="absolute inset-x-0 bottom-8 text-center text-xs text-fg-muted">
-      {COPYRIGHT_NOTICE}
+      {COPY.footer.prefix}
+      {/*
+        =========================================================================
+         THE AUTHOR'S NAME CARRIES THE APP'S GREEN, ASKED FOR ON 2026-08-12.
+
+         `text-accent` -- the SAME token as Start and Play again, which is what
+         "the standard green of the app" means here. Not `--color-fg-year` (the
+         card's neon, reserved for the game's payoff) and not `--color-ring-from`
+         (a gradient stop, not a text colour): reusing an action colour for a
+         non-interactive word is safe because it is not on a control, while
+         inventing a fourth green would put a colour in the app that the theme
+         block does not name.
+
+         CONTRAST WAS THE ONLY REAL QUESTION, because this is the app's smallest
+         text (`text-xs`, i.e. 12px, so the 4.5:1 floor applies rather than the
+         3:1 large-text one) and it is the one place the accent appears as TEXT
+         instead of as a filled background. Measured 5.13:1 on `--color-page`,
+         which passes -- and it is brighter than the `text-fg-muted` (6.12:1)
+         around it only in chroma, not in the audit. If the accent token is ever
+         darkened, THIS is the usage that fails first: `--color-on-accent` exists
+         precisely because white on that background measured 3.67:1.
+
+         A `<span>` rather than a second `<footer>` line, and the three parts
+         concatenate with no separator, so the element's `textContent` is still
+         exactly `COPY.footer.notice` -- which is what the leak proofs subtract
+         and what `Footer.test.tsx` queries for. Splitting the sentence into
+         styled parts must not split the string.
+        =========================================================================
+      */}
+      <span className="text-accent">{COPY.footer.author}</span>
+      {COPY.footer.suffix}
     </footer>
   );
 }

@@ -24,6 +24,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 
 import App from './App';
 import { fixtureDeck, highConfidenceCard, pendingYearCard } from './components/__fixtures__/cards';
+import { COPY } from './game/copy';
 import { PLAYLIST_ERROR_MESSAGES } from './game/messages';
 import { clearQrCache } from './game/qr-cache';
 import { resetBackNavigationTraversals } from './hooks/useBackNavigation';
@@ -223,24 +224,45 @@ function renderApp(fetchImpl: PlaylistFetch, storage = memoryStorage()) {
   return { storage };
 }
 
+/**
+ * The number the HUD is currently showing, recovered through the copy function that wrote it.
+ *
+ * No regex over the sentence, deliberately: `COPY.hud.cardsLeft` owns both the wording AND the
+ * pluralisation, so the only honest way to read the count back is to ask it which `n` produces the
+ * line on screen. Counted DOWNWARD so "12 cards left" is not matched by the `2` case first, and
+ * `-1` when nothing matches -- which fails the assertions that use it rather than passing quietly.
+ */
+function cardsLeftInHud(): number {
+  const hud = screen.getByTestId('hud').textContent ?? '';
+
+  for (let count = 500; count >= 0; count -= 1) {
+    if (hud.includes(COPY.hud.cardsLeft(count))) return count;
+  }
+
+  return -1;
+}
+
 /** Paste a URL and press Start. */
 function startPlaylist(url = PLAYLIST_URL) {
-  fireEvent.change(screen.getByLabelText('Playlist link'), { target: { value: url } });
-  fireEvent.click(screen.getByRole('button', { name: /start/i }));
+  fireEvent.change(screen.getByLabelText(COPY.landing.playlistLinkLabel(0)), {
+    target: { value: url },
+  });
+  fireEvent.click(screen.getByRole('button', { name: COPY.landing.start }));
 }
 
 /** Press "+" until there are enough rows, fill them all in order, and press Start. */
 function startPlaylists(urls: readonly string[]) {
   for (let index = 1; index < urls.length; index += 1) {
-    fireEvent.click(screen.getByRole('button', { name: 'Add another playlist' }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.landing.addRow }));
   }
 
   urls.forEach((url, index) => {
-    const label = index === 0 ? 'Playlist link' : `Playlist link ${index + 1}`;
-    fireEvent.change(screen.getByLabelText(label), { target: { value: url } });
+    fireEvent.change(screen.getByLabelText(COPY.landing.playlistLinkLabel(index)), {
+      target: { value: url },
+    });
   });
 
-  fireEvent.click(screen.getByRole('button', { name: /start/i }));
+  fireEvent.click(screen.getByRole('button', { name: COPY.landing.start }));
 }
 
 describe('App', () => {
@@ -307,7 +329,7 @@ describe('App', () => {
     stubHangingYearApi();
     renderApp(playlistFetch(200, playlistResult()));
 
-    expect(screen.queryByLabelText('Playlist link')).not.toBeNull();
+    expect(screen.queryByLabelText(COPY.landing.playlistLinkLabel(0))).not.toBeNull();
     expect(screen.queryByTestId('hud')).toBeNull();
   });
 
@@ -319,7 +341,7 @@ describe('App', () => {
     startPlaylist();
 
     await waitFor(() => {
-      expect(screen.getByRole('status').textContent).toContain('Dealing your deck');
+      expect(screen.getByRole('status').textContent).toContain(COPY.preparing.heading);
     });
     // Count-only: the deck is in memory by now, and none of it may be on screen.
     for (const card of UNRESOLVED_DECK) {
@@ -337,7 +359,7 @@ describe('App', () => {
     await waitFor(() => {
       expect(screen.queryByTestId('hud')).not.toBeNull();
     });
-    expect(screen.queryByRole('button', { name: 'Exit game' })).not.toBeNull();
+    expect(screen.queryByRole('button', { name: COPY.controls.exit })).not.toBeNull();
   });
 
   it('should show the landing error copy when the playlist request fails', async () => {
@@ -347,7 +369,9 @@ describe('App', () => {
     startPlaylist();
 
     await waitFor(() => {
-      expect(screen.getByRole('alert').textContent).toMatch(/private, deleted/i);
+      expect(screen.getByRole('alert').textContent).toBe(
+        PLAYLIST_ERROR_MESSAGES['not-found-or-private'],
+      );
     });
     // And it stayed on the landing screen: a failed fetch must never deal a deck.
     expect(screen.queryByTestId('hud')).toBeNull();
@@ -384,11 +408,11 @@ describe('App', () => {
       PLAYLIST_ERROR_MESSAGES['no-years-found'],
     );
     // And it is the landing screen the warning is on.
-    expect(screen.queryByLabelText('Playlist link')).not.toBeNull();
+    expect(screen.queryByLabelText(COPY.landing.playlistLinkLabel(0))).not.toBeNull();
 
     // Not the end screen, and not the preparing spinner.
-    expect(screen.queryByText(/deck finished/i)).toBeNull();
-    expect(screen.queryByRole('button', { name: /play again/i })).toBeNull();
+    expect(screen.queryByText(COPY.end.heading)).toBeNull();
+    expect(screen.queryByRole('button', { name: COPY.end.restart })).toBeNull();
     expect(screen.queryByTestId('hud')).toBeNull();
 
     // And nothing about the tracks it dropped is on screen -- the player is being sent away from a
@@ -463,9 +487,7 @@ describe('App', () => {
     // The HUD's count falls as the crawl drops cards, which is the visible consequence. It must
     // land strictly between "nothing dropped" and "nothing left".
     await waitFor(() => {
-      const hud = screen.getByTestId('hud').textContent ?? '';
-      expect(hud).toMatch(/\d+ cards? left/);
-      const remaining = Number(/(\d+) cards? left/.exec(hud)?.[1] ?? '-1');
+      const remaining = cardsLeftInHud();
       expect(remaining).toBeGreaterThan(0);
       expect(remaining).toBeLessThan(UNRESOLVED_DECK.length - 1);
     });
@@ -522,9 +544,9 @@ describe('App', () => {
 
     // Everything still works: the QR rendered, the controls are live, and Exit is enabled.
     expect(await screen.findByRole('img')).not.toBeNull();
-    expect((screen.getByRole('button', { name: 'Exit game' }) as HTMLButtonElement).disabled).toBe(
-      false,
-    );
+    expect(
+      (screen.getByRole('button', { name: COPY.controls.exit }) as HTMLButtonElement).disabled,
+    ).toBe(false);
     // And a flip is not blocked on the pending year.
     //
     // `getAllBy`, not `getBy`: the card just swiped away is still mounted while `AnimatePresence`
@@ -548,8 +570,8 @@ describe('App', () => {
 
     fireEvent.keyDown(window, { key: 'ArrowRight' });
 
-    expect(await screen.findByText(/deck finished/i)).not.toBeNull();
-    expect(screen.queryByRole('button', { name: /play again/i })).not.toBeNull();
+    expect(await screen.findByText(COPY.end.heading)).not.toBeNull();
+    expect(screen.queryByRole('button', { name: COPY.end.restart })).not.toBeNull();
   });
 
   it('should render the landing screen after exit', async () => {
@@ -572,11 +594,11 @@ describe('App', () => {
 
     // Two presses, because Exit now asks first: `ExitConfirmDialog` stands between the button and
     // the container, and the container hears nothing until the player confirms.
-    fireEvent.click(screen.getByRole('button', { name: 'Exit game' }));
-    fireEvent.click(screen.getByRole('button', { name: 'End game' }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.controls.exit }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.exitDialog.confirm }));
 
-    expect(await screen.findByLabelText('Playlist link')).not.toBeNull();
-    expect(screen.queryByText(/deck finished/i)).toBeNull();
+    expect(await screen.findByLabelText(COPY.landing.playlistLinkLabel(0))).not.toBeNull();
+    expect(screen.queryByText(COPY.end.heading)).toBeNull();
   });
 
   it('should not intercept a back press outside the game screen', async () => {
@@ -620,7 +642,7 @@ describe('App', () => {
     expect(window.history.state).not.toEqual(base);
 
     fireEvent.keyDown(window, { key: 'ArrowRight' });
-    expect(await screen.findByText(/deck finished/i)).not.toBeNull();
+    expect(await screen.findByText(COPY.end.heading)).not.toBeNull();
 
     // The end screen: the entry is gone again, because the game screen unmounted with it. The wait
     // is for jsdom's queued traversal, which is asynchronous (~10ms, measured 2026-08-12).
@@ -642,11 +664,11 @@ describe('App', () => {
       expect(screen.queryByTestId('hud')).not.toBeNull();
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Exit game' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Keep playing' }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.controls.exit }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.exitDialog.cancel }));
 
     expect(screen.queryByTestId('hud')).not.toBeNull();
-    expect(screen.queryByLabelText('Playlist link')).toBeNull();
+    expect(screen.queryByLabelText(COPY.landing.playlistLinkLabel(0))).toBeNull();
     expect(storage.map.has(SESSION_STORAGE_KEY)).toBe(true);
   });
 
@@ -661,9 +683,9 @@ describe('App', () => {
     await waitFor(() => {
       expect(screen.queryByTestId('hud')).not.toBeNull();
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Exit game' }));
-    fireEvent.click(screen.getByRole('button', { name: 'End game' }));
-    await screen.findByLabelText('Playlist link');
+    fireEvent.click(screen.getByRole('button', { name: COPY.controls.exit }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.exitDialog.confirm }));
+    await screen.findByLabelText(COPY.landing.playlistLinkLabel(0));
 
     // Game 2: play it out. The end screen must appear.
     startPlaylist();
@@ -672,7 +694,7 @@ describe('App', () => {
     });
     fireEvent.keyDown(window, { key: 'ArrowRight' });
 
-    expect(await screen.findByText(/deck finished/i)).not.toBeNull();
+    expect(await screen.findByText(COPY.end.heading)).not.toBeNull();
   });
 
   it('should return to the landing screen from the end screen', async () => {
@@ -687,11 +709,11 @@ describe('App', () => {
       expect(screen.queryByTestId('hud')).not.toBeNull();
     });
     fireEvent.keyDown(window, { key: 'ArrowRight' });
-    await screen.findByText(/deck finished/i);
+    await screen.findByText(COPY.end.heading);
 
-    fireEvent.click(screen.getByRole('button', { name: /^home$/i }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.end.home }));
 
-    expect(await screen.findByLabelText('Playlist link')).not.toBeNull();
+    expect(await screen.findByLabelText(COPY.landing.playlistLinkLabel(0))).not.toBeNull();
   });
 
   it('should resume a persisted session on mount', async () => {
@@ -714,7 +736,7 @@ describe('App', () => {
 
     // Straight to the game screen -- no landing screen, and no playlist request.
     expect(screen.queryByTestId('hud')).not.toBeNull();
-    expect(screen.queryByLabelText('Playlist link')).toBeNull();
+    expect(screen.queryByLabelText(COPY.landing.playlistLinkLabel(0))).toBeNull();
     await screen.findByRole('img');
   });
 
@@ -754,16 +776,16 @@ describe('App', () => {
     // Play the resumed deck out.
     fireEvent.keyDown(window, { key: 'ArrowRight' });
     fireEvent.keyDown(window, { key: 'ArrowRight' });
-    await screen.findByText(/deck finished/i);
-    expect(screen.getByText(/2 cards played/i)).not.toBeNull();
+    await screen.findByText(COPY.end.heading);
+    expect(screen.getByText(COPY.end.cardsPlayed(2, PLAYLIST.name))).not.toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: /play again/i }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.end.restart }));
 
     // Back in a game, with the same deck size and no request having been made.
     await waitFor(() => {
       expect(screen.queryByTestId('hud')).not.toBeNull();
     });
-    expect(screen.getByTestId('hud').textContent).toContain('1 card left');
+    expect(screen.getByTestId('hud').textContent).toContain(COPY.hud.cardsLeft(1));
   });
 
   describe('the shareable deck link', () => {
@@ -834,7 +856,7 @@ describe('App', () => {
       await waitFor(() => {
         expect(screen.queryByTestId('hud')).not.toBeNull();
       });
-      expect(screen.queryByLabelText('Playlist link')).toBeNull();
+      expect(screen.queryByLabelText(COPY.landing.playlistLinkLabel(0))).toBeNull();
 
       const saved = JSON.parse(storage.map.get(SESSION_STORAGE_KEY) ?? '{}') as PersistedSession;
       expect(saved.seed).toBe(LINK_SEED);
@@ -893,7 +915,7 @@ describe('App', () => {
         />,
       );
 
-      expect(await screen.findByLabelText('Playlist link')).not.toBeNull();
+      expect(await screen.findByLabelText(COPY.landing.playlistLinkLabel(0))).not.toBeNull();
       expect(screen.queryByRole('alert')).toBeNull();
       expect(fetchImpl).not.toHaveBeenCalled();
     });
@@ -925,7 +947,9 @@ describe('App', () => {
 
       // The link's fetch failed, so the landing screen is showing with its error.
       await waitFor(() => {
-        expect(screen.getByRole('alert').textContent).toMatch(/private, deleted/i);
+        expect(screen.getByRole('alert').textContent).toBe(
+          PLAYLIST_ERROR_MESSAGES['not-found-or-private'],
+        );
       });
 
       startPlaylist();
@@ -955,17 +979,17 @@ describe('App', () => {
         expect(screen.queryByTestId('hud')).not.toBeNull();
       });
       fireEvent.keyDown(window, { key: 'ArrowRight' });
-      await screen.findByText(/deck finished/i);
+      await screen.findByText(COPY.end.heading);
 
-      fireEvent.click(screen.getByRole('button', { name: /save this playlist/i }));
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.save }));
 
       // The button confirms immediately, from live state rather than from a re-read.
-      expect(screen.queryByRole('button', { name: /saved to your playlists/i })).not.toBeNull();
+      expect(screen.queryByRole('button', { name: COPY.deckActions.saved })).not.toBeNull();
       expect(storage.map.has(LIBRARY_STORAGE_KEY)).toBe(true);
 
       // And it is on the landing screen, by the playlist's own name.
-      fireEvent.click(screen.getByRole('button', { name: /^home$/i }));
-      expect(await screen.findByText('Your playlists')).not.toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: COPY.end.home }));
+      expect(await screen.findByText(COPY.landing.savedHeading)).not.toBeNull();
       expect(screen.queryByRole('button', { name: PLAYLIST.name })).not.toBeNull();
     });
 
@@ -1000,14 +1024,12 @@ describe('App', () => {
 
       renderApp(playlistFetch(200, playlistResult()), storage);
 
-      fireEvent.click(
-        screen.getByRole('button', { name: 'Remove Going away from your playlists' }),
-      );
+      fireEvent.click(screen.getByRole('button', { name: COPY.landing.removeSaved('Going away') }));
 
       expect(screen.queryByRole('button', { name: 'Going away' })).toBeNull();
       // Gone from the store too, and the section with it -- the empty state renders nothing.
       expect(storage.map.get(LIBRARY_STORAGE_KEY)).not.toContain('Going away');
-      expect(screen.queryByText('Your playlists')).toBeNull();
+      expect(screen.queryByText(COPY.landing.savedHeading)).toBeNull();
     });
 
     it('should deal a saved playlist when it is clicked', async () => {
@@ -1041,8 +1063,8 @@ describe('App', () => {
 
       renderApp(playlistFetch(200, playlistResult()), storage);
 
-      expect(screen.queryByLabelText('Playlist link')).not.toBeNull();
-      expect(screen.queryByText('Your playlists')).toBeNull();
+      expect(screen.queryByLabelText(COPY.landing.playlistLinkLabel(0))).not.toBeNull();
+      expect(screen.queryByText(COPY.landing.savedHeading)).toBeNull();
       // And the bad payload was cleared on the way past.
       expect(storage.map.has(LIBRARY_STORAGE_KEY)).toBe(false);
     });
@@ -1059,9 +1081,9 @@ describe('App', () => {
     await waitFor(() => {
       expect(screen.queryByTestId('notice-banner')).not.toBeNull();
     });
-    expect(screen.getByTestId('notice-banner').textContent).toContain('2 tracks');
+    expect(screen.getByTestId('notice-banner').textContent).toContain(COPY.notice.skippedTracks(2));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Dismiss notice' }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.notice.dismiss }));
     expect(screen.queryByTestId('notice-banner')).toBeNull();
 
     // Advance a card. It must stay gone.
@@ -1125,7 +1147,7 @@ describe('App', () => {
       // The deck is both playlists' cards, which the HUD's count is the only visible measure of --
       // nothing on a pre-reveal surface may name a card. `cardsRemaining` excludes the current one.
       const total = distinctCardCount(UNRESOLVED_DECK, SECOND_DECK);
-      expect(screen.getByTestId('hud').textContent).toContain(`${total - 1} cards left`);
+      expect(screen.getByTestId('hud').textContent).toContain(COPY.hud.cardsLeft(total - 1));
     });
 
     it('should show the deck label rather than one playlist name', async () => {
@@ -1140,7 +1162,7 @@ describe('App', () => {
       await waitFor(() => {
         expect(screen.queryByTestId('hud')).not.toBeNull();
       });
-      expect(screen.getByTestId('hud').textContent).toContain('Test Playlist +1 more');
+      expect(screen.getByTestId('hud').textContent).toContain(COPY.deck.label(PLAYLIST.name, 1));
     });
 
     it('should deduplicate a track that appears in both playlists', async () => {
@@ -1173,7 +1195,7 @@ describe('App', () => {
         expect(screen.queryByTestId('hud')).not.toBeNull();
       });
       // Three distinct tracks, not five.
-      expect(screen.getByTestId('hud').textContent).toContain('2 cards left');
+      expect(screen.getByTestId('hud').textContent).toContain(COPY.hud.cardsLeft(2));
     });
 
     it('should play the remaining playlists when one fails, and say so', async () => {
@@ -1198,9 +1220,9 @@ describe('App', () => {
       });
 
       const banner = screen.getByTestId('notice-banner').textContent ?? '';
-      expect(banner).toContain('1 playlist could not be loaded and was left out.');
+      expect(banner).toContain(COPY.notice.failedPlaylists(1));
       // A NOTICE, never the landing screen's error slot: the deck is dealt and playable.
-      expect(screen.queryByLabelText('Playlist link')).toBeNull();
+      expect(screen.queryByLabelText(COPY.landing.playlistLinkLabel(0))).toBeNull();
       // And the failure is not named -- the row it belonged to is gone by now.
       expect(banner).not.toContain(SECOND_PLAYLIST.name);
     });
@@ -1223,7 +1245,9 @@ describe('App', () => {
       });
       expect(screen.queryByTestId('hud')).toBeNull();
       // Still on the landing screen, with the rows the player typed still in them.
-      expect((screen.getByLabelText('Playlist link') as HTMLInputElement).value).toBe(PLAYLIST_URL);
+      expect(
+        (screen.getByLabelText(COPY.landing.playlistLinkLabel(0)) as HTMLInputElement).value,
+      ).toBe(PLAYLIST_URL);
     });
 
     it('should report the combined deck size when more than one playlist loaded', async () => {
@@ -1240,7 +1264,7 @@ describe('App', () => {
       });
       const total = distinctCardCount(UNRESOLVED_DECK, SECOND_DECK);
       expect(screen.getByTestId('notice-banner').textContent).toContain(
-        `${total} cards from 2 playlists, shuffled into one deck.`,
+        COPY.notice.combinedDeck(total, 2),
       );
     });
 
@@ -1373,10 +1397,10 @@ describe('App', () => {
       });
       fireEvent.keyDown(window, { key: 'ArrowRight' });
       fireEvent.keyDown(window, { key: 'ArrowRight' });
-      await screen.findByText(/deck finished/i);
+      await screen.findByText(COPY.end.heading);
 
-      fireEvent.click(screen.getByRole('button', { name: /save this playlist/i }));
-      expect(screen.queryByRole('button', { name: /saved to your playlists/i })).not.toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.save }));
+      expect(screen.queryByRole('button', { name: COPY.deckActions.saved })).not.toBeNull();
 
       // Both ids, under one label, in one entry.
       const stored = storage.map.get(LIBRARY_STORAGE_KEY) ?? '';
@@ -1384,9 +1408,11 @@ describe('App', () => {
       expect(stored).toContain(SECOND_PLAYLIST.id);
 
       // And one row on the landing screen, named by the deck label.
-      fireEvent.click(screen.getByRole('button', { name: /^home$/i }));
-      expect(await screen.findByText('Your playlists')).not.toBeNull();
-      expect(screen.queryByRole('button', { name: 'Test Playlist +1 more' })).not.toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: COPY.end.home }));
+      expect(await screen.findByText(COPY.landing.savedHeading)).not.toBeNull();
+      expect(
+        screen.queryByRole('button', { name: COPY.deck.label(PLAYLIST.name, 1) }),
+      ).not.toBeNull();
     });
 
     it('should re-deal every playlist of a saved multi-playlist deck', async () => {
@@ -1410,7 +1436,7 @@ describe('App', () => {
       const fetchImpl = bothLoad();
 
       renderApp(fetchImpl, storage);
-      fireEvent.click(screen.getByRole('button', { name: 'Test Playlist +1 more' }));
+      fireEvent.click(screen.getByRole('button', { name: COPY.deck.label(PLAYLIST.name, 1) }));
 
       await waitFor(() => {
         expect(screen.queryByTestId('hud')).not.toBeNull();

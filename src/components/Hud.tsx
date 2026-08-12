@@ -17,6 +17,8 @@
  * thing to want and the second one is how one of them quietly stops working.
  */
 
+import { COPY } from '../game/copy';
+
 export interface HudProps {
   /**
    * Cards still to come AFTER the current one, from `cardsRemaining`. Zero on the last card, which
@@ -57,7 +59,7 @@ export function Hud({ cardsRemaining, playlistName }: HudProps) {
         screen-reader user gets that a swipe actually advanced the deck.
       */}
       <span role="status" className="shrink-0 tabular-nums">
-        {cardsRemaining === 1 ? '1 card left' : `${cardsRemaining} cards left`}
+        {COPY.hud.cardsLeft(cardsRemaining)}
       </span>
     </div>
   );

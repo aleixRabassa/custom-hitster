@@ -6,6 +6,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { Hud } from './Hud';
+import { COPY } from '../game/copy';
 import { fixtureDeck } from './__fixtures__/cards';
 
 describe('Hud', () => {
@@ -14,13 +15,13 @@ describe('Hud', () => {
   it('should render cards remaining', () => {
     render(<Hud cardsRemaining={17} playlistName="Rock Classics" />);
 
-    expect(screen.getByTestId('hud').textContent).toContain('17 cards left');
+    expect(screen.getByTestId('hud').textContent).toContain(COPY.hud.cardsLeft(17));
   });
 
   it('should use the singular for one card left', () => {
     render(<Hud cardsRemaining={1} playlistName="Rock Classics" />);
 
-    expect(screen.getByTestId('hud').textContent).toContain('1 card left');
+    expect(screen.getByTestId('hud').textContent).toContain(COPY.hud.cardsLeft(1));
   });
 
   it('should render zero on the last card rather than a fraction', () => {
@@ -28,7 +29,7 @@ describe('Hud', () => {
     // not read "0 of 42", which looks like an error on a card the player is still holding.
     render(<Hud cardsRemaining={0} playlistName="Rock Classics" />);
 
-    expect(screen.getByTestId('hud').textContent).toContain('0 cards left');
+    expect(screen.getByTestId('hud').textContent).toContain(COPY.hud.cardsLeft(0));
   });
 
   it('should render the playlist name', () => {
@@ -74,7 +75,7 @@ describe('Hud', () => {
 
     expect(name?.className).toContain('truncate');
     expect(count?.className).toContain('shrink-0');
-    expect(hud.textContent).toContain('17 cards left');
+    expect(hud.textContent).toContain(COPY.hud.cardsLeft(17));
   });
 
   it('should not render an exit control', () => {

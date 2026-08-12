@@ -14,6 +14,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { COPYRIGHT_NOTICE } from './Footer';
 import { PreparingScreen } from './PreparingScreen';
+import { COPY } from '../game/copy';
 import { fixtureDeck } from './__fixtures__/cards';
 
 describe('PreparingScreen', () => {
@@ -25,10 +26,9 @@ describe('PreparingScreen', () => {
     // the component -- "0 of 42" reads as a bar that has to fill, while the gate is ONE lookup.
     render(<PreparingScreen />);
 
-    const status = screen.getByRole('status').textContent ?? '';
-    expect(status).not.toMatch(/years found/i);
-    // No count in any phrasing. The screen has no numbers on it at all now.
-    expect(status).not.toMatch(/\d/);
+    // No count in any phrasing, asserted as the absence of a DIGIT rather than of a wording:
+    // "N of M years found" is the line that went, and every rewrite of it has a number in it.
+    expect(screen.getByRole('status').textContent ?? '').not.toMatch(/\d/);
   });
 
   it('should say the game starts before the deck is fully resolved', () => {
@@ -36,7 +36,7 @@ describe('PreparingScreen', () => {
     // the only line that says so, which makes it the whole of the screen's honesty about the wait.
     render(<PreparingScreen />);
 
-    expect(screen.getByRole('status').textContent).toMatch(/first card/i);
+    expect(screen.getByRole('status').textContent).toContain(COPY.preparing.detail);
   });
 
   it('should host the footer: positioned, with the bottom band reserved', () => {
@@ -107,8 +107,8 @@ describe('PreparingScreen', () => {
     container.querySelector('[data-motion="spinner"]')?.remove();
 
     const status = screen.getByRole('status').textContent ?? '';
-    expect(status).toMatch(/dealing your deck/i);
-    expect(status).toMatch(/first card/i);
+    expect(status).toContain(COPY.preparing.heading);
+    expect(status).toContain(COPY.preparing.detail);
   });
 
   it('should not render any track title, artist, or year', () => {

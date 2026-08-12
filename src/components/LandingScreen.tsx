@@ -40,6 +40,7 @@
 import { useRef, useState } from 'react';
 
 import { Footer } from './Footer';
+import { COPY } from '../game/copy';
 import { MAX_DECK_PLAYLISTS } from '../game/deck-merge';
 import { playlistErrorMessage } from '../game/messages';
 import { savedDeckKey } from '../game/playlist-library';
@@ -372,17 +373,14 @@ export function LandingScreen({
           <h1>
             <img
               src="/logo.webp"
-              alt="Playlist Jitster"
+              alt={COPY.landing.logoAlt}
               width={384}
               height={384}
               fetchPriority="high"
               className="size-48"
             />
           </h1>
-          <p className="text-sm text-fg-secondary">
-            Paste up to {MAX_DECK_PLAYLISTS} public Spotify playlist links to deal one deck. Play a
-            card or scan it to hear the song, then guess the year.
-          </p>
+          <p className="text-sm text-fg-secondary">{COPY.landing.intro(MAX_DECK_PLAYLISTS)}</p>
         </div>
 
         <form
@@ -409,9 +407,7 @@ export function LandingScreen({
                   are five boxes a screen-reader user cannot tell apart, and one query in the tests
                   would match all of them.
                 */}
-                  <span className="text-fg-secondary">
-                    {index === 0 ? 'Playlist link' : `Playlist link ${index + 1}`}
-                  </span>
+                  <span className="text-fg-secondary">{COPY.landing.playlistLinkLabel(index)}</span>
                   {/*
                   ===============================================================
                    NO `aria-label` ON THESE INPUTS, AND ADDING ONE BACK IS A
@@ -447,7 +443,7 @@ export function LandingScreen({
                         ),
                       );
                     }}
-                    placeholder="https://open.spotify.com/playlist/…"
+                    placeholder={COPY.landing.playlistLinkPlaceholder}
                     aria-invalid={row.errorCode !== undefined}
                     /*
                     `aria-describedby` pointed at this row's error WHILE ONE EXISTS, and undefined
@@ -490,7 +486,7 @@ export function LandingScreen({
                       setRows((current) => current.filter((candidate) => candidate.id !== row.id));
                     }}
                     disabled={isLoading}
-                    aria-label={`Remove playlist ${index + 1}`}
+                    aria-label={COPY.landing.removeRow(index + 1)}
                     className="touch-target rounded-lg border border-border px-3 text-fg-muted hover:border-border-strong hover:text-fg focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)"
                   >
                     <span aria-hidden="true">✕</span>
@@ -551,7 +547,7 @@ export function LandingScreen({
               className="touch-target flex w-full items-center gap-2 rounded-lg border border-dashed border-border px-3 py-2 text-sm text-fg-secondary hover:border-border-strong hover:bg-surface hover:text-fg focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)"
             >
               <span aria-hidden="true">+</span>
-              Add another playlist
+              {COPY.landing.addRow}
             </button>
           )}
 
@@ -561,9 +557,7 @@ export function LandingScreen({
           and reaching five playlists is not an error.
         */}
           {canAddRow ? null : (
-            <p className="text-xs text-fg-muted">
-              {MAX_DECK_PLAYLISTS} playlists is the maximum for one deck.
-            </p>
+            <p className="text-xs text-fg-muted">{COPY.landing.atMaxRows(MAX_DECK_PLAYLISTS)}</p>
           )}
 
           <button
@@ -580,7 +574,7 @@ export function LandingScreen({
           */
             className="touch-target rounded-lg bg-accent px-4 py-2 font-medium text-on-accent hover:bg-accent-hover focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)"
           >
-            {isLoading ? 'Loading…' : 'Start'}
+            {isLoading ? COPY.landing.starting : COPY.landing.start}
           </button>
 
           {/*
@@ -626,7 +620,7 @@ export function LandingScreen({
       */}
       {savedPlaylists.length === 0 ? null : (
         <section className="flex w-full max-w-content flex-col gap-2">
-          <h2 className="text-sm text-fg-secondary">Your playlists</h2>
+          <h2 className="text-sm text-fg-secondary">{COPY.landing.savedHeading}</h2>
 
           <ul className="flex flex-col gap-2">
             {savedPlaylists.map((saved) => (
@@ -676,7 +670,7 @@ export function LandingScreen({
                     gives a screen-reader user no way to tell which one they are on. The ✕ is
                     `aria-hidden` decoration -- same split as `NoticeBanner`'s Dismiss.
                   */
-                  aria-label={`Remove ${saved.name} from your playlists`}
+                  aria-label={COPY.landing.removeSaved(saved.name)}
                   className="touch-target rounded-lg border border-border px-3 text-fg-muted hover:border-border-strong hover:text-fg focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)"
                 >
                   <span aria-hidden="true">✕</span>
@@ -704,10 +698,17 @@ export function LandingScreen({
          demotion here is entirely weight and order, which is what it should have
          been.
 
-         The heading dims to `text-fg-muted` -- the app's audited 6.12:1 -- rather
-         than taking an `opacity-*` on the brighter token, for the reason
-         `Footer.tsx` gives: an opacity modifier puts a real contrast ratio nowhere
-         in the repo.
+         THE HEADING IS STYLED AS A FORM LABEL, NOT AS DIMMED SMALL PRINT
+         (2026-08-12, second pass). It is `text-sm text-fg-secondary` -- the exact
+         pair the "Playlist link" `<span>` above carries -- because the developer
+         asked for the two to match, and because they are the same KIND of thing:
+         each names the control under it. It was `text-xs text-fg-muted`, which is
+         the app's small-print pair (the cap hint, the footer), and which made the
+         one-click demo path read as a footnote.
+
+         Still not an `opacity-*` on a brighter token, for the reason `Footer.tsx`
+         gives: an opacity modifier puts a real contrast ratio nowhere in the repo.
+         `--color-fg-secondary` is audited like every other colour here.
         ===========================================================================
       */}
       <section className="flex w-full max-w-content flex-col gap-3 sm:max-w-2xl">
@@ -718,7 +719,7 @@ export function LandingScreen({
           left-aligned grid draws a second axis. The string itself is unchanged, so `uppercase`
           could simply go: it was a display transform, not the text.
         */}
-        <h2 className="text-xs text-fg-muted">Or try one of these</h2>
+        <h2 className="text-sm text-fg-secondary">{COPY.landing.suggestionsHeading}</h2>
 
         <ul className="grid gap-2 sm:grid-cols-2">
           {SUGGESTED_PLAYLISTS.map((playlist) => (

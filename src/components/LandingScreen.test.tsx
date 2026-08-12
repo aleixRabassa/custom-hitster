@@ -12,8 +12,8 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { COPYRIGHT_NOTICE } from './Footer';
 import { LandingScreen, SUGGESTED_PLAYLISTS } from './LandingScreen';
+import { COPY, COPYRIGHT_NOTICE } from '../game/copy';
 import { fixtureDeck } from './__fixtures__/cards';
 import { MAX_DECK_PLAYLISTS } from '../game/deck-merge';
 import { PLAYLIST_ERROR_MESSAGES } from '../game/messages';
@@ -74,9 +74,7 @@ function suggestionButton(label: string) {
  * does not also match "Playlist link 2".
  */
 function rowInput(index: number): HTMLInputElement {
-  const label = index === 0 ? 'Playlist link' : `Playlist link ${index + 1}`;
-
-  return screen.getByLabelText(label) as HTMLInputElement;
+  return screen.getByLabelText(COPY.landing.playlistLinkLabel(index)) as HTMLInputElement;
 }
 
 function typeInRow(index: number, value: string) {
@@ -112,11 +110,11 @@ function auditableText(container: HTMLElement): string {
 }
 
 function pressStart() {
-  fireEvent.click(screen.getByRole('button', { name: /start/i }));
+  fireEvent.click(screen.getByRole('button', { name: COPY.landing.start }));
 }
 
 function pressAdd() {
-  fireEvent.click(screen.getByRole('button', { name: 'Add another playlist' }));
+  fireEvent.click(screen.getByRole('button', { name: COPY.landing.addRow }));
 }
 
 /** Type a value into the first row and press Start -- the single-playlist path, unchanged. */
@@ -194,7 +192,7 @@ describe('LandingScreen', () => {
 
     const heading = screen.getByRole('heading', { level: 1 });
     expect(heading.textContent).toBe('');
-    expect(screen.getByRole('img', { name: 'Playlist Jitster' })).toBe(
+    expect(screen.getByRole('img', { name: COPY.landing.logoAlt })).toBe(
       heading.querySelector('img'),
     );
     // Reserved before it decodes: this is the biggest element on the app's front door, and a
@@ -229,7 +227,7 @@ describe('LandingScreen', () => {
     // The hero is found through the FORM it contains, not as `main`'s first `<section>`: a position
     // query would silently retarget the assertions below at anything inserted above it.
     const hero = container.querySelector('form')?.closest('section');
-    const suggestions = screen.getByText('Or try one of these').closest('section');
+    const suggestions = screen.getByText(COPY.landing.suggestionsHeading).closest('section');
 
     expect(main?.className).not.toContain('justify-center');
     expect(hero?.querySelector('form')).not.toBeNull();
@@ -346,8 +344,12 @@ describe('LandingScreen', () => {
     renderLanding({ errorCode: 'empty-playlist' });
     expect(screen.getByRole('alert').textContent).toBe(PLAYLIST_ERROR_MESSAGES['empty-playlist']);
     // The regression this code exists for: an empty playlist used to render the
-    // `unexpected-payload` apology, which blamed our parser for a perfectly readable answer.
-    expect(screen.getByRole('alert').textContent).not.toContain('our side');
+    // `unexpected-payload` apology, which blamed our parser for a perfectly readable answer. The
+    // two are asserted to be DIFFERENT MESSAGES rather than by a phrase in either -- which is what
+    // the bug actually was, and what stays true through any rewording of both.
+    expect(PLAYLIST_ERROR_MESSAGES['empty-playlist']).not.toBe(
+      PLAYLIST_ERROR_MESSAGES['unexpected-payload'],
+    );
 
     cleanup();
 
@@ -393,13 +395,13 @@ describe('LandingScreen', () => {
     // so this is about not inviting the second click rather than about correctness.
     renderLanding({ isLoading: true });
 
-    expect((screen.getByRole('button', { name: /loading/i }) as HTMLButtonElement).disabled).toBe(
-      true,
-    );
+    expect(
+      (screen.getByRole('button', { name: COPY.landing.starting }) as HTMLButtonElement).disabled,
+    ).toBe(true);
     expect(rowInput(0).disabled).toBe(true);
     // Including the "+": adding a row mid-request is a row that cannot be submitted anyway.
     expect(
-      (screen.getByRole('button', { name: 'Add another playlist' }) as HTMLButtonElement).disabled,
+      (screen.getByRole('button', { name: COPY.landing.addRow }) as HTMLButtonElement).disabled,
     ).toBe(true);
     for (const playlist of SUGGESTED_PLAYLISTS) {
       expect((suggestionButton(playlist.label) as HTMLButtonElement).disabled).toBe(true);
@@ -511,7 +513,7 @@ describe('LandingScreen', () => {
     renderLanding();
     pressAdd();
 
-    for (const [index, name] of ['Playlist link', 'Playlist link 2'].entries()) {
+    for (const [index, name] of [0, 1].map(COPY.landing.playlistLinkLabel).entries()) {
       const input = screen.getByRole('textbox', { name });
       expect(input.hasAttribute('aria-label')).toBe(false);
       // And the name really is coming from the label element a sighted player reads.
@@ -680,10 +682,10 @@ describe('LandingScreen', () => {
       // the reason the attribute could go.
       renderLanding();
 
-      const add = screen.getByRole('button', { name: 'Add another playlist' });
+      const add = screen.getByRole('button', { name: COPY.landing.addRow });
 
       expect(add.hasAttribute('aria-label')).toBe(false);
-      expect(add.textContent).toContain('Add another playlist');
+      expect(add.textContent).toContain(COPY.landing.addRow);
     });
 
     it('should add a row when the add button is pressed', () => {
@@ -693,7 +695,7 @@ describe('LandingScreen', () => {
 
       expect(screen.getAllByRole('textbox')).toHaveLength(2);
       // Numbered from the second, so every box on the screen has a unique accessible name.
-      expect(screen.getByLabelText('Playlist link 2')).not.toBeNull();
+      expect(screen.getByLabelText(COPY.landing.playlistLinkLabel(1))).not.toBeNull();
     });
 
     it('should not add more rows than the maximum', () => {
@@ -708,7 +710,7 @@ describe('LandingScreen', () => {
       for (let index = 1; index < MAX_DECK_PLAYLISTS; index += 1) pressAdd();
 
       expect(screen.getAllByRole('textbox')).toHaveLength(MAX_DECK_PLAYLISTS);
-      expect(screen.queryByRole('button', { name: 'Add another playlist' })).toBeNull();
+      expect(screen.queryByRole('button', { name: COPY.landing.addRow })).toBeNull();
     });
 
     it('should explain the cap once the add button is gone', () => {
@@ -717,13 +719,11 @@ describe('LandingScreen', () => {
       // button may be unmounted at all.
       renderLanding();
 
-      expect(screen.queryByText(/is the maximum/i)).toBeNull();
+      expect(screen.queryByText(COPY.landing.atMaxRows(MAX_DECK_PLAYLISTS))).toBeNull();
 
       for (let index = 1; index < MAX_DECK_PLAYLISTS; index += 1) pressAdd();
 
-      expect(
-        screen.getByText(`${MAX_DECK_PLAYLISTS} playlists is the maximum for one deck.`),
-      ).not.toBeNull();
+      expect(screen.getByText(COPY.landing.atMaxRows(MAX_DECK_PLAYLISTS))).not.toBeNull();
     });
 
     it('should not render a remove button when there is only one row', () => {
@@ -731,11 +731,19 @@ describe('LandingScreen', () => {
       // cannot do anything.
       renderLanding();
 
-      expect(screen.queryByRole('button', { name: /remove playlist/i })).toBeNull();
+      expect(
+        screen.queryByRole('button', {
+          name: new RegExp(COPY.landing.removeRow(1).replace(/\d+$/, '\\d+')),
+        }),
+      ).toBeNull();
 
       pressAdd();
 
-      expect(screen.getAllByRole('button', { name: /remove playlist/i })).toHaveLength(2);
+      expect(
+        screen.getAllByRole('button', {
+          name: new RegExp(COPY.landing.removeRow(1).replace(/\d+$/, '\\d+')),
+        }),
+      ).toHaveLength(2);
     });
 
     it('should remove a row without disturbing the other values', () => {
@@ -752,7 +760,7 @@ describe('LandingScreen', () => {
       typeInRow(1, SECOND_URL);
       typeInRow(2, THIRD_URL);
 
-      fireEvent.click(screen.getByRole('button', { name: 'Remove playlist 2' }));
+      fireEvent.click(screen.getByRole('button', { name: COPY.landing.removeRow(2) }));
 
       expect(screen.getAllByRole('textbox')).toHaveLength(2);
       expect(rowInput(0).value).toBe(PLAYLIST_URL);
@@ -812,7 +820,7 @@ describe('LandingScreen', () => {
       // go through the same validation. There is no second entry point.
       const { onSubmit } = renderLanding({ savedPlaylists: SAVED });
 
-      expect(screen.getByText('Your playlists')).not.toBeNull();
+      expect(screen.getByText(COPY.landing.savedHeading)).not.toBeNull();
       // EXACT names, not patterns: the remove control beside each row names the same playlist, so a
       // `/party mix/i` regex matches both buttons in the row. The row's own name is the name alone.
       expect(screen.getByRole('button', { name: 'Party Mix' })).not.toBeNull();
@@ -864,7 +872,7 @@ describe('LandingScreen', () => {
       // suggestions, and a block explaining an empty list is noise on the app's front door.
       renderLanding({ savedPlaylists: [] });
 
-      expect(screen.queryByText('Your playlists')).toBeNull();
+      expect(screen.queryByText(COPY.landing.savedHeading)).toBeNull();
       // The "+", Start, and the suggestions. No remove button: there is one row.
       expect(screen.getAllByRole('button')).toHaveLength(2 + SUGGESTED_PLAYLISTS.length);
     });
@@ -878,7 +886,7 @@ describe('LandingScreen', () => {
       const { onRemoveSaved, onSubmit } = renderLanding({ savedPlaylists: SAVED });
 
       fireEvent.click(
-        screen.getByRole('button', { name: 'Remove Road Trip +2 more from your playlists' }),
+        screen.getByRole('button', { name: COPY.landing.removeSaved('Road Trip +2 more') }),
       );
 
       // Sorted, which is what makes the same set saved in a different row order one favourite.
@@ -897,7 +905,7 @@ describe('LandingScreen', () => {
 
       for (const saved of SAVED) {
         expect(
-          screen.getByRole('button', { name: `Remove ${saved.name} from your playlists` }),
+          screen.getByRole('button', { name: COPY.landing.removeSaved(saved.name) }),
         ).not.toBeNull();
       }
     });

@@ -15,6 +15,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DeckActions } from './DeckActions';
 import { fixtureDeck } from './__fixtures__/cards';
+import { COPY } from '../game/copy';
+import { sheetsForDeck } from '../hooks/usePdfExport';
 import type { DeckActionsProps } from './DeckActions';
 
 /**
@@ -128,9 +130,9 @@ describe('DeckActions', () => {
     // them is dropped in a later edit.
     renderActions();
 
-    expect(screen.queryByRole('button', { name: /copy share link/i })).not.toBeNull();
-    expect(screen.queryByRole('button', { name: /save this playlist/i })).not.toBeNull();
-    expect(screen.queryByRole('button', { name: /print as pdf cards/i })).not.toBeNull();
+    expect(screen.queryByRole('button', { name: COPY.deckActions.copyLink })).not.toBeNull();
+    expect(screen.queryByRole('button', { name: COPY.deckActions.save })).not.toBeNull();
+    expect(screen.queryByRole('button', { name: COPY.deckActions.print })).not.toBeNull();
   });
 
   it('should give every action a focus-visible style', () => {
@@ -179,7 +181,7 @@ describe('DeckActions', () => {
       stubClipboard(writeText);
       renderActions();
 
-      fireEvent.click(screen.getByRole('button', { name: /copy share link/i }));
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.copyLink }));
 
       expect(writeText).toHaveBeenCalledTimes(1);
       expect(writeText.mock.calls[0]?.[0]).toBe(
@@ -188,7 +190,7 @@ describe('DeckActions', () => {
       // Confirmed in a live region, which is safe even beside an unflipped card: the link names a
       // playlist and a seed.
       await waitFor(() => {
-        expect(screen.getByRole('status').textContent).toMatch(/copied/i);
+        expect(screen.getByRole('status').textContent).toBe(COPY.deckActions.linkCopied);
       });
     });
 
@@ -205,13 +207,13 @@ describe('DeckActions', () => {
       stubClipboard(writeText);
       renderActions({ playlistIds: [PLAYLIST_ID, SECOND_PLAYLIST_ID] });
 
-      fireEvent.click(screen.getByRole('button', { name: /copy share link/i }));
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.copyLink }));
 
       expect(writeText.mock.calls[0]?.[0]).toBe(
         `https://hitster.example?playlist=${PLAYLIST_ID},${SECOND_PLAYLIST_ID}&seed=${SEED}`,
       );
       await waitFor(() => {
-        expect(screen.getByRole('status').textContent).toMatch(/copied/i);
+        expect(screen.getByRole('status').textContent).toBe(COPY.deckActions.linkCopied);
       });
     });
 
@@ -220,11 +222,7 @@ describe('DeckActions', () => {
       // describes. "Same playlist" over a three-playlist deck reads as a link to one of them.
       renderActions({ playlistIds: [PLAYLIST_ID, SECOND_PLAYLIST_ID] });
 
-      const text = document.body.textContent ?? '';
-      expect(text).toMatch(/same playlists, same shuffle/i);
-      // And still never the one promise it cannot keep -- which now has a third reason: a playlist
-      // that has gone private since is dropped with a notice rather than blocking.
-      expect(text).not.toMatch(/same deck/i);
+      expect(document.body.textContent ?? '').toContain(COPY.deckActions.shareCaption(2));
     });
 
     it('should build the share link from the current seed', () => {
@@ -241,12 +239,12 @@ describe('DeckActions', () => {
       stubClipboard(writeText);
       const { rerender, props } = renderActions();
 
-      fireEvent.click(screen.getByRole('button', { name: /copy share link/i }));
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.copyLink }));
       expect(writeText.mock.calls[0]?.[0]).toContain(`seed=${SEED}`);
 
       const nextSeed = '0f0e0d0c0b0a0908';
       rerender(<DeckActions {...props} seed={nextSeed} />);
-      fireEvent.click(screen.getByRole('button', { name: /copy share link/i }));
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.copyLink }));
 
       expect(writeText.mock.calls[1]?.[0]).toContain(`seed=${nextSeed}`);
     });
@@ -260,9 +258,11 @@ describe('DeckActions', () => {
       );
       renderActions();
 
-      fireEvent.click(screen.getByRole('button', { name: /copy share link/i }));
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.copyLink }));
 
-      const field = (await screen.findByLabelText('Share link')) as HTMLInputElement;
+      const field = (await screen.findByLabelText(
+        COPY.deckActions.shareLinkFieldLabel,
+      )) as HTMLInputElement;
       expect(field.value).toBe(`https://hitster.example?playlist=${PLAYLIST_ID}&seed=${SEED}`);
       expect(field.readOnly).toBe(true);
     });
@@ -274,22 +274,11 @@ describe('DeckActions', () => {
       renderActions();
 
       expect(() => {
-        fireEvent.click(screen.getByRole('button', { name: /copy share link/i }));
+        fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.copyLink }));
       }).not.toThrow();
-      expect((screen.getByLabelText('Share link') as HTMLInputElement).value).toContain(
-        `seed=${SEED}`,
-      );
-    });
-
-    it('should not promise an identical deck', () => {
-      // Decision 4, asserted as copy. The link reproduces a SHUFFLE, not a card set -- yearless
-      // cards are dropped at play time and editorial playlists refresh. "The same deck" here would
-      // be a promise the app cannot keep.
-      const { container } = renderActions();
-      const text = container.textContent ?? '';
-
-      expect(text).toMatch(/same playlist, same shuffle/i);
-      expect(text).not.toMatch(/same deck/i);
+      expect(
+        (screen.getByLabelText(COPY.deckActions.shareLinkFieldLabel) as HTMLInputElement).value,
+      ).toContain(`seed=${SEED}`);
     });
 
     it('should say nothing before the copy button is pressed', () => {
@@ -298,7 +287,7 @@ describe('DeckActions', () => {
       renderActions();
 
       expect(screen.queryByRole('status')).toBeNull();
-      expect(screen.queryByLabelText('Share link')).toBeNull();
+      expect(screen.queryByLabelText(COPY.deckActions.shareLinkFieldLabel)).toBeNull();
     });
   });
 
@@ -309,7 +298,7 @@ describe('DeckActions', () => {
       const onSavePlaylist = vi.fn();
       renderActions({ onSavePlaylist });
 
-      fireEvent.click(screen.getByRole('button', { name: /save this playlist/i }));
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.save }));
 
       expect(onSavePlaylist).toHaveBeenCalledTimes(1);
     });
@@ -320,10 +309,10 @@ describe('DeckActions', () => {
       renderActions({ isPlaylistSaved: true });
 
       const button = screen.getByRole('button', {
-        name: /saved to your playlists/i,
+        name: COPY.deckActions.saved,
       }) as HTMLButtonElement;
       expect(button.disabled).toBe(true);
-      expect(screen.queryByRole('button', { name: /^save this playlist$/i })).toBeNull();
+      expect(screen.queryByRole('button', { name: COPY.deckActions.save })).toBeNull();
     });
   });
 
@@ -332,12 +321,11 @@ describe('DeckActions', () => {
       // Nine sheets is a thing to know BEFORE committing paper, and long-edge is the setting the
       // column mirror in `pdf-sheet.ts` assumes -- short-edge would invert the correction, so the
       // instruction is on screen rather than guessed at in code.
-      const { container } = renderActions();
-      const text = container.textContent ?? '';
+      const { container, props } = renderActions();
 
-      expect(text).toMatch(/A4 sheets?/);
-      expect(text).toMatch(/double-sided on the long edge/i);
-      expect(text).toMatch(/12 cards each/i);
+      expect(container.textContent ?? '').toContain(
+        COPY.deckActions.sheetSummary(sheetsForDeck(props.deck)),
+      );
     });
 
     it('should report that there is nothing to print when no card has a year', () => {
@@ -348,11 +336,17 @@ describe('DeckActions', () => {
       delete pending.year;
       renderActions({ deck: [pending] });
 
-      fireEvent.click(screen.getByRole('button', { name: /print as pdf cards/i }));
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
 
-      expect(screen.getByRole('status').textContent).toMatch(/nothing to print/i);
-      // Nothing was loaded and nothing was downloaded -- the check happens before the import.
-      expect(screen.queryByText(/building pdf/i)).toBeNull();
+      expect(screen.getByRole('status').textContent).toBe(COPY.deckActions.exportEmpty);
+      /*
+        Nothing was loaded and nothing was downloaded -- the check happens before the import. Read
+        off the button's LABEL rather than by searching for the progress wording: the label is
+        `COPY.deckActions.print` while idle and `printing(done, total)` while working, so a button
+        still wearing the idle name is exactly the claim "no export started", with no sentence
+        pinned anywhere.
+      */
+      expect(screen.queryByRole('button', { name: COPY.deckActions.print })).not.toBeNull();
     });
 
     it('should wait for the outstanding years instead of exporting a short deck', () => {
@@ -368,14 +362,15 @@ describe('DeckActions', () => {
       // ===================================================================
       const { container } = renderActions({ pendingYearCount: 3 });
 
-      fireEvent.click(screen.getByRole('button', { name: /print as pdf cards/i }));
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
 
       const text = container.textContent ?? '';
-      expect(text).toMatch(/waiting for the last years/i);
-      expect(text).toMatch(/3 cards are still looking up a year/i);
-      // Nothing was started: no progress count, and the export's own statuses are all silent.
-      expect(screen.queryByText(/building pdf/i)).toBeNull();
-      expect(screen.queryByText(/nothing to print/i)).toBeNull();
+      expect(text).toContain(COPY.deckActions.waitingHeading);
+      expect(text).toContain(COPY.deckActions.waitingDetail(3));
+      // Nothing was started: the wait's own button is still offering the partial print rather than
+      // reporting progress, and the export's statuses are all silent.
+      expect(screen.queryByRole('button', { name: COPY.deckActions.printPartial })).not.toBeNull();
+      expect(screen.queryByText(COPY.deckActions.exportEmpty)).toBeNull();
     });
 
     it('should export by itself once the last year lands', () => {
@@ -383,19 +378,28 @@ describe('DeckActions', () => {
       // spinner has been made to do the app's bookkeeping.
       const { rerender, props } = renderActions({ pendingYearCount: 2 });
 
-      fireEvent.click(screen.getByRole('button', { name: /print as pdf cards/i }));
-      expect(screen.queryByText(/waiting for the last years/i)).not.toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
+      expect(screen.queryByText(COPY.deckActions.waitingHeading)).not.toBeNull();
 
       // One more year arrives -- still waiting.
       rerender(<DeckActions {...props} pendingYearCount={1} />);
-      expect(screen.queryByText(/waiting for the last years/i)).not.toBeNull();
-      expect(screen.queryByText(/1 card is still looking up a year/i)).not.toBeNull();
+      expect(screen.queryByText(COPY.deckActions.waitingHeading)).not.toBeNull();
+      expect(screen.queryByText(COPY.deckActions.waitingDetail(1))).not.toBeNull();
 
       // The last one lands: the wait is over and the export has taken over the panel.
       rerender(<DeckActions {...props} pendingYearCount={0} />);
-      expect(screen.queryByText(/waiting for the last years/i)).toBeNull();
+      expect(screen.queryByText(COPY.deckActions.waitingHeading)).toBeNull();
+      /*
+        Either label is correct here -- the panel is back and the auto-export may already have
+        started -- so the name is matched with a predicate over the two strings the button can
+        carry rather than with a regex over a phrase. `printing`'s counts are known: the default
+        deck is the six resolved fixture cards.
+      */
       expect(
-        screen.queryByRole('button', { name: /print as pdf cards|building pdf/i }),
+        screen.queryByRole('button', {
+          name: (name: string) =>
+            name === COPY.deckActions.print || name === COPY.deckActions.printing(0, 6),
+        }),
       ).not.toBeNull();
     });
 
@@ -406,15 +410,15 @@ describe('DeckActions', () => {
       // pair of checks `PreparingScreen.test.tsx` makes, for the same reason.
       const { container } = renderActions({ pendingYearCount: 2 });
 
-      fireEvent.click(screen.getByRole('button', { name: /print as pdf cards/i }));
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
 
       const spinner = container.querySelector('[data-motion="spinner"]');
       expect(spinner).not.toBeNull();
       expect(spinner?.getAttribute('aria-hidden')).toBe('true');
 
       spinner?.remove();
-      expect(container.textContent ?? '').toMatch(/waiting for the last years/i);
-      expect(container.textContent ?? '').toMatch(/2 cards are still looking up a year/i);
+      expect(container.textContent ?? '').toContain(COPY.deckActions.waitingHeading);
+      expect(container.textContent ?? '').toContain(COPY.deckActions.waitingDetail(2));
     });
 
     it('should move focus to Cancel when the wait begins', () => {
@@ -423,9 +427,9 @@ describe('DeckActions', () => {
       // they cannot see.
       renderActions({ pendingYearCount: 2 });
 
-      fireEvent.click(screen.getByRole('button', { name: /print as pdf cards/i }));
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
 
-      expect(document.activeElement?.textContent).toMatch(/^cancel$/i);
+      expect(document.activeElement?.textContent).toBe(COPY.deckActions.cancel);
     });
 
     it('should let the player cancel the wait', () => {
@@ -433,11 +437,11 @@ describe('DeckActions', () => {
       // but this component cannot assume a host that provides one.
       renderActions({ pendingYearCount: 5 });
 
-      fireEvent.click(screen.getByRole('button', { name: /print as pdf cards/i }));
-      fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }));
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.cancel }));
 
-      expect(screen.queryByText(/waiting for the last years/i)).toBeNull();
-      expect(screen.queryByRole('button', { name: /copy share link/i })).not.toBeNull();
+      expect(screen.queryByText(COPY.deckActions.waitingHeading)).toBeNull();
+      expect(screen.queryByRole('button', { name: COPY.deckActions.copyLink })).not.toBeNull();
     });
 
     it('should not resume a cancelled wait when the years arrive', () => {
@@ -445,11 +449,13 @@ describe('DeckActions', () => {
       // its crawl a second later must not spring a download on somebody who backed out.
       const { rerender, props } = renderActions({ pendingYearCount: 4 });
 
-      fireEvent.click(screen.getByRole('button', { name: /print as pdf cards/i }));
-      fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }));
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.cancel }));
       rerender(<DeckActions {...props} pendingYearCount={0} />);
 
-      expect(screen.queryByText(/building pdf/i)).toBeNull();
+      // Back to the resolved panel with its idle label: nothing sprang a download on somebody who
+      // backed out. Same "ask the button, not a sentence" reading as above.
+      expect(screen.queryByRole('button', { name: COPY.deckActions.print })).not.toBeNull();
       expect(screen.queryByRole('status')).toBeNull();
     });
 
@@ -457,11 +463,11 @@ describe('DeckActions', () => {
       // `sheetsForDeck` counts only the cards that already have a year, so mid-crawl it is a figure
       // that would climb while the player read it -- and it would be describing a deck nobody is
       // going to print, since the press waits for the rest.
-      const { container } = renderActions({ pendingYearCount: 7 });
+      const { container, props } = renderActions({ pendingYearCount: 7 });
       const text = container.textContent ?? '';
 
-      expect(text).toMatch(/7 cards are still looking up a year — printing waits for them all/i);
-      expect(text).not.toMatch(/A4 sheets?/);
+      expect(text).toContain(COPY.deckActions.printWaitsForYears(7));
+      expect(text).not.toContain(COPY.deckActions.sheetSummary(sheetsForDeck(props.deck)));
     });
 
     it('should keep copy and save available while years are pending', () => {
@@ -470,10 +476,11 @@ describe('DeckActions', () => {
       renderActions({ pendingYearCount: 9 });
 
       expect(
-        (screen.getByRole('button', { name: /copy share link/i }) as HTMLButtonElement).disabled,
+        (screen.getByRole('button', { name: COPY.deckActions.copyLink }) as HTMLButtonElement)
+          .disabled,
       ).toBe(false);
       expect(
-        (screen.getByRole('button', { name: /save this playlist/i }) as HTMLButtonElement).disabled,
+        (screen.getByRole('button', { name: COPY.deckActions.save }) as HTMLButtonElement).disabled,
       ).toBe(false);
     });
 
@@ -482,7 +489,7 @@ describe('DeckActions', () => {
       // precisely the ones whose answer the player has not seen. A count, never a list.
       const { container } = renderActions({ deck: fixtureDeck, pendingYearCount: 2 });
 
-      fireEvent.click(screen.getByRole('button', { name: /print as pdf cards/i }));
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
 
       const text = container.textContent ?? '';
       for (const card of fixtureDeck) {
@@ -500,7 +507,7 @@ describe('DeckActions', () => {
       // ===================================================================
       const { container } = renderActions({ deck: fixtureDeck });
 
-      fireEvent.click(screen.getByRole('button', { name: /print as pdf cards/i }));
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
 
       const text = container.textContent ?? '';
       for (const card of fixtureDeck) {
@@ -530,7 +537,7 @@ describe('DeckActions', () => {
     function startWait(overrides: Partial<DeckActionsProps> = {}) {
       const rendered = renderActions({ deck: fixtureDeck, pendingYearCount: 2, ...overrides });
 
-      fireEvent.click(screen.getByRole('button', { name: /print as pdf cards/i }));
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
 
       return rendered;
     }
@@ -538,8 +545,8 @@ describe('DeckActions', () => {
     it('should offer the partial print beside Cancel', () => {
       startWait();
 
-      expect(screen.queryByRole('button', { name: /print so far/i })).not.toBeNull();
-      expect(screen.queryByRole('button', { name: /^cancel$/i })).not.toBeNull();
+      expect(screen.queryByRole('button', { name: COPY.deckActions.printPartial })).not.toBeNull();
+      expect(screen.queryByRole('button', { name: COPY.deckActions.cancel })).not.toBeNull();
     });
 
     it('should export the resolved cards and report how many were left out', async () => {
@@ -547,15 +554,17 @@ describe('DeckActions', () => {
       // of the latter are dropped by `selectPrintableCards`, and the count is the honest part.
       startWait();
 
-      fireEvent.click(screen.getByRole('button', { name: /print so far/i }));
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.printPartial }));
 
       // Synchronous, because `usePdfExport` publishes `working` before it awaits either import.
-      expect(screen.queryByRole('button', { name: /building pdf… 0\/6/i })).not.toBeNull();
+      expect(
+        screen.queryByRole('button', { name: COPY.deckActions.printing(0, 6) }),
+      ).not.toBeNull();
 
+      // The count is the honest half of the trade, so the DONE message is asserted in its
+      // excluded-cards form rather than in its plain one.
       await waitFor(() => {
-        expect(screen.getByText(/pdf downloaded/i).textContent).toMatch(
-          /2 cards left out, no year yet/i,
-        );
+        expect(screen.queryByText(COPY.deckActions.exportDonePartial(2))).not.toBeNull();
       });
 
       expect(saveMock).toHaveBeenCalledTimes(1);
@@ -568,19 +577,19 @@ describe('DeckActions', () => {
       // asked for.
       const { rerender, props } = startWait();
 
-      fireEvent.click(screen.getByRole('button', { name: /print so far/i }));
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.printPartial }));
       await waitFor(() => {
-        expect(screen.queryByText(/pdf downloaded/i)).not.toBeNull();
+        expect(screen.queryByText(COPY.deckActions.exportDonePartial(2))).not.toBeNull();
       });
 
-      expect(screen.queryByText(/waiting for the last years/i)).not.toBeNull();
-      expect(screen.queryByRole('button', { name: /print so far/i })).not.toBeNull();
+      expect(screen.queryByText(COPY.deckActions.waitingHeading)).not.toBeNull();
+      expect(screen.queryByRole('button', { name: COPY.deckActions.printPartial })).not.toBeNull();
 
       // The crawl finishes: the wait ends on its own and the auto-export takes over, exactly as it
       // does for a player who never pressed this.
       rerender(<DeckActions {...props} deck={fixtureDeck} pendingYearCount={0} />);
 
-      expect(screen.queryByText(/waiting for the last years/i)).toBeNull();
+      expect(screen.queryByText(COPY.deckActions.waitingHeading)).toBeNull();
       await waitFor(() => {
         expect(saveMock).toHaveBeenCalledTimes(2);
       });
@@ -590,11 +599,11 @@ describe('DeckActions', () => {
       // The common case on card 1, and it is not a failure: the whole deck is still in flight.
       startWait({ deck: fixtureDeck.filter((card) => typeof card.year !== 'number') });
 
-      fireEvent.click(screen.getByRole('button', { name: /print so far/i }));
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.printPartial }));
 
-      expect(screen.getByText(/nothing to print/i)).not.toBeNull();
+      expect(screen.getByText(COPY.deckActions.exportEmpty)).not.toBeNull();
       // Still waiting -- a refusal is not an exit either.
-      expect(screen.queryByText(/waiting for the last years/i)).not.toBeNull();
+      expect(screen.queryByText(COPY.deckActions.waitingHeading)).not.toBeNull();
       expect(saveMock).not.toHaveBeenCalled();
     });
 
@@ -604,9 +613,9 @@ describe('DeckActions', () => {
       // covers the DONE message as much as the pending one.
       const { container } = startWait();
 
-      fireEvent.click(screen.getByRole('button', { name: /print so far/i }));
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.printPartial }));
       await waitFor(() => {
-        expect(screen.queryByText(/pdf downloaded/i)).not.toBeNull();
+        expect(screen.queryByText(COPY.deckActions.exportDonePartial(2))).not.toBeNull();
       });
 
       const text = container.textContent ?? '';
