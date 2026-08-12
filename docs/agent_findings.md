@@ -3196,7 +3196,7 @@ twice, and the second version is what shipped. It carries the JITSTER wordmark, 
 
 ### The whole icon identity was regenerated, and the master is deliberately not in `public/`
 
-`docs/assets/logo.png` (1254 × 1254, 1,285,649 bytes) is the master; `logo.webp` 320,
+`docs/assets/logo.png` (1254 × 1254, 1,285,649 bytes) is the master; `logo.webp` 384,
 `pwa-192x192`, `pwa-512x512`, `pwa-maskable-512x512` and `apple-touch-icon` are all `LANCZOS`
 downscales of it, each PNG written twice (RGB-optimised, and 256-colour palette) with the smaller
 kept. Totals in [`architecture.md`](./architecture.md) §3.
@@ -3216,7 +3216,124 @@ launcher, and no local check would have said so.
 ### Still unverified, and not verifiable here
 
 Nothing in this repo renders a pixel: jsdom applies no stylesheet and computes no layout, so the
-centring, the 88dvh peek, the two-column grid and the logo's legibility at 128px are all
+centring, the 88dvh peek, the two-column grid and the logo's legibility at 192px are all
 **class-name assertions only**. The "three widths" row in [`development.md`](./development.md) §5
 now also owes: the hero centred at 320 / 768 / 1280, the suggestions grid at each, and one look at
 the icon on a real home screen (the maskable crop is the part a desktop cannot show).
+
+---
+
+## 2026-08-12 — Android's back button became an in-app control, and four assumptions about jsdom's history turned out to be wrong
+
+Built from [`plan.google-play-back-button.md`](./plans/plan.google-play-back-button.md): a pure
+decision (`src/game/back-navigation.ts`), a thin binding hook (`src/hooks/useBackNavigation.ts`) and
+one call in `GameScreen`. The bug it fixes is that a Trusted Web Activity has **no history entry to
+go back to**, so Android's back gesture closed the activity outright — bypassing `ExitConfirmDialog`
+_invisibly_, because the session survives in `localStorage` and a relaunch resumes. The player reads
+that as the app quitting at random rather than as a game they lost.
+
+The design is written up in [`architecture.md`](./architecture.md) §3. What belongs here is the
+measurement, because the plan asked for the answer rather than a guess and the answer moved two
+tests and one comment.
+
+### jsdom fires `popstate`, and not within one macrotask
+
+`history.back()` really traverses — unlike a drag, which Motion reads from geometry jsdom never
+computes — so the hook's own listener is exercised rather than a double. But a `setTimeout(0)` is
+**too early**: the first probe saw no event and an unchanged `history.state`, which reads exactly
+like "jsdom does not implement this". At 50 ms it fires; the event landed at ~11 ms. Every assertion
+after a traversal in `useBackNavigation.test.ts`, `GameScreen.test.tsx` and `App.test.tsx` therefore
+waits on a real timer inside `act`.
+
+### `history.length` cannot see the failure it was supposed to catch
+
+The plan asked for "should leave the history length unchanged after unmount". **Going back does not
+shorten `history.length`** — the forward entry is retained — in jsdom _and_ in a browser, so a stray
+entry and a cleanly removed one read as the same number. The test is written as a **position**
+instead: a sentinel is stamped into the base entry's state, and after unmount the current entry must
+be that sentinel again. Worth knowing generally: `history.length` is close to useless as an
+assertion, because it counts entries in both directions and never decreases on traversal.
+
+### The cleanup ordering is real, and NOT observable — so it is pinned as a call order
+
+"Remove the listener before navigating" is the plan's central hazard, and the obvious test for it
+**passes with the two lines in either order** (verified by swapping them). The traversal is queued
+rather than synchronous, so the listener is gone before the event lands whichever line runs first.
+A second test asserts the **call order** through spies, which is the only instrument that can see
+it, and that one does go red on a swap. The order stays because it is the only version that survives
+the cleanup gaining an `await`, an early return, or a second statement between the lines — but the
+honest label is on the test, not implied by a green suite.
+
+### jsdom DISCARDS a queued traversal that a `pushState` beats, which hides the StrictMode phantom
+
+The interesting one. React's double-invoke gives: push A → cleanup queues `back()` → push B. In
+Chrome the queued traversal re-resolves its delta when the task runs, moves B → A, and fires
+`popstate` at the listener the **second** effect attached — a phantom back press that would open the
+exit confirmation by itself a few milliseconds into every game in development. In jsdom the same
+sequence ends at B with **no `popstate` at all**: the intervening push cancels the traversal.
+
+Consequence to know before deleting anything: `pendingCleanupTraversals` — the module-level count of
+traversals the hook itself queued — guards a failure **no local test can reproduce**, and the suite
+is green with it removed. It is written against the platform rather than against the test
+environment, and its test says so in its own comment.
+
+Two smaller measurements from the same session. `pushState(state, '')` with **no URL argument**
+keeps the href, search and hash in full, which is what leaves a shared deck link's
+`?playlist=…&seed=…` intact for a mid-game reload. And `EventTarget.prototype.removeEventListener
+.call(window, …)` **throws** in jsdom — its `window` fails the branded IDL check — so a spy that
+needs to delegate must capture the bound original before `vi.spyOn` replaces it.
+
+### One decision beyond the plan, because the plan's version worked only once
+
+**The entry is re-pushed after every press.** A back press consumes it; without a synchronous
+replacement inside the handler the interception works exactly once per game — press back, cancel the
+confirmation, press back again, and the activity closes. That is the original bug delayed by one
+press, which makes it harder to report rather than less severe. The invariant is "exactly one
+outstanding entry for the life of the game", and the accounting is asserted end to end: three
+presses, three replacements, and the teardown still lands on the base entry.
+
+### Still unverified, and not verifiable here
+
+Whether Android's gesture arrives as a `popstate` at all. jsdom's history is a model, not Chrome's,
+and every device row in [`development.md`](./development.md) §5 needs the installed TWA — a browser
+supplies its own back affordance and its own entries, so a green result in Chrome proves nothing.
+The Android 13+ predictive-back animation is the one that could send this back to the shell plan.
+
+### Two defects a fan-out caught that no check in this repo could
+
+Both were found by review agents rather than by `pnpm test`, and both are the same shape: a number
+that looked measured and was not.
+
+**1. The maskable icon shipped with the clamp applied to the CANVAS but not to the ARTWORK PASTED
+INTO IT.** `Image.new(...BACKDROP)` was clamped, `master.resize(...)` was not, so the file held a
+hard-edged 374 x 374 square of `#010101` inside a `#0a0a0a` frame -- 46% of its pixels below the
+floor, with a 1px step from mean luminance 10.00 to 1.08. The seam's edge midpoints sit **187px from
+centre, INSIDE the 204.8px safe circle**, so a round launcher would have shown all four sides of it
+while cropping only the corners. Invisible to every automated check here and probably invisible in a
+bright room; **perceptible on an OLED phone in the dark**. Fixed by pasting the clamped resize. The
+file also dropped 80,511 -> 40,070 bytes, which is the tell in hindsight: a flat backdrop quantises
+to one palette entry, and the un-clamped one could not.
+
+**2. THE CSS EDGE FADE WAS REASONING IN THE WRONG UNITS, AND IT DIMMED THE THING IT WAS PROTECTING.**
+`mask-x-from-90%` was added to soften the logo's edges; its comment justified the 90% stop against a
+neon frame "at ~89.5% of the half-edge". **Tailwind's mask stops are a fraction of the FULL axis**,
+so 90% fades the outer 10% of the width = the outer **20%** of the half-edge, twice the assumed band.
+Measured on the shipped 384px file: bright pixels span 11.0%..95.8% horizontally, the frame's right
+edge took mask alpha **0.44** and the bottom-right corner ~**0.3** -- and the attenuation was
+**asymmetric**, because the artwork is not centred in its own canvas. It was also pointless: from
+96.6% outward every pixel is already exactly the page colour, so there was nothing left to dissolve.
+Removed. The seam it was meant to soften is fixed in the asset instead, which needs no CSS and
+degrades to nothing.
+
+**The lesson both share is the one this repo keeps relearning**: `pnpm typecheck && pnpm lint &&
+pnpm test && pnpm build` passed on every version of both. Nothing here opens an image, evaluates a
+mask, or computes a layout.
+
+### One leak proxy narrowed silently on the same day
+
+Making the `<h1>` an `<img>` moved the app's name out of `textContent` and into an `alt`. Both landing
+leak tests audit `container.textContent`, so their coverage shrank with no assertion changing and no
+test failing -- while AGENTS.md lists `alt` text and `aria-label`s as leak surfaces in their own
+right. `LandingScreen.test.tsx` now audits text **plus** `alt`, `aria-label`, `title`, `placeholder`
+and `value`. Note what this catches that the old proxy could not: a saved playlist's name reaches an
+`aria-label` ("Remove X from your playlists") as well as its button's text.

@@ -35,19 +35,15 @@ import { resetBackNavigationTraversals, useBackNavigation } from './useBackNavig
 /** Marks the entry the hook must always come back to. Nothing in the app writes history state. */
 const BASE_STATE = { base: 'test-base' };
 
-interface Handlers {
-  onCloseDeckActions: ReturnType<typeof vi.fn>;
-  onCloseExitConfirm: ReturnType<typeof vi.fn>;
-  onRequestExit: ReturnType<typeof vi.fn>;
-}
-
-function makeHandlers(): Handlers {
+function makeHandlers() {
   return {
-    onCloseDeckActions: vi.fn(),
-    onCloseExitConfirm: vi.fn(),
-    onRequestExit: vi.fn(),
+    onCloseDeckActions: vi.fn<() => void>(),
+    onCloseExitConfirm: vi.fn<() => void>(),
+    onRequestExit: vi.fn<() => void>(),
   };
 }
+
+type Handlers = ReturnType<typeof makeHandlers>;
 
 interface ProbeProps extends Handlers {
   isDeckActionsOpen?: boolean;

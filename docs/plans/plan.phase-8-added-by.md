@@ -46,12 +46,12 @@ re-runs the spike a third time.
 
 ## Scope & Affected Areas
 
-| Area                     | Type     | Notes                                                                                             |
-| ------------------------ | -------- | ------------------------------------------------------------------------------------------------- |
-| `docs/plans/plan.md`     | Modified | §5's Phase 8 bullet resolved with an outcome; §2 gains a back-reference if the decision stands     |
-| `docs/agent_findings.md` | Modified | The re-spike written up as a dated, repeatable procedure rather than as a one-line conclusion      |
-| `AGENTS.md`              | Modified | One line, so the next session does not re-spike a field that has been checked twice                |
-| **No source files**      | —        | Nothing under `src/`, `api/` or `shared/` is touched. That is the point                            |
+| Area                     | Type     | Notes                                                                                          |
+| ------------------------ | -------- | ---------------------------------------------------------------------------------------------- |
+| `docs/plans/plan.md`     | Modified | §5's Phase 8 bullet resolved with an outcome; §2 gains a back-reference if the decision stands |
+| `docs/agent_findings.md` | Modified | The re-spike written up as a dated, repeatable procedure rather than as a one-line conclusion  |
+| `AGENTS.md`              | Modified | One line, so the next session does not re-spike a field that has been checked twice            |
+| **No source files**      | —        | Nothing under `src/`, `api/` or `shared/` is touched. That is the point                        |
 
 ---
 
@@ -181,13 +181,13 @@ What replaces it is a verification that nothing moved:
 
 ## Assumptions & Decisions
 
-| # | Assumption / Decision                                                          | Rationale                                                                                                                                   |
-| - | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1 | The item is resolved as won't-build, not deferred again                         | It has been spiked twice with the same answer. A third deferral produces a third spike                                                       |
-| 2 | No speculative UI and no speculative type field                                 | `plan.md` says not to build against an assumed field, and the field inventory is what three other decisions rest on                          |
-| 3 | The re-open condition is a Spotify auth path, i.e. §2                           | The blocker is data availability under an anonymous public-link audience, not rendering                                                      |
-| 4 | The evidence is recorded as a procedure, not a conclusion                       | So the next check costs a re-run rather than a redesign                                                                                      |
-| 5 | Identity confirmation by `entity.uri` **and** `entity.name` is mandatory        | A nonexistent id returns HTTP 200, and Phase 0's parallel fan-out silently read the wrong playlist twice without it                          |
+| #   | Assumption / Decision                                                    | Rationale                                                                                                           |
+| --- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| 1   | The item is resolved as won't-build, not deferred again                  | It has been spiked twice with the same answer. A third deferral produces a third spike                              |
+| 2   | No speculative UI and no speculative type field                          | `plan.md` says not to build against an assumed field, and the field inventory is what three other decisions rest on |
+| 3   | The re-open condition is a Spotify auth path, i.e. §2                    | The blocker is data availability under an anonymous public-link audience, not rendering                             |
+| 4   | The evidence is recorded as a procedure, not a conclusion                | So the next check costs a re-run rather than a redesign                                                             |
+| 5   | Identity confirmation by `entity.uri` **and** `entity.name` is mandatory | A nonexistent id returns HTTP 200, and Phase 0's parallel fan-out silently read the wrong playlist twice without it |
 
 ---
 

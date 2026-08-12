@@ -377,6 +377,33 @@ Browser (SPA)                          Serverless (Vercel Functions)
 
 ---
 
+### The platform back press (`src/game/back-navigation.ts` + `src/hooks/useBackNavigation.ts`) — built 2026-08-12
+
+**The bug this fixes is invisible, which is why it is worth a subsection.** `App.tsx` never touches the address bar, which is correct for the web and has a consequence inside a Trusted Web Activity that is not: there is **no history entry to go back to**, so Android's back gesture closes the activity outright. Mid-game a reflexive edge swipe therefore ended the game while bypassing `ExitConfirmDialog` — and bypassed it _silently_, because the session survives in `localStorage` and a relaunch resumes. The player experiences it as the app quitting at random rather than as a game they lost.
+
+The same decision/binding split as `gestures.ts` and `resolver.ts`, for a reason specific to this case:
+
+| Lives in                         | What it owns                                                                                                                     |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `src/game/back-navigation.ts`    | `backNavigationAction(state)` → `close-deck-actions` \| `close-exit-confirm` \| `request-exit`. No React, no DOM, no history API |
+| `src/hooks/useBackNavigation.ts` | One pushed entry, one `popstate` listener, the latest-ref, the cleanup. No branching of its own                                  |
+| `src/components/GameScreen.tsx`  | Calls the hook with its two existing dialog flags and its two existing handlers                                                  |
+
+Six things are load-bearing, and five of them are traps rather than features:
+
+- **Back is a REQUEST, never an exit.** It routes through `handleExitRequest` — the Exit button's own handler — so there is one confirmation rather than two paths to an irreversible action. `END` clears the saved session, so a back press that ended the game outright would destroy the shuffle, the position in the deck and every resolved year with no question asked. The action is named `request-exit` rather than `exit` so that wiring it to `onExit` reads wrong.
+- **Mounting is the scoping — there is no status check anywhere.** `GameScreen` is rendered exactly while `status === 'playing'`, so the interception's lifetime is the mount's, and landing, preparing and end keep the platform's default behaviour by construction rather than by an exclusion list somebody has to remember to update. `App.test.tsx` walks landing → playing → end asserting the entry appears and disappears with the screen.
+- **Exactly one entry is outstanding at all times, which means the entry is REPLACED after every press.** A press consumes it; without a synchronous re-push inside the handler the interception would work exactly once per game — press back, cancel, press back again, and the activity closes. That is the original bug delayed by one press, which makes it harder to report rather than less severe.
+- **The cleanup removes the listener BEFORE it navigates.** Undoing the entry means going back, which fires `popstate`; with the listener still attached the teardown would be read as a back press and the confirmation would open on an unmounting screen. **Measured caveat:** both orderings work today, because the traversal is queued and both statements run in one tick — so the order is pinned as a **call order** in the hook's test, which is the only instrument that can see it. It stops being cosmetic the moment the cleanup grows an `await` or an early return between the two lines.
+- **The cleanup must leave the history where it found it.** A stray entry means the first back press on the landing screen does nothing visible, which reads as a frozen back button — a worse bug than the one being fixed, and one nobody would connect to the game screen. Note `history.length` **cannot see this**, in jsdom or in a browser: going back retains the forward entry. The test asserts the current entry's identity instead.
+- **`pendingCleanupTraversals` is the StrictMode fix, and the reflexive "already pushed" ref is what it replaces.** That ref is exactly what broke the deck-link effect (2026-08-06): StrictMode's simulated unmount runs the cleanup for work the ref still records as done. An undoing cleanup is necessary but not sufficient here, because the traversal is asynchronous — push A, cleanup queues a back, effect 2 pushes B, and the queued traversal then lands on the **second** listener as a phantom back press, opening the confirmation by itself seconds into every dev session. The module-level counter consumes a pop this hook caused. **jsdom cannot reproduce that**, so no local test proves the guard is needed: a `pushState` that beats a queued traversal discards it there, where the spec has the traversal re-resolve its delta when the task runs.
+
+Two consequences worth stating plainly. **This is not TWA-only**: the browser's own back button now opens the exit confirmation during play, on desktop and in mobile Chrome. That is accepted rather than suppressed — a mis-swiped back loses the game there too, and there is deliberately no user-agent sniff and no `display-mode: standalone` check. And **`App.tsx` is untouched**: the "never touches the address bar" rule stays literally true of the container, because the dialog flags this decision reads live in `GameScreen` and lifting them would widen the one file that knows all four statuses exist.
+
+**Nothing local confirms the behaviour.** jsdom's history is a model, not Chrome's: it fires `popstate` on `history.back()` asynchronously (~10 ms, measured 2026-08-12), which is enough to test the wiring and nothing more. Whether Android's gesture arrives as a `popstate` at all, and whether the Android 13+ predictive-back animation previews the app closing while the web app is handling the press, are device checks — see `docs/development.md` §5 and [`plans/plan.google-play-back-button.md`](./plans/plan.google-play-back-button.md).
+
+---
+
 ### Sharing, saving and printing (Phase 8) — built
 
 Three features that add to the app without changing how a game is played, and all three are **caller changes**: the reducer, `GameState` and the persistence format are untouched.
@@ -521,7 +548,7 @@ Comments in that file are **shipped bytes** — it is the blocking request on th
 
 - **`meta description`** — a Lighthouse SEO item and the text a link preview shows. It describes what the app does and names the one constraint a visitor needs in advance: the playlist has to be public.
 - **`meta theme-color`, `#0a0a0a`** — colours the browser chrome on a phone, which is the device this game is played on; without it the near-black app sits under a light grey address bar. It is **the one duplicated colour literal in the app**, because `index.html` is not processed by Tailwind and a `meta` content attribute cannot hold a `var()`. It must be updated by hand when `--color-page` changes, which Phase 8's redesign will do.
-- **`link rel="icon"`, a 320×320 WebP of 10,716 bytes** (240×240 / 20,610 bytes when this was written; regrown to 320 on 2026-08-12 because the same file is now the landing screen's `<h1>`, displayed at 128px) — replacing a 1254×1254 PNG of **1,262,175 bytes**, which was downloaded on every visit and was six times the entire JavaScript payload. **That single asset was costing 6.2 s of LCP** (see `development.md` §8). There is deliberately no PNG fallback: every browser that can run this app reads a WebP favicon, and a second `<link>` would reintroduce a request whose only purpose is a tab icon elsewhere. If one is ever needed, add a _small_ PNG.
+- **`link rel="icon"`, a 384×384 WebP of 12,892 bytes** (240×240 / 20,610 bytes when this was written; regrown to 384 on 2026-08-12 because the same file is now the landing screen's `<h1>`, displayed at 192px — exactly 2× on a retina phone) — replacing a 1254×1254 PNG of **1,262,175 bytes**, which was downloaded on every visit and was six times the entire JavaScript payload. **That single asset was costing 6.2 s of LCP** (see `development.md` §8). There is deliberately no PNG fallback: every browser that can run this app reads a WebP favicon, and a second `<link>` would reintroduce a request whose only purpose is a tab icon elsewhere. If one is ever needed, add a _small_ PNG.
 
 ### The token layer and the motion strategy (`src/index.css`) — built
 
@@ -665,7 +692,7 @@ so its whole subtree is announced, and a copyright line would be read out to a s
 the middle of being told the game crashed.
 
 **It is pinned to the bottom out of flow, and that is a two-ended contract.** `Footer` is
-`absolute inset-x-0 bottom-4`; every host carries **`relative` and `pb-12`**, the footer rides in that
+`absolute inset-x-0 bottom-4`; every host carries **`relative` and a band of at least `pb-12`** (the landing screen uses `pb-20`), the footer rides in that
 reserved padding band (48px below the content box against a ~16px line, so it overlaps nothing), and
 each screen's test asserts both classes — the same shape of contract as `card-ring`, where the utility
 positions itself against an ancestor it does not create. The textbook `mt-auto` sticky footer does not
@@ -842,7 +869,7 @@ src/pwa/manifest.test.ts   A `node` test over the installability-critical fields
 vite.config.ts             VitePWA(...) — workbox options and the update strategy
 public/pwa-*.png           192, 512 and a separate 512 maskable
 public/apple-touch-icon.png  180. iOS ignores the manifest's icons entirely
-public/logo.webp           320. The favicon AND the landing screen's <h1>
+public/logo.webp           384. The favicon AND the landing screen's <h1>, at 192px
 docs/assets/logo.png       The 1254 master every one of the above derives
                            from. In docs/ because public/ ships and precaches
 ```
@@ -873,7 +900,7 @@ Four decisions carry the design:
 - **`devOptions` is absent**, so neither `pnpm dev` nor `npx vercel dev` registers a worker. A service
   worker in development is a caching-bug generator, and this repo's dev story (§5) is delicate enough.
 
-**The icon set comes from `docs/assets/logo.png`** — a 1254 × 1254 card-stack neon wordmark, supplied
+**The icon set comes from `docs/assets/logo.png`** — a 1254 × 1254 neon card-stack whose wordmark reads "PLAYLIST JITSTER", supplied
 by the developer on 2026-08-12 and replacing the pre-`5e178f6` artwork the set was generated from
 until then. Every shipped image is derived from it, which is what keeps the browser tab, the home
 screen and the landing screen's `<h1>` one identity; the 2026-08-06 finding records what happens when
@@ -884,13 +911,35 @@ master there would be downloaded by every install — it is the same file, at th
 survived only in git history, and recovering it was a whole step of Phase 8 plan 1.
 
 Derived, all by `LANCZOS` downscale from that master, each PNG written both RGB-optimised and
-256-colour palette-quantised with the smaller kept: `logo.webp` 320 (10,716 bytes), `pwa-192x192.png`
-(25,240), `pwa-512x512.png` (131,253), `apple-touch-icon.png` 180 (22,609),
-`pwa-maskable-512x512.png` (80,349). The PNGs total 259 kB and none is fetched before first paint.
-**The maskable variant is its own file**, with the artwork at **73.1%** of the canvas — measured, not
-guessed: the lit content reaches 109.4% of the half-edge on this artwork (the neon bloom runs past the
-card into the corners), so that is the scale at which every lit pixel falls inside the 80% safe circle.
-A full-bleed 512 relabelled `maskable` validates cleanly and gets cropped on every round-icon launcher.
+256-colour palette-quantised with the smaller kept: `logo.webp` 384 (12,892 bytes), `pwa-192x192.png`
+(13,312), `pwa-512x512.png` (67,542), `apple-touch-icon.png` 180 (11,937),
+`pwa-maskable-512x512.png` (40,070). The PNGs total 133 kB — **106 kB less than the set they replaced**
+— and none is fetched before first paint.
+
+**Every derivative has its black floor raised to `--color-page` (#0a0a0a)**, per channel, which is a
+clamp rather than a blend so nothing lit is touched and no gradient bands. The artwork's own backdrop
+is pure black and the page is not, and the logo is now rendered at 192px on the landing screen: a 4%
+luminance step across a hard straight edge is exactly what an eye finds, and it read as a square
+pasted onto the page. Two consequences worth knowing. It is also **why the PNGs halved** — a flat
+backdrop quantises to one palette entry. And it is why **the landing screen carries no CSS mask**: a
+`mask-x-from-90% mask-y-from-90%` fade was added on top and then measured out again. `mask-x-from-*`
+stops are a fraction of the FULL axis, so 90% fades the outer 10% of the width — the outer **20%** of
+the half-edge, twice what the reasoning assumed — and the artwork's bright pixels span 11.0%…95.8%
+horizontally, so the band landed on the neon frame, attenuating its right edge to 0.44 and the
+bottom-right corner to ~0.3, _asymmetrically_ (the artwork is not centred in its own canvas). It also
+had nothing left to do: from 96.6% outward every pixel is already the page colour.
+
+**The maskable variant is its own file**, with the artwork at **72%** of the canvas. That number is
+measured rather than inherited: the lit content reaches 109.4% of the half-edge on this artwork (the
+neon bloom runs past the card into the corners), so 73.1% is the scale at which the content lands
+_exactly_ on the 80% safe circle — and an exact fit is only exact at the threshold it was measured
+with (204.0px of a 204.8px budget at "lit ≥ 40", but 205.4px at "lit ≥ 25"). 72% buys the margin and
+costs nothing visible; the shipped file measures 200.5px. **The clamp applies to the pasted artwork,
+not only to the canvas** — the first attempt clamped the frame and pasted unclamped art into it,
+putting a hard-edged 374 × 374 square of #010101 inside a #0a0a0a canvas, with its edges 187px from
+centre and therefore _inside_ the safe circle, so every round launcher would have shown all four sides
+of the seam. A full-bleed 512 relabelled `maskable` validates cleanly and gets cropped on every
+round-icon launcher.
 Provenance and byte counts are in [`agent_findings.md`](./agent_findings.md); **never restore a large
 icon to the favicon slot.**
 

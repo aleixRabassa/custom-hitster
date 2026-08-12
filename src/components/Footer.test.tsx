@@ -53,7 +53,7 @@ describe('Footer', () => {
   it('should pin itself to the bottom of its host rather than sitting in the flow', () => {
     // ===================================================================
     //  THE FOOTER'S HALF OF A TWO-ENDED CONTRACT: this element positions
-    //  itself, and its host supplies `relative` and `pb-12`. Each screen's
+    //  itself, and its host supplies `relative` and a band of at least `pb-12`. Each screen's
     //  own test holds the other end.
     //
     //  Out of flow rather than the textbook `mt-auto` sticky footer, and

@@ -36,14 +36,14 @@ error message anywhere, which is the single failure mode this plan is shaped to 
 
 ### Produces for downstream plans
 
-| Output                            | Consumed by                    | Description                                                                                                              |
-| --------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| Output                                | Consumed by                    | Description                                                                                                                                                                 |
+| ------------------------------------- | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | An installed, asset-link-verified TWA | `plan.google-play-back-button` | The back-button behaviour cannot be observed in a browser, because a browser has its own back affordance and its own history. Verification requires this build on a device. |
-| The permanent application id      | `plan.google-play-back-button` | Only for the device-install instructions in that plan's manual checks.                                                    |
-| The closed-testing track          | `plan.google-play-back-button` | Recommended landing window — see the sequencing note below.                                                               |
+| The permanent application id          | `plan.google-play-back-button` | Only for the device-install instructions in that plan's manual checks.                                                                                                      |
+| The closed-testing track              | `plan.google-play-back-button` | Recommended landing window — see the sequencing note below.                                                                                                                 |
 
 **Sequencing note.** Plan 2 is not a blocker for reaching closed testing, and it should not be
-treated as one. The intended order is: this plan reaches closed testing, plan 2 lands *inside* the
+treated as one. The intended order is: this plan reaches closed testing, plan 2 lands _inside_ the
 fourteen-day window while testers are already exercising the build, and the production rollout
 carries both. That way the fourteen days are spent, not waited out twice.
 
@@ -51,20 +51,20 @@ carries both. That way the fourteen days are spent, not waited out twice.
 
 ## Scope & Affected Areas
 
-| Area                                | Type            | Notes                                                                                                                                    |
-| ----------------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `android/`                          | New             | Bubblewrap-generated Gradle project. A fourth top-level tree, subject to none of the `src`/`api`/`shared` import rules.                   |
-| `android/twa-manifest.json`         | New (committed) | The packaging config, and the one file in `android/` that must be tracked — it is what makes a release reproducible.                      |
-| `public/.well-known/assetlinks.json` | New            | Digital Asset Links. Carries **two** certificate fingerprints, not one.                                                                   |
-| `public/privacy.html`               | New             | Mandatory for the listing. A static file because the app has no router; its dotted path bypasses the SPA rewrite in `vercel.json`.        |
-| `src/pwa/manifest.ts`               | Modified        | Add `id`, `lang`, `dir`, `categories`. Deliberately do **not** add `orientation`.                                                         |
-| `src/pwa/manifest.test.ts`          | Modified        | Assert the added fields, and pin the absence of `orientation`.                                                                           |
-| `src/pwa/assetlinks.test.ts`        | New             | Node test reading the static file from disk and cross-pinning the package id against `twa-manifest.json`.                                 |
-| `.gitignore`                        | Modified        | Keystore and Gradle build output. Appended without introducing any new `.env*` pattern — see the negation-last rule already in that file. |
-| `docs/store/`                       | New             | Listing copy and graphics, so the store listing is reviewable and reproducible rather than living only in the Console.                    |
-| `vite.config.ts`                    | Verify only     | Confirm `globPatterns` does not precache the JSON and that `globIgnores` needs no change. No edit expected.                               |
-| `AGENTS.md`                         | Modified        | Two Documentation Index rows, plus the new rules this tree introduces.                                                                    |
-| `README.md`, `docs/*`               | Modified        | See Documentation Updates.                                                                                                               |
+| Area                                 | Type            | Notes                                                                                                                                     |
+| ------------------------------------ | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `android/`                           | New             | Bubblewrap-generated Gradle project. A fourth top-level tree, subject to none of the `src`/`api`/`shared` import rules.                   |
+| `android/twa-manifest.json`          | New (committed) | The packaging config, and the one file in `android/` that must be tracked — it is what makes a release reproducible.                      |
+| `public/.well-known/assetlinks.json` | New             | Digital Asset Links. Carries **two** certificate fingerprints, not one.                                                                   |
+| `public/privacy.html`                | New             | Mandatory for the listing. A static file because the app has no router; its dotted path bypasses the SPA rewrite in `vercel.json`.        |
+| `src/pwa/manifest.ts`                | Modified        | Add `id`, `lang`, `dir`, `categories`. Deliberately do **not** add `orientation`.                                                         |
+| `src/pwa/manifest.test.ts`           | Modified        | Assert the added fields, and pin the absence of `orientation`.                                                                            |
+| `src/pwa/assetlinks.test.ts`         | New             | Node test reading the static file from disk and cross-pinning the package id against `twa-manifest.json`.                                 |
+| `.gitignore`                         | Modified        | Keystore and Gradle build output. Appended without introducing any new `.env*` pattern — see the negation-last rule already in that file. |
+| `docs/store/`                        | New             | Listing copy and graphics, so the store listing is reviewable and reproducible rather than living only in the Console.                    |
+| `vite.config.ts`                     | Verify only     | Confirm `globPatterns` does not precache the JSON and that `globIgnores` needs no change. No edit expected.                               |
+| `AGENTS.md`                          | Modified        | Two Documentation Index rows, plus the new rules this tree introduces.                                                                    |
+| `README.md`, `docs/*`                | Modified        | See Documentation Updates.                                                                                                                |
 
 **Not touched:** every file under `src/components/`, `src/game/`, `src/hooks/`, `api/` and
 `shared/`. If this plan starts editing application code, something has gone wrong — the store build
@@ -168,7 +168,7 @@ Actions migration is recorded in Out of Scope rather than built speculatively.
         tracked. Store the passwords in a password manager, not in the repo and not in a shell
         history.
   - [ ] Note the accurate recovery position, because the folklore overstates it: with **Play App
-        Signing** enabled, Google holds the app signing key and a lost *upload* key can be reset
+        Signing** enabled, Google holds the app signing key and a lost _upload_ key can be reset
         through Play Console support. Losing the keystore is therefore a serious inconvenience and a
         support round-trip, not the end of the app's update path. Back it up anyway.
   - [ ] Add to `.gitignore`: keystore and JKS files, `android/build/`, `android/app/build/`,
@@ -275,8 +275,7 @@ Every test below is a **node** test needing no DOM, consistent with this repo's 
       other, and a mismatch fails silently on a device: the same situation as `PAGE_COLOR` and
       `--color-page`, handled the same way.
 - [ ] `should ship a non-empty privacy policy page` — covers the existence of `public/privacy.html`
-      in `src/pwa/assetlinks.test.ts` or a sibling. Cheap insurance against a listing that links to a
-      404.
+      in `src/pwa/assetlinks.test.ts` or a sibling. Cheap insurance against a listing that links to a 404.
 
 **What these tests cannot prove, stated so nobody mistakes green for verified:** that Android's
 verifier accepted the fingerprints, that the URL bar is gone, that the AAB installs, or that the
@@ -332,23 +331,23 @@ the contract and be explicit that the middle is untestable here.
 
 ## Assumptions & Decisions
 
-| #   | Assumption / Decision                                                                            | Rationale                                                                                                                                                                             |
-| --- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Bubblewrap CLI over PWABuilder over Capacitor.                                                   | Official toolchain, reproducible from a committed config, and zero application-code change. PWABuilder cannot satisfy "committed to this repo"; Capacitor breaks redeploy-updates-installs and forces CORS onto both handlers for no store-facing gain. |
-| 2   | Bound to the `*.vercel.app` production alias, not a custom domain.                               | Developer's choice. Works technically — asset links are per-origin. The cost is recorded in Open Questions: moving to a custom domain later requires a new app release.                |
-| 3   | The alias, never a per-deployment URL.                                                           | Deployment URLs change on every push. A TWA bound to one breaks on the next deploy, with no error the user could interpret.                                                            |
-| 4   | Personal developer account, so the twelve-tester / fourteen-day closed test is a milestone.       | Google requires it for personal accounts before production access. It is the calendar critical path and cannot be shortened, only overlapped.                                          |
-| 5   | `android/twa-manifest.json` is committed; the generated Gradle project's tracking is TBD.         | The config is what makes a release reproducible. Whether the generated project must also be tracked depends on whether `bubblewrap update` regenerates it — verified, not assumed.     |
-| 6   | `@bubblewrap/cli` installed globally, never as a project dependency.                             | It would pull an Android toolchain into `devDependencies` and the lockfile, and no pre-commit check needs it. An explicit, recorded exception to the pnpm-only rule.                    |
-| 7   | Both certificate fingerprints go in `assetlinks.json`, and the count is asserted by a test.       | One fingerprint is a *valid file* that produces a URL bar on either store installs or local installs. Nothing warns; a test is the only cheap guard.                                   |
-| 8   | The placeholder asset-links file is deployed and verified before any keystore exists.             | It separates "is the file reachable and un-rewritten" from "are the fingerprints right". Debugging both at once, through a symptom as vague as a URL bar, is the avoidable version.     |
-| 9   | `id` is added explicitly even though it changes nothing today.                                   | It already defaults to `start_url`. Writing it down converts a future silent second-app-on-the-store into a failing test.                                                              |
-| 10  | `orientation` stays absent and its absence gains a test.                                         | The `--card-height` clamp makes landscape a supported layout rather than a tolerated one. A packaging prompt is exactly the pressure that would lock rotation, invisibly.               |
-| 11  | The privacy policy is a static `public/privacy.html`.                                            | The app has no router, and the dotted path bypasses the SPA rewrite. A route would mean adding routing to a single-screen app for one document.                                        |
-| 12  | Lost upload keystore is recoverable via Play Console support.                                    | With Play App Signing, Google holds the app signing key. Stating this accurately matters: the folklore version ("you can never update again") predates Play App Signing.               |
-| 13  | Local builds now, GitHub Actions later.                                                          | One app, one maintainer, low cadence. CI would add secret handling to a repo that currently has no CI at all — worth doing when the cadence justifies it, not before.                   |
-| 14  | Staged production rollout rather than 100%.                                                      | This app has never run on more than a handful of devices, and most of `docs/development.md` §5 is still Pending. A halt button is worth having.                                         |
-| 15  | Store listing copy lives in `docs/store/`.                                                       | Console-only copy is unreviewable and unversioned. Every other decision in this repo is written down; the listing should not be the exception.                                         |
+| #   | Assumption / Decision                                                                       | Rationale                                                                                                                                                                                                                                               |
+| --- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Bubblewrap CLI over PWABuilder over Capacitor.                                              | Official toolchain, reproducible from a committed config, and zero application-code change. PWABuilder cannot satisfy "committed to this repo"; Capacitor breaks redeploy-updates-installs and forces CORS onto both handlers for no store-facing gain. |
+| 2   | Bound to the `*.vercel.app` production alias, not a custom domain.                          | Developer's choice. Works technically — asset links are per-origin. The cost is recorded in Open Questions: moving to a custom domain later requires a new app release.                                                                                 |
+| 3   | The alias, never a per-deployment URL.                                                      | Deployment URLs change on every push. A TWA bound to one breaks on the next deploy, with no error the user could interpret.                                                                                                                             |
+| 4   | Personal developer account, so the twelve-tester / fourteen-day closed test is a milestone. | Google requires it for personal accounts before production access. It is the calendar critical path and cannot be shortened, only overlapped.                                                                                                           |
+| 5   | `android/twa-manifest.json` is committed; the generated Gradle project's tracking is TBD.   | The config is what makes a release reproducible. Whether the generated project must also be tracked depends on whether `bubblewrap update` regenerates it — verified, not assumed.                                                                      |
+| 6   | `@bubblewrap/cli` installed globally, never as a project dependency.                        | It would pull an Android toolchain into `devDependencies` and the lockfile, and no pre-commit check needs it. An explicit, recorded exception to the pnpm-only rule.                                                                                    |
+| 7   | Both certificate fingerprints go in `assetlinks.json`, and the count is asserted by a test. | One fingerprint is a _valid file_ that produces a URL bar on either store installs or local installs. Nothing warns; a test is the only cheap guard.                                                                                                    |
+| 8   | The placeholder asset-links file is deployed and verified before any keystore exists.       | It separates "is the file reachable and un-rewritten" from "are the fingerprints right". Debugging both at once, through a symptom as vague as a URL bar, is the avoidable version.                                                                     |
+| 9   | `id` is added explicitly even though it changes nothing today.                              | It already defaults to `start_url`. Writing it down converts a future silent second-app-on-the-store into a failing test.                                                                                                                               |
+| 10  | `orientation` stays absent and its absence gains a test.                                    | The `--card-height` clamp makes landscape a supported layout rather than a tolerated one. A packaging prompt is exactly the pressure that would lock rotation, invisibly.                                                                               |
+| 11  | The privacy policy is a static `public/privacy.html`.                                       | The app has no router, and the dotted path bypasses the SPA rewrite. A route would mean adding routing to a single-screen app for one document.                                                                                                         |
+| 12  | Lost upload keystore is recoverable via Play Console support.                               | With Play App Signing, Google holds the app signing key. Stating this accurately matters: the folklore version ("you can never update again") predates Play App Signing.                                                                                |
+| 13  | Local builds now, GitHub Actions later.                                                     | One app, one maintainer, low cadence. CI would add secret handling to a repo that currently has no CI at all — worth doing when the cadence justifies it, not before.                                                                                   |
+| 14  | Staged production rollout rather than 100%.                                                 | This app has never run on more than a handful of devices, and most of `docs/development.md` §5 is still Pending. A halt button is worth having.                                                                                                         |
+| 15  | Store listing copy lives in `docs/store/`.                                                  | Console-only copy is unreviewable and unversioned. Every other decision in this repo is written down; the listing should not be the exception.                                                                                                          |
 
 ---
 
@@ -358,7 +357,7 @@ the contract and be explicit that the middle is untestable here.
 - [ ] What is the permanent application id string? Reverse-DNS, and genuinely unchangeable after
       first publish.
 - [ ] Is moving to a custom domain foreseeable? If it is even plausible within a year, doing it
-      *before* step 6 is far cheaper than after — the origin is baked into the shell.
+      _before_ step 6 is far cheaper than after — the origin is baked into the shell.
 - [ ] Does the content rating questionnaire's user-generated-content question apply? The app renders
       arbitrary track titles from a player-chosen playlist, so it displays text the developer does
       not control.

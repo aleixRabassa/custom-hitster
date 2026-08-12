@@ -31,15 +31,15 @@ below the component.
 
 ### Requires from plan.multi-playlist-core
 
-| Output                                                                | Description                                                                     |
-| --------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `src/game/deck-merge.ts` — `mergePlaylists()`                          | Folds N `PlaylistOutcome`s into one `MergedDeck` or one failure code             |
-| `src/game/deck-merge.ts` — `MergedDeck`                                | `playlists`, `cards`, `truncated`, `skippedCount`, `failures`                    |
-| `src/game/deck-merge.ts` — `deckLabel()`                               | The `"<first> +N more"` string the HUD, end screen, PDF and library row all show |
-| `src/game/deck-merge.ts` — `MAX_DECK_PLAYLISTS`                        | 5. The row cap and the link cap read the same constant                          |
-| `GameState.playlists`, `start(cards, playlists, seed?)`                | The widened session                                                             |
-| `parseDeckLink()` → `playlistIds`, `buildDeckLink(origin, ids, seed)`  | The multi-id share link                                                         |
-| `SavedPlaylist.ids`, `savedDeckKey()`, `removePlaylist(storage, key)`  | The multi-id library                                                            |
+| Output                                                                | Description                                                                      |
+| --------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `src/game/deck-merge.ts` — `mergePlaylists()`                         | Folds N `PlaylistOutcome`s into one `MergedDeck` or one failure code             |
+| `src/game/deck-merge.ts` — `MergedDeck`                               | `playlists`, `cards`, `truncated`, `skippedCount`, `failures`                    |
+| `src/game/deck-merge.ts` — `deckLabel()`                              | The `"<first> +N more"` string the HUD, end screen, PDF and library row all show |
+| `src/game/deck-merge.ts` — `MAX_DECK_PLAYLISTS`                       | 5. The row cap and the link cap read the same constant                           |
+| `GameState.playlists`, `start(cards, playlists, seed?)`               | The widened session                                                              |
+| `parseDeckLink()` → `playlistIds`, `buildDeckLink(origin, ids, seed)` | The multi-id share link                                                          |
+| `SavedPlaylist.ids`, `savedDeckKey()`, `removePlaylist(storage, key)` | The multi-id library                                                             |
 
 ### Produces for downstream plans
 
@@ -49,28 +49,28 @@ below the component.
 
 ## Scope & Affected Areas
 
-| Area                                       | Type     | Notes                                                                                            |
-| ------------------------------------------ | -------- | ------------------------------------------------------------------------------------------------ |
-| `src/hooks/usePlaylist.ts`                 | Modified | `request(urls)` fans out over up to 5 `fetchPlaylist` calls under one controller, then merges     |
-| `src/components/LandingScreen.tsx`         | Modified | Row list, the "+" button, per-row remove and per-row validation                                   |
-| `src/components/LandingScreen.test.tsx`    | Modified | Rows, the cap, per-row errors, the suggestion/saved submit path                                   |
-| `src/App.tsx`                              | Modified | Deal from `MergedDeck`, multi-id link entry, save/remove by deck key, labels via `deckLabel()`     |
-| `src/App.test.tsx`                         | Modified | Multi-playlist deal, partial failure, total failure, multi-id link entry, save/remove              |
-| `src/components/NoticeBanner.tsx`          | Modified | Two new optional notices: playlists that failed, and the combined deck's size                      |
-| `src/components/NoticeBanner.test.tsx`     | Modified | Both new lines, and that neither renders in the single-playlist case                               |
-| `src/components/DeckActions.tsx`           | Modified | `playlistIds` replaces `playlistId`; the share caption pluralises                                  |
-| `src/components/DeckActions.test.tsx`      | Modified | A multi-id link is copied; the leak test re-run against the new props                              |
-| `src/components/DeckActionsDialog.tsx`     | Modified | Prop pass-through only                                                                             |
-| `src/components/DeckActionsDialog.test.tsx` | Modified | Fixture props updated                                                                             |
-| `src/components/EndScreen.tsx`             | Modified | `playlistIds`; the deck label in the count line; the full playlist list, which lives only here      |
-| `src/components/EndScreen.test.tsx`        | Modified | The list, the label, and the existing "same deck" absence assertion                                 |
-| `src/components/GameScreen.tsx`            | Modified | `playlistIds` pass-through to the dialog. `playlistName` stays a string — it receives the label     |
-| `src/components/GameScreen.test.tsx`       | Modified | Fixture props updated; the deck-actions leak assertion re-run                                       |
-| `src/components/Hud.tsx`                   | None     | Already takes one string and truncates it. The label is that string                                 |
-| `docs/development.md`                      | Modified | §5: new manual verification rows; §8: the gaps this feature cannot close locally                    |
-| `docs/architecture.md`                     | Modified | §3: the landing screen's row model and the fan-out; the notice list grows from three to five        |
-| `docs/agent_findings.md`                   | Modified | Dated entry: what was measured (deck size after dedupe, request count, bundle delta)                |
-| `AGENTS.md`                                | Modified | Extend plan 1's bullet with the UI consequences (the row cap, the two new notices, the labels)      |
+| Area                                        | Type     | Notes                                                                                           |
+| ------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------- |
+| `src/hooks/usePlaylist.ts`                  | Modified | `request(urls)` fans out over up to 5 `fetchPlaylist` calls under one controller, then merges   |
+| `src/components/LandingScreen.tsx`          | Modified | Row list, the "+" button, per-row remove and per-row validation                                 |
+| `src/components/LandingScreen.test.tsx`     | Modified | Rows, the cap, per-row errors, the suggestion/saved submit path                                 |
+| `src/App.tsx`                               | Modified | Deal from `MergedDeck`, multi-id link entry, save/remove by deck key, labels via `deckLabel()`  |
+| `src/App.test.tsx`                          | Modified | Multi-playlist deal, partial failure, total failure, multi-id link entry, save/remove           |
+| `src/components/NoticeBanner.tsx`           | Modified | Two new optional notices: playlists that failed, and the combined deck's size                   |
+| `src/components/NoticeBanner.test.tsx`      | Modified | Both new lines, and that neither renders in the single-playlist case                            |
+| `src/components/DeckActions.tsx`            | Modified | `playlistIds` replaces `playlistId`; the share caption pluralises                               |
+| `src/components/DeckActions.test.tsx`       | Modified | A multi-id link is copied; the leak test re-run against the new props                           |
+| `src/components/DeckActionsDialog.tsx`      | Modified | Prop pass-through only                                                                          |
+| `src/components/DeckActionsDialog.test.tsx` | Modified | Fixture props updated                                                                           |
+| `src/components/EndScreen.tsx`              | Modified | `playlistIds`; the deck label in the count line; the full playlist list, which lives only here  |
+| `src/components/EndScreen.test.tsx`         | Modified | The list, the label, and the existing "same deck" absence assertion                             |
+| `src/components/GameScreen.tsx`             | Modified | `playlistIds` pass-through to the dialog. `playlistName` stays a string — it receives the label |
+| `src/components/GameScreen.test.tsx`        | Modified | Fixture props updated; the deck-actions leak assertion re-run                                   |
+| `src/components/Hud.tsx`                    | None     | Already takes one string and truncates it. The label is that string                             |
+| `docs/development.md`                       | Modified | §5: new manual verification rows; §8: the gaps this feature cannot close locally                |
+| `docs/architecture.md`                      | Modified | §3: the landing screen's row model and the fan-out; the notice list grows from three to five    |
+| `docs/agent_findings.md`                    | Modified | Dated entry: what was measured (deck size after dedupe, request count, bundle delta)            |
+| `AGENTS.md`                                 | Modified | Extend plan 1's bullet with the UI consequences (the row cap, the two new notices, the labels)  |
 
 ---
 
@@ -175,7 +175,7 @@ buttons already fill.
         **do not add an "already submitted" ref**: both rules are load-bearing and both are documented
         in that effect's header block. It stays a single effect with the same two stable dependencies.
   - [x] `handleSavePlaylist` writes `{ ids: state.playlists.map(…id), name: deckLabel(state.playlists),
-        savedAt: … }`. `isPlaylistSaved` compares `savedDeckKey` of the live deck against the saved
+    savedAt: … }`. `isPlaylistSaved` compares `savedDeckKey` of the live deck against the saved
         entries' keys, so a partially-overlapping set is correctly **not** "saved".
   - [x] `handleRemoveSaved(key)` takes the deck key.
   - [x] `handleRestart` reads `state.playlists`. It still restarts from `state.deck` rather than from a
@@ -202,7 +202,7 @@ buttons already fill.
 
 - [x] **Step 5 — Carry the ids through the deck actions.**
   - [x] `DeckActions` takes `playlistIds: readonly string[]` and calls `buildDeckLink(shareOrigin,
-        playlistIds, seed)` **inside the handler**, unchanged. The build-at-click rule is documented and
+    playlistIds, seed)` **inside the handler**, unchanged. The build-at-click rule is documented and
         still load-bearing: a restart deals a fresh seed.
   - [x] The share caption pluralises: "Same playlists, same shuffle …" beyond one playlist. It must
         still **never** say "the same deck" — and it now has a third reason, since a playlist that has
@@ -220,7 +220,7 @@ buttons already fill.
   - [x] The second button still says "Home", and the assertion that "New playlist" is absent stays.
 
 - [x] **Step 7 — Update the tests below, then run the four checks.** `pnpm typecheck && pnpm lint &&
-      pnpm test && pnpm build`, all four green. **Run 2026-08-07: all four green, 45 files / 706 tests.**
+    pnpm test && pnpm build`, all four green. **Run 2026-08-07: all four green, 45 files / 706 tests.**
   - [x] Every DOM test file keeps its `afterEach(cleanup)` — Testing Library does not auto-clean here —
         and every file that renders a card keeps `clearQrCache()` in its `beforeEach`.
   - [x] Measure and record: the bundle delta on the initial path (the landing screen gains rows and the
@@ -367,18 +367,18 @@ buttons already fill.
 
 ## Assumptions & Decisions
 
-| #   | Assumption / Decision                                                                                      | Rationale                                                                                                                                                                        |
-| --- | ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | **The hook fans out in parallel under one `AbortController`.**                                              | Five sequential embed fetches would put the card-1 gate behind their sum. One controller keeps "the player changed their mind" a single act, and the existing stale-response guards protect a batch unchanged. |
-| 2   | **`usePlaylist` gains a `Promise.all` and nothing else.**                                                   | Its own header block says any logic accumulating there is logic nothing tests. The merge, the failure ordering and the label are plan 1's pure module.                            |
-| 3   | **Per-row error messages, not one shared slot.**                                                            | With five inputs, one message names none of them. Each row's message is wired to its own input via `aria-describedby`, which is also what makes the assertion meaningful.          |
-| 4   | **The container-level error keeps its single slot.**                                                         | It describes the request, not a row: a total failure, or `no-years-found` from the session. `StartFailureCode` is unchanged.                                                       |
-| 5   | **A suggestion or saved deck still submits instantly, replacing whatever was typed.**                        | It is today's one-click demo path and the reason the suggestions exist. The rows are refilled with what was actually submitted before the screen is replaced, so nothing is lost silently. |
-| 6   | **Rows are keyed on a stable per-row id, not on the index.**                                                 | Removing a middle row with index keys renumbers the inputs under the cursor and moves focus and error associations to the wrong box.                                               |
-| 7   | **The two new notices are counts, and neither names a playlist.**                                            | Every pre-reveal surface in this app reports counts. The row a failure belonged to is gone by the time the banner renders, so a name is information the player cannot act on.       |
-| 8   | **`GameScreen`, `Hud` and `PreparingScreen` keep taking one `playlistName` string.**                          | The label IS that string. Pushing the array down to the HUD would buy nothing and would make a truncation rule into a layout decision.                                             |
-| 9   | **The end screen is the only place the full playlist list is rendered.**                                      | Post-game, so nothing can be spoiled, and it is the one screen with room. Every other surface gets the label.                                                                      |
-| 10  | **No per-playlist progress UI while the batch is in flight.**                                                 | Start already shows one loading state and the batch is bounded at five parallel requests. A per-row spinner is a follow-up, not this task.                                          |
+| #   | Assumption / Decision                                                                 | Rationale                                                                                                                                                                                                      |
+| --- | ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **The hook fans out in parallel under one `AbortController`.**                        | Five sequential embed fetches would put the card-1 gate behind their sum. One controller keeps "the player changed their mind" a single act, and the existing stale-response guards protect a batch unchanged. |
+| 2   | **`usePlaylist` gains a `Promise.all` and nothing else.**                             | Its own header block says any logic accumulating there is logic nothing tests. The merge, the failure ordering and the label are plan 1's pure module.                                                         |
+| 3   | **Per-row error messages, not one shared slot.**                                      | With five inputs, one message names none of them. Each row's message is wired to its own input via `aria-describedby`, which is also what makes the assertion meaningful.                                      |
+| 4   | **The container-level error keeps its single slot.**                                  | It describes the request, not a row: a total failure, or `no-years-found` from the session. `StartFailureCode` is unchanged.                                                                                   |
+| 5   | **A suggestion or saved deck still submits instantly, replacing whatever was typed.** | It is today's one-click demo path and the reason the suggestions exist. The rows are refilled with what was actually submitted before the screen is replaced, so nothing is lost silently.                     |
+| 6   | **Rows are keyed on a stable per-row id, not on the index.**                          | Removing a middle row with index keys renumbers the inputs under the cursor and moves focus and error associations to the wrong box.                                                                           |
+| 7   | **The two new notices are counts, and neither names a playlist.**                     | Every pre-reveal surface in this app reports counts. The row a failure belonged to is gone by the time the banner renders, so a name is information the player cannot act on.                                  |
+| 8   | **`GameScreen`, `Hud` and `PreparingScreen` keep taking one `playlistName` string.**  | The label IS that string. Pushing the array down to the HUD would buy nothing and would make a truncation rule into a layout decision.                                                                         |
+| 9   | **The end screen is the only place the full playlist list is rendered.**              | Post-game, so nothing can be spoiled, and it is the one screen with room. Every other surface gets the label.                                                                                                  |
+| 10  | **No per-playlist progress UI while the batch is in flight.**                         | Start already shows one loading state and the batch is bounded at five parallel requests. A per-row spinner is a follow-up, not this task.                                                                     |
 
 ---
 

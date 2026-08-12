@@ -11,7 +11,7 @@ describe('sanitizeForPdf', () => {
     //
     //  WinAnsi already covers every Spanish, Portuguese, French, German and
     //  Italian glyph, and these are the playlists this app is actually built
-    //  for -- four of the nine suggestions are Spanish or Latin. So the
+    //  for -- six of the eight suggestions are Spanish or Latin. So the
     //  common case must be a NO-OP, and if this test ever fails the decision
     //  itself is wrong.
     // ===================================================================

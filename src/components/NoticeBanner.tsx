@@ -19,7 +19,7 @@
  * ===========================================================================
  *  A FAILED PLAYLIST IS NOT NAMED, AND THAT IS DELIBERATE (decision 7).
  *
- *  A playlist title is safe data -- the suggestion buttons render nine of them.
+ *  A playlist title is safe data -- the suggestion buttons render eight of them.
  *  The reason is different: the failures are ordered by the ROW they came from,
  *  and the rows are gone by the time this renders. So a name here would be
  *  information the player cannot act on, in a banner whose every other line is

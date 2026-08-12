@@ -145,7 +145,7 @@ describe('NoticeBanner', () => {
 
   it('should not name a playlist that failed', () => {
     /*
-      COUNT ONLY (decision 7). A playlist title is safe data -- the suggestions render nine of them
+      COUNT ONLY (decision 7). A playlist title is safe data -- the suggestions render eight of them
       -- but the failures are ordered by the ROW they came from and the rows are gone by the time
       this renders, so a name here is information the player cannot act on. This asserts the
       component has no way to receive one: a name would have to arrive as a prop.

@@ -10,12 +10,13 @@
  * not about whether a function exists.
  */
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GameScreen } from './GameScreen';
 import { highConfidenceCard, lowConfidenceCard, noPreviewCard } from './__fixtures__/cards';
 import { clearQrCache } from '../game/qr-cache';
+import { resetBackNavigationTraversals } from '../hooks/useBackNavigation';
 
 const { toDataURLMock } = vi.hoisted(() => ({
   toDataURLMock: vi.fn<(text: string, options?: unknown) => Promise<string>>(),
@@ -605,5 +606,145 @@ describe('GameScreen keyboard controls', () => {
 
     expect(onFlip).not.toHaveBeenCalled();
     expect(onNext).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The platform back press, wired through `useBackNavigation`.
+ *
+ * These are the END-TO-END half of the feature: the decision's own truth table lives in
+ * `src/game/back-navigation.test.ts` and the history bookkeeping in
+ * `src/hooks/useBackNavigation.test.ts`, so what is left for this file is the WIRING -- that a
+ * press reaches the same confirmation the Exit button reaches, and that it never reaches `onExit`.
+ *
+ * A back press is `window.history.back()` and jsdom really traverses, but ASYNCHRONOUSLY (measured
+ * at roughly 10ms on 2026-08-12), so every press is followed by a timed wait inside `act`.
+ *
+ * WHAT NONE OF THIS PROVES is that Android's gesture arrives as a `popstate` in a Trusted Web
+ * Activity at all. jsdom's history is a model, not Chrome's, and the device pass in the plan's
+ * step 5 is the only thing that can confirm the behaviour.
+ */
+describe('GameScreen back navigation', () => {
+  beforeEach(() => {
+    toDataURLMock.mockReset();
+    toDataURLMock.mockImplementation((text) =>
+      Promise.resolve(`data:image/png;base64,QR(${text})`),
+    );
+    clearQrCache();
+    // Module state in the hook, reset for the same reason `clearQrCache` is: Vitest isolates
+    // modules per FILE, so a test that unmounted without waiting would leave the traversal counter
+    // armed and swallow the next test's first press.
+    resetBackNavigationTraversals();
+
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+    vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  /** Press back the way the platform does, then wait for jsdom's queued traversal to land. */
+  async function pressBack() {
+    window.history.back();
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+  }
+
+  it('should open the exit confirmation rather than calling onExit on a back press', async () => {
+    // ===================================================================
+    //  THE WHOLE FEATURE IN ONE ASSERTION: BACK IS A REQUEST.
+    //
+    //  In a TWA there is no entry to go back to, so the gesture closed the
+    //  activity outright -- ending the game while bypassing this dialog,
+    //  and bypassing it INVISIBLY, because the session survives in
+    //  `localStorage` and a relaunch resumes. The player experiences it as
+    //  the app quitting at random rather than as a game they lost.
+    //
+    //  `onExit` not being called is the half that matters most: `END`
+    //  clears the saved session, so a back press that ended the game would
+    //  destroy the shuffle, the position in the deck and every resolved
+    //  year with no question asked.
+    // ===================================================================
+    const onExit = vi.fn();
+    render(renderScreen({ onExit }));
+
+    await pressBack();
+
+    expect(screen.queryByRole('dialog')).not.toBeNull();
+    expect(screen.queryByRole('button', { name: 'End game' })).not.toBeNull();
+    expect(onExit).not.toHaveBeenCalled();
+
+    // And it is the SAME dialog the button opens, so cancelling returns to the same card rather
+    // than to a second, parallel confirmation.
+    fireEvent.click(screen.getByRole('button', { name: 'Keep playing' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Play' })).not.toBeNull();
+    expect(onExit).not.toHaveBeenCalled();
+  });
+
+  it('should close the exit confirmation on a back press instead of answering it', async () => {
+    // A back press that CONFIRMED an exit would be strictly worse than not intercepting back at
+    // all: it would turn the reflexive gesture into the destructive one, through the guard added
+    // to catch exactly that.
+    const onExit = vi.fn();
+    render(renderScreen({ onExit }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Exit game' }));
+    expect(screen.queryByRole('dialog')).not.toBeNull();
+
+    await pressBack();
+
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(onExit).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'Play' })).not.toBeNull();
+  });
+
+  it('should close the deck actions on a back press and leave the game playable', async () => {
+    const onExit = vi.fn();
+    render(renderScreen({ onExit }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Keep this deck' }));
+    expect(screen.queryByRole('button', { name: /copy share link/i })).not.toBeNull();
+
+    await pressBack();
+
+    // The panel closes and NOTHING else happens -- no exit request behind it, which is the
+    // precedence in `backNavigationAction` arriving through the real screen.
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(onExit).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'Play' })).not.toBeNull();
+  });
+
+  it('should keep intercepting a second back press', async () => {
+    // One entry consumed once would make this work exactly once per game: press back, cancel,
+    // press back again, and the activity closes. The hook re-pushes, and this is that invariant
+    // seen from the screen.
+    const onExit = vi.fn();
+    render(renderScreen({ onExit }));
+
+    await pressBack();
+    fireEvent.click(screen.getByRole('button', { name: 'Keep playing' }));
+
+    await pressBack();
+
+    expect(screen.queryByRole('dialog')).not.toBeNull();
+    expect(onExit).not.toHaveBeenCalled();
+  });
+
+  it('should not intercept a back press once the game screen has unmounted', async () => {
+    // MOUNTING IS THE SCOPING. There is no status check anywhere in the hook or the screen, so
+    // this is the assertion that the interception really ends with the mount -- the landing,
+    // preparing and end screens keep the platform's default behaviour by construction.
+    const onExit = vi.fn();
+    const { unmount } = render(renderScreen({ onExit }));
+
+    unmount();
+    await pressBack();
+
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(onExit).not.toHaveBeenCalled();
   });
 });

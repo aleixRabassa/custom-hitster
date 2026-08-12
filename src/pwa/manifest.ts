@@ -114,9 +114,10 @@ export const manifest: Partial<ManifestOptions> = {
    *   also what Android scales the splash-screen image from.
    * - **512 `purpose: 'maskable'`** — a SEPARATE file, not the same one relabelled. Android
    *   crops a maskable icon to whatever shape the launcher uses, so the artwork is drawn at
-   *   84% of the canvas with the rest as background: its content radius is 204.9px against a
-   *   204.8px safe radius (the 80% safe circle). Relabelling the full-bleed 512 would get its
-   *   edges cropped on every round-icon launcher.
+   *   **72%** of the canvas with the rest as background — re-measured on 2026-08-12, when new
+   *   artwork replaced the old: its bloom reaches 109.4% of the half-edge, so its content radius
+   *   is 200.5px against a 204.8px safe radius (the 80% safe circle). Relabelling the full-bleed
+   *   512 would get its edges cropped on every round-icon launcher.
    *
    * PNG throughout, not the WebP the favicon uses: manifest icon support for WebP is not
    * universal, and iOS ignores the manifest's icons entirely in favour of the

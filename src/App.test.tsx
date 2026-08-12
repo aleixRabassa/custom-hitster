@@ -18,7 +18,7 @@
  * directly and mount into it.
  */
 
-import { cleanup, render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { StrictMode } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -26,6 +26,7 @@ import App from './App';
 import { fixtureDeck, highConfidenceCard, pendingYearCard } from './components/__fixtures__/cards';
 import { PLAYLIST_ERROR_MESSAGES } from './game/messages';
 import { clearQrCache } from './game/qr-cache';
+import { resetBackNavigationTraversals } from './hooks/useBackNavigation';
 import { SESSION_STORAGE_KEY, SESSION_VERSION } from './game/persistence';
 import { LIBRARY_STORAGE_KEY, LIBRARY_VERSION } from './game/playlist-library';
 import type { PlaylistFetch } from './game/playlist-client';
@@ -287,6 +288,10 @@ describe('App', () => {
     // survives a card advance. Vitest isolates modules per FILE, so every test here would
     // otherwise render against whatever the previous one generated. Same reason as `cleanup`.
     clearQrCache();
+    // Module state in `useBackNavigation`, reset for the same reason: a test that unmounts the game
+    // screen without waiting for jsdom's queued traversal leaves the hook's counter armed, and the
+    // next test's first back press would be swallowed by it.
+    resetBackNavigationTraversals();
 
     vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(() => Promise.resolve());
     vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
@@ -572,6 +577,57 @@ describe('App', () => {
 
     expect(await screen.findByLabelText('Playlist link')).not.toBeNull();
     expect(screen.queryByText(/deck finished/i)).toBeNull();
+  });
+
+  it('should not intercept a back press outside the game screen', async () => {
+    // ===================================================================
+    //  MOUNTING IS THE SCOPING (plan decision 3), ASSERTED END TO END.
+    //
+    //  `useBackNavigation` is called by `GameScreen` and by nothing else,
+    //  so the interception's lifetime is that component's mount -- there
+    //  is deliberately no status check in the hook, in the screen or here.
+    //  On the landing, preparing and end screens, back must therefore do
+    //  what the platform does with it: in a TWA, close the app. An entry
+    //  left behind on any of them would absorb that press instead, and the
+    //  player would see a back button that does nothing.
+    //
+    //  Measured as the CURRENT ENTRY rather than as `history.length`, which
+    //  cannot see the difference: going back does not shorten it.
+    // ===================================================================
+    // Let any traversal an earlier test queued land BEFORE the base is stamped. jsdom's is
+    // asynchronous, and one arriving mid-test would move the current entry under the assertions --
+    // which reads as this feature leaking rather than as the previous test finishing.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    const base = { base: 'app-test' };
+    window.history.replaceState(base, '');
+
+    stubYearApi();
+    // One card, so a single advance runs the deck out and reaches the end screen.
+    renderApp(playlistFetch(200, playlistResult({ cards: [{ ...pendingYearCard }] })));
+
+    // Landing: the address bar and the history are untouched, exactly as `App.tsx` promises.
+    expect(window.history.state).toEqual(base);
+
+    startPlaylist();
+    await waitFor(() => {
+      expect(screen.queryByTestId('hud')).not.toBeNull();
+    });
+
+    // Playing: one entry for the press to consume.
+    expect(window.history.state).not.toEqual(base);
+
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    expect(await screen.findByText(/deck finished/i)).not.toBeNull();
+
+    // The end screen: the entry is gone again, because the game screen unmounted with it. The wait
+    // is for jsdom's queued traversal, which is asynchronous (~10ms, measured 2026-08-12).
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(window.history.state).toEqual(base);
   });
 
   it('should stay in the game when the exit is cancelled', async () => {

@@ -160,7 +160,9 @@ export function usePlaylist(options: UsePlaylistOptions = {}): UsePlaylistResult
       const merged = mergePlaylists(outcomes);
 
       setState(
-        merged.ok ? { status: 'loaded', deck: merged.deck } : { status: 'error', code: merged.code },
+        merged.ok
+          ? { status: 'loaded', deck: merged.deck }
+          : { status: 'error', code: merged.code },
       );
     })();
   }, []);

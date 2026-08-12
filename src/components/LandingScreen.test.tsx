@@ -82,6 +82,34 @@ function typeInRow(index: number, value: string) {
   fireEvent.change(rowInput(index), { target: { value } });
 }
 
+/**
+ * Everything on the screen a leak could hide in: the rendered text AND the attributes that speak.
+ *
+ * ===========================================================================
+ *  `textContent` ALONE STOPPED BEING ENOUGH ON 2026-08-12, and nothing failed
+ *  when it did.
+ *
+ *  The `<h1>` used to be the words "Playlist Jitster" and is now
+ *  `<img alt="Playlist Jitster">`. `textContent` does not include `alt`, so the
+ *  audit below quietly narrowed: a heading, a decorative image or an icon
+ *  button added later could name a track and both leak tests would still pass.
+ *  AGENTS.md lists `alt` text, `aria-label`s and attributes as leak surfaces in
+ *  their own right -- this is the proxy catching up with the rule.
+ *
+ *  `placeholder` and `value` are in the list because the suggestion buttons fill
+ *  a row's value, and a future "recently played" affordance would fill it with
+ *  something derived from a deck.
+ * ===========================================================================
+ */
+function auditableText(container: HTMLElement): string {
+  const spoken = ['alt', 'aria-label', 'title', 'placeholder', 'value'];
+  const attributes = [...container.querySelectorAll('*')].flatMap((element) =>
+    spoken.map((name) => element.getAttribute(name) ?? ''),
+  );
+
+  return [container.textContent ?? '', ...attributes].join(' ');
+}
+
 function pressStart() {
   fireEvent.click(screen.getByRole('button', { name: /start/i }));
 }
@@ -101,7 +129,7 @@ describe('LandingScreen', () => {
 
   it('should host the footer: positioned, with the bottom band reserved', () => {
     // The screen's half of `Footer`'s contract. This is the host where it matters most: the landing
-    // column is the one that OUTGROWS the viewport (nine suggestions plus a library), so `<main>`
+    // column is the one that OUTGROWS the viewport (eight suggestions plus a library), so `<main>`
     // stretches past `min-h-dvh` and the absolutely positioned footer goes with it -- at the end of
     // the scroll rather than hovering over it. Without `relative` here it would anchor to the
     // viewport instead and float over the suggestions; without `pb-12` it would land on the last one.
@@ -109,7 +137,11 @@ describe('LandingScreen', () => {
     const main = container.querySelector('main');
 
     expect(main?.className).toContain('relative');
-    expect(main?.className).toContain('pb-12');
+    // `pb-20` since 2026-08-12 -- more clearance above the line, asked for by the developer. The
+    // CONTRACT is a band of at least `pb-12`, so this asserts the class that is actually there
+    // rather than the minimum: a screen that reserved less is the bug, and a screen that reserved
+    // more by accident should still be a deliberate number.
+    expect(main?.className).toContain('pb-20');
     expect(container.querySelector('footer')?.className).toContain('absolute');
   });
 
@@ -137,8 +169,8 @@ describe('LandingScreen', () => {
     // late-arriving logo would shove the form it is centred with.
     const logo = heading.querySelector('img');
     expect(logo?.getAttribute('src')).toBe('/logo.webp');
-    expect(logo?.getAttribute('width')).toBe('320');
-    expect(logo?.getAttribute('height')).toBe('320');
+    expect(logo?.getAttribute('width')).toBe('384');
+    expect(logo?.getAttribute('height')).toBe('384');
   });
 
   it('should centre the form in the viewport with the suggestions below it', () => {
@@ -150,7 +182,7 @@ describe('LandingScreen', () => {
     //
     //  `justify-center` on `<main>` is the specific regression: it was there
     //  for two phases doing NOTHING, because this column always outgrows the
-    //  viewport (nine suggestions plus a library) and `justify-content` only
+    //  viewport (eight suggestions plus a library) and `justify-content` only
     //  spends free space. Putting it back would look harmless and would not
     //  centre anything.
     //
@@ -158,7 +190,9 @@ describe('LandingScreen', () => {
     // ===================================================================
     const { container } = renderLanding();
     const main = container.querySelector('main');
-    const hero = main?.querySelector('section');
+    // The hero is found through the FORM it contains, not as `main`'s first `<section>`: a position
+    // query would silently retarget all three assertions below at anything inserted above it.
+    const hero = container.querySelector('form')?.closest('section');
 
     expect(main?.className).not.toContain('justify-center');
     expect(hero?.className).toContain('justify-center');
@@ -332,11 +366,13 @@ describe('LandingScreen', () => {
     }
   });
 
-  it('should render nine suggested playlists', () => {
-    // Nine, so a first-time visitor with no playlist of their own can still see the app work.
+  it('should render eight suggested playlists', () => {
+    // Enough that a first-time visitor with no playlist of their own can still see the app work.
+    // Eight since 2026-08-12, when "Radio Brianper" -- the one personal playlist in the set -- was
+    // removed at the developer's request.
     renderLanding();
 
-    expect(SUGGESTED_PLAYLISTS).toHaveLength(9);
+    expect(SUGGESTED_PLAYLISTS).toHaveLength(8);
     for (const playlist of SUGGESTED_PLAYLISTS) {
       expect(screen.queryByText(playlist.label)).not.toBeNull();
     }
@@ -557,7 +593,7 @@ describe('LandingScreen', () => {
       everything else, rather than to loosen the pattern until any 20xx passes. If the footer ever
       renders something else, this stops matching and the assertion sees every digit again.
     */
-    const text = (container.textContent ?? '').replace(COPYRIGHT_NOTICE, '');
+    const text = auditableText(container).replace(COPYRIGHT_NOTICE, '');
 
     for (const card of fixtureDeck) {
       expect(text).not.toContain(card.title);
@@ -767,7 +803,7 @@ describe('LandingScreen', () => {
     });
 
     it('should render nothing when the library is empty', () => {
-      // NOTHING, not a placeholder (step 14): a first-time visitor already has the form and nine
+      // NOTHING, not a placeholder (step 14): a first-time visitor already has the form and eight
       // suggestions, and a block explaining an empty list is noise on the app's front door.
       renderLanding({ savedPlaylists: [] });
 
@@ -841,8 +877,10 @@ describe('LandingScreen', () => {
       // This is the assertion that fails if an entry ever grows a track list.
       const { container } = renderLanding({ savedPlaylists: SAVED });
       // Subtracted for the reason given in the screen-level leak test above: the footer's
-      // "2026-present" is a year-shaped constant that derives from no card.
-      const text = (container.textContent ?? '').replace(COPYRIGHT_NOTICE, '');
+      // "2026-present" is a year-shaped constant that derives from no card. Attributes are audited
+      // too -- a saved entry's name reaches an `aria-label` ("Remove X from your playlists") as well
+      // as the button's text, so `textContent` alone would check one of the two places it appears.
+      const text = auditableText(container).replace(COPYRIGHT_NOTICE, '');
 
       for (const card of fixtureDeck) {
         expect(text).not.toContain(card.title);

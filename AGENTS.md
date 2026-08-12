@@ -8,26 +8,26 @@ Several decisions in this repo look like mistakes and are not. If something seem
 
 ## Documentation Index
 
-| File                                                                                       | What it covers                                                                                              |
-| ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
-| [`docs/architecture.md`](./docs/architecture.md)                                           | Components, import boundaries between `src`/`api`/`shared`, data flow, external services, planned phases    |
-| [`docs/api.md`](./docs/api.md)                                                             | The `api/` surface, handler conventions, environment variable reference                                     |
-| [`docs/toolchain.md`](./docs/toolchain.md)                                                 | The two TypeScript installs, the four tsconfigs, ESLint/Prettier, pnpm and the Node pin, Tailwind, Vitest   |
-| [`docs/development.md`](./docs/development.md)                                             | Setup, scripts, running functions locally, tests, deploy, known limitations                                 |
-| [`docs/agent_findings.md`](./docs/agent_findings.md)                                       | Running log of discoveries and gotchas found while working here                                             |
-| [`docs/plans/plan.md`](./docs/plans/plan.md)                                               | **Authoritative phase plan** — what belongs in which phase, plus all Phase 0 research findings              |
-| [`docs/plans/plan.phase-1.md`](./docs/plans/plan.phase-1.md)                               | Phase 1 detail, decisions, and execution notes                                                              |
-| [`docs/plans/plan.phase-2-playlist.md`](./docs/plans/plan.phase-2-playlist.md)             | Phase 2, first half — URL parsing, the embed adapter, `/api/playlist`                                       |
-| [`docs/plans/plan.phase-2-year.md`](./docs/plans/plan.phase-2-year.md)                     | Phase 2, second half — the cache, the MusicBrainz adapter, year resolution, `/api/year`                     |
-| [`docs/plans/plan.phase-3.md`](./docs/plans/plan.phase-3.md)                               | Phase 3 — the reducer, seeded shuffle, persistence, and the progressive-loading resolver                    |
-| [`docs/plans/plan.phase-4-6-card-ui.md`](./docs/plans/plan.phase-4-6-card-ui.md)           | Phase 4 — the DOM test environment, the flip card, the QR code, and card audio                              |
-| [`docs/plans/plan.phase-4-6-gestures.md`](./docs/plans/plan.phase-4-6-gestures.md)         | Phase 5 — swipe, tap-versus-drag, the stacked deck, keyboard controls                                       |
-| [`docs/plans/plan.phase-4-6-screens.md`](./docs/plans/plan.phase-4-6-screens.md)           | Phase 6 — landing, the playlist client, notices, the HUD, the end screen, the session container             |
-| [`docs/plans/plan.phase-7-look.md`](./docs/plans/plan.phase-7-look.md)                     | Phase 7, first half — the `@theme` token layer, the fluid card, reduced motion, focus and ARIA              |
-| [`docs/plans/plan.phase-7-robustness.md`](./docs/plans/plan.phase-7-robustness.md)         | Phase 7, second half — failure codes, the error boundary, the chunk splits, the meta tags, Lighthouse       |
-| [`docs/plans/plan.phase-8-look-and-shell.md`](./docs/plans/plan.phase-8-look-and-shell.md) | Phase 8, plan 1 — neon-ring card design, contrast re-audit, PWA, icon set. **Built**                        |
-| [`docs/plans/plan.phase-8-features.md`](./docs/plans/plan.phase-8-features.md)             | Phase 8, plan 2 — the share link, the saved-playlist library, the PDF export, the audio reversal. **Built** |
-| [`docs/plans/plan.phase-8-added-by.md`](./docs/plans/plan.phase-8-added-by.md)             | Phase 8, plan 3 — the "Added by" decision. Writes no code; resolved as won't-build                          |
+| File                                                                                       | What it covers                                                                                               |
+| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| [`docs/architecture.md`](./docs/architecture.md)                                           | Components, import boundaries between `src`/`api`/`shared`, data flow, external services, planned phases     |
+| [`docs/api.md`](./docs/api.md)                                                             | The `api/` surface, handler conventions, environment variable reference                                      |
+| [`docs/toolchain.md`](./docs/toolchain.md)                                                 | The two TypeScript installs, the four tsconfigs, ESLint/Prettier, pnpm and the Node pin, Tailwind, Vitest    |
+| [`docs/development.md`](./docs/development.md)                                             | Setup, scripts, running functions locally, tests, deploy, known limitations                                  |
+| [`docs/agent_findings.md`](./docs/agent_findings.md)                                       | Running log of discoveries and gotchas found while working here                                              |
+| [`docs/plans/plan.md`](./docs/plans/plan.md)                                               | **Authoritative phase plan** — what belongs in which phase, plus all Phase 0 research findings               |
+| [`docs/plans/plan.phase-1.md`](./docs/plans/plan.phase-1.md)                               | Phase 1 detail, decisions, and execution notes                                                               |
+| [`docs/plans/plan.phase-2-playlist.md`](./docs/plans/plan.phase-2-playlist.md)             | Phase 2, first half — URL parsing, the embed adapter, `/api/playlist`                                        |
+| [`docs/plans/plan.phase-2-year.md`](./docs/plans/plan.phase-2-year.md)                     | Phase 2, second half — the cache, the MusicBrainz adapter, year resolution, `/api/year`                      |
+| [`docs/plans/plan.phase-3.md`](./docs/plans/plan.phase-3.md)                               | Phase 3 — the reducer, seeded shuffle, persistence, and the progressive-loading resolver                     |
+| [`docs/plans/plan.phase-4-6-card-ui.md`](./docs/plans/plan.phase-4-6-card-ui.md)           | Phase 4 — the DOM test environment, the flip card, the QR code, and card audio                               |
+| [`docs/plans/plan.phase-4-6-gestures.md`](./docs/plans/plan.phase-4-6-gestures.md)         | Phase 5 — swipe, tap-versus-drag, the stacked deck, keyboard controls                                        |
+| [`docs/plans/plan.phase-4-6-screens.md`](./docs/plans/plan.phase-4-6-screens.md)           | Phase 6 — landing, the playlist client, notices, the HUD, the end screen, the session container              |
+| [`docs/plans/plan.phase-7-look.md`](./docs/plans/plan.phase-7-look.md)                     | Phase 7, first half — the `@theme` token layer, the fluid card, reduced motion, focus and ARIA               |
+| [`docs/plans/plan.phase-7-robustness.md`](./docs/plans/plan.phase-7-robustness.md)         | Phase 7, second half — failure codes, the error boundary, the chunk splits, the meta tags, Lighthouse        |
+| [`docs/plans/plan.phase-8-look-and-shell.md`](./docs/plans/plan.phase-8-look-and-shell.md) | Phase 8, plan 1 — neon-ring card design, contrast re-audit, PWA, icon set. **Built**                         |
+| [`docs/plans/plan.phase-8-features.md`](./docs/plans/plan.phase-8-features.md)             | Phase 8, plan 2 — the share link, the saved-playlist library, the PDF export, the audio reversal. **Built**  |
+| [`docs/plans/plan.phase-8-added-by.md`](./docs/plans/plan.phase-8-added-by.md)             | Phase 8, plan 3 — the "Added by" decision. Writes no code; resolved as won't-build                           |
 | [`docs/plans/plan.multi-playlist-core.md`](./docs/plans/plan.multi-playlist-core.md)       | Multi-playlist, plan 1 — the merge module, the widened state, both v2 storage formats, the link. **Built**   |
 | [`docs/plans/plan.multi-playlist-ui.md`](./docs/plans/plan.multi-playlist-ui.md)           | Multi-playlist, plan 2 — the landing rows, the fan-out hook, the container wiring, the labels. **Not built** |
 | [`docs/plans/plan.year-accuracy.md`](./docs/plans/plan.year-accuracy.md)                   | The tier ladder — Singles/EPs in the top rung, the graded middle rung, the re-captured fixtures. **Built**   |
@@ -126,13 +126,40 @@ identically with the artist rule reverted. Same false-comfort shape as the pre-2
 
 **Two Phase 8 findings that read as bugs and are not, plus one that is:**
 
-- **The pre-`5e178f6` `public/logo.png` and the `logo.webp` that replaced it are DIFFERENT ARTWORK**, swapped in a single commit, which nothing recorded — Phase 7's note about replacing "a 1.26 MB PNG" is true about the bytes and silent about the picture. Resolved 2026-08-06 as **one identity everywhere**: all four PWA icons and `logo.webp` are generated from that 1254×1254 card-stack source, and the app is **"Playlist Hitster"**. `logo.webp` came out at 10,376 bytes, smaller than the 20,610 it replaced. **Never restore a large icon to the favicon slot** — that rule is unchanged.
+- **The pre-`5e178f6` `public/logo.png` and the `logo.webp` that replaced it are DIFFERENT ARTWORK**, swapped in a single commit, which nothing recorded — Phase 7's note about replacing "a 1.26 MB PNG" is true about the bytes and silent about the picture. Resolved 2026-08-06 as **one identity everywhere**, then **re-resolved on 2026-08-12 against NEW developer-supplied artwork**: the master is now `docs/assets/logo.png` (1254×1254, wordmark reading "PLAYLIST JITSTER"), and `logo.webp` (**384×384, 12,892 bytes**) plus all four PWA icons are `LANCZOS` downscales of it. **The master is deliberately in `docs/`, never `public/`** — everything in `public/` ships _and_ is precached by the service worker, and a 1.2 MB master there is the same file, at the same size, that cost 6.2 s of LCP as a favicon. **Never restore a large icon to the favicon slot** — that rule is unchanged. Every derivative also has its **black floor raised to `--color-page` (#0a0a0a)**, because the artwork's backdrop is pure black and the page is not: the logo is rendered on the landing screen at 192px and a 4% luminance step across a straight edge reads as a pasted square.
 - **`--color-fg-year` is a separate token from `--color-ring-from` despite sharing its value**, and the year is **flat rather than the mockup's gradient**. `background-clip: text` needs `color: transparent`, so a gradient that fails to paint renders the year _invisible_ — the same silent shape as the unknown-colour-utility bug this repo already shipped — and a gradient has no single contrast ratio to record.
 - **The deck's two peeking backs do not render at all on a full-height card**, and this one is a real defect: centre-origin `scale()` lifts the bottom edge by 8.96px while `translateY` pushes it down 10px, so they peek by 1.04px and 2.08px and are inset on every other side. Pre-existing from Phase 5, measured 2026-08-06, **not fixed** — the remedy is a deck-feel decision. Consequence: `card-ring-dim` is currently inert at desktop card sizes.
 
 **Everything plan 2 built is a caller change: the reducer, `GameState` and the persistence format are untouched.** Three new pure modules in `src/game/` (`deck-link.ts`, `playlist-library.ts`, `pdf-sheet.ts` + `pdf-text.ts`), one new hook (`src/hooks/usePdfExport.ts`), and the shared `src/game/qrcode-loader.ts`. **Which subtree each landed in was the usual decision, and the rule is "put it where it can be tested":** `deck-link.ts` takes a query STRING rather than reading `location`, `playlist-library.ts` takes an injected `StorageLike` exactly as `persistence.ts` does, and `pdf-sheet.ts` holds every millimetre as arithmetic over numbers — the same decision/binding split as `gestures.ts` and `resolver.ts`, for the same reason: **getting the duplex column mirror wrong pairs every printed card with the wrong answer and is discoverable only by printing and cutting.** The binding halves are `App.tsx`, `EndScreen.tsx` and `usePdfExport.ts`. See [`docs/architecture.md`](./docs/architecture.md) §3.
 
-**A shared link promises "same playlist, same shuffle", NEVER "the same deck", and the copy is the feature.** Yearless cards are dropped at play time and editorial playlists refresh their tracks, so the seeded shuffle is exact while its input is not. `EndScreen.test.tsx` asserts the phrase "same deck" is absent. Also load-bearing: a **saved session outranks a link** (opening an old one must not discard a game in progress), a malformed link is the plain landing screen with **no error**, and `App.tsx` **never touches the address bar** — no `pushState`, no `replaceState`. The link effect deliberately has **no "already submitted" ref**: such a guard survives StrictMode's simulated unmount, whose cleanup has already aborted the request it was recording, so the app would sit on the landing screen forever. That is measured and written up in [`docs/agent_findings.md`](./docs/agent_findings.md) (2026-08-06).
+**A shared link promises "same playlist, same shuffle", NEVER "the same deck", and the copy is the feature.** Yearless cards are dropped at play time and editorial playlists refresh their tracks, so the seeded shuffle is exact while its input is not. `EndScreen.test.tsx` asserts the phrase "same deck" is absent. Also load-bearing: a **saved session outranks a link** (opening an old one must not discard a game in progress), a malformed link is the plain landing screen with **no error**, and `App.tsx` **never touches the address bar** — no `pushState`, no `replaceState`. That rule is still true **of `App.tsx`** and is not the whole story any more: see the back-press block below, and do not delete the `pushState` in `useBackNavigation.ts` on the strength of this sentence. The link effect deliberately has **no "already submitted" ref**: such a guard survives StrictMode's simulated unmount, whose cleanup has already aborted the request it was recording, so the app would sit on the landing screen forever. That is measured and written up in [`docs/agent_findings.md`](./docs/agent_findings.md) (2026-08-06).
+
+**THE ANDROID BACK PRESS IS AN IN-APP CONTROL AS OF 2026-08-12, SO THERE IS EXACTLY ONE `pushState` IN
+THE APP AND IT IS NOT IN `App.tsx`.** `GameScreen` calls `useBackNavigation`, which pushes ONE history
+entry for the duration of a game and turns a back press into the same exit REQUEST the Exit button
+makes — or, with a dialog up, into closing that dialog. It exists because a TWA has **no entry to go
+back to**, so the gesture closed the activity outright, bypassing `ExitConfirmDialog` **invisibly**:
+the session survives in `localStorage` and a relaunch resumes, so the player reads it as the app
+quitting at random rather than as a game they lost. The decision is the pure
+`src/game/back-navigation.ts`; the hook holds no branching. **`App.tsx` is deliberately untouched** —
+the two dialog flags live in `GameScreen`, and lifting them would widen the one file that knows all
+four statuses exist. Six things before editing any of it. **Back is a request, never an exit** (`END`
+clears the save, so a direct exit would destroy the deck with no question asked), and the action is
+called `request-exit` so wiring it to `onExit` reads wrong. **Mounting IS the scoping** — no status
+check exists anywhere, because `GameScreen` is mounted exactly while the status is `playing`, and an
+exclusion list of screens is a thing to forget to update. **The entry is REPLACED after every press**:
+one entry consumed once makes the fix work exactly once per game — press back, cancel, press back
+again, and the activity closes. **The cleanup removes the listener BEFORE it navigates**, and both
+orderings pass today (the traversal is queued, so the listener is gone either way) — which is why the
+order is pinned as a **call order** rather than as a behaviour, and why "simplify it, the suite is
+green" is the wrong conclusion. **`history.length` is not an instrument** for the stray-entry failure,
+in jsdom or in a browser: going back retains the forward entry, so the tests assert the current
+entry's identity. And **`pendingCleanupTraversals` cannot be justified by a local test** — jsdom
+discards a queued traversal when a `pushState` beats it, where Chrome re-resolves the delta and fires
+the phantom pop that the counter exists to swallow. The browser-side change is **accepted, not
+suppressed**: desktop and mobile-Chrome back now open the confirmation too, and there is deliberately
+no user-agent sniff. Full reasoning in [`docs/architecture.md`](./docs/architecture.md) §3; **every
+device check is still outstanding** and cannot be run in Chrome.
 
 **`playlist-library.ts` rebuilds an entry field by field on the WRITE as well as on the read, and that is a leak rule.** `SavedPlaylist` is a structural interface and TypeScript's excess-property check does not fire for a spread, so `savePlaylist(storage, { ...somethingLarger })` type-checked and wrote every extra field into a store the **landing screen** reads — a pre-start surface. Caught by the module's own leak test. **Validating only on read is not enough when the store itself is the leak surface.**
 
@@ -333,8 +360,11 @@ read, so it silently discards a saved game and a curated library); every "Hitste
 BOARD GAME (`pdf-sheet.ts`'s 65 mm card, `reducer.ts` and `messages.ts` on dropping a yearless card,
 `CardRevealSide`, README's "shop-bought Hitster cards") — renaming those corrupts the reasoning; and
 `custom-hitster` as the package/repo name, in `MUSICBRAINZ_USER_AGENT`, in `api/hello`'s message and in
-the `https://hitster.example` test origins. The PWA ARTWORK is unaffected: the icons carry no wordmark,
-so "one identity everywhere" still holds under the new name.
+the `https://hitster.example` test origins. **The PWA ARTWORK was NOT unaffected, and this line used to
+claim it was**: the icons did carry a "PLAYLIST HITSTER" wordmark — nobody opened the image, because the
+rename was reasoned about as a string change. New artwork reading "PLAYLIST JITSTER" landed on
+2026-08-12 and the whole set was regenerated from it, so "one identity everywhere" now holds by
+regeneration rather than by the absence of a wordmark. **No check in this repo has ever opened an image.**
 
 **Five developer decisions landed on 2026-08-05, after Phase 7 plan 1. Two of them reverse
 something `plan.md` had already resolved, so read these before "fixing" the code back:**

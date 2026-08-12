@@ -38,35 +38,35 @@ Nothing.
 
 ### Produces for downstream plans
 
-| Output                                                                              | Consumed by                                               |
-| ----------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| Output                                                                                           | Consumed by                                                |
+| ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------- |
 | `src/game/deck-merge.ts` — `mergePlaylists()`, `deckLabel()`, `MergedDeck`, `MAX_DECK_PLAYLISTS` | plan.multi-playlist-ui (`usePlaylist`, `LandingScreen`)    |
-| `GameState.playlists` and the `START` action's `playlists` argument                  | plan.multi-playlist-ui (`App.tsx` deal + restart + labels) |
-| `useGameSession().start(cards, playlists, seed?)`                                    | plan.multi-playlist-ui (`App.tsx`)                        |
-| `parseDeckLink()` returning `playlistIds`, `buildDeckLink(origin, ids, seed)`        | plan.multi-playlist-ui (`App.tsx`, `DeckActions`)          |
-| `SavedPlaylist.ids`, `savedDeckKey()`, `savePlaylist()`, `removePlaylist(key)`       | plan.multi-playlist-ui (`App.tsx`, `LandingScreen`)        |
+| `GameState.playlists` and the `START` action's `playlists` argument                              | plan.multi-playlist-ui (`App.tsx` deal + restart + labels) |
+| `useGameSession().start(cards, playlists, seed?)`                                                | plan.multi-playlist-ui (`App.tsx`)                         |
+| `parseDeckLink()` returning `playlistIds`, `buildDeckLink(origin, ids, seed)`                    | plan.multi-playlist-ui (`App.tsx`, `DeckActions`)          |
+| `SavedPlaylist.ids`, `savedDeckKey()`, `savePlaylist()`, `removePlaylist(key)`                   | plan.multi-playlist-ui (`App.tsx`, `LandingScreen`)        |
 
 ---
 
 ## Scope & Affected Areas
 
-| Area                              | Type     | Notes                                                                                                    |
-| --------------------------------- | -------- | -------------------------------------------------------------------------------------------------------- |
-| `src/game/deck-merge.ts`          | New      | Pure merge of N playlist outcomes into one deck, plus the deck label and `MAX_DECK_PLAYLISTS`             |
-| `src/game/deck-merge.test.ts`     | New      | Node environment. Dedupe, notice aggregation, partial failure, total failure, label                        |
-| `src/game/types.ts`               | Modified | `GameState.playlist` → `playlists`; `START` takes `playlists`                                              |
-| `src/game/reducer.ts`             | Modified | `START` / `RESUME` write `playlists`; `initialGameState` starts empty                                      |
-| `src/game/reducer.test.ts`        | Modified | Every `START`/`RESUME` fixture and assertion moves to the array                                            |
-| `src/game/persistence.ts`         | Modified | `SESSION_VERSION` → 2, `PersistedSession.playlists`, and a v1 read that lifts `playlist` into `[playlist]` |
-| `src/game/persistence.test.ts`    | Modified | New v2 round trip plus a v1-payload migration test                                                         |
-| `src/game/deck-link.ts`           | Modified | `?playlist=` accepts a comma list and repeated params; `DeckLink.playlistIds`; builder takes ids           |
-| `src/game/deck-link.test.ts`      | Modified | Multi-id parse/build, the single-id back-compat case, the over-cap rejection                               |
-| `src/game/playlist-library.ts`    | Modified | `SavedPlaylist.ids`, `LIBRARY_VERSION` → 2 with a v1 lift, `savedDeckKey()`, key-based remove              |
-| `src/game/playlist-library.test.ts` | Modified | Multi-id save/dedupe/remove, the v1 migration, the leak test against the new shape                       |
-| `src/game/use-game-session.ts`    | Modified | `start(cards, playlists, seed?)` signature only — no new logic                                             |
-| `docs/architecture.md`            | Modified | §3: the combined deck, the merge module, both storage version bumps                                        |
-| `docs/agent_findings.md`          | Modified | Dated entry for the decisions and anything measured while building                                         |
-| `AGENTS.md`                       | Modified | New bullet: the deck is 1..5 playlists, and what that means for the leak rules and the two storage keys    |
+| Area                                | Type     | Notes                                                                                                      |
+| ----------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------- |
+| `src/game/deck-merge.ts`            | New      | Pure merge of N playlist outcomes into one deck, plus the deck label and `MAX_DECK_PLAYLISTS`              |
+| `src/game/deck-merge.test.ts`       | New      | Node environment. Dedupe, notice aggregation, partial failure, total failure, label                        |
+| `src/game/types.ts`                 | Modified | `GameState.playlist` → `playlists`; `START` takes `playlists`                                              |
+| `src/game/reducer.ts`               | Modified | `START` / `RESUME` write `playlists`; `initialGameState` starts empty                                      |
+| `src/game/reducer.test.ts`          | Modified | Every `START`/`RESUME` fixture and assertion moves to the array                                            |
+| `src/game/persistence.ts`           | Modified | `SESSION_VERSION` → 2, `PersistedSession.playlists`, and a v1 read that lifts `playlist` into `[playlist]` |
+| `src/game/persistence.test.ts`      | Modified | New v2 round trip plus a v1-payload migration test                                                         |
+| `src/game/deck-link.ts`             | Modified | `?playlist=` accepts a comma list and repeated params; `DeckLink.playlistIds`; builder takes ids           |
+| `src/game/deck-link.test.ts`        | Modified | Multi-id parse/build, the single-id back-compat case, the over-cap rejection                               |
+| `src/game/playlist-library.ts`      | Modified | `SavedPlaylist.ids`, `LIBRARY_VERSION` → 2 with a v1 lift, `savedDeckKey()`, key-based remove              |
+| `src/game/playlist-library.test.ts` | Modified | Multi-id save/dedupe/remove, the v1 migration, the leak test against the new shape                         |
+| `src/game/use-game-session.ts`      | Modified | `start(cards, playlists, seed?)` signature only — no new logic                                             |
+| `docs/architecture.md`              | Modified | §3: the combined deck, the merge module, both storage version bumps                                        |
+| `docs/agent_findings.md`            | Modified | Dated entry for the decisions and anything measured while building                                         |
+| `AGENTS.md`                         | Modified | New bullet: the deck is 1..5 playlists, and what that means for the leak rules and the two storage keys    |
 
 ---
 
@@ -125,7 +125,7 @@ had to know which of two overlapping fields to read, forever.
         the merged deck being empty. The second one must return the existing `empty-playlist` code,
         because `START` on an empty deck is what the reducer's own comment says nothing above it owns.
   - [x] Export `deckLabel(playlists)`: the first playlist's name for one playlist, and `"<first> +N
-        more"` beyond that. Pure over the array, so the HUD, the end screen, the PDF filename and the
+    more"` beyond that. Pure over the array, so the HUD, the end screen, the PDF filename and the
         library row all read one function and cannot disagree. Document that it is playlist-level data
         only — the same class of string the suggestion buttons already render.
 
@@ -209,12 +209,12 @@ had to know which of two overlapping fields to read, forever.
         one label, still playlist-level only, still read on a pre-start surface.
 
 - [x] **Step 7 — Update the `start` signature in `src/game/use-game-session.ts`.** `start(cards,
-      playlists, seed?)` forwarding to `START`. Nothing else in the hook changes: the resolver already
+    playlists, seed?)` forwarding to `START`. Nothing else in the hook changes: the resolver already
       takes the deck rather than the playlist, so a 500-card crawl needs no new code — only the
       documentation in step 8's note about how long it runs.
 
 - [x] **Step 8 — Run the four checks and record the decisions.** `pnpm typecheck && pnpm lint && pnpm
-      test && pnpm build`, all four green, before this plan is considered done — plan 2 starts from a
+    test && pnpm build`, all four green, before this plan is considered done — plan 2 starts from a
       clean tree.
   - [x] Grep for `state.playlist` and `.playlist?.` across `src/` and confirm every remaining hit is
         in plan 2's files, so plan 2's scope is known rather than discovered.
@@ -325,20 +325,20 @@ had to know which of two overlapping fields to read, forever.
 
 ## Assumptions & Decisions
 
-| #   | Assumption / Decision                                                                                                                                                                                       | Rationale                                                                                                                                                                                                                          |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | **Client-side fan-out; `api/playlist.ts` is untouched.**                                                                                                                                                     | Partial success has no representation in `PlaylistErrorCode`, so a server merge would widen the shared response type and the handler's exhaustive status table, put untested logic in `api/`, and make the edge cache key the exact combination of playlists. |
-| 2   | **`GameState.playlist` becomes `playlists: readonly PlaylistSummary[]`; the `null` sentinel is dropped.**                                                                                                     | One playlist becomes the `n = 1` case, so no consumer carries a permanent two-shape branch. The id is not decorative — it feeds the link and the library key — so a sibling id list would leave every consumer choosing between two overlapping fields. |
-| 3   | **Cards are deduped by track id, first occurrence wins.**                                                                                                                                                    | Two identical cards in one deck read as a bug. Safe to merge on the id alone because a card from `/api/playlist` carries no year, so the copies differ in nothing the game reads.                                                    |
-| 4   | **A playlist that fails is dropped with a count; only a total failure blocks Start.**                                                                                                                        | Matches the existing non-blocking notice pattern (`truncated`, `skippedCount`), and one dead editorial playlist must not cost a five-playlist deck. The total-failure case reports the FIRST row's code, so the single error slot describes the first thing that went wrong. |
-| 5   | **No new `StartFailureCode`.**                                                                                                                                                                               | A partial failure is a notice, and a total failure is already exactly one of the existing codes. `messages.ts`'s exhaustive `Record` stays as it is.                                                                                 |
-| 6   | **The deck label is `"<first> +N more"`, from one pure `deckLabel()`.**                                                                                                                                       | Short enough for the HUD, still names a deck the player recognises. One function means the HUD, the end screen, the PDF filename and the library row cannot disagree.                                                               |
-| 7   | **Both storage versions bump to 2 and both read v1 by lifting the single id/playlist.**                                                                                                                       | Exact, not a guess — a v1 payload described exactly one playlist. Without the lift, deploying this would silently empty a curated library on a pre-start surface and discard a game in progress.                                     |
-| 8   | **The share link is a comma list in one `playlist` param, and repeated params are also accepted.**                                                                                                            | A single id parses identically, so every link already shared keeps working. A comma needs no escaping in a query value, and `getAll` tolerance costs one line.                                                                        |
-| 9   | **A link naming more than five playlists is rejected as `null` (the plain landing screen, no error), not truncated.**                                                                                          | Truncating deals a deck the link did not describe. Every other rejection in `deck-link.ts` already looks identical to "no link at all".                                                                                             |
-| 10  | **The library caps ids on read; the session deliberately does not.**                                                                                                                                          | The cap governs INPUT. A library entry is input to a future fetch, so it is capped; a stored session describes a deck that already exists, so capping it would throw away a game in progress if the cap ever rises.                  |
-| 11  | **The dedupe key for a saved deck is its ids sorted and joined, derived rather than stored.**                                                                                                                 | The same set saved in a different row order is one favourite, not two indistinguishable rows. A stored key is a second source of truth that can disagree with the ids beside it.                                                     |
-| 12  | **No cap on the combined deck size, and the year resolver is untouched.**                                                                                                                                     | Five playlists can be ~500 cards and the crawl runs at roughly 1 req/s, but the card-1 gate means play still starts in seconds and the crawl is invisible unless the player outruns it. Plan 2 says the size out loud instead.        |
+| #   | Assumption / Decision                                                                                                 | Rationale                                                                                                                                                                                                                                                                    |
+| --- | --------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **Client-side fan-out; `api/playlist.ts` is untouched.**                                                              | Partial success has no representation in `PlaylistErrorCode`, so a server merge would widen the shared response type and the handler's exhaustive status table, put untested logic in `api/`, and make the edge cache key the exact combination of playlists.                |
+| 2   | **`GameState.playlist` becomes `playlists: readonly PlaylistSummary[]`; the `null` sentinel is dropped.**             | One playlist becomes the `n = 1` case, so no consumer carries a permanent two-shape branch. The id is not decorative — it feeds the link and the library key — so a sibling id list would leave every consumer choosing between two overlapping fields.                      |
+| 3   | **Cards are deduped by track id, first occurrence wins.**                                                             | Two identical cards in one deck read as a bug. Safe to merge on the id alone because a card from `/api/playlist` carries no year, so the copies differ in nothing the game reads.                                                                                            |
+| 4   | **A playlist that fails is dropped with a count; only a total failure blocks Start.**                                 | Matches the existing non-blocking notice pattern (`truncated`, `skippedCount`), and one dead editorial playlist must not cost a five-playlist deck. The total-failure case reports the FIRST row's code, so the single error slot describes the first thing that went wrong. |
+| 5   | **No new `StartFailureCode`.**                                                                                        | A partial failure is a notice, and a total failure is already exactly one of the existing codes. `messages.ts`'s exhaustive `Record` stays as it is.                                                                                                                         |
+| 6   | **The deck label is `"<first> +N more"`, from one pure `deckLabel()`.**                                               | Short enough for the HUD, still names a deck the player recognises. One function means the HUD, the end screen, the PDF filename and the library row cannot disagree.                                                                                                        |
+| 7   | **Both storage versions bump to 2 and both read v1 by lifting the single id/playlist.**                               | Exact, not a guess — a v1 payload described exactly one playlist. Without the lift, deploying this would silently empty a curated library on a pre-start surface and discard a game in progress.                                                                             |
+| 8   | **The share link is a comma list in one `playlist` param, and repeated params are also accepted.**                    | A single id parses identically, so every link already shared keeps working. A comma needs no escaping in a query value, and `getAll` tolerance costs one line.                                                                                                               |
+| 9   | **A link naming more than five playlists is rejected as `null` (the plain landing screen, no error), not truncated.** | Truncating deals a deck the link did not describe. Every other rejection in `deck-link.ts` already looks identical to "no link at all".                                                                                                                                      |
+| 10  | **The library caps ids on read; the session deliberately does not.**                                                  | The cap governs INPUT. A library entry is input to a future fetch, so it is capped; a stored session describes a deck that already exists, so capping it would throw away a game in progress if the cap ever rises.                                                          |
+| 11  | **The dedupe key for a saved deck is its ids sorted and joined, derived rather than stored.**                         | The same set saved in a different row order is one favourite, not two indistinguishable rows. A stored key is a second source of truth that can disagree with the ids beside it.                                                                                             |
+| 12  | **No cap on the combined deck size, and the year resolver is untouched.**                                             | Five playlists can be ~500 cards and the crawl runs at roughly 1 req/s, but the card-1 gate means play still starts in seconds and the crawl is invisible unless the player outruns it. Plan 2 says the size out loud instead.                                               |
 
 ---
 

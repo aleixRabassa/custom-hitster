@@ -78,21 +78,27 @@ function rowErrorId(rowId: string): string {
 }
 
 /**
- * The nine ready-to-try playlists, so a first-time visitor does not need a playlist of their own
+ * The eight ready-to-try playlists, so a first-time visitor does not need a playlist of their own
  * to see the app work.
  *
  * ===========================================================================
  *  VERIFIED 2026-08-06, when this set replaced the five Phase 0 ids (RapCaviar
- *  is the one that survived). All nine resolve to the intended playlist, checked
- *  by `entity.uri` AND `entity.name` in the embed payload rather than by a 200
- *  response -- editorial playlists get their contents refreshed by Spotify, so a
- *  200 is not evidence that an id still means the same playlist (plan.md §5).
+ *  is the one that survived). All of them resolve to the intended playlist,
+ *  checked by `entity.uri` AND `entity.name` in the embed payload rather than by
+ *  a 200 response -- editorial playlists get their contents refreshed by
+ *  Spotify, so a 200 is not evidence that an id still means the same playlist
+ *  (plan.md §5).
  *
- *  Track counts at that check, in the order below: 100, 40, 100, 100, 50, 100,
- *  50, 50, 50. FOUR return exactly MAX_EMBED_TRACKS -- Éxitos Verano, Radio
- *  BrianPer, Electro Latino and This is Duki -- so all four raise the truncation
- *  notice by design. Preview coverage was total except Electro Latino (2 of 100
- *  without one) and This is Duki (8 of 100).
+ *  Track counts at that check, in the order below: 100, 40, 100, 50, 100, 50,
+ *  50, 50. THREE return exactly MAX_EMBED_TRACKS -- Éxitos Verano, Electro
+ *  Latino and This is Duki -- so all three raise the truncation notice by
+ *  design. Preview coverage was total except Electro Latino (2 of 100 without
+ *  one) and This is Duki (8 of 100).
+ *
+ *  "Radio Brianper" (`2wJx2AIytvpaSJLsc2wy3V`, 100 tracks) was REMOVED on
+ *  2026-08-12 at the developer's request. It was the one entry that was neither
+ *  editorial nor chart -- a personal playlist -- so it is the one whose contents
+ *  nobody but its owner controls.
  *
  *  Re-verify the same way before shipping any future change here.
  * ===========================================================================
@@ -116,7 +122,6 @@ export const SUGGESTED_PLAYLISTS: readonly { id: string; label: string; blurb: s
     blurb: 'Spanish summer hits',
   },
   { id: '37i9dQZF1DX1HCSfq0nSal', label: 'PEGAO', blurb: 'Reggaeton' },
-  { id: '2wJx2AIytvpaSJLsc2wy3V', label: 'Radio Brianper', blurb: 'Mixed radio' },
   { id: '7nnjdGCdCe24vVeSlFpGQV', label: 'Electro Latino Mejores Temazos', blurb: 'Latin electro' },
   { id: '37i9dQZEVXbNFJfN1Vw8d9', label: 'Top 50 España', blurb: 'Spain chart' },
   { id: '2ASgmy04ZIcIXLBn8nkmKj', label: 'This is Duki (all songs)', blurb: 'Argentine trap' },
@@ -256,16 +261,20 @@ export function LandingScreen({
 
   return (
     /*
-      `relative` and `pb-12` are the FOOTER'S CONTRACT, not decoration: `Footer` is
-      `absolute bottom-4`, so it anchors to this element and rides in the padding band this reserves.
-      Drop either and the line either escapes to the viewport or lands on the last suggestion.
-      `Footer.tsx` has the reasoning; `LandingScreen.test.tsx` asserts both classes.
+      `relative` and a bottom band of AT LEAST `pb-12` are the FOOTER'S CONTRACT, not decoration:
+      `Footer` is `absolute bottom-4`, so it anchors to this element and rides in the padding band
+      this reserves. Drop either and the line either escapes to the viewport or lands on the last
+      suggestion. `Footer.tsx` has the reasoning; `LandingScreen.test.tsx` asserts both.
+
+      `pb-20` rather than the contract's minimum `pb-12`, asked for on 2026-08-12 as more room above
+      the footer. The extra 32px is clearance, not reservation: `bottom-4` measures from the padding
+      box either way, so what grows is the gap between the last suggestion and the line.
 
       =============================================================================
        NO `justify-center` HERE ANY MORE, AND THAT IS THE WHOLE LAYOUT CHANGE
        (2026-08-12).
 
-       This column has ALWAYS outgrown the viewport -- nine suggestions plus a
+       This column has ALWAYS outgrown the viewport -- eight suggestions plus a
        library -- so `justify-center` on it centred nothing: it only applies to the
        free space of a container that has some, and this one never did. The
        centring the developer asked for now lives on the HERO section below, which
@@ -277,7 +286,7 @@ export function LandingScreen({
        the viewport plus 3rem of padding it cannot see.
       =============================================================================
     */
-    <main className="relative flex min-h-dvh flex-col items-center gap-10 bg-page px-6 pb-12 text-fg">
+    <main className="relative flex min-h-dvh flex-col items-center gap-4 bg-page px-6 pb-20 text-fg">
       {/*
         ===========================================================================
          THE HERO: THE LOGO, THE ONE SENTENCE, AND THE FORM -- CENTRED IN THE
@@ -313,30 +322,57 @@ export function LandingScreen({
              fixed that, and it is the reason the identity was regenerated
              rather than merely reused.
 
-             `width`/`height` are the intrinsic 320 x 320 of the file, set as
+             `width`/`height` are the intrinsic 384 x 384 of the file, set as
              attributes so the box is reserved before the image decodes: this is
              the largest element on the app's front door and a late-arriving
-             logo would shove the form it is centred with. Displayed at 128px,
-             which is 2.5x on a retina phone. Never swap this for one of the
-             `pwa-*.png` icons: they are the same artwork at 512px and 128 kB,
-             on the one screen every visitor pays for -- and the full 1254px
-             master is in `docs/assets/`, deliberately outside `public/`,
-             because everything in `public/` ships AND is precached.
+             logo would shove the form it is centred with. Displayed at 192px,
+             which is exactly 2x on a retina phone -- the file was regenerated at
+             384 when the display size grew, rather than upscaling a 240. Never
+             swap this for one of the `pwa-*.png` icons: they are the same
+             artwork at 512px and 68 kB, on the one screen every visitor pays
+             for -- and the full 1254px master is in `docs/assets/`,
+             deliberately outside `public/`, because everything in `public/`
+             ships AND is precached.
+
+             ===================================================================
+              THE EDGES ARE SOFTENED IN THE ASSET, AND A CSS MASK WAS TRIED HERE
+              AND REMOVED. Do not add one back without measuring first.
+
+              The artwork is a neon card on a PURE BLACK backdrop and the page is
+              `--color-page` (#0a0a0a), so the logo read as a square pasted onto
+              the screen: a 4% luminance step across a hard straight edge is what
+              an eye is built to find. The fix is in the FILE -- every derivative
+              now has its black floor raised to exactly the page colour, so the
+              backdrop and the page are the same colour and there is no step to
+              see. It works in every browser and needs no CSS.
+
+              `mask-x-from-90% mask-y-from-90%` was added on top of that and then
+              measured out again. Two reasons, and the first is the trap:
+              `mask-x-from-*` measures from the CENTRE as a fraction of the FULL
+              axis, so a 90% stop fades the outer 10% of the width -- which is the
+              outer 20% of the half-edge, twice what the reasoning assumed. The
+              artwork's bright pixels span 11.0%..95.8% horizontally, so the band
+              landed ON the neon frame: its right edge was attenuated to 0.44 and
+              the bottom-right corner to ~0.3, ASYMMETRICALLY, because the artwork
+              is not centred in its own canvas. The second reason is that it had
+              nothing left to do -- from 96.6% outward every pixel is already
+              exactly the page colour, so a mask there is a no-op by construction.
+             ===================================================================
             ===================================================================
           */}
           <h1>
             <img
               src="/logo.webp"
               alt="Playlist Jitster"
-              width={320}
-              height={320}
+              width={384}
+              height={384}
               fetchPriority="high"
-              className="size-32"
+              className="size-48"
             />
           </h1>
-          <p className="max-w-content text-sm text-fg-secondary">
-            Paste up to {MAX_DECK_PLAYLISTS} public Spotify playlist links to deal one deck. Scan a
-            card to hear the song, then guess the year.
+          <p className="text-sm text-fg-secondary">
+            Paste up to {MAX_DECK_PLAYLISTS} public Spotify playlist links to deal one deck. Play a
+            card or scan it to hear the song, then guess the year.
           </p>
         </div>
 
@@ -357,7 +393,7 @@ export function LandingScreen({
           */
             <div key={row.id} className="flex flex-col gap-1">
               <div className="flex items-end gap-2">
-                <label className="flex flex-1 flex-col gap-1 text-sm">
+                <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm">
                   {/*
                   The first row keeps Phase 6's wording; later rows are numbered, so every input on
                   the screen has a UNIQUE accessible name. Five boxes all called "Playlist link"
@@ -561,7 +597,7 @@ export function LandingScreen({
          THE SAVED LIBRARY, AND THE EMPTY STATE IS *NOTHING AT ALL*.
 
          Not a placeholder, not "you have no saved playlists yet" (step 14). A
-         first-time visitor already has the form and nine suggestions; a fourth
+         first-time visitor already has the form and eight suggestions; a fourth
          block explaining an empty list is noise on the screen that has to make
          the app's one job obvious.
 
@@ -580,7 +616,7 @@ export function LandingScreen({
         ===================================================================
       */}
       {savedPlaylists.length === 0 ? null : (
-        <section className="flex w-full max-w-content flex-col gap-2 sm:max-w-2xl">
+        <section className="flex w-full max-w-content flex-col gap-2">
           <h2 className="text-sm text-fg-secondary">Your playlists</h2>
 
           <ul className="flex flex-col gap-2">
@@ -647,7 +683,7 @@ export function LandingScreen({
          SECONDARY BY POSITION *AND* BY WEIGHT (2026-08-12).
 
          These were full-width `bg-surface` rows directly under the form, which
-         made nine of them the visual bulk of the app's front door -- the developer's
+         made them the visual bulk of the app's front door -- the developer's
          note was that they are not a main element. They are now below the fold, in
          a two-column grid on anything wider than a phone, with no filled surface
          and quieter type. What did NOT change is what a press does: still one
@@ -660,9 +696,14 @@ export function LandingScreen({
         ===========================================================================
       */}
       <section className="flex w-full max-w-content flex-col gap-3 sm:max-w-2xl">
-        <h2 className="text-center text-xs tracking-wide text-fg-muted uppercase">
-          Or try one of these
-        </h2>
+        {/*
+          Left-aligned and in sentence case since 2026-08-12. It was centred and `uppercase`, which
+          is a lot of emphasis for the section whose whole point is that it is NOT a main element --
+          all-caps reads as a label on something important, and a centred heading over a
+          left-aligned grid draws a second axis. The string itself is unchanged, so `uppercase`
+          could simply go: it was a display transform, not the text.
+        */}
+        <h2 className="text-xs text-fg-muted">Or try one of these</h2>
 
         <ul className="grid gap-2 sm:grid-cols-2">
           {SUGGESTED_PLAYLISTS.map((playlist) => (
