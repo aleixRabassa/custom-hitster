@@ -84,6 +84,7 @@ import { CardControls } from './CardControls';
 import { CardStack } from './CardStack';
 import { DeckActionsDialog } from './DeckActionsDialog';
 import { ExitConfirmDialog } from './ExitConfirmDialog';
+import { Footer } from './Footer';
 import { Hud } from './Hud';
 import { useBackNavigation } from '../hooks/useBackNavigation';
 import { useCardAudio } from '../hooks/useCardAudio';
@@ -358,7 +359,25 @@ export function GameScreen({
   });
 
   return (
-    <main className="flex min-h-dvh flex-col items-center justify-center gap-6 bg-page p-6">
+    /*
+      ===========================================================================
+       `relative pb-20` IS `Footer`'S CONTRACT, AND THIS SCREEN PAYS FOR IT OUT OF
+       THE CARD'S HEIGHT BUDGET (2026-08-12).
+
+       The copyright line is now on every screen, mid-game included, at the
+       developer's request. `Footer` is `absolute bottom-8`, so it takes no row in
+       this column -- but the 80px band it needs is 56px more than the `p-6` this
+       screen used to have, and this column is a height budget rather than a page:
+       `--card-height` is `clamp(15rem, min(62dvh, 80vw), 24rem)` so that the HUD,
+       the notice, the card, its caption and the control bar fit a phone without
+       scrolling. On a short viewport that 56px is what makes the column overflow.
+
+       ACCEPTED, not overlooked -- and the lever if it hurts on a real device is
+       `--card-height`'s `62dvh` term in `src/index.css`, not deleting the footer
+       from this one screen. `Footer.tsx` records the same trade from its side.
+      ===========================================================================
+    */
+    <main className="relative flex min-h-dvh flex-col items-center justify-center gap-6 bg-page p-6 pb-20">
       {/*
         THE session audio element. `preload="none"` so nothing is fetched until the player
         actually asks -- a 100-card deck must not pull 100 previews for cards nobody reaches.
@@ -445,6 +464,27 @@ export function GameScreen({
           setIsDeckActionsOpen(true);
         }}
       />
+
+      {/*
+        ===========================================================================
+         THE COPYRIGHT LINE, MID-GAME (2026-08-12).
+
+         It is out of flow, so it adds no row between the controls and the bottom
+         of the screen -- what it costs is the `pb-20` band on the `<main>` above,
+         which that block accounts for.
+
+         BEFORE THE DIALOGS, so they stay last in the DOM and last in the tab
+         order. It makes no difference to what paints on top -- both dialogs are
+         `fixed z-50` -- but the tab order is a real ordering and a copyright line
+         must not sit after a modal's buttons in it.
+
+         It carries nothing about the deck: `COPYRIGHT_NOTICE` is a module constant,
+         which is what keeps this safe beside an unflipped card. Its "2026-present"
+         IS a year-shaped string, so the leak proxies that scan whole screens
+         subtract it by exact string -- see `LandingScreen.test.tsx`.
+        ===========================================================================
+      */}
+      <Footer />
 
       {/*
         Last in the DOM, so they are last in the tab order and paint over everything above without

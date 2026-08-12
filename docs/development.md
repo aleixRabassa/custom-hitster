@@ -290,7 +290,7 @@ The end-to-end checks worth running by hand, each pinning a decision:
 
 | Check                                                                                            | Status  |
 | ------------------------------------------------------------------------------------------------ | ------- |
-| Each of the eight suggested playlists loads and deals a deck                                     | Pending |
+| Every suggested playlist loads and deals a deck (re-run whenever the set is edited)              | Pending |
 | A `spotify.link` URL from a phone's share sheet loads the right playlist                         | Pending |
 | A legacy `/user/{user}/playlist/{id}` URL loads instead of erroring                              | Pending |
 | A private/deleted playlist and a track URL each produce their inline error copy                  | Pending |
@@ -351,13 +351,16 @@ covers exactly what it covered before — it is **not** invalidated by the redes
 | The back stays exactly aligned with the card at all three widths                  | Pending — **rebuilt 2026-08-06**, see below |
 | The HUD and the notice banner line up with the card's width when wide             | Pending                                     |
 | A long user-created playlist name truncates without pushing the count off the row | Pending                                     |
-| The landing screen's eight suggestions are usable at 320px                        | Pending                                     |
+| The landing screen's suggestions are all usable at 320px                          | Pending                                     |
 | A phone in **landscape**: the card fits the short viewport                        | Pending                                     |
 | The card is **square** at all three widths, not merely square on a desktop        | Pending — **new 2026-08-11**, see below     |
 | The three control gaps read as EQUAL to the gaps at the card's edges              | Pending — **new 2026-08-11**, see below     |
 | The enlarged QR fits the face on the **240px floor card**, uncropped              | Pending — **new 2026-08-11**, see below     |
 | The scan caption sits under the card and is legibly dim, not invisible            | Pending — **new 2026-08-11**, see below     |
 | The footer sits at the bottom on a short screen and at the end of a long scroll   | Pending — **new 2026-08-11**, see below     |
+| Start to the suggestions reads as a normal margin, not a void                     | Pending — **new 2026-08-12**, see below     |
+| The copyright line has visibly EQUAL air above and below it                       | Pending — **new 2026-08-12**, see below     |
+| The **game screen** still fits a short phone without scrolling                    | Pending — **new 2026-08-12**, see below     |
 
 The landscape row is what the `62dvh` term in `--card-height` exists for; without it a landscape
 phone gets a card taller than its viewport ([`architecture.md`](./architecture.md) §3).
@@ -378,8 +381,18 @@ phone gets a card taller than its viewport ([`architecture.md`](./architecture.m
 > end screens the column is shorter than the viewport, so `<main>` is exactly `min-h-dvh` and the
 > absolutely positioned line lands at the bottom of the screen; on the landing screen at 320px the
 > column outgrows the viewport, so `<main>` stretches and the line lands at the end of the scroll
-> instead. Check both, and check that it never sits ON the last suggestion — the reserved band (`pb-20` here, `pb-12` elsewhere) is the
+> instead. Check both, and check that it never sits ON the last suggestion — the reserved band
+> (`pb-20`, the same on all four screens since 2026-08-12) is the
 > only thing separating them, and jsdom cannot see a pixel of it.
+>
+> **The three 2026-08-12 rows are the same shape: arithmetic that nothing here executes.** The gap
+> row is the removal of the hero's `min-h-[88dvh]` — the suite asserts the class is absent and cannot
+> see the distance that replaced it. The copyright row is `bottom-8` inside `pb-20`, i.e. 32px above
+> and 32px below a ~16px line; the two numbers are paired and a `bottom-4` sneaking back leaves every
+> check green. **The game-screen row is the one with a real failure mode**: the footer's band costs
+> that column 56px it did not spend before, and that column is a height budget (`--card-height` exists
+> so the HUD, card, caption and controls fit a phone). If it overflows, the fix is the `62dvh` term,
+> **not** removing the footer from that screen — see [`architecture.md`](./architecture.md) §3.
 
 > **The backs row was a measured failure and the geometry has now been replaced rather than retuned.**
 > At the card's 448px ceiling the two peeking backs peeked by **1.04px** and **2.08px** at the bottom and

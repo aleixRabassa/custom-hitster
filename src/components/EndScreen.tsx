@@ -115,10 +115,11 @@ export function EndScreen({
 }: EndScreenProps) {
   return (
     /*
-      `relative` + a band of at least `pb-12` are `Footer`'s contract; this screen uses the minimum -- it is `absolute bottom-4` and rides in the band
-      this reserves. See `Footer.tsx`; `EndScreen.test.tsx` asserts both.
+      `relative pb-20` is `Footer`'s contract, and the band is the SAME on all four screens as of
+      2026-08-12: the footer is `absolute bottom-8` and 80px is what puts 32px above the line and
+      32px below it. See `Footer.tsx`; `EndScreen.test.tsx` asserts both.
     */
-    <main className="relative flex min-h-dvh flex-col items-center justify-center gap-8 bg-page p-6 pb-12 text-fg">
+    <main className="relative flex min-h-dvh flex-col items-center justify-center gap-8 bg-page p-6 pb-20 text-fg">
       <div className="flex flex-col items-center gap-2 text-center">
         <h1 className="text-3xl font-semibold">Deck finished</h1>
         <p className="text-sm text-fg-secondary">

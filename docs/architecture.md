@@ -307,7 +307,7 @@ src/App.tsx             THE container. The only caller of useGameSession(). Swit
                         on state.status; holds the ended-destination flag and the
                         notice-dismissal state. No router
 src/components/
-  LandingScreen.tsx     URL input, inline validation, 9 suggested playlists, and
+  LandingScreen.tsx     URL input, inline validation, the suggested playlists, and
                         "Your playlists" — the saved library, above the suggestions
   PreparingScreen.tsx   The card-1 gate. COUNT-ONLY
   Hud.tsx               Cards remaining + playlist name. Counts only, no Exit
@@ -678,23 +678,36 @@ flip for free, and reproducing that with `{isFlipped ? null : …}` would remove
 `justify-center` column — so the card itself would jump on every flip. The flip is a toggle, so the
 sentence stays true.
 
-#### The footer is on three screens, and the two omissions are the decision
+#### The footer is on all four screens, and the one omission is the decision
 
-`src/components/Footer.tsx` renders the copyright line on the **landing, preparing and end** screens.
-There is no shell to hang it on: every screen is its own `min-h-dvh` centred column, so a footer
-rendered once in `App.tsx` or `main.tsx` would be a sibling of a full-viewport column and give every
-screen a permanent scrollbar. **The game screen is excluded** because its column is a height budget
-rather than a page — `--card-height` is sized against the viewport precisely so the HUD, card, caption
-and control bar fit a phone, and a footer spends ~40px of that on a line nobody reads mid-game (a
-`mt-auto` variant is worse: auto margins beat `justify-center`, so the card would stop being centred).
-**The crash screen is excluded** for a different reason: `ErrorBoundary`'s fallback is a `role="alert"`,
-so its whole subtree is announced, and a copyright line would be read out to a screen-reader user in
-the middle of being told the game crashed.
+`src/components/Footer.tsx` renders the copyright line on the **landing, preparing, game and end**
+screens. There is no shell to hang it on: every screen is its own `min-h-dvh` centred column, so a
+footer rendered once in `App.tsx` or `main.tsx` would be a sibling of a full-viewport column and give
+every screen a permanent scrollbar.
+
+**The game screen was excluded until 2026-08-12, and the reason it gave is still true — it was
+overruled, not refuted.** That column is a height budget rather than a page: `--card-height` is
+`clamp(15rem, min(62dvh, 80vw), 24rem)` precisely so the HUD, card, caption and control bar fit a phone
+without scrolling, and the `pb-20` band the footer needs takes **56px more than the `p-6` that screen
+used to have**, on every viewport. On a short phone that is what makes the column overflow and the
+screen scroll. The developer asked for the line to be visible at all times, mid-game included, so the
+cost is accepted — and **the lever, if it hurts on a real device, is `--card-height`'s `62dvh` term,
+not a re-exclusion by hand.** How it is placed there did not change: still `absolute`, never `mt-auto`,
+because auto margins beat `justify-content` and the card would stop being centred.
+
+**The crash screen is still excluded** for a reason that has nothing to do with pixels:
+`ErrorBoundary`'s fallback is a `role="alert"`, so its whole subtree is announced, and a copyright line
+would be read out to a screen-reader user in the middle of being told the game crashed.
 
 **It is pinned to the bottom out of flow, and that is a two-ended contract.** `Footer` is
-`absolute inset-x-0 bottom-4`; every host carries **`relative` and a band of at least `pb-12`** (the landing screen uses `pb-20`), the footer rides in that
-reserved padding band (48px below the content box against a ~16px line, so it overlaps nothing), and
-each screen's test asserts both classes — the same shape of contract as `card-ring`, where the utility
+`absolute inset-x-0 bottom-8`; every host carries **`relative pb-20`** — the same band on all four
+screens since 2026-08-12. **The two numbers are one number split in two**: 80px of band, a 32px offset
+and a ~16px line put exactly **32px above the copyright and 32px below it**, which is the symmetry the
+developer asked for ("margen debajo igual al margen superior"). Before it, `bottom-4` inside a
+`pb-12`/`pb-20` band left the line 16px off the screen's edge under anything from 16px to 48px of air.
+Move one number without the other, on any host, and the symmetry is silently gone — jsdom computes no
+layout, so the class names are the only grip the suite has. Each screen's test asserts both — the same
+shape of contract as `card-ring`, where the utility
 positions itself against an ancestor it does not create. The textbook `mt-auto` sticky footer does not
 work here: every screen is a `min-h-dvh flex flex-col justify-center` column, and **an auto margin beats
 `justify-content`** — the first `mt-auto` swallows the free space and the screen's content stops being
@@ -710,7 +723,9 @@ Two non-obvious consequences. The `<footer>` sits inside each screen's `<main>`,
 intended outcome, and why it carries no explicit `role`. And its "2026-present" is a **year-shaped
 number on a pre-reveal surface**, which three leak-proxy tests caught immediately; they now subtract
 `COPYRIGHT_NOTICE` by exact string rather than loosening the `\b(19|20)\d{2}\b` pattern, so the proxy
-stays absolute for everything else.
+stays absolute for everything else. On the game screen the footer is rendered **before the two
+dialogs**, which is the tab order — painting is unaffected either way, since both dialogs are
+`fixed z-50`.
 
 **One consequence reaches outside presentation.** `SWIPE_COMMIT_DISTANCE_PX` (96px) was chosen as a
 third of a 288px card, which is now not a size the card ever takes: the width runs 240px → 384px, so

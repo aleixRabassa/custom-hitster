@@ -101,6 +101,54 @@ describe('GameScreen', () => {
     vi.restoreAllMocks();
   });
 
+  it('should host the footer: positioned, with the bottom band reserved', () => {
+    // ===================================================================
+    //  THIS SCREEN'S HALF OF `Footer`'S CONTRACT, AND IT IS THE ONE THAT
+    //  DID NOT EXIST BEFORE 2026-08-12.
+    //
+    //  The copyright line used to be kept OFF the game screen on purpose --
+    //  this column is a height budget, not a page -- and the developer
+    //  asked for it to be visible at all times, mid-game included. So the
+    //  exclusion is gone and the contract applies here like anywhere else:
+    //  `relative` (or the `absolute bottom-8` line anchors to the viewport
+    //  rather than to this screen) and `pb-20` (or it lands on the control
+    //  bar).
+    //
+    //  The footer must also come BEFORE the dialogs in the DOM, which is
+    //  the tab order: a copyright line after a modal's buttons is a
+    //  keyboard trap-shaped surprise. jsdom computes no layout, so the
+    //  class names and the document order are the whole of what is
+    //  observable here.
+    // ===================================================================
+    const { container } = render(renderScreen({}));
+    const main = container.querySelector('main');
+
+    expect(main?.className).toContain('relative');
+    expect(main?.className).toContain('pb-20');
+
+    const footer = container.querySelector('footer');
+    expect(footer).not.toBeNull();
+    expect(footer?.className).toContain('absolute');
+  });
+
+  it('should keep the footer ahead of the deck-actions dialog in the tab order', () => {
+    // The ordering half of the test above, asserted only when a dialog actually exists. Both
+    // dialogs are `fixed z-50`, so painting is unaffected either way -- what would change is where
+    // the copyright line falls for someone tabbing through an open modal.
+    const { container } = render(renderScreen({}));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Keep this deck' }));
+
+    const footer = container.querySelector('footer');
+    const dialog = container.querySelector('[role="dialog"]');
+    expect(footer).not.toBeNull();
+    expect(dialog).not.toBeNull();
+
+    if (footer === null || dialog === null) throw new Error('unreachable');
+    // `DOCUMENT_POSITION_FOLLOWING` -- the dialog comes after the footer.
+    expect(footer.compareDocumentPosition(dialog)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
   it('should render exactly one audio element regardless of deck size', () => {
     // The session-scoped ownership decision. One element is what makes bleed-across-cards
     // structurally impossible, and it is also what plan 2's stack of 2-3 visible cards

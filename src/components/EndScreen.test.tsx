@@ -61,16 +61,19 @@ describe('EndScreen', () => {
   });
 
   it('should host the footer: positioned, with the bottom band reserved', () => {
-    // The screen's half of `Footer`'s contract. The footer is `absolute bottom-4`, so this `<main>`
+    // The screen's half of `Footer`'s contract. The footer is `absolute bottom-8`, so this `<main>`
     // has to be `relative` (or the line anchors to the viewport instead of to this screen) and has
-    // to reserve `pb-12` (or the line lands on top of the deck actions). jsdom computes no layout,
+    // to reserve `pb-20` (or the line lands on top of the deck actions). jsdom computes no layout,
     // so the classes are the only observable end of it -- and both are easy to lose to a tidy-up of
     // the class string, which is why they are asserted here rather than trusted.
+    //
+    // `pb-20` rather than the old `pb-12` since 2026-08-12: the band is now the same on all four
+    // screens and is sized so the line has equal air above and below it. See `Footer.tsx`.
     const { container } = renderEnd();
     const main = container.querySelector('main');
 
     expect(main?.className).toContain('relative');
-    expect(main?.className).toContain('pb-12');
+    expect(main?.className).toContain('pb-20');
     expect(container.querySelector('footer')).not.toBeNull();
   });
 

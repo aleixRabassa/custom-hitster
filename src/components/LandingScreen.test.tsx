@@ -54,10 +54,11 @@ const SAVED = [
  * Query a suggestion button by its label.
  *
  * The label is ESCAPED before it becomes a pattern, and that is load-bearing rather than
- * defensive: "This is Duki (all songs)" contains parentheses, and an unescaped `new RegExp()`
- * turns them into a capture group -- the pattern then matches "This is Duki all songs", which
- * appears nowhere, and the query fails on a button that renders perfectly. A plain string is not
- * an option either, because the accessible name is the label AND the blurb.
+ * defensive. `SUGGESTED_PLAYLISTS` is edited on request and its labels are whatever the playlists
+ * are called, so a regex metacharacter arrives in one sooner or later -- a label containing
+ * parentheses turns them into a capture group under an unescaped `new RegExp()`, the pattern then
+ * matches a string that appears nowhere, and the query fails on a button that renders perfectly.
+ * A plain string is not an option either, because the accessible name is the label AND the blurb.
  */
 function suggestionButton(label: string) {
   return screen.getByRole('button', {
@@ -132,17 +133,48 @@ describe('LandingScreen', () => {
     // column is the one that OUTGROWS the viewport (eight suggestions plus a library), so `<main>`
     // stretches past `min-h-dvh` and the absolutely positioned footer goes with it -- at the end of
     // the scroll rather than hovering over it. Without `relative` here it would anchor to the
-    // viewport instead and float over the suggestions; without `pb-12` it would land on the last one.
+    // viewport instead and float over the suggestions; without `pb-20` it would land on the last one.
     const { container } = renderLanding();
     const main = container.querySelector('main');
 
     expect(main?.className).toContain('relative');
-    // `pb-20` since 2026-08-12 -- more clearance above the line, asked for by the developer. The
-    // CONTRACT is a band of at least `pb-12`, so this asserts the class that is actually there
-    // rather than the minimum: a screen that reserved less is the bug, and a screen that reserved
-    // more by accident should still be a deliberate number.
+    // `pb-20` on every host since 2026-08-12, and it is PAIRED with the footer's `bottom-8`: 80px of
+    // band around a 32px offset and a ~16px line is what puts equal air above and below the copyright.
+    // Neither number is free to move on its own -- see `Footer.tsx`.
     expect(main?.className).toContain('pb-20');
     expect(container.querySelector('footer')?.className).toContain('absolute');
+  });
+
+  it('should not reserve a viewport-sized band above the suggestions', () => {
+    // ===================================================================
+    //  THE HERO'S `min-h-[88dvh]` IS GONE (2026-08-12), AND THIS IS THE
+    //  ONLY THING THAT CAN NOTICE IF IT COMES BACK.
+    //
+    //  It existed for one day, to centre the form in the first screenful.
+    //  What it actually did was make the distance between Start and "Or try
+    //  one of these" equal to whatever was left of the viewport -- on a
+    //  desktop, a screenful of empty page, which reads as the page having
+    //  ended. The developer asked for a standard margin instead, and a
+    //  standard margin is what the column's own `gap-*` already is.
+    //
+    //  jsdom computes no layout, so the class name is the whole of what is
+    //  observable: nothing here can see a gap, only the rule that would
+    //  create one. Asserted as "no descendant carries a dvh-based minimum
+    //  height" rather than against the one literal, because the way this
+    //  regresses is somebody reaching for a slightly different number.
+    // ===================================================================
+    const { container } = renderLanding();
+
+    // `getAttribute` rather than `.className`, which is an `SVGAnimatedString` on an SVG element
+    // and would throw this assertion off the moment an icon lands on this screen.
+    for (const element of container.querySelectorAll('*')) {
+      expect(element.getAttribute('class') ?? '').not.toMatch(/min-h-\[\d+dvh\]/);
+    }
+
+    // The column's gap is the standard margin that replaced it, and it is the SAME between the
+    // hero and the suggestions as it is inside the hero -- which is what makes it read as a
+    // rhythm rather than as a gap somebody chose.
+    expect(container.querySelector('main')?.className).toContain('gap-8');
   });
 
   it('should render the logo as the level-1 heading, named after the app', () => {
@@ -173,33 +205,41 @@ describe('LandingScreen', () => {
     expect(logo?.getAttribute('height')).toBe('384');
   });
 
-  it('should centre the form in the viewport with the suggestions below it', () => {
+  it('should put the form first and the suggestions in a later section', () => {
     // ===================================================================
-    //  A CLASS-NAME ASSERTION, AND THE USUAL CAVEAT: jsdom computes no
-    //  layout, so this cannot prove anything is centred. What it pins is the
-    //  ARRANGEMENT that made the centring possible at all -- the hero owns a
-    //  viewport-sized minimum and `<main>` does not centre.
+    //  ORDER IS ALL THAT IS LEFT OF THIS TEST, AND THAT IS THE POINT.
     //
-    //  `justify-center` on `<main>` is the specific regression: it was there
-    //  for two phases doing NOTHING, because this column always outgrows the
-    //  viewport (eight suggestions plus a library) and `justify-content` only
-    //  spends free space. Putting it back would look harmless and would not
-    //  centre anything.
+    //  It used to assert a viewport-sized hero as well ("centre the form in
+    //  the viewport"). That minimum lasted one day -- see the layout test
+    //  above -- and the demotion of the suggestions was always supposed to
+    //  be weight and ORDER rather than a screenful of empty page, so what
+    //  survives the removal is exactly the half that was load-bearing.
     //
-    //  The row in `development.md` §5 is what actually checks the result.
+    //  `justify-center` on `<main>` is still the specific regression to
+    //  guard: it was there for two phases doing NOTHING, because this column
+    //  always outgrows the viewport (eight suggestions plus a library) and
+    //  `justify-content` only spends free space. Putting it back would look
+    //  harmless and would centre nothing.
+    //
+    //  jsdom computes no layout, so document order is the strongest thing
+    //  observable here. The row in `development.md` §5 checks the result.
     // ===================================================================
     const { container } = renderLanding();
     const main = container.querySelector('main');
     // The hero is found through the FORM it contains, not as `main`'s first `<section>`: a position
-    // query would silently retarget all three assertions below at anything inserted above it.
+    // query would silently retarget the assertions below at anything inserted above it.
     const hero = container.querySelector('form')?.closest('section');
+    const suggestions = screen.getByText('Or try one of these').closest('section');
 
     expect(main?.className).not.toContain('justify-center');
-    expect(hero?.className).toContain('justify-center');
-    expect(hero?.className).toContain('min-h-[88dvh]');
-    // The form is inside the hero; the suggestions are a later sibling of it, i.e. below the fold.
     expect(hero?.querySelector('form')).not.toBeNull();
-    expect(screen.getByText('Or try one of these').closest('section')).not.toBe(hero);
+    expect(suggestions).not.toBe(hero);
+
+    if (hero === null || hero === undefined || suggestions === null) {
+      throw new Error('unreachable');
+    }
+    // `DOCUMENT_POSITION_FOLLOWING` -- the suggestions come after the hero, never before it.
+    expect(hero.compareDocumentPosition(suggestions)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
   it('should show an inline error for an unparseable URL without submitting', () => {
@@ -366,16 +406,30 @@ describe('LandingScreen', () => {
     }
   });
 
-  it('should render eight suggested playlists', () => {
-    // Enough that a first-time visitor with no playlist of their own can still see the app work.
-    // Eight since 2026-08-12, when "Radio Brianper" -- the one personal playlist in the set -- was
-    // removed at the developer's request.
+  it('should render every suggested playlist', () => {
+    // A FLOOR rather than an exact count, and no named row anywhere in this file. The set is edited
+    // on request, so an exact length turns every such edit into a failing test that says nothing --
+    // what actually matters is that there are enough of them for a first-time visitor with no
+    // playlist of their own to see the app work, and that all of them reach the screen.
     renderLanding();
 
-    expect(SUGGESTED_PLAYLISTS).toHaveLength(8);
+    expect(SUGGESTED_PLAYLISTS.length).toBeGreaterThanOrEqual(5);
     for (const playlist of SUGGESTED_PLAYLISTS) {
       expect(screen.queryByText(playlist.label)).not.toBeNull();
     }
+  });
+
+  it('should suggest each playlist only once', () => {
+    /*
+      A duplicate id is invisible on the screen -- two rows with different labels, both submitting
+      the same deck -- and it arrives the obvious way: the set is maintained by pasting links, and
+      one pasted twice under two names looks exactly like two additions. Caught for real on
+      2026-08-12, when a requested pair of new rows carried the same link.
+
+      Labels too: two rows sharing one would break `suggestionButton()`, which is a `getByRole`.
+    */
+    expect(new Set(SUGGESTED_PLAYLISTS.map((p) => p.id)).size).toBe(SUGGESTED_PLAYLISTS.length);
+    expect(new Set(SUGGESTED_PLAYLISTS.map((p) => p.label)).size).toBe(SUGGESTED_PLAYLISTS.length);
   });
 
   it('should submit a suggestion immediately as a single playlist', () => {
@@ -387,9 +441,11 @@ describe('LandingScreen', () => {
     // for the demo path (decision 5).
     const { onSubmit } = renderLanding();
 
-    fireEvent.click(suggestionButton('Top 50 Global'));
+    // Sampled off the head of the list rather than named, so editing the set never edits this test.
+    const sample = SUGGESTED_PLAYLISTS[0]!;
+    fireEvent.click(suggestionButton(sample.label));
 
-    const expected = 'https://open.spotify.com/playlist/37i9dQZEVXbMDoHDwVN2tF';
+    const expected = `https://open.spotify.com/playlist/${sample.id}`;
     expect(onSubmit).toHaveBeenCalledWith([expected]);
     expect(rowInput(0).value).toBe(expected);
     expect(screen.getAllByRole('textbox')).toHaveLength(1);
@@ -423,9 +479,10 @@ describe('LandingScreen', () => {
     typeInRow(0, PLAYLIST_URL);
     typeInRow(1, SECOND_URL);
 
-    fireEvent.click(suggestionButton('Top 50 Global'));
+    const sample = SUGGESTED_PLAYLISTS[0]!;
+    fireEvent.click(suggestionButton(sample.label));
 
-    const expected = 'https://open.spotify.com/playlist/37i9dQZEVXbMDoHDwVN2tF';
+    const expected = `https://open.spotify.com/playlist/${sample.id}`;
     expect(onSubmit).toHaveBeenCalledExactlyOnceWith([expected]);
     expect(screen.getAllByRole('textbox')).toHaveLength(1);
     expect(rowInput(0).value).toBe(expected);

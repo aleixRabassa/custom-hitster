@@ -239,12 +239,13 @@ buttons already fill.
       double-invokes render and effects rather than handlers — so the double-fetch hazard the link
       path has (and absorbs through `usePlaylist`'s abort) does not exist on the form path at all.
     - **A real five-playlist deck: 390 raw tracks → 365 after the dedupe** (25 duplicates, 6.4%).
-      Measured against the live embed endpoint on 2026-08-07 with Éxitos Verano (100), PEGAO (40),
-      Radio Brianper (100), Electro Latino (100) and Top 50 España (50) — five of the nine
-      suggestions. **Three of those five return exactly `MAX_EMBED_TRACKS`, so a deck like this
-      raises the truncation notice**, and the overlap is real rather than theoretical: 25 tracks
-      appear in more than one of five Spanish-chart playlists, which is exactly the case the dedupe
-      exists for. The deck then loses roughly a third again to `no-years-found` drops at play time,
+      Measured against the live embed endpoint on 2026-08-07 over five of the then-current
+      suggestions, all Spanish-chart or Spanish-hits playlists, at 100 / 40 / 100 / 100 / 50 tracks
+      (the set has been edited since, and is not enumerated in `docs/` — see `plan.md` §5).
+      **Three of those five returned exactly `MAX_EMBED_TRACKS`, so a deck like this raises the
+      truncation notice**, and the overlap is real rather than theoretical: 25 tracks appeared in
+      more than one of five playlists drawn from the same scene, which is exactly the case the
+      dedupe exists for. The deck then loses roughly a third again to `no-years-found` drops at play time,
       so ~240 cards is the shape of what actually gets played. **Decision 12's "no cap" is therefore
       not yet stress-tested against the HUD** — 365 is well past 400/3 but not absurd; the open
       question below stays open.

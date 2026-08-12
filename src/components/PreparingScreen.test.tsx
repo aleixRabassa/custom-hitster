@@ -40,15 +40,15 @@ describe('PreparingScreen', () => {
   });
 
   it('should host the footer: positioned, with the bottom band reserved', () => {
-    // The screen's half of `Footer`'s contract -- the footer is `absolute bottom-4`, so this `<main>`
-    // must be `relative` and must reserve `pb-12`. This is also the screen that made the textbook
+    // The screen's half of `Footer`'s contract -- the footer is `absolute bottom-8`, so this `<main>`
+    // must be `relative` and must reserve `pb-20`. This is also the screen that made the textbook
     // `mt-auto` sticky footer unusable: its content is a spinner and two lines, so an auto margin
     // eating the free space would leave them clinging to the top of an otherwise empty viewport.
     const { container } = render(<PreparingScreen />);
     const main = container.querySelector('main');
 
     expect(main?.className).toContain('relative');
-    expect(main?.className).toContain('pb-12');
+    expect(main?.className).toContain('pb-20');
     // And the column still centres its content, which is what the positioning bought.
     expect(main?.className).toContain('justify-center');
   });

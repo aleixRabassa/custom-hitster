@@ -197,14 +197,14 @@ a container state field that would otherwise need keeping in step.
   - [x] Inline error states from the message map, both for client-side parse failures and for server
         codes
   - [x] A disabled/loading submit state while the request is in flight
-  - [x] **Suggested playlists** — the five Phase 0 ids from `plan.md` §5 (Today's Top Hits, Rock
-        Classics, RapCaviar, Reggae Classics, All Out 80s). Clicking one fills and submits the input
-        exactly as if pasted
+  - [x] **Suggested playlists** — the ids `plan.md` §5 calls for, which are recorded only in
+        `SUGGESTED_PLAYLISTS` and not repeated in `docs/` (the set is edited on request and drifts).
+        Clicking one fills and submits the input exactly as if pasted
   - [x] Suggested-playlist labels are genre/era names, not track information — the landing screen is
         a pre-Start surface and must leak nothing about any deck
-- [x] **Step 9 — Re-verify the five suggested playlist ids before shipping.** `plan.md` says to check
+- [x] **Step 9 — Re-verify every suggested playlist id before shipping.** `plan.md` says to check
       `entity.uri` in the embed JSON rather than just a 200 response, because editorial playlists get
-      refreshed by Spotify. Record the date verified alongside the ids.
+      refreshed by Spotify and a personal one can be re-pointed by its owner.
 - [x] **Step 10 — Build `PreparingScreen.tsx`** for the card-1 gate. This is the **only** status a
       loading screen may render for.
   - [x] **Count-only.** No track titles, no artists, no years — findings entry #6 lists loading
@@ -315,7 +315,7 @@ a container state field that would otherwise need keeping in step.
 - [x] `should submit a spotify.link URL instead of rejecting it` — covers the short-link decision
 - [x] `should render server error copy from the error code` — covers the message map wiring
 - [x] `should disable the submit control while loading` — covers double-submit
-- [x] `should render five suggested playlists` — covers the section
+- [x] `should render every suggested playlist` — covers the section
 - [x] `should submit the corresponding URL when a suggestion is clicked` — covers fill-and-submit
 - [x] `should not render any track information` — the landing screen's leak assertion
 - [x] `should render a count-only progress line` — covers `PreparingScreen.test.tsx`
@@ -401,7 +401,7 @@ a container state field that would otherwise need keeping in step.
 - **Manual verification:**
   - `npx vercel dev`, then paste a real playlist URL and play through several cards. `pnpm dev`
     cannot do this — the playlist request returns function source.
-  - Each of the five suggested playlists loads and deals a deck.
+  - Every suggested playlist loads and deals a deck.
   - A `spotify.link` URL from a phone's Spotify share sheet loads the right playlist.
   - A legacy `/user/{user}/playlist/{id}` URL loads instead of erroring.
   - A private/deleted playlist and a track URL each produce their inline error copy.
@@ -488,10 +488,10 @@ a container state field that would otherwise need keeping in step.
 NOT done and is owed**, along with the manual verification list in Testing Strategy. Gate green:
 `pnpm typecheck && pnpm lint && pnpm test && pnpm build`, **408 tests across 32 files** (up from 310).
 
-Step 9's re-verification was done and passed: all five suggested playlist ids resolve to the intended
-playlist, checked by `entity.uri` **and** `entity.name` rather than by a 200. Counts 50 / 100 / 50 /
-100 / 100, matching Phase 0 exactly, including Reggae Classics' two preview-less tracks. The date is
-recorded beside the ids in `SUGGESTED_PLAYLISTS`.
+Step 9's re-verification was done and passed: every suggested playlist id resolved to the intended
+playlist, checked by `entity.uri` **and** `entity.name` rather than by a 200. The set has been
+edited since and is **not** enumerated here — it lives only in `SUGGESTED_PLAYLISTS`, for the reason
+recorded there and in `plan.md` §5.
 
 ### The bug that was not in the plan, and that changed where a control lives
 

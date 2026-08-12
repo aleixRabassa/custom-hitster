@@ -256,20 +256,18 @@ Browser (SPA)                          Serverless (Vercel Functions)
 ### Phase 6 — Game Flow Screens (complete)
 
 - [x] Landing: URL input, validation, inline error states
-- [x] **Suggested-playlists section** on the landing screen — a handful of ready-to-try public playlist links so a first-time visitor doesn't need their own playlist to see the app work. Clicking one fills/submits the URL input exactly as if pasted. Reuse the Phase 0 spike playlists — already verified against the embed adapter, with genre/era variety and known preview coverage:
-  - Today's Top Hits — `37i9dQZF1DXcBWIGoYBM5M`
-  - Rock Classics — `37i9dQZF1DWXRqgorJj26U`
-  - RapCaviar — `37i9dQZF1DX0XUsuxWHRQd`
-  - Reggae Classics — `37i9dQZF1DXbSbnqxMTGx9`
-  - All Out 80s — `37i9dQZF1DX4UtSsGT1Sbe`
+- [x] **Suggested-playlists section** on the landing screen — a handful of ready-to-try public playlist links so a first-time visitor doesn't need their own playlist to see the app work, with genre/era variety. Clicking one fills/submits the URL input exactly as if pasted.
 
-  Editorial playlists like these get their tracks refreshed by Spotify periodically, so re-verify the IDs still resolve to the intended playlist (check `entity.uri` in the embed JSON, not just a 200) before shipping.
+  **The set itself is deliberately NOT listed here, or anywhere else in `docs/`.** It is edited on
+  request and its contents drift on their own — Spotify refreshes an editorial playlist's tracks and
+  an owner can re-point, empty or hide a personal one — so a document naming the rows is stale
+  shortly after it is written, and a stale note about a *verified* id is worse than no note at all:
+  it reads as evidence. `SUGGESTED_PLAYLISTS` in `src/components/LandingScreen.tsx` is the only
+  record, and the rule that outlives any edit lives beside it there.
 
-  **Re-verified 2026-08-05.** All five resolve to the intended playlist, checked by `entity.uri` **and**
-  `entity.name`, not by a 200. Track counts: 50 / 100 / 50 / 100 / 100 — matching Phase 0's own
-  measurements exactly, including Reggae Classics' two preview-less tracks. Three of the five return
-  exactly `MAX_EMBED_TRACKS`, so they raise the truncation notice by design. The ids and the
-  verification date live in `SUGGESTED_PLAYLISTS` in `src/components/LandingScreen.tsx`.
+  What does belong in a plan is the discipline: **re-verify every id before shipping any change to
+  that set — the rows that stayed as well as the rows that arrived — by `entity.uri` AND
+  `entity.name` in the embed JSON, never by a 200.** A survivor is exactly the row nobody rechecks.
 
 - [x] **Non-blocking notices from `/api/playlist`**, both shown only when they apply and neither ever blocking Start:
   - the `truncated` warning ("this playlist may have more tracks than shown — only the first 100 could be loaded"), per the Phase 0 track-source decision

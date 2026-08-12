@@ -5,15 +5,22 @@
  *  IT IS ABSOLUTELY POSITIONED IN ITS HOST'S BOTTOM PADDING, AND THE CONTRACT
  *  IS THAT THE CALLER IS POSITIONED AND RESERVES THE BAND.
  *
- *  Every host must carry `relative` and a bottom band of AT LEAST `pb-12` --
- *  the preparing and end screens use exactly that, the landing screen uses
- *  `pb-20` (2026-08-12, asked for as more room above the line). That is the same
- *  shape of contract as `card-ring` in `src/index.css` -- the utility positions
- *  itself against an ancestor it does not create -- and it is asserted at both
- *  ends: `Footer.test.tsx` pins the classes here, and each screen's own test pins
- *  `relative` and its own band on its `<main>`. Drop `relative` from a screen and
- *  the footer silently anchors to the nearest positioned ancestor or the viewport,
- *  which is a bug nothing else would catch.
+ *  Every host carries `relative pb-20`, and the two numbers in that band are
+ *  PAIRED rather than chosen: `bottom-8` is 32px, the line is ~16px tall, so a
+ *  band of 80px leaves exactly 32px above the line and 32px below it. THE LINE IS
+ *  CENTRED IN ITS OWN BAND, which is what the developer asked for on 2026-08-12
+ *  ("margen debajo igual al margen superior") -- before it, `bottom-4` inside a
+ *  `pb-12`/`pb-20` band put the copyright 16px off the screen's edge with anything
+ *  from 16px to 48px of air above it. Change `bottom-8` without changing `pb-20`
+ *  on all four hosts, or the reverse, and the symmetry is silently gone: jsdom
+ *  computes no layout, so nothing here can measure it.
+ *
+ *  That is the same shape of contract as `card-ring` in `src/index.css` -- the
+ *  utility positions itself against an ancestor it does not create -- and it is
+ *  asserted at both ends: `Footer.test.tsx` pins the classes here, and each
+ *  screen's own test pins `relative` and `pb-20` on its `<main>`. Drop `relative`
+ *  from a screen and the footer silently anchors to the nearest positioned
+ *  ancestor or the viewport, which is a bug nothing else would catch.
  *
  *  WHY OUT OF FLOW, when "put it last and give it `mt-auto`" is the textbook
  *  sticky footer: every screen here centres a column -- the preparing and end
@@ -29,11 +36,10 @@
  *  screen's children, which changes their `gap-*` semantics. Positioning is one
  *  class here and two on each host, and it moves nothing.
  *
- *  It rides in the PADDING because that band is already empty: `p-6` plus the
- *  extra `pb-12` gives 48px below the content box (80px on the landing screen,
- *  which reserves `pb-20`), and a 12px line is ~16px
- *  tall, so there is no overlap to guard against even at the 320px width where
- *  the landing screen's column is tallest.
+ *  It rides in the PADDING because that band is already empty: `pb-20` gives 80px
+ *  below the content box and the line occupies the middle 16px of it, so there is
+ *  no overlap to guard against even at the 320px width where the landing screen's
+ *  column is tallest.
  *
  *  BOTTOM OF THE PAGE, WHICH IS THE BOTTOM OF THE SCREEN WHENEVER THE SCREEN IS
  *  THE PAGE. On the landing screen -- the one column that outgrows the viewport,
@@ -46,38 +52,40 @@
  * ===========================================================================
  *
  * ===========================================================================
- *  IT IS RENDERED ON THE LANDING, PREPARING AND END SCREENS -- AND THE TWO
- *  SCREENS IT IS KEPT OFF ARE THE ONLY INTERESTING DECISIONS IN THIS FILE.
+ *  IT IS RENDERED ON ALL FOUR OF THE APP'S SCREENS, INCLUDING THE GAME SCREEN
+ *  (2026-08-12) -- AND THE ONE SCREEN IT IS KEPT OFF IS THE ONLY INTERESTING
+ *  DECISION LEFT IN THIS FILE.
  *
- *  Every screen in this app is its own `min-h-dvh` column, centred either by
- *  `justify-center` or (the landing screen) by a hero section inside it, so
- *  there is no shell to hang a footer on: a footer
- *  rendered once in `App.tsx` or `main.tsx` would be a SIBLING of a
- *  full-viewport column, which makes the page 100dvh + the footer's height and
- *  gives every screen a permanent scrollbar. Rendering it as the last child of
- *  each `<main>` costs nothing and keeps each screen self-contained -- the same
- *  reason `NoticeBanner` is passed in as a node rather than positioned globally.
+ *  Every screen in this app is its own `min-h-dvh` column, so there is no shell
+ *  to hang a footer on: a footer rendered once in `App.tsx` or `main.tsx` would
+ *  be a SIBLING of a full-viewport column, which makes the page 100dvh + the
+ *  footer's height and gives every screen a permanent scrollbar. Rendering it as
+ *  the last child of each `<main>` costs nothing and keeps each screen
+ *  self-contained -- the same reason `NoticeBanner` is passed in as a node rather
+ *  than positioned globally.
  *
- *  THE GAME SCREEN IS EXCLUDED BECAUSE ITS COLUMN IS A HEIGHT BUDGET, NOT A
- *  PAGE. `--card-height` is `clamp(15rem, min(62dvh, 80vw), 24rem)` -- the card
- *  is sized against the viewport precisely so the HUD, the notice, the card, its
- *  caption and the control bar fit a phone without scrolling. A footer there
- *  spends about 40px of that budget (a 16px line plus the column's `gap-6`) on
- *  a legal line nobody reads mid-game, and on a short viewport it is the card
- *  that pays. It is also the one screen where the player is doing something
- *  continuous, and a `mt-auto` variant that pinned it to the bottom would be
- *  worse: auto margins beat `justify-center`, so the card would stop being
- *  centred.
+ *  THE GAME SCREEN USED TO BE EXCLUDED, AND THE REASON IT GAVE IS STILL TRUE --
+ *  IT WAS OVERRULED, NOT REFUTED. That column is a HEIGHT BUDGET rather than a
+ *  page: `--card-height` is `clamp(15rem, min(62dvh, 80vw), 24rem)` precisely so
+ *  the HUD, the notice, the card, its caption and the control bar fit a phone
+ *  without scrolling, and the `pb-20` band this footer requires takes 56px out of
+ *  that budget on every viewport. On a short phone the column can therefore
+ *  overflow and the screen scrolls -- which is the cost the developer accepted on
+ *  2026-08-12 when they asked for the line to be visible at all times, including
+ *  mid-game. IF THAT TURNS OUT TO HURT ON A REAL DEVICE, the fix is `--card-height`
+ *  (its `62dvh` term), not a re-exclusion by hand.
  *
- *  THE CRASH SCREEN IS EXCLUDED FOR A DIFFERENT REASON: `ErrorBoundary`'s
- *  fallback is a `role="alert"`, so its WHOLE SUBTREE is what gets announced
- *  when the page silently becomes something else. A copyright line inside that
- *  is read out to a screen-reader user in the middle of being told the game
- *  crashed, which is the one place where adding text has a cost beyond pixels.
+ *  What did NOT change is HOW it is placed there: still `absolute`, never
+ *  `mt-auto`. The game screen is `justify-center`, auto margins beat
+ *  `justify-content`, and an `mt-auto` footer would swallow the free space and
+ *  stop the card being centred -- see the block above.
  *
- *  So the footer marks the app's screens at rest -- landing, preparing and the
- *  end screen -- which is also every screen a first-time visitor sees before
- *  they start playing.
+ *  THE CRASH SCREEN IS STILL EXCLUDED, and for a reason that has nothing to do
+ *  with pixels: `ErrorBoundary`'s fallback is a `role="alert"`, so its WHOLE
+ *  SUBTREE is what gets announced when the page silently becomes something else.
+ *  A copyright line inside that is read out to a screen-reader user in the middle
+ *  of being told the game crashed, which is the one place where adding text has a
+ *  cost beyond layout.
  * ===========================================================================
  *
  * Presentational and propless, deliberately: the year is part of the string the developer
@@ -114,16 +122,17 @@ export function Footer() {
       screen-reader user navigates by, where a copyright line is noise.
 
       NO EXPLICIT `role`, and that is the part a future edit could get wrong: adding
-      `role="contentinfo"` would make the landmark real in every browser, and three screens render
+      `role="contentinfo"` would make the landmark real in every browser, and all four screens render
       this component. `Footer.test.tsx` asserts the absence -- and records that Testing Library maps
       `footer` to `contentinfo` regardless of ancestry, so a role QUERY cannot be used to check any
       of this.
 
-      `absolute inset-x-0 bottom-4` -- OUT OF FLOW, and the header block explains why that is the one
-      arrangement of the four that keeps every screen's centring. It sits in the host's reserved band
-      (`pb-12` minimum, `pb-20` on the landing screen), so it overlaps nothing.
+      `absolute inset-x-0 bottom-8` -- OUT OF FLOW, and the header block explains why that is the one
+      arrangement of the four that keeps every screen's centring. `bottom-8` is half of the host's
+      `pb-20` band minus half the line, i.e. the line sits in the MIDDLE of the band with equal air
+      above and below; the two numbers move together or not at all.
     */
-    <footer className="absolute inset-x-0 bottom-4 text-center text-xs text-fg-muted">
+    <footer className="absolute inset-x-0 bottom-8 text-center text-xs text-fg-muted">
       {COPYRIGHT_NOTICE}
     </footer>
   );

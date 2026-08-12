@@ -78,53 +78,56 @@ function rowErrorId(rowId: string): string {
 }
 
 /**
- * The eight ready-to-try playlists, so a first-time visitor does not need a playlist of their own
- * to see the app work.
+ * The ready-to-try playlists, so a first-time visitor does not need a playlist of their own to see
+ * the app work.
  *
  * ===========================================================================
- *  VERIFIED 2026-08-06, when this set replaced the five Phase 0 ids (RapCaviar
- *  is the one that survived). All of them resolve to the intended playlist,
- *  checked by `entity.uri` AND `entity.name` in the embed payload rather than by
- *  a 200 response -- editorial playlists get their contents refreshed by
- *  Spotify, so a 200 is not evidence that an id still means the same playlist
- *  (plan.md §5).
+ *  THE ROWS THEMSELVES ARE NOT DOCUMENTED ANYWHERE, DELIBERATELY. The set is
+ *  edited on request and its contents drift on their own, so a comment naming
+ *  the entries -- or recording their track counts, owners or preview coverage --
+ *  is stale the day after it is written, and a stale comment about a verified id
+ *  is worse than none: it reads as evidence. The array below IS the record. What
+ *  survives here is only what stays true across any edit:
  *
- *  Track counts at that check, in the order below: 100, 40, 100, 50, 100, 50,
- *  50, 50. THREE return exactly MAX_EMBED_TRACKS -- Éxitos Verano, Electro
- *  Latino and This is Duki -- so all three raise the truncation notice by
- *  design. Preview coverage was total except Electro Latino (2 of 100 without
- *  one) and This is Duki (8 of 100).
- *
- *  "Radio Brianper" (`2wJx2AIytvpaSJLsc2wy3V`, 100 tracks) was REMOVED on
- *  2026-08-12 at the developer's request. It was the one entry that was neither
- *  editorial nor chart -- a personal playlist -- so it is the one whose contents
- *  nobody but its owner controls.
- *
- *  Re-verify the same way before shipping any future change here.
+ *  1. VERIFY BEFORE SHIPPING ANY CHANGE HERE, and verify by `entity.uri` AND
+ *     `entity.name` in the embed payload -- never by a 200 response. Spotify
+ *     refreshes an editorial playlist's contents and an owner can re-point,
+ *     empty or hide a personal one, so a 200 is not evidence that an id still
+ *     means the same playlist (plan.md §5). Re-verify the rows that stayed, not
+ *     just the ones that arrived: a survivor is exactly the row nobody rechecks.
+ *  2. A PERSONAL PLAYLIST IS A WEAKER PROMISE THAN AN EDITORIAL ONE. Its owner
+ *     can make it private at any time, and the player then meets
+ *     `not-found-or-private` on a row the app itself suggested. That is a
+ *     trade to make knowingly, not a reason the set must be editorial.
+ *  3. ANY ROW MAY RETURN EXACTLY MAX_EMBED_TRACKS, which raises the truncation
+ *     notice by design -- correct behaviour, not a defect in the suggestion.
  * ===========================================================================
  *
- * The labels are Spotify's own playlist titles and the blurbs are genre/era names. None of them
- * describes a track or a year, which is what keeps this section leak-free.
- *
- * "This is Duki (all songs)" is the one label that says something about a deck's contents -- it is
- * a single-artist playlist, so picking it tells the player every card is by the same artist. That
- * is not a leak in the sense this screen guards against: the game is guessing the YEAR, and the
- * artist gives none of them away. Naming a track or a year still would.
+ * The labels are readable renderings of Spotify's own titles -- real titles carry emoji, stray
+ * punctuation and the occasional typo -- and the blurbs are genre/era names. Nothing in either names
+ * a track or a year, which is what keeps this pre-Start section leak-free. A single-artist row is
+ * allowed: it tells the player every card shares an artist, and the game is guessing the YEAR, which
+ * an artist gives nothing away about. Naming a track or a year would still be a leak.
  *
  * Stored as ids and turned into full links at the click, via `spotifyPlaylistUrl()`. The id is the
- * thing that was verified above and the thing a re-verification checks, so it stays the constant;
- * the URL is derived so the two can never disagree.
+ * thing a verification checks, so it stays the constant; the URL is derived so the two can never
+ * disagree.
  */
 export const SUGGESTED_PLAYLISTS: readonly { id: string; label: string; blurb: string }[] = [
+  { id: '34cIJlWIX9TEoA8bpI2UBu', label: 'Hitster', blurb: 'Mixed hits' },
+  { id: '0Bq6Ofk5drHQKzevbnPzW2', label: 'Trap Argentino Prime', blurb: 'Argentine trap' },
+  { id: '4wZA7zbfDuTi9yqZy8WY4y', label: 'Hits Catalans', blurb: 'Catalan hits' },
+  { id: '6xrNthbRvaWedC81pc78xo', label: 'Openings Català', blurb: 'Anime openings in Catalan' },
   {
-    id: '2zmXlpkOMN92NlQaE2M62c',
-    label: 'Éxitos Verano 2000s & 2010s',
-    blurb: 'Spanish summer hits',
+    id: '3iANnuxueS6wustAWPbCgW',
+    label: 'Disney: las 100 mejores canciones',
+    blurb: 'Disney soundtracks',
   },
+  { id: '5y50Cn8dw3C25s2mwnCWQJ', label: 'Mejores BSO del cine', blurb: 'Film and TV scores' },
+  { id: '7m1C1eHUC2kJQL69dGMjaz', label: 'EDM Hits of All Time', blurb: 'EDM' },
+  { id: '37i9dQZF1DX8FwnYE6PRvL', label: 'Rock Party', blurb: 'Rock' },
   { id: '37i9dQZF1DX1HCSfq0nSal', label: 'PEGAO', blurb: 'Reggaeton' },
   { id: '7nnjdGCdCe24vVeSlFpGQV', label: 'Electro Latino Mejores Temazos', blurb: 'Latin electro' },
-  { id: '37i9dQZEVXbNFJfN1Vw8d9', label: 'Top 50 España', blurb: 'Spain chart' },
-  { id: '2ASgmy04ZIcIXLBn8nkmKj', label: 'This is Duki (all songs)', blurb: 'Argentine trap' },
   { id: '37i9dQZEVXbMDoHDwVN2tF', label: 'Top 50 Global', blurb: 'Global chart' },
   { id: '37i9dQZF1DXaxEKcoCdWHD', label: 'Exitos España', blurb: 'Spanish hits' },
   { id: '37i9dQZF1DX0XUsuxWHRQd', label: 'RapCaviar', blurb: 'Hip-hop' },
@@ -266,45 +269,51 @@ export function LandingScreen({
       this reserves. Drop either and the line either escapes to the viewport or lands on the last
       suggestion. `Footer.tsx` has the reasoning; `LandingScreen.test.tsx` asserts both.
 
-      `pb-20` rather than the contract's minimum `pb-12`, asked for on 2026-08-12 as more room above
-      the footer. The extra 32px is clearance, not reservation: `bottom-4` measures from the padding
-      box either way, so what grows is the gap between the last suggestion and the line.
+      `pb-20` is the band every host now reserves, and it is sized by the footer rather than chosen:
+      `Footer` is `absolute bottom-8` and its line is ~16px, so 80px of padding puts exactly 32px
+      above the line and 32px below it. Symmetric, which is what the developer asked for on
+      2026-08-12 -- see `Footer.tsx` for the arithmetic. Change one of the two numbers and the line
+      stops being centred in its own band.
 
       =============================================================================
-       NO `justify-center` HERE ANY MORE, AND THAT IS THE WHOLE LAYOUT CHANGE
-       (2026-08-12).
+       NO `justify-center` HERE, AND NO VIEWPORT-SIZED HERO EITHER (2026-08-12).
 
        This column has ALWAYS outgrown the viewport -- eight suggestions plus a
        library -- so `justify-center` on it centred nothing: it only applies to the
-       free space of a container that has some, and this one never did. The
-       centring the developer asked for now lives on the HERO section below, which
-       carries its own viewport-sized minimum, and everything after it is
-       explicitly the second screenful.
+       free space of a container that has some, and this one never did.
 
-       The vertical padding moved with it: `px-6` here and `py-6` on the hero, so
-       the hero's minimum height is the viewport EXACTLY (border-box) rather than
-       the viewport plus 3rem of padding it cannot see.
+       The hero below briefly carried a `min-h-[88dvh]` so the form sat in the
+       middle of the first screenful. That is gone, asked for the same day: the
+       minimum turned the distance between Start and the suggestions into
+       "whatever is left of the viewport", which on a desktop is several hundred
+       pixels of nothing and reads as the page having ended. The hero is now its
+       own natural height and the sections are separated by this column's `gap-8`
+       like every other pair -- one standard margin, the same at every viewport.
+
+       `pt-6` here rather than `py-6` on the hero: the top padding belongs to the
+       page, and leaving it on the hero would add to the `gap-8` below it and make
+       the hero's two neighbours unequal.
       =============================================================================
     */
-    <main className="relative flex min-h-dvh flex-col items-center gap-4 bg-page px-6 pb-20 text-fg">
+    <main className="relative flex min-h-dvh flex-col items-center gap-8 bg-page px-6 pt-6 pb-20 text-fg">
       {/*
         ===========================================================================
-         THE HERO: THE LOGO, THE ONE SENTENCE, AND THE FORM -- CENTRED IN THE
-         VIEWPORT.
+         THE HERO: THE LOGO, THE ONE SENTENCE, AND THE FORM.
 
-         `88dvh` rather than `100dvh` ON PURPOSE. At a full viewport the next
-         section starts exactly at the fold, so on a desktop there is nothing at
-         all below the form and no reason to believe there is more -- and the
-         suggestions are the one-click demo path for a first-time visitor with no
-         playlist of their own, i.e. the thing that must not become undiscoverable
-         when it stops being a main element. At 88 the next heading peeks, which is
-         the cheapest possible affordance and costs the centring ~6dvh of offset.
+         NO MINIMUM HEIGHT. It carried `min-h-[88dvh] justify-center` for part of
+         2026-08-12, to put the form in the middle of the first screenful, and the
+         developer asked for it back out the same day: a viewport-sized minimum
+         makes the distance between Start and the suggestions equal to whatever is
+         left over, which on a desktop is a screenful of empty page between the
+         two -- and the suggestions are the one-click demo path for a first-time
+         visitor, i.e. the thing that must not read as absent.
 
-         It is a MINIMUM, so five rows plus five error messages simply make it
-         taller and push the rest down; nothing is ever clipped.
+         So the group is purely a GROUP now: it keeps `max-w-content` and its own
+         `gap-8`, and the column outside it supplies the same `gap-8` to whatever
+         comes next.
         ===========================================================================
       */}
-      <section className="flex min-h-[88dvh] w-full max-w-content flex-col items-center justify-center gap-8 py-6">
+      <section className="flex w-full max-w-content flex-col items-center gap-8">
         <div className="flex flex-col items-center gap-3 text-center">
           {/*
             ===================================================================
@@ -607,12 +616,12 @@ export function LandingScreen({
          as well. There is no second entry into the session for a saved
          playlist.
 
-         BELOW THE HERO SINCE 2026-08-12, with the suggestions: the developer
-         asked for the inputs and Start to sit in the middle of the screen, and
-         anything rendered between the form and the fold moves them off it by
-         however many decks happen to be saved -- a centring that depends on the
-         player's history is not a centring. It keeps its full row shape, unlike
-         the suggestions below, because these ARE the player's own.
+         BELOW THE HERO SINCE 2026-08-12, with the suggestions, and it stayed
+         there when the hero's viewport minimum came back out later the same day:
+         the form is the screen's one job, and a block whose height is however
+         many decks the player happens to have saved is the wrong thing to put
+         between the logo and Start. It keeps its full row shape, unlike the
+         suggestions below, because these ARE the player's own.
         ===================================================================
       */}
       {savedPlaylists.length === 0 ? null : (
@@ -684,10 +693,16 @@ export function LandingScreen({
 
          These were full-width `bg-surface` rows directly under the form, which
          made them the visual bulk of the app's front door -- the developer's
-         note was that they are not a main element. They are now below the fold, in
-         a two-column grid on anything wider than a phone, with no filled surface
-         and quieter type. What did NOT change is what a press does: still one
-         click into a game, which is the entire reason they exist.
+         note was that they are not a main element. They are now last, in a
+         two-column grid on anything wider than a phone, with no filled surface and
+         quieter type. What did NOT change is what a press does: still one click
+         into a game, which is the entire reason they exist.
+
+         "Last" and no longer "below the fold": the hero's `min-h-[88dvh]`, which
+         is what put them there, came back out on the same day -- the empty band it
+         created between Start and this heading was the developer's next note. The
+         demotion here is entirely weight and order, which is what it should have
+         been.
 
          The heading dims to `text-fg-muted` -- the app's audited 6.12:1 -- rather
          than taking an `opacity-*` on the brighter token, for the reason

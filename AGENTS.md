@@ -331,17 +331,23 @@ because the reference's nodes are solid and three rings read as noise at 20px. T
 rationale is not wrong, it is answered — see the comment above `KeepDeckIcon`. `aria-label` is
 unchanged ("Keep this deck"), and `CardControls.test.tsx` pins the shape counts and the `fill="none"`.
 
-**There is a copyright footer, it is on THREE screens, and both omissions are the decision
-(2026-08-11).** `src/components/Footer.tsx` renders on **landing, preparing and end**. There is no
-shell to hang it on — every screen is its own `min-h-dvh justify-center` column, so one footer in
+**There is a copyright footer, it is on ALL FOUR screens as of 2026-08-12, and the one omission is
+the decision.** `src/components/Footer.tsx` renders on **landing, preparing, game and end**. There is
+no shell to hang it on — every screen is its own `min-h-dvh justify-center` column, so one footer in
 `App.tsx` or `main.tsx` is a sibling of a full-viewport column and gives every screen a permanent
-scrollbar. **Not the game screen**: that column is a height budget (`--card-height` exists so the HUD,
-card, caption and controls fit a phone) and a `mt-auto` variant is worse, because auto margins beat
-`justify-center` and the card stops being centred. **Not the crash screen**: `ErrorBoundary`'s fallback
-is a `role="alert"`, so its whole subtree is announced and the copyright would be read out to someone
-being told the game crashed. **It is pinned to the bottom OUT OF FLOW and that is a two-ended
-contract**: `Footer` is `absolute inset-x-0 bottom-4`, every host must carry **`relative` and
-`pb-12`**, and each screen's test asserts both (same shape as `card-ring` — the caller is positioned).
+scrollbar. **The game screen's old exclusion is still TRUE, it was OVERRULED**: that column is a
+height budget (`--card-height` exists so the HUD, card, caption and controls fit a phone) and the
+`pb-20` band costs it **56px more than the `p-6` it had**, so a short phone can now scroll mid-game —
+accepted at the developer's request, and the lever if it hurts on a device is `--card-height`'s
+`62dvh` term, **not** deleting the footer from that one screen. Still `absolute`, never `mt-auto`:
+auto margins beat `justify-center` and the card would stop being centred. **Not the crash screen**:
+`ErrorBoundary`'s fallback is a `role="alert"`, so its whole subtree is announced and the copyright
+would be read out to someone being told the game crashed. **It is pinned to the bottom OUT OF FLOW
+and that is a two-ended contract**: `Footer` is `absolute inset-x-0 bottom-8`, every host must carry
+**`relative pb-20`**, and each screen's test asserts both (same shape as `card-ring` — the caller is
+positioned). **THOSE TWO NUMBERS ARE ONE NUMBER SPLIT IN TWO** — 80px of band around a 32px offset and
+a ~16px line is what puts equal air (32px) above and below the line, which is the symmetry asked for
+on 2026-08-12; move one without the other and it is silently gone, because jsdom computes no layout.
 The textbook `mt-auto` sticky footer is what this replaced and it cannot work here: **an auto margin
 beats `justify-content`**, so the first `mt-auto` swallows the free space and the screen's content
 stops being centred. Not `fixed` either — on the landing screen it would float over the suggestions

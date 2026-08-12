@@ -53,8 +53,15 @@ describe('Footer', () => {
   it('should pin itself to the bottom of its host rather than sitting in the flow', () => {
     // ===================================================================
     //  THE FOOTER'S HALF OF A TWO-ENDED CONTRACT: this element positions
-    //  itself, and its host supplies `relative` and a band of at least `pb-12`. Each screen's
-    //  own test holds the other end.
+    //  itself, and its host supplies `relative pb-20`. Each screen's own test
+    //  holds the other end -- all four of them, since 2026-08-12.
+    //
+    //  `bottom-8` AND `pb-20` ARE ONE NUMBER SPLIT IN TWO: 80px of band, a 32px
+    //  offset and a ~16px line put exactly 32px above the copyright and 32px
+    //  below it, which is the symmetry the developer asked for. Asserting the
+    //  class here is the only grip the suite has on it, because jsdom computes
+    //  no layout -- a `bottom-4` sneaking back would leave the line 16px off the
+    //  edge under 48px of air with every test still green.
     //
     //  Out of flow rather than the textbook `mt-auto` sticky footer, and
     //  the reason is specific to this app: every screen is a `min-h-dvh
@@ -72,7 +79,7 @@ describe('Footer', () => {
 
     const footer = container.querySelector('footer');
     expect(footer?.className).toContain('absolute');
-    expect(footer?.className).toContain('bottom-4');
+    expect(footer?.className).toContain('bottom-8');
     // Full width, so `text-center` centres against the screen rather than against the text's own box.
     expect(footer?.className).toContain('inset-x-0');
     expect(footer?.className).toContain('text-center');

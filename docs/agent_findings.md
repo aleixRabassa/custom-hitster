@@ -1879,9 +1879,10 @@ So Phase 0's inventory holds. The bullet moved to Phase 8 with this evidence att
 built**, because building it requires a new auth path and that re-opens §2's no-credentials decision
 — a product question about the audience, not a UI task.
 
-Incidental: `SUGGESTED_PLAYLISTS` labels that playlist **"Radio BrianPer"** while Spotify's
-`entity.name` is **"Radio Brianper"**. Capitalisation in a label, not a functional problem, but noted
-so the next re-verification does not read it as a mismatch.
+Incidental, and **superseded on 2026-08-12** — the row it described has since left the set, and
+`SUGGESTED_PLAYLISTS` labels are now explicitly readable renderings of Spotify's titles rather than
+the titles verbatim, so a label that does not match `entity.name` character for character is the
+design. Verify by `entity.uri` **and** `entity.name` against the *playlist*, never against the label.
 
 ### The procedure, so the third check is a re-run and not a redesign
 
@@ -3337,3 +3338,142 @@ test failing -- while AGENTS.md lists `alt` text and `aria-label`s as leak surfa
 right. `LandingScreen.test.tsx` now audits text **plus** `alt`, `aria-label`, `title`, `placeholder`
 and `value`. Note what this catches that the old proxy could not: a saved playlist's name reaches an
 `aria-label` ("Remove X from your playlists") as well as its button's text.
+
+---
+
+## 2026-08-12 — The footer went to every screen, its band became symmetric, and the landing hero's one-day viewport minimum came back out
+
+Three developer requests in one session, all layout, none of them touching behaviour: no reducer
+action, no prop, no storage format, no request.
+
+### The hero's `min-h-[88dvh]` lasted one day, and the thing it optimised for is what it broke
+
+The centring fix recorded earlier the same day (see the entry above) gave the landing screen's logo,
+sentence and form their own viewport-sized hero. The developer's next note was that there is too much
+space between Start and the suggestions.
+
+Both are true, and they are the same class: **a viewport-sized minimum does not set a distance, it
+sets a remainder.** The gap between the form and "Or try one of these" became `88dvh − (however tall
+the hero's contents are)`, which on a phone with five rows is nearly nothing and on a desktop is
+several hundred pixels of empty page — and empty page below a form reads as the page having ended,
+which is precisely the failure mode `88dvh` was chosen (over `100dvh`) to avoid. It bought a peek at
+the next heading and paid for it with a void above that heading.
+
+Removed. The hero is now its own natural height and `<main>`'s `gap-8` separates it from the
+suggestions like any other pair — one standard margin, the same at every viewport. `justify-center`
+stays off `<main>` (it was inert, for the reason the earlier entry gives), and `py-6` moved off the
+hero to `pt-6` on `<main>`: the hero's own padding would have stacked on the gap and made its two
+neighbours unequal.
+
+`LandingScreen.test.tsx` pins the **absence** of any `min-h-[…dvh]` on every descendant, matched on
+the pattern rather than on the one literal — the way this regresses is somebody reaching for a
+slightly different number. The old "centre the form in the viewport" test lost its subject and was
+rewritten as an **order** test (form first, suggestions in a later section, asserted with
+`compareDocumentPosition`), which is the half of it that was load-bearing all along: demoting the
+suggestions was always supposed to be weight and order, not a screenful of nothing.
+
+### `bottom-4` in a `pb-12`/`pb-20` band was never centred in it, and nothing could see that
+
+The developer asked for the copyright line to have as much room below it as above it. It had
+**16px below and 16–48px above**, depending on which screen: the offset (`bottom-4`) and the band
+(`pb-12` on preparing/end, `pb-20` on landing) had been chosen independently, and the line's own
+height was in neither.
+
+The fix is to treat them as one number: **`bottom-8` inside `pb-20`, on every host.** 80px of band, a
+32px offset and a ~16px line put exactly 32px above and 32px below. The contract in `Footer.tsx` now
+says so, and every host's test asserts `pb-20` rather than "at least `pb-12`" — a minimum was the
+right shape when only the top gap mattered and is the wrong shape now that the two ends are paired.
+
+**Nothing in this repo can check the result**, which is the reason the arithmetic is written down
+rather than left implied: jsdom computes no layout, so a `bottom-4` sneaking back leaves the suite
+entirely green.
+
+### The game screen's exclusion was overruled, not refuted, and it costs 56px of the card's budget
+
+The footer was deliberately off the game screen; `Footer.tsx` gave two reasons and both still hold.
+The developer asked for the line to be visible at all times, mid-game included.
+
+What that costs is specific and worth having in one place. `Footer` is `absolute`, so it takes no row
+in the column — but its `pb-20` band is **56px more than the `p-6`** that screen used to have, and
+that column is a height budget rather than a page: `--card-height` is
+`clamp(15rem, min(62dvh, 80vw), 24rem)` precisely so the HUD, the notice, the card, its caption and
+the control bar fit a phone without scrolling. On a short viewport the extra 56px is what makes it
+overflow. **Accepted, and the lever if it hurts on a real device is `--card-height`'s `62dvh` term,
+not deleting the footer from that one screen.** How it is placed there did not change: still
+`absolute`, never `mt-auto`, because an auto margin beats `justify-content` and the card would stop
+being centred.
+
+Two details that are easy to get wrong. It is rendered **before** the two dialogs, which is the tab
+order — painting is unaffected either way, since both are `fixed z-50`, but a copyright line after a
+modal's buttons is a surprise for a keyboard user. And the crash screen is **still** excluded:
+`ErrorBoundary`'s fallback is a `role="alert"`, so its whole subtree is announced, and that is the one
+place where adding text has a cost beyond layout.
+
+### The build tells one small truth about this
+
+`Footer` is now imported by both the eager landing path and the lazy `GameScreen` chunk, so rolldown
+moved it into the **existing** shared chunk — the one that was named `DeckActions` and is now named
+`Footer`. Measured both ways: 19.62 kB / 7.84 kB gzip before, 19.84 kB / 7.94 kB gzip after. **No new
+request and +0.10 kB gzip**, i.e. the chunk was renamed rather than created, which is worth knowing
+before reading the build log as a regression.
+
+### Still unverified, and not verifiable here
+
+Every one of these is a class-name assertion. The **"three widths" row** in
+[`development.md`](./development.md) §5 now also owes: that the gap between Start and the suggestions
+reads as a normal margin at 320 / 768 / 1280, that the copyright line sits with visibly equal air
+above and below it, and — the one with a real failure mode — **that the game screen still fits a short
+phone without scrolling** now that 56px of its height budget is gone.
+
+---
+
+## 2026-08-12 — The suggested-playlist set is deliberately undocumented, and a duplicate id is invisible
+
+The developer replaced most of `SUGGESTED_PLAYLISTS` and then asked for every reference to the
+individual playlists to come out of the docs, "no es relevante ya que puede ir cambiando". Both
+halves are worth recording, because the second one has a failure mode.
+
+**1. The set is now recorded in exactly one place, and that is a rule rather than an omission.**
+`SUGGESTED_PLAYLISTS` in `src/components/LandingScreen.tsx` is the only enumeration; `README.md`,
+`docs/architecture.md`, `docs/development.md`, `plan.md` §5, `plan.phase-4-6-screens.md`,
+`plan.phase-2-playlist.md` and `plan.multi-playlist-ui.md` were all edited to stop naming rows or
+counting them. The reasoning is not tidiness: **a stale note about a _verified_ id is worse than no
+note, because it reads as evidence.** Spotify refreshes an editorial playlist's tracks and an owner
+can re-point, empty or hide a personal one, so a recorded track count or preview-coverage figure
+decays silently while still looking like a measurement someone took. What survives beside the array
+is only what outlives any edit — verify before shipping, verify by `entity.uri` **and**
+`entity.name`, verify the survivors too, and expect any row to be able to hit `MAX_EMBED_TRACKS`.
+Dated spike records elsewhere in this file that used a playlist as a measurement **subject** were
+left alone: there the name is the experiment's traceability, not documentation of the set.
+
+Two consequences already visible. Docs that counted the rows ("eight suggestions", "nine suggested
+playlists") were wrong at three different numbers across four files, which is what the count-free
+phrasing prevents. And `LandingScreen.test.tsx` stopped naming rows: the exact-length assertion
+became a floor (`>= 5`), and the two tests that clicked a hard-coded label now sample
+`SUGGESTED_PLAYLISTS[0]` — an exact count turns a routine edit into a failing test that says nothing.
+
+**2. A duplicate id in the set is invisible on the screen, and it arrived on the first try.** The
+requested additions included two rows under different names carrying the **same** link, which
+resolves to one playlist. Nothing would have caught it: both buttons render, both submit, both deal
+the same deck, and every existing assertion (`toHaveLength`, the per-row submit loop, the leak
+proxies) passes. It is the natural failure of a list maintained by pasting links — one pasted twice
+under two names looks exactly like two additions. Now pinned by
+`should suggest each playlist only once`, which asserts uniqueness of **both** id and label; the
+label half matters too, since `suggestionButton()` is a `getByRole` and two identical names make it
+throw.
+
+**3. Verification method, so the next one is a re-run.** A throwaway Node script over
+`https://open.spotify.com/embed/playlist/{id}` with a browser `User-Agent`, extracting
+`__NEXT_DATA__` and reading `props.pageProps.state.data.entity` — the same path
+`api/_lib/spotify-embed.ts` takes. Per id it reports `uri === spotify:playlist:{id}`, `name`,
+`subtitle` (the owner), `trackList.length` and how many entries lack `audioPreview.url`. All twelve
+ids passed. **Labels are now readable renderings of the titles, not the titles verbatim**, because
+real titles carry emoji, trailing punctuation and the occasional typo — so a label that differs from
+`entity.name` is the design, and this supersedes the two older "label capitalisation mismatch" notes
+above.
+
+**4. A personal playlist is a weaker promise than an editorial one, and the set is now mostly
+personal.** On 2026-08-12 one row was removed precisely for being user-owned; later the same day six
+user-owned rows were added at the developer's request. The trade is accepted, not overlooked: an
+owner can make one private at any time and the player then meets `not-found-or-private` on a row the
+app itself suggested. That is what makes the re-verification a recurring chore rather than a one-off.

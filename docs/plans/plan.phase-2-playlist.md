@@ -488,8 +488,8 @@ logic worth testing, that logic belongs in the adapter instead.
     empty deck. This is the manual counterpart of the most important unit test
   - Request with an album URL and confirm 400 `unsupported-entity`; with junk and confirm 400
     `invalid-url`
-  - Request one of the Phase 6 suggested playlists known to hold more than 100 tracks (Rock Classics,
-    `37i9dQZF1DWXRqgorJj26U`) and confirm `truncated` is true with exactly 100 cards
+  - Request any playlist holding more than 100 tracks — several of the Phase 6 suggestions do, though
+    which ones changes, so pick one at the time — and confirm `truncated` is true with exactly 100 cards
   - Confirm the response carries no upstream HTML and no `accessToken` anywhere
   - Grep for `@/` under `api/` before deploying — the one layout rule that cannot be verified locally
   - After deploying, confirm `/api/hello` still returns `maxEmbedTracks: 100`, which is the standing
