@@ -15,11 +15,14 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  LONG_PRESS_DURATION_MS,
+  LONG_PRESS_MAX_MOVEMENT_PX,
   SWIPE_COMMIT_DISTANCE_PX,
   SWIPE_COMMIT_VELOCITY_PX_PER_S,
   TAP_MAX_DURATION_MS,
   TAP_MAX_MOVEMENT_X_PX,
   TAP_MAX_MOVEMENT_Y_PX,
+  exceedsLongPressMovement,
   isTap,
   shouldCommitSwipe,
   swipeDirection,
@@ -179,5 +182,45 @@ describe('isTap', () => {
     // could be both a tap and a commit, and the card would flip AND advance: the answer
     // revealed on a card the player can never return to. Both misreadings at once.
     expect(TAP_MAX_MOVEMENT_X_PX).toBeLessThan(SWIPE_COMMIT_DISTANCE_PX);
+  });
+});
+
+describe('the long press', () => {
+  it('should require a longer hold than a tap is allowed to last', () => {
+    // Not a boundary test -- an assertion that the two durations do not overlap, in the same
+    // shape as the dead-band assertion above. They govern different elements, so nothing
+    // compares them at runtime and no test but this one would notice them crossing. If they
+    // did, one press would satisfy both readings and the winner would be event ordering.
+    expect(LONG_PRESS_DURATION_MS).toBeGreaterThan(TAP_MAX_DURATION_MS);
+  });
+
+  it('should tolerate drift up to the bound on either axis', () => {
+    // A thumb held on a button is never perfectly still. Exactly at the bound still holds, the
+    // same inclusive tolerance `isTap` gives.
+    expect(exceedsLongPressMovement({ deltaX: 0, deltaY: 0 })).toBe(false);
+    expect(exceedsLongPressMovement({ deltaX: LONG_PRESS_MAX_MOVEMENT_PX, deltaY: 0 })).toBe(false);
+    expect(exceedsLongPressMovement({ deltaX: 0, deltaY: LONG_PRESS_MAX_MOVEMENT_PX })).toBe(false);
+  });
+
+  it('should cancel once drift passes the bound on either axis', () => {
+    // The scroll starting under the finger. The suggestions are in the one column of this app
+    // that is expected to scroll, so this is the common case rather than the exotic one.
+    expect(exceedsLongPressMovement({ deltaX: LONG_PRESS_MAX_MOVEMENT_PX + 1, deltaY: 0 })).toBe(
+      true,
+    );
+    expect(exceedsLongPressMovement({ deltaX: 0, deltaY: LONG_PRESS_MAX_MOVEMENT_PX + 1 })).toBe(
+      true,
+    );
+  });
+
+  it('should measure drift on the absolute value in both directions', () => {
+    // The bound is symmetric, unlike the card's per-axis pair: a button press has no
+    // privileged axis, so up and left must cancel exactly as down and right do.
+    expect(exceedsLongPressMovement({ deltaX: -(LONG_PRESS_MAX_MOVEMENT_PX + 1), deltaY: 0 })).toBe(
+      true,
+    );
+    expect(exceedsLongPressMovement({ deltaX: 0, deltaY: -(LONG_PRESS_MAX_MOVEMENT_PX + 1) })).toBe(
+      true,
+    );
   });
 });

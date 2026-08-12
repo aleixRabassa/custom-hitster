@@ -48,7 +48,7 @@ describe('Footer', () => {
     expect(container.querySelector('footer')?.textContent).toBe(COPY.footer.notice);
   });
 
-  it('should render the author in the accent colour, inside the same line', () => {
+  it('should render the author bold, in the accent colour, inside the same line', () => {
     // ===================================================================
     //  THE ONE PLACE `--color-accent` IS USED AS TEXT RATHER THAN AS A FILLED
     //  BACKGROUND, asked for on 2026-08-12 ("the standard green of the app").
@@ -62,12 +62,41 @@ describe('Footer', () => {
     //  The measurement that made this safe is in `Footer.tsx`: 5.13:1 on
     //  `--color-page`, which clears the 4.5:1 floor for 12px text. jsdom
     //  computes no colour, so the class name is the whole of the grip.
+    //
+    //  `font-bold` is the other half of the same 2026-08-12 request, and it
+    //  is not merely cosmetic: colour alone is not an affordance, so the
+    //  weight is what marks the name as a link for anyone who cannot tell
+    //  the green from the grey around it.
     // ===================================================================
     const { container } = render(<Footer />);
 
-    const author = container.querySelector('footer span');
+    const author = container.querySelector('footer a');
     expect(author?.textContent).toBe(COPY.footer.author);
     expect(author?.className).toContain('text-accent');
+    expect(author?.className).toContain('font-bold');
+  });
+
+  it("should link the author's name to their site, safely and focusably", () => {
+    // ===================================================================
+    //  THE APP'S ONLY ANCHOR, added 2026-08-12 -- so none of the habits the
+    //  rest of the app has for interactive elements were already in place
+    //  here, and each one is asserted rather than assumed.
+    //
+    //  `focus-visible:focus-ring` is the repo-wide rule for anything
+    //  focusable, and this element is now in the tab order of all four
+    //  screens. `rel` must carry `noopener`: without it the opened page can
+    //  reach back through `window.opener` into a tab that is holding a game.
+    //
+    //  The URL is read from `COPY.footer.authorUrl`, never written here --
+    //  same rule as the wording, so the developer can repoint it in one file.
+    // ===================================================================
+    const { container } = render(<Footer />);
+
+    const author = container.querySelector('footer a');
+    expect(author?.getAttribute('href')).toBe(COPY.footer.authorUrl);
+    expect(author?.getAttribute('target')).toBe('_blank');
+    expect(author?.getAttribute('rel')).toContain('noopener');
+    expect(author?.className).toContain('focus-visible:focus-ring');
   });
 
   it('should render as a footer element with a colour that exists', () => {

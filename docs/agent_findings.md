@@ -1882,7 +1882,7 @@ built**, because building it requires a new auth path and that re-opens §2's no
 Incidental, and **superseded on 2026-08-12** — the row it described has since left the set, and
 `SUGGESTED_PLAYLISTS` labels are now explicitly readable renderings of Spotify's titles rather than
 the titles verbatim, so a label that does not match `entity.name` character for character is the
-design. Verify by `entity.uri` **and** `entity.name` against the *playlist*, never against the label.
+design. Verify by `entity.uri` **and** `entity.name` against the _playlist_, never against the label.
 
 ### The procedure, so the third check is a re-run and not a redesign
 
@@ -3562,3 +3562,84 @@ the class name. And the class name assertion is not padding: an unknown Tailwind
 this app emits **no rule at all**, so `text-accent-green` or `text-emerald` would leave the name
 rendering in the inherited `text-fg-muted` with all four checks green. Verified in the built CSS —
 `dist/assets/*.css` contains `.text-accent{color:var(--color-accent)}`.
+
+## 2026-08-12 — The footer's author name became the app's first and only `<a>`, which is a set of conventions this repo had never had to apply
+
+Asked for as "make it bold and a link". The `<span>` became
+`<a className="font-bold text-accent focus-visible:focus-ring" href={COPY.footer.authorUrl}
+target="_blank" rel="noreferrer noopener">`. Four things the change surfaced, none of them obvious
+from the request:
+
+1. **There was no prior anchor anywhere in `src/`** (grepped `href=` and `<a `: zero hits), so every
+   habit the app has for interactive elements — the focus ring, the `rel` hygiene — existed only on
+   `<button>`s and had to be re-derived here. `focus-visible:focus-ring` matters more than usual
+   because this component renders on **all four screens**, so the link is in the tab order mid-game
+   too.
+2. **Both dialogs trap Tab**, so the link is unreachable behind an open modal. That is what keeps the
+   pre-existing "footer before the dialogs in the DOM" ordering sufficient rather than merely tidy —
+   a focusable footer after a modal's buttons would otherwise have been reachable.
+3. **The URL went into `copy.ts` but NOT into `notice`.** `COPY.footer.notice` is subtracted by exact
+   string from three screens' `textContent` in the year-shaped-number leak proxies; an `href` is not
+   part of the sentence a player reads, and folding it in would have broken that subtraction. It is
+   also not picked up by `LandingScreen.test.tsx`'s `auditableText`, whose spoken-attribute list is
+   `alt`/`aria-label`/`title`/`placeholder`/`value` — checked, because the proxies are the app's
+   cheapest guard against a pre-reveal leak.
+4. **`font-bold` is doing a11y work, not only what was asked**: colour alone is not a link
+   affordance, and this is the app's smallest (12px) and dimmest line. Verified in the built CSS that
+   both `.font-bold` and `.focus-visible\:focus-ring:focus-visible` emit rules — same silent-no-op
+   check the accent colour got, since an unrecognised utility here produces nothing at all.
+
+Unrelated, noted while running the suite: `src/components/SuggestionButton.test.tsx` (untracked,
+work in progress from another session) fails with `Invalid Chai property: toHaveAttribute` — this
+repo does not set up `@testing-library/jest-dom`, so that matcher does not exist here. Use
+`getAttribute()` instead. Pre-existing and unrelated to the footer change.
+
+## 2026-08-12 — Suggestion multi-select: `src/` fires its first pointer event and uses its first fake clock, and both work
+
+Built holding-to-select on the landing screen's suggested playlists (`src/game/playlist-selection.ts`,
+`src/hooks/useLongPress.ts`, `src/components/SuggestionButton.tsx`; thresholds added to
+`src/game/gestures.ts`). Six things learned, and the first two reverse assumptions that were written
+into the plan as risks.
+
+1. **jsdom has no `PointerEvent` constructor, and `fireEvent.pointerDown` works anyway.**
+   `@testing-library/dom` falls back to a plain `Event` and copies the init properties — including
+   `clientX`/`clientY` — straight onto the object. `useLongPress` reads nothing else from the event,
+   which is now a deliberate constraint rather than a coincidence: read `pointerId`, `pressure` or
+   `getCoalescedEvents()` and the fallback stops carrying it. This was scoped as "verify early, and
+   fall back to asserting wiring only if it does not hold". It held.
+2. **`vi.useFakeTimers()` is fine in `src/`, which had never used it.** Every other waiting test in
+   `src/` awaits a real `setTimeout`; at a 500 ms threshold that would have cost ~5 s across the
+   suite. `act(() => vi.advanceTimersByTime(...))` drives the timer and flushes React together. The
+   `api/_lib/cache.test.ts` pattern — restore real timers in a `finally`, never only in an
+   `afterEach` — matters more here than there, because these files share a worker with other jsdom
+   files and a leaked fake clock breaks whatever runs next.
+3. **The click that follows a hold is the bug this feature is one line away from.** `click` fires
+   after `pointerup`, so without `consumeLongPress()` the hold selects the playlist and the click a
+   millisecond later deals a single-playlist deck from it — i.e. the gesture that exists to BUILD a
+   multi-playlist deck would instead start a game and discard the selection. The flag is cleared by
+   the next `pointerdown`, **not** by the click: a hold whose pointer produced no click (released off
+   the button, or cancelled by a scroll) would otherwise leave it set and swallow an unrelated press
+   much later.
+4. **Deriving the selection from the rows made two requirements disappear instead of being built.**
+   "Pressing the ✕ deselects" and "a pasted link lights its suggestion" are both free once a
+   suggestion is lit exactly when a row parses to its id. The only code the ✕ needed was a _rendering_
+   change — it used to appear only when `rows.length > 1`, so a lone selected row had none, and the
+   first selection on a pristine screen lands in exactly that row.
+5. **Tailwind's source scan sees an unimported component, so a CSS delta cannot be isolated by
+   reverting the import.** Building with `LandingScreen.tsx` stashed produced a byte-identical
+   stylesheet (same content hash), because `SuggestionButton.tsx` was still on disk and Tailwind v4
+   scans files rather than the module graph. The JS delta isolates cleanly: **213.00 → 215.05 kB raw,
+   66.63 → 67.40 kB gzip (+2.05 / +0.77)** on `index-*.js`. Same trap as the "utility class names
+   harvested out of prose" finding: what generates CSS here is not what the bundler imports.
+6. **`--color-accent` as a selected border measures 5.26:1 on `--color-page` and 4.76:1 on
+   `--color-surface`**, both clear of the 3:1 non-text floor (WCAG 1.4.11) — so no new token was
+   introduced. The tick beside the label is not decoration: a border colour is colour alone, which
+   1.4.1 forbids as the only differentiator, and `aria-pressed` covers the non-visual half.
+
+Two smaller notes. The `toHaveAttribute` failure recorded in the footer entry above was this work in
+progress and is fixed — the assertions use `getAttribute()`, and it stands as a good reminder that
+`@testing-library/jest-dom` is not set up here. And `LONG_PRESS_DURATION_MS` deliberately lives in
+`gestures.ts` beside `TAP_MAX_DURATION_MS` rather than in a module of its own: it must stay above it,
+nothing compares them at runtime, and **no rendering would change if they crossed** — a press would
+merely satisfy both readings with event ordering picking the winner. Proximity plus one assertion is
+the entire enforcement.

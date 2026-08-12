@@ -68,6 +68,13 @@ export const APP_NAME = 'Playlist Jitster';
 const FOOTER_AUTHOR = 'Aleix Rabassa';
 const FOOTER_PREFIX = 'Copyright © 2026-present ';
 const FOOTER_SUFFIX = '. All rights reserved.';
+/**
+ * The author's site, which the name links to. It lives here rather than in `Footer.tsx` for the
+ * same reason the words do: it is a value the developer changes, not a decision the component
+ * makes. It is NOT part of `notice` -- the sentence a leak proof subtracts must stay exactly the
+ * text a player reads, and an `href` is not read out.
+ */
+const FOOTER_AUTHOR_URL = 'https://aleixrabassa.vercel.app/';
 
 export const COPY = {
   app: {
@@ -229,6 +236,7 @@ export const COPY = {
 
   footer: {
     author: FOOTER_AUTHOR,
+    authorUrl: FOOTER_AUTHOR_URL,
     prefix: FOOTER_PREFIX,
     suffix: FOOTER_SUFFIX,
     notice: `${FOOTER_PREFIX}${FOOTER_AUTHOR}${FOOTER_SUFFIX}`,

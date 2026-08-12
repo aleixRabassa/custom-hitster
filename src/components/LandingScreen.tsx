@@ -35,15 +35,42 @@
  *
  * The container-level `errorCode` prop keeps its own slot below the form. It describes the
  * REQUEST -- a total failure, or `no-years-found` from the session -- rather than a row.
+ *
+ * ## The suggestions are SELECTABLE, and the selection IS the rows
+ *
+ * Holding a suggestion -- or Ctrl/Cmd/Shift-activating it, which is the keyboard's only route --
+ * puts it in the form instead of dealing a deck from it, so several can be combined and Start
+ * plays all of them at once.
+ *
+ * ===========================================================================
+ *  THERE IS NO SET OF SELECTED IDS IN THIS COMPONENT, AND ADDING ONE IS THE
+ *  CHANGE THAT BREAKS THIS.
+ *
+ *  A suggestion is highlighted exactly when some row holds a link naming it.
+ *  That single fact is what makes the row's ✕ a deselect (it removes the row,
+ *  and the highlight is a function of the rows), what makes a hand-pasted link
+ *  light up the suggestion it names, and what leaves no second copy of the truth
+ *  to drift out of step with the boxes the player can see.
+ *
+ *  Every rule -- membership, the cap, which row a toggle touches -- is in
+ *  `src/game/playlist-selection.ts`, because all of them fail INVISIBLY here: a
+ *  wrong cap is a six-playlist deck and a wrong index is a box that emptied
+ *  itself, and neither is a rendering difference a jsdom test would notice.
+ * ===========================================================================
+ *
+ * A press with nothing selected still deals a deck immediately and still replaces whatever was
+ * typed -- decision 5, unchanged, and the reason the hold and the modifier exist at all.
  */
 
 import { useRef, useState } from 'react';
 
 import { Footer } from './Footer';
+import { SuggestionButton } from './SuggestionButton';
 import { COPY } from '../game/copy';
 import { MAX_DECK_PLAYLISTS } from '../game/deck-merge';
 import { playlistErrorMessage } from '../game/messages';
 import { savedDeckKey } from '../game/playlist-library';
+import { planSelectionToggle, selectedPlaylistIds } from '../game/playlist-selection';
 import { isSpotifyShortLink, parsePlaylistUrl, spotifyPlaylistUrl } from '../../shared/spotify-url';
 import type { StartFailureCode } from '../game/messages';
 import type { SavedPlaylist } from '../game/playlist-library';
@@ -189,6 +216,85 @@ export function LandingScreen({
     values.map((value) => ({ id: `row-${nextRowIdRef.current++}`, value }));
 
   const canAddRow = rows.length < MAX_DECK_PLAYLISTS;
+
+  /**
+   * Which playlists the form currently holds, and therefore which suggestions are lit.
+   *
+   * Recomputed on every render rather than memoised: it is five short strings through a regex, and
+   * a `useMemo` here would cost a dependency array that has to stay right for no measurable gain.
+   */
+  const selectedIds = selectedPlaylistIds(rows.map((row) => row.value));
+
+  /**
+   * Is the screen in selection mode -- i.e. would a plain press add rather than deal a deck?
+   *
+   * ===========================================================================
+   *  SCOPED TO THE SUGGESTIONS, NOT TO "ANY PARSEABLE ROW", AND THAT IS THE
+   *  POINT.
+   *
+   *  The HIGHLIGHT is the only cue the player has for which of the two things a
+   *  press will do, so the mode has to be exactly what is highlighted. A player
+   *  who pasted their own link has nothing lit, so a press on a suggestion still
+   *  deals a deck immediately -- which does discard that typed row, and is
+   *  decision 5 unchanged rather than an oversight.
+   *
+   *  If this read `selectedIds.size > 0`, typing any valid link would silently
+   *  change what every suggestion does, with nothing on screen to say so.
+   * ===========================================================================
+   */
+  const isSelecting = SUGGESTED_PLAYLISTS.some((playlist) => selectedIds.has(playlist.id));
+
+  /**
+   * Drop one row, and never leave the form with none.
+   *
+   * The substitute blank row is what lets the ✕ appear beside a lone filled row at all: without
+   * it, removing the only row would leave a form with nothing to type in.
+   *
+   * Reads `rows` and sets the finished array, rather than using the functional form -- `makeRows`
+   * writes `nextRowIdRef`, and a ref write inside an updater React may invoke twice is exactly
+   * what the ref's own comment warns about.
+   */
+  const removeRow = (rowId: string) => {
+    const remaining = rows.filter((candidate) => candidate.id !== rowId);
+
+    setRows(remaining.length === 0 ? makeRows(['']) : remaining);
+  };
+
+  /**
+   * Put a suggested playlist in the form, or take it out again.
+   *
+   * Every decision belongs to `planSelectionToggle`; this applies the instruction it returns. The
+   * `at-cap` case is deliberately silent: the form is already showing "N playlists is the maximum
+   * for one deck" in exactly that state, and a second message about the same fact is noise.
+   */
+  const toggleSuggestion = (playlistId: string) => {
+    const plan = planSelectionToggle(
+      rows.map((row) => row.value),
+      playlistId,
+      MAX_DECK_PLAYLISTS,
+    );
+
+    if (plan.action === 'at-cap') return;
+
+    if (plan.action === 'remove') {
+      const target = rows[plan.atIndex];
+      if (target) removeRow(target.id);
+
+      return;
+    }
+
+    if (plan.intoIndex === null) {
+      setRows([...rows, ...makeRows([plan.url])]);
+
+      return;
+    }
+
+    // Rebuilt without `errorCode`, exactly as an edit to the box would: a message about the value
+    // that used to be there must not sit under the one that just replaced it.
+    setRows(
+      rows.map((row, index) => (index === plan.intoIndex ? { id: row.id, value: plan.url } : row)),
+    );
+  };
 
   /**
    * Validate every row and submit the whole set, or submit nothing.
@@ -471,19 +577,26 @@ export function LandingScreen({
                 </label>
 
                 {/*
-                Only once there is something to remove. A lone row with a remove button beside it
-                offers an action that cannot do anything -- the form always has at least one box.
+                Only once there is something to remove -- which now means EITHER another row to
+                fall back to OR something in this one. A lone EMPTY row still has no ✕, because
+                removing it would do nothing observable; a lone FILLED row does, and removing it
+                substitutes a fresh blank (see `removeRow`).
+
+                That second case was added with the suggestion selection, and it is not cosmetic:
+                the ✕ is one of the two documented ways to deselect a suggestion, and the first
+                selection on a pristine screen lands in the single starting row. Without this it
+                would be the one selection the ✕ could not undo.
 
                 The name carries the row's POSITION, for the same reason the library's remove
                 button carries its playlist name: five buttons all called "Remove" give a
                 screen-reader user no way to tell which one they are on. The ✕ is `aria-hidden`
                 decoration -- same split as `NoticeBanner`'s Dismiss.
               */}
-                {rows.length === 1 ? null : (
+                {rows.length === 1 && row.value === '' ? null : (
                   <button
                     type="button"
                     onClick={() => {
-                      setRows((current) => current.filter((candidate) => candidate.id !== row.id));
+                      removeRow(row.id);
                     }}
                     disabled={isLoading}
                     aria-label={COPY.landing.removeRow(index + 1)}
@@ -724,30 +837,31 @@ export function LandingScreen({
         <ul className="grid gap-2 sm:grid-cols-2">
           {SUGGESTED_PLAYLISTS.map((playlist) => (
             <li key={playlist.id}>
-              <button
-                type="button"
-                // Fills the rows with the FULL link AND submits, so the suggestion behaves
-                // exactly as if that link had been pasted -- including leaving it visible, which
-                // is how a player learns what a valid link looks like. It used to fill in the
-                // bare id, which parsed but taught the wrong shape.
-                //
-                // One id, so it deals a SINGLE-playlist deck and replaces whatever was typed.
-                onClick={() => {
+              {/*
+                `SuggestionButton` owns the press: a hold selects, a plain press deals a deck
+                while nothing is selected and toggles once something is. It is a separate
+                component because `useLongPress` is a hook and a hook cannot be called inside
+                this `.map()` -- see its header for the rest.
+
+                `onStart` is Phase 6's path, untouched: fill the rows with the FULL link AND
+                submit, so the suggestion behaves exactly as if that link had been pasted --
+                including leaving it visible, which is how a player learns what a valid link
+                looks like. One id, so it deals a SINGLE-playlist deck and replaces whatever was
+                typed.
+              */}
+              <SuggestionButton
+                label={playlist.label}
+                blurb={playlist.blurb}
+                isSelected={selectedIds.has(playlist.id)}
+                isSelecting={isSelecting}
+                disabled={isLoading}
+                onToggle={() => {
+                  toggleSuggestion(playlist.id);
+                }}
+                onStart={() => {
                   submitPlaylistIds([playlist.id]);
                 }}
-                disabled={isLoading}
-                /*
-                  `focus-visible`, not `focus`. These are the buttons that make the
-                  distinction visible: they submit and the screen is replaced, so a `focus:` ring
-                  would be the last thing a mouse user saw of the landing screen. With
-                  `focus-visible` a click leaves no ring and a Tab still shows one.
-                */
-                className="flex h-full w-full touch-target items-baseline justify-between gap-3 rounded-lg border border-border px-3 py-2 text-left hover:border-border-strong hover:bg-surface focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)"
-              >
-                <span className="text-xs text-fg-secondary">{playlist.label}</span>
-                {/* Genre/era only. Never a track, an artist or a year -- see the header block. */}
-                <span className="text-xs text-fg-muted">{playlist.blurb}</span>
-              </button>
+              />
             </li>
           ))}
         </ul>

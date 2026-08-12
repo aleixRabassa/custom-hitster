@@ -140,9 +140,9 @@ export function Footer() {
          "the standard green of the app" means here. Not `--color-fg-year` (the
          card's neon, reserved for the game's payoff) and not `--color-ring-from`
          (a gradient stop, not a text colour): reusing an action colour for a
-         non-interactive word is safe because it is not on a control, while
-         inventing a fourth green would put a colour in the app that the theme
-         block does not name.
+         word that is now a LINK is if anything more honest than it was when the
+         name was inert, while inventing a fourth green would put a colour in the
+         app that the theme block does not name.
 
          CONTRAST WAS THE ONLY REAL QUESTION, because this is the app's smallest
          text (`text-xs`, i.e. 12px, so the 4.5:1 floor applies rather than the
@@ -153,14 +153,43 @@ export function Footer() {
          darkened, THIS is the usage that fails first: `--color-on-accent` exists
          precisely because white on that background measured 3.67:1.
 
-         A `<span>` rather than a second `<footer>` line, and the three parts
-         concatenate with no separator, so the element's `textContent` is still
-         exactly `COPY.footer.notice` -- which is what the leak proofs subtract
-         and what `Footer.test.tsx` queries for. Splitting the sentence into
-         styled parts must not split the string.
+         THE THREE PARTS CONCATENATE WITH NO SEPARATOR, so the element's
+         `textContent` is still exactly `COPY.footer.notice` -- which is what the
+         leak proofs subtract and what `Footer.test.tsx` queries for. Styling or
+         linking the name must not split the string.
+        =========================================================================
+
+        =========================================================================
+         IT IS THE APP'S ONLY ANCHOR (2026-08-12), so the conventions every other
+         interactive element here follows had to be applied by hand.
+
+         `focus-visible:focus-ring` because the repo's rule is that EVERY
+         interactive element gets one, and this is now interactive: it is
+         reachable by Tab on all four screens, and a keyboard user who lands on
+         an unringed link has no idea where they are. `font-bold` is what the
+         developer asked for and also the non-colour half of "this is a link",
+         which matters because colour alone is not an affordance.
+
+         `target="_blank"` with `rel="noreferrer noopener"`: the game keeps state
+         in the page -- a deck mid-crawl, an unsaved session -- so navigating the
+         tab away from a footer link would be an expensive misclick, and `noopener`
+         is what stops the opened page reaching back through `window.opener`.
+
+         NO `aria-label`. The link's accessible name is its text, which is the
+         author's name; an "opens in a new tab" label would put a second string in
+         `copy.ts` for a fact the browser already conveys, and -- more to the point
+         -- `Footer.test.tsx` asserts the footer carries no `aria-label`, because
+         this component renders on every screen including mid-game.
         =========================================================================
       */}
-      <span className="text-accent">{COPY.footer.author}</span>
+      <a
+        className="font-bold text-accent focus-visible:focus-ring"
+        href={COPY.footer.authorUrl}
+        target="_blank"
+        rel="noreferrer noopener"
+      >
+        {COPY.footer.author}
+      </a>
       {COPY.footer.suffix}
     </footer>
   );

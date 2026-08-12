@@ -638,6 +638,54 @@ All four must pass. **There are no pre-commit hooks and no CI workflow**, so not
 
 ---
 
+### The suggestion multi-select — built 2026-08-12, and the gesture itself is the part nothing local runs
+
+Holding a suggested playlist (or Ctrl/Cmd/Shift-activating it) puts it in the form instead of dealing
+a deck from it, so up to `MAX_DECK_PLAYLISTS` can be combined and Start plays all of them.
+
+**What IS covered locally, so do not re-check it by hand.** `playlist-selection.test.ts` pins every
+rule about rows and the cap in the node environment; `gestures.test.ts` pins the 500 ms threshold, the
+10px drift bound and — importantly — that the threshold stays above `TAP_MAX_DURATION_MS`;
+`SuggestionButton.test.tsx` fires real pointer sequences against a fake clock and covers the swallowed
+click, the drift cancel, the pointer cancel, the leave and the unmount. This is the first place in
+`src/` that has ever fired a pointer event or used `vi.useFakeTimers()`, and both work.
+
+**What is left is everything a synthetic pointer is not.**
+
+| Check                                                                                              | Status  |
+| -------------------------------------------------------------------------------------------------- | ------- |
+| Android Chrome: a real 500 ms hold selects, with **no text-selection callout and no context menu** | Pending |
+| iOS Safari: the same, and specifically that the **iOS callout** stays suppressed                   | Pending |
+| Both: a hold that turns into a **scroll** does not select, and the page scrolls normally           | Pending |
+| Both: a hold with a normal thumb wobble **does** select — i.e. 10px is usable, not merely present  | Pending |
+| Both: the tick and the accent border are distinguishable from hover and from the focus ring        | Pending |
+| 360px: five selected rows still leave Start reachable above the suggestions                        | Pending |
+| Keyboard: Ctrl+Enter selects, Enter adds the next, Enter on a selected one removes it              | Pending |
+| Screen reader: the suggestion is announced as a **pressed toggle**, and the pressed state changes  | Pending |
+
+> **The first four rows are the gesture, and jsdom has no opinion about any of them.** A synthetic
+> `pointerdown` cannot raise a platform text-selection callout, so `select-none`,
+> `touch-manipulation` and `[-webkit-touch-callout:none]` on `SuggestionButton` are asserted by
+> nothing at all — they are three class names that either work on a real finger or do not. The
+> `preventDefault` on `contextmenu` **is** tested, but only that it happens, not that it was the
+> thing the platform was about to do.
+>
+> **The scroll row is the one with a real failure mode.** The suggestions live in the one column of
+> this app that outgrows the viewport, so a hold that drifts is the ordinary case rather than the
+> exotic one. The mechanism that saves it on touch is `pointercancel`, fired by the browser when it
+> takes the gesture for scrolling — and the drift bound is the backstop for when it does not.
+>
+> **The 360px row is `plan.multi-playlist-ui.md`'s first Open Question, and this feature makes it far
+> easier to reach.** Five rows used to mean pasting five links; it is now five taps. If it does not
+> fit, that plan already records the intended remedy: collapse the suggestions rather than shrink the
+> rows.
+>
+> The last row matters because `aria-pressed` is the only thing that makes this feature exist for a
+> screen-reader user at all — the highlight and the tick are both visual, and a hold is unreachable
+> without a pointer. Run it with the reveal's screen-reader pass above, and **name the reader**.
+
+---
+
 ## 7. Deploy
 
 The Vercel project is **linked and deploys** (first deploy 2026-08-03; deploys can also run from a push to `main`, as the 2026-08-04 build log shows). `vercel.json` declares the build command, output directory, and the SPA rewrite that excludes `/api/*`.

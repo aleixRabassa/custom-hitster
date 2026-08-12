@@ -8,29 +8,30 @@ Several decisions in this repo look like mistakes and are not. If something seem
 
 ## Documentation Index
 
-| File                                                                                       | What it covers                                                                                               |
-| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
-| [`docs/architecture.md`](./docs/architecture.md)                                           | Components, import boundaries between `src`/`api`/`shared`, data flow, external services, planned phases     |
-| [`docs/api.md`](./docs/api.md)                                                             | The `api/` surface, handler conventions, environment variable reference                                      |
-| [`docs/toolchain.md`](./docs/toolchain.md)                                                 | The two TypeScript installs, the four tsconfigs, ESLint/Prettier, pnpm and the Node pin, Tailwind, Vitest    |
-| [`docs/development.md`](./docs/development.md)                                             | Setup, scripts, running functions locally, tests, deploy, known limitations                                  |
-| [`docs/agent_findings.md`](./docs/agent_findings.md)                                       | Running log of discoveries and gotchas found while working here                                              |
-| [`docs/plans/plan.md`](./docs/plans/plan.md)                                               | **Authoritative phase plan** — what belongs in which phase, plus all Phase 0 research findings               |
-| [`docs/plans/plan.phase-1.md`](./docs/plans/plan.phase-1.md)                               | Phase 1 detail, decisions, and execution notes                                                               |
-| [`docs/plans/plan.phase-2-playlist.md`](./docs/plans/plan.phase-2-playlist.md)             | Phase 2, first half — URL parsing, the embed adapter, `/api/playlist`                                        |
-| [`docs/plans/plan.phase-2-year.md`](./docs/plans/plan.phase-2-year.md)                     | Phase 2, second half — the cache, the MusicBrainz adapter, year resolution, `/api/year`                      |
-| [`docs/plans/plan.phase-3.md`](./docs/plans/plan.phase-3.md)                               | Phase 3 — the reducer, seeded shuffle, persistence, and the progressive-loading resolver                     |
-| [`docs/plans/plan.phase-4-6-card-ui.md`](./docs/plans/plan.phase-4-6-card-ui.md)           | Phase 4 — the DOM test environment, the flip card, the QR code, and card audio                               |
-| [`docs/plans/plan.phase-4-6-gestures.md`](./docs/plans/plan.phase-4-6-gestures.md)         | Phase 5 — swipe, tap-versus-drag, the stacked deck, keyboard controls                                        |
-| [`docs/plans/plan.phase-4-6-screens.md`](./docs/plans/plan.phase-4-6-screens.md)           | Phase 6 — landing, the playlist client, notices, the HUD, the end screen, the session container              |
-| [`docs/plans/plan.phase-7-look.md`](./docs/plans/plan.phase-7-look.md)                     | Phase 7, first half — the `@theme` token layer, the fluid card, reduced motion, focus and ARIA               |
-| [`docs/plans/plan.phase-7-robustness.md`](./docs/plans/plan.phase-7-robustness.md)         | Phase 7, second half — failure codes, the error boundary, the chunk splits, the meta tags, Lighthouse        |
-| [`docs/plans/plan.phase-8-look-and-shell.md`](./docs/plans/plan.phase-8-look-and-shell.md) | Phase 8, plan 1 — neon-ring card design, contrast re-audit, PWA, icon set. **Built**                         |
-| [`docs/plans/plan.phase-8-features.md`](./docs/plans/plan.phase-8-features.md)             | Phase 8, plan 2 — the share link, the saved-playlist library, the PDF export, the audio reversal. **Built**  |
-| [`docs/plans/plan.phase-8-added-by.md`](./docs/plans/plan.phase-8-added-by.md)             | Phase 8, plan 3 — the "Added by" decision. Writes no code; resolved as won't-build                           |
-| [`docs/plans/plan.multi-playlist-core.md`](./docs/plans/plan.multi-playlist-core.md)       | Multi-playlist, plan 1 — the merge module, the widened state, both v2 storage formats, the link. **Built**   |
-| [`docs/plans/plan.multi-playlist-ui.md`](./docs/plans/plan.multi-playlist-ui.md)           | Multi-playlist, plan 2 — the landing rows, the fan-out hook, the container wiring, the labels. **Not built** |
-| [`docs/plans/plan.year-accuracy.md`](./docs/plans/plan.year-accuracy.md)                   | The tier ladder — Singles/EPs in the top rung, the graded middle rung, the re-captured fixtures. **Built**   |
+| File                                                                                         | What it covers                                                                                              |
+| -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| [`docs/architecture.md`](./docs/architecture.md)                                             | Components, import boundaries between `src`/`api`/`shared`, data flow, external services, planned phases    |
+| [`docs/api.md`](./docs/api.md)                                                               | The `api/` surface, handler conventions, environment variable reference                                     |
+| [`docs/toolchain.md`](./docs/toolchain.md)                                                   | The two TypeScript installs, the four tsconfigs, ESLint/Prettier, pnpm and the Node pin, Tailwind, Vitest   |
+| [`docs/development.md`](./docs/development.md)                                               | Setup, scripts, running functions locally, tests, deploy, known limitations                                 |
+| [`docs/agent_findings.md`](./docs/agent_findings.md)                                         | Running log of discoveries and gotchas found while working here                                             |
+| [`docs/plans/plan.md`](./docs/plans/plan.md)                                                 | **Authoritative phase plan** — what belongs in which phase, plus all Phase 0 research findings              |
+| [`docs/plans/plan.phase-1.md`](./docs/plans/plan.phase-1.md)                                 | Phase 1 detail, decisions, and execution notes                                                              |
+| [`docs/plans/plan.phase-2-playlist.md`](./docs/plans/plan.phase-2-playlist.md)               | Phase 2, first half — URL parsing, the embed adapter, `/api/playlist`                                       |
+| [`docs/plans/plan.phase-2-year.md`](./docs/plans/plan.phase-2-year.md)                       | Phase 2, second half — the cache, the MusicBrainz adapter, year resolution, `/api/year`                     |
+| [`docs/plans/plan.phase-3.md`](./docs/plans/plan.phase-3.md)                                 | Phase 3 — the reducer, seeded shuffle, persistence, and the progressive-loading resolver                    |
+| [`docs/plans/plan.phase-4-6-card-ui.md`](./docs/plans/plan.phase-4-6-card-ui.md)             | Phase 4 — the DOM test environment, the flip card, the QR code, and card audio                              |
+| [`docs/plans/plan.phase-4-6-gestures.md`](./docs/plans/plan.phase-4-6-gestures.md)           | Phase 5 — swipe, tap-versus-drag, the stacked deck, keyboard controls                                       |
+| [`docs/plans/plan.phase-4-6-screens.md`](./docs/plans/plan.phase-4-6-screens.md)             | Phase 6 — landing, the playlist client, notices, the HUD, the end screen, the session container             |
+| [`docs/plans/plan.phase-7-look.md`](./docs/plans/plan.phase-7-look.md)                       | Phase 7, first half — the `@theme` token layer, the fluid card, reduced motion, focus and ARIA              |
+| [`docs/plans/plan.phase-7-robustness.md`](./docs/plans/plan.phase-7-robustness.md)           | Phase 7, second half — failure codes, the error boundary, the chunk splits, the meta tags, Lighthouse       |
+| [`docs/plans/plan.phase-8-look-and-shell.md`](./docs/plans/plan.phase-8-look-and-shell.md)   | Phase 8, plan 1 — neon-ring card design, contrast re-audit, PWA, icon set. **Built**                        |
+| [`docs/plans/plan.phase-8-features.md`](./docs/plans/plan.phase-8-features.md)               | Phase 8, plan 2 — the share link, the saved-playlist library, the PDF export, the audio reversal. **Built** |
+| [`docs/plans/plan.phase-8-added-by.md`](./docs/plans/plan.phase-8-added-by.md)               | Phase 8, plan 3 — the "Added by" decision. Writes no code; resolved as won't-build                          |
+| [`docs/plans/plan.multi-playlist-core.md`](./docs/plans/plan.multi-playlist-core.md)         | Multi-playlist, plan 1 — the merge module, the widened state, both v2 storage formats, the link. **Built**  |
+| [`docs/plans/plan.multi-playlist-ui.md`](./docs/plans/plan.multi-playlist-ui.md)             | Multi-playlist, plan 2 — the landing rows, the fan-out hook, the container wiring, the labels. **Built**    |
+| [`docs/plans/plan.year-accuracy.md`](./docs/plans/plan.year-accuracy.md)                     | The tier ladder — Singles/EPs in the top rung, the graded middle rung, the re-captured fixtures. **Built**  |
+| [`docs/plans/plan.suggestion-multi-select.md`](./docs/plans/plan.suggestion-multi-select.md) | Hold a suggested playlist to select it — the pure selection module, the press hook. **Built**               |
 
 **Do not build ahead of the current phase.** The plan defers things deliberately. Current phase: **8, CODE COMPLETE.** Phases 1–7 are complete, all three Phase 8 plans are resolved, and the app is playable end to end, has a design surface, is installable, and fails legibly. `src/App.tsx` is the **real container** and the only caller of `useGameSession()`. Plan 2 built the shareable deck URL, the saved-playlist library, the printable PDF export and the audio reversal; plan 1 built the neon ring, the contrast re-audit, the PWA and the icon set; plan 3 resolved "Added by" as won't-build with no code. Note that plan 2 depended on plan 1 only **softly** and did not wait — so the PDF's print palette is deliberately its own and did not change when the screen was redesigned.
 
@@ -57,27 +58,52 @@ them pure-wording checks with no constant to point at: the `/same deck/i` and `/
 property those were really defending and which survives any rewrite. Full reasoning in the module's
 own header; the deletions are logged in [`docs/agent_findings.md`](./docs/agent_findings.md).
 
-**A DECK IS NOW 1..5 PLAYLISTS, and plan 1 of 2 is built (2026-08-07) — so the tree is green but the
-FEATURE IS HALF LANDED.** Everything below React exists: `src/game/deck-merge.ts` (the merge, the
-dedupe, the notice aggregation, the failure ordering, `deckLabel()` and `MAX_DECK_PLAYLISTS`),
-`GameState.playlists` replacing `playlist`, both `localStorage` payloads at **v2 reading v1**, the
-share link's `playlist` param as a **comma list**, and `SavedPlaylist.ids` keyed by `savedDeckKey()`.
-**Nothing above React does**: `usePlaylist` still fetches ONE playlist, the landing screen still has
-one input, and there is no way for a player to name a second playlist. That is
-[`plan.multi-playlist-ui.md`](./docs/plans/plan.multi-playlist-ui.md), and until it lands the app
-behaves exactly as it did — the whole feature is the `n = 1` case. **`App.tsx`, `DeckActions.tsx` and
-`LandingScreen.tsx` carry small n=1 SHIMS, each commented as such**, because plan 1 is out of scope
-for them and the four checks still had to pass; plan 2 replaces every one. The one shim with a
-behavioural edge: **`App.tsx`'s link effect IGNORES a link naming several playlists** rather than
-dealing its first — unreachable today, since this build's `buildDeckLink` only ever emits one id, and
-dealing a deck the link did not describe is exactly what the over-cap rejection refuses to do.
-**The merge lives in a pure module because a wrong dedupe or a wrong label is invisible to every DOM
-test** — it reads as a duplicate card halfway through a deck, or as a slightly odd heading. Three
-rules to know before touching any of it: **the v1 lifts on both storage keys are load-bearing** (drop
-one and a deploy silently empties a curated library on the landing screen), **the library caps its
-ids on read while a stored session deliberately does not** (the cap governs INPUT; a saved session
-describes a deck that already exists), and **a link over the cap is rejected, never truncated**. Full
-reasoning in [`docs/architecture.md`](./docs/architecture.md) §3, "The combined deck".
+**A DECK IS 1..5 PLAYLISTS AND BOTH PLANS ARE BUILT — plan 1 on 2026-08-07, plan 2 with it.** This
+paragraph claimed until 2026-08-12 that plan 2 was unbuilt and that `App.tsx`, `DeckActions.tsx` and
+`LandingScreen.tsx` carried `n = 1` **shims**; none of that is true and none of it has been for some
+time. There are no shims (grep `shim` under `src/` — nothing), `usePlaylist.request(urls)` fans out
+over up to five `fetchPlaylist` calls under **one** `AbortController`, `LandingScreen` is a list of
+1..5 rows with a "+" and per-row errors, and `App.tsx`'s link effect submits **every** id a link
+names. Only plan 2's own Documentation Updates were ever outstanding. Below React: `src/game/deck-merge.ts`
+(the merge, the dedupe, the notice aggregation, the failure ordering, `deckLabel()` and
+`MAX_DECK_PLAYLISTS`), `GameState.playlists` replacing `playlist`, both `localStorage` payloads at
+**v2 reading v1**, the share link's `playlist` param as a **comma list**, and `SavedPlaylist.ids`
+keyed by `savedDeckKey()`. **The merge lives in a pure module because a wrong dedupe or a wrong label
+is invisible to every DOM test** — it reads as a duplicate card halfway through a deck, or as a
+slightly odd heading. Three rules to know before touching any of it: **the v1 lifts on both storage
+keys are load-bearing** (drop one and a deploy silently empties a curated library on the landing
+screen), **the library caps its ids on read while a stored session deliberately does not** (the cap
+governs INPUT; a saved session describes a deck that already exists), and **a link over the cap is
+rejected, never truncated**. Full reasoning in
+[`docs/architecture.md`](./docs/architecture.md) §3, "The combined deck".
+
+**HOLDING A SUGGESTED PLAYLIST SELECTS IT AS OF 2026-08-12, AND THE SELECTION IS DERIVED FROM THE
+ROWS RATHER THAN STORED — that is the whole design, and a `Set` in component state is the change that
+breaks it.** A suggestion is lit exactly when some form row parses to its id (via the shared
+`parsePlaylistUrl`, so a `?si=` tail counts), which makes the row's ✕ **be** a deselect, makes a
+hand-pasted link light the suggestion it names, and leaves no second copy of the truth to disagree
+with the boxes on screen. The decisions are `src/game/playlist-selection.ts` — `selectedPlaylistIds`,
+`planSelectionToggle` (returns an INSTRUCTION, so the module never touches row identity) and
+`suggestionIntent` — all node-tested, because a wrong cap is a six-playlist deck and a wrong index is
+a box that emptied itself, and neither is a rendering difference jsdom would notice. The binding is
+`src/hooks/useLongPress.ts` and `src/components/SuggestionButton.tsx` (its own component only because
+a hook cannot be called inside the `.map()`). **Nothing below React changed**: `onSubmit` has taken an
+array since plan 2. Six things before editing any of it. **A press with NOTHING selected still deals a
+deck immediately, replacing typed rows** — decision 5 unchanged, and the asymmetry the feature is
+built on; the three ways to say "select instead" (the hold, a Ctrl/Cmd/Shift modifier, and "something
+is already lit") are all explicit. **The modifier is the keyboard's ONLY route**, since a hold needs a
+pointer. **Selection mode is scoped to the suggestions**, never "any parseable row" — the highlight is
+the only cue for which of two things a press does, so a typed link must not silently change it.
+**`LONG_PRESS_DURATION_MS` (500) sits beside `TAP_MAX_DURATION_MS` (400) in `gestures.ts` for the
+invariant, not the topic**: it must stay above it, nothing compares them at runtime, and no rendering
+would change if they crossed — a press would just satisfy both readings. **`consumeLongPress()` must
+stay first in the button's `onClick`**, because `click` fires after `pointerup` and the swallowed
+click is the one-line bug that would turn every hold into a single-playlist game. And the row's ✕ now
+renders beside a **lone filled row** too (removing the last row substitutes a blank), without which
+the first selection on a pristine screen would be the one the ✕ could not undo. `select-none`,
+`touch-manipulation` and `[-webkit-touch-callout:none]` on the button are asserted by **nothing** — a
+synthetic pointer cannot raise a platform text-selection callout, so that row is manual
+([`docs/development.md`](./docs/development.md) §5).
 
 **`Single` and `EP` COUNT toward a `high` year as of 2026-08-11, and that reverses Phase 2's
 `primary-type: Album` rule — narrowing it back is the one edit that reintroduces the bug.** A release
@@ -379,7 +405,7 @@ instead of ending the scroll. Two more traps. The `<footer>` is inside each `<ma
 `contentinfo` regardless of ancestry**, so a role query cannot check any of this (a `toBeNull()` was
 written first and failed against correct code). And its **"2026-present" is a year-shaped number on a
 pre-reveal surface**: three leak proxies asserting `not.toMatch(/\b(19|20)\d{2}\b/)` caught it, and they
-now subtract `COPYRIGHT_NOTICE` by exact string rather than loosening the pattern. **That string now lives in `src/game/copy.ts`** (re-exported from `Footer.tsx` for its importers), and since 2026-08-12 the author's name is a `<span className="text-accent">` inside the same line — the app's one use of the accent as TEXT, measured at 5.13:1 on `--color-page`. The three parts concatenate with **no separator**, so `<footer>`'s `textContent` is still the notice character for character; break that and the leak proxies fail on screens that have no leak. `getByText` cannot see it (its matcher reads only DIRECT text-node children), which is why `Footer.test.tsx` reads `textContent`.
+now subtract `COPYRIGHT_NOTICE` by exact string rather than loosening the pattern. **That string now lives in `src/game/copy.ts`** (re-exported from `Footer.tsx` for its importers), and since 2026-08-12 the author's name is a **bold `<a>`** inside the same line — `font-bold text-accent focus-visible:focus-ring`, `target="_blank" rel="noreferrer noopener"`, href from `COPY.footer.authorUrl`. It is the app's one use of the accent as TEXT (measured 5.13:1 on `--color-page`) and **the app's only anchor**, so it is also the only place the everything-focusable-gets-a-focus-ring rule had to be applied by hand. The URL is deliberately **not part of `notice`** — that string is what the leak proxies subtract, and an `href` is not text a player reads. The three parts concatenate with **no separator**, so `<footer>`'s `textContent` is still the notice character for character; break that and the leak proxies fail on screens that have no leak. `getByText` cannot see it (its matcher reads only DIRECT text-node children), which is why `Footer.test.tsx` reads `textContent`.
 
 **The app is "Playlist Jitster" as of 2026-08-11 — and the RENAME'S BOUNDARY is the part to know.**
 Renamed: `index.html`'s `<title>`, `manifest.name`/`short_name`, `LandingScreen`'s `<h1>`, README's

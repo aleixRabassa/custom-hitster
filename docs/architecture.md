@@ -504,6 +504,32 @@ The link now has a **third** reason it cannot promise the same deck, beside the 
 
 **No cap on the combined deck size, and the year resolver is untouched.** Five playlists can be ~500 cards and the crawl runs at roughly 1 req/s, but the card-1 gate means play still starts in seconds — the resolver already takes the deck rather than the playlist, so a 500-card crawl needed no new code. Plan 2 says the size out loud in a notice instead of capping it.
 
+#### Selecting suggestions — built 2026-08-12
+
+Pasting five links is the only way a player could reach a five-playlist deck, and the suggestions — the one-click demo path a first-time visitor actually uses — could only ever deal one. **Holding a suggestion now selects it instead**, it appears as a row in the form, and further suggestions join it with a single tap each.
+
+```
+src/game/playlist-selection.ts   the DECISIONS, pure, node-tested
+  selectedPlaylistIds(values)      → which suggestions the rows already hold
+  planSelectionToggle(values,…)    → 'add' (into a blank row, or appended) | 'remove' | 'at-cap'
+  suggestionIntent({…})            → 'toggle' | 'start'
+src/game/gestures.ts             LONG_PRESS_DURATION_MS · LONG_PRESS_MAX_MOVEMENT_PX
+src/hooks/useLongPress.ts        the BINDING: one timer, three refs, no thresholds
+src/components/SuggestionButton  one suggestion; owns the press, renders the pressed state
+```
+
+**The selection is derived from the rows and is never stored, and that is the whole design.** A suggestion is lit exactly when some row holds a link naming it — parsed with the shared `parsePlaylistUrl`, so a `?si=` tail or an `intl-es/` prefix counts. Three things follow for free rather than being built: the row's ✕ **is** a deselect, a hand-pasted link lights the suggestion it names, and there is no second copy of the truth to drift out of step with the boxes the player can see. It is the same shape as `deckCollapsed` and as `usePdfExport`'s derived wait.
+
+**A press with nothing selected still deals a deck immediately** — decision 5 unchanged, including that it replaces typed rows. That is the asymmetry the whole feature is built around: the default press is unchanged, and the three ways to say "select instead" are all explicit. The hold is the asked-for gesture; **Ctrl/Cmd/Shift is the keyboard's only route**, since a hold cannot be performed without a pointer; and once anything is lit, a plain press toggles, which is what makes picks two through five one tap each.
+
+**"Selection mode" is scoped to the suggestions, not to any parseable row.** The highlight is the only cue for which of the two things a press will do, so the mode must be exactly what is highlighted. Reading it as "any valid row" would let a typed link silently change what every suggestion does, with nothing on screen saying so.
+
+**`LONG_PRESS_DURATION_MS` lives beside `TAP_MAX_DURATION_MS` for the invariant, not the topic.** It must stay above it, nothing compares them at runtime, and no rendering would change if they crossed — a press would merely satisfy both readings, with event ordering picking the winner. A separate module is exactly how one gets lowered without the other being seen. `gestures.test.ts` asserts the ordering, in the same shape as the existing tap/commit dead-band assertion.
+
+**Nothing below React changed.** `onSubmit` has taken an array since plan 2, so a five-suggestion deck is the same call a five-row paste already made: no reducer action, no storage format, no link format, no hook. The cost is **+2.05 kB raw / +0.77 kB gzip** on the initial chunk.
+
+Two consequences worth knowing before editing any of it. The row's ✕ now renders beside a **lone filled row** as well as beside any row when there are several, and removing the last row substitutes a fresh blank one — without that, the first selection on a pristine screen (which lands in the single starting row) would be the one selection the ✕ could not undo. And `SuggestionButton` carries `select-none`, `touch-manipulation` and `[-webkit-touch-callout:none]` because a 500 ms hold otherwise raises the platform's text-selection affordance at almost exactly the threshold; **none of those three is asserted by anything**, because a synthetic pointer cannot raise a callout ([`development.md`](./development.md) §5).
+
 ---
 
 ### The error boundary and the chunk layout — built
@@ -726,6 +752,17 @@ number on a pre-reveal surface**, which three leak-proxy tests caught immediatel
 stays absolute for everything else. On the game screen the footer is rendered **before the two
 dialogs**, which is the tab order — painting is unaffected either way, since both dialogs are
 `fixed z-50`.
+
+**The author's name is the app's only `<a>` (2026-08-12), and being the first of its kind is what
+made it worth writing down.** It is `font-bold text-accent focus-visible:focus-ring`, `target="_blank"`
+with `rel="noreferrer noopener"`, pointing at `COPY.footer.authorUrl` — the URL lives in `copy.ts`
+beside the words for the same reason they do, and deliberately **outside `notice`**, because that
+string is what the three leak proxies subtract and an `href` is not text a player reads. Three things
+follow. The `focus-ring` is not decoration: the link is now in the tab order of **all four screens**,
+including mid-game, and the repo's rule is that everything focusable carries one. Both dialogs trap
+Tab, so it stays unreachable behind a backdrop — that is what makes the footer-before-dialogs DOM
+order above still sufficient. And `font-bold` is doing accessibility work as well as what was asked
+for: colour alone is not a link affordance, and this is the app's dimmest, smallest line.
 
 **One consequence reaches outside presentation.** `SWIPE_COMMIT_DISTANCE_PX` (96px) was chosen as a
 third of a 288px card, which is now not a size the card ever takes: the width runs 240px → 384px, so

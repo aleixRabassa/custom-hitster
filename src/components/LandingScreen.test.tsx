@@ -9,14 +9,16 @@
  * none of them, and `aria-describedby` is the only association jsdom can actually see.
  */
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { LandingScreen, SUGGESTED_PLAYLISTS } from './LandingScreen';
 import { COPY, COPYRIGHT_NOTICE } from '../game/copy';
 import { fixtureDeck } from './__fixtures__/cards';
+import { LONG_PRESS_DURATION_MS } from '../game/gestures';
 import { MAX_DECK_PLAYLISTS } from '../game/deck-merge';
 import { PLAYLIST_ERROR_MESSAGES } from '../game/messages';
+import { spotifyPlaylistUrl } from '../../shared/spotify-url';
 
 const PLAYLIST_URL = 'https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M';
 const SECOND_URL = 'https://open.spotify.com/playlist/2zmXlpkOMN92NlQaE2M62c';
@@ -945,6 +947,229 @@ describe('LandingScreen', () => {
       // "2026-present" is a year-shaped constant that derives from no card. Attributes are audited
       // too -- a saved entry's name reaches an `aria-label` ("Remove X from your playlists") as well
       // as the button's text, so `textContent` alone would check one of the two places it appears.
+      const text = auditableText(container).replace(COPYRIGHT_NOTICE, '');
+
+      for (const card of fixtureDeck) {
+        expect(text).not.toContain(card.title);
+        expect(text).not.toContain(card.artist);
+      }
+      expect(text).not.toMatch(/\b(19|20)\d{2}\b/);
+    });
+  });
+
+  /*
+    ===========================================================================
+     THE SUGGESTION SELECTION.
+
+     The gesture's own mechanics -- the threshold, the drift bound, the swallowed
+     click, every way a press can be abandoned -- are asserted in
+     `SuggestionButton.test.tsx`, and the rules about rows and the cap are
+     asserted with no DOM at all in `playlist-selection.test.ts`. What is left
+     for this block is the part that only exists once the two meet the form:
+     that selecting FILLS A BOX, that the box and the highlight agree, and that
+     Start plays the whole set.
+
+     Most of these select with a MODIFIER rather than a hold. It is the same
+     `suggestionIntent` path, it needs no fake clock, and it is also the only
+     route a keyboard user has -- so asserting it here covers the accessible
+     path rather than merely being convenient. One test performs a real hold,
+     because that is the gesture that was asked for.
+    ===========================================================================
+  */
+  describe('the suggestion selection', () => {
+    /** Ctrl-activate: select without holding. The keyboard's route, and the mouse's shortcut. */
+    function selectSuggestion(label: string) {
+      fireEvent.click(suggestionButton(label), { ctrlKey: true });
+    }
+
+    function pressSuggestion(label: string) {
+      fireEvent.click(suggestionButton(label));
+    }
+
+    function isPressed(label: string): boolean {
+      return suggestionButton(label).getAttribute('aria-pressed') === 'true';
+    }
+
+    it('should select a held suggestion instead of dealing a deck from it', () => {
+      // The gesture the feature was asked for, end to end: hold, and the playlist is in the form
+      // with the suggestion lit -- and crucially NOT in a game, which the click that follows a
+      // hold would otherwise have started.
+      vi.useFakeTimers();
+      try {
+        const { onSubmit } = renderLanding();
+        const sample = SUGGESTED_PLAYLISTS[0]!;
+        const button = suggestionButton(sample.label);
+
+        fireEvent.pointerDown(button, { clientX: 0, clientY: 0 });
+        act(() => {
+          vi.advanceTimersByTime(LONG_PRESS_DURATION_MS);
+        });
+        fireEvent.pointerUp(button);
+        fireEvent.click(button);
+
+        expect(onSubmit).not.toHaveBeenCalled();
+        expect(rowInput(0).value).toBe(spotifyPlaylistUrl(sample.id));
+        expect(isPressed(sample.label)).toBe(true);
+      } finally {
+        // Restored here rather than in an `afterEach`, so a fake clock cannot leak into the tests
+        // below -- or, worse, into another file sharing this worker.
+        vi.useRealTimers();
+      }
+    });
+
+    it('should fill the blank starting row rather than adding a box beside it', () => {
+      // The first selection has somewhere to go. Appending here would leave the empty starting
+      // row above the new one and grow a hole in the form per press.
+      renderLanding();
+      const sample = SUGGESTED_PLAYLISTS[0]!;
+
+      selectSuggestion(sample.label);
+
+      expect(screen.getAllByRole('textbox')).toHaveLength(1);
+      expect(rowInput(0).value).toBe(spotifyPlaylistUrl(sample.id));
+    });
+
+    it('should add further suggestions with a plain press once one is selected', () => {
+      // Picks two through five are a single tap each. That is what makes the feature usable --
+      // holding five times would be a chore -- and the highlight is the cue that says so.
+      const first = SUGGESTED_PLAYLISTS[0]!;
+      const second = SUGGESTED_PLAYLISTS[1]!;
+      const third = SUGGESTED_PLAYLISTS[2]!;
+      renderLanding();
+
+      selectSuggestion(first.label);
+      pressSuggestion(second.label);
+      pressSuggestion(third.label);
+
+      expect(rowInput(0).value).toBe(spotifyPlaylistUrl(first.id));
+      expect(rowInput(1).value).toBe(spotifyPlaylistUrl(second.id));
+      expect(rowInput(2).value).toBe(spotifyPlaylistUrl(third.id));
+      expect(isPressed(first.label)).toBe(true);
+      expect(isPressed(third.label)).toBe(true);
+    });
+
+    it('should not disturb a row the player typed', () => {
+      // The promise the whole feature rests on. A selection READS the rows and appends; it never
+      // rewrites one.
+      renderLanding();
+      const sample = SUGGESTED_PLAYLISTS[0]!;
+
+      typeInRow(0, PLAYLIST_URL);
+      selectSuggestion(sample.label);
+
+      expect(rowInput(0).value).toBe(PLAYLIST_URL);
+      expect(rowInput(1).value).toBe(spotifyPlaylistUrl(sample.id));
+    });
+
+    it('should deselect a suggestion pressed again', () => {
+      // The first of the two ways to undo a selection.
+      renderLanding();
+      const sample = SUGGESTED_PLAYLISTS[0]!;
+
+      selectSuggestion(sample.label);
+      pressSuggestion(sample.label);
+
+      expect(isPressed(sample.label)).toBe(false);
+      // Back to one empty box, never to none: `removeRow` substitutes a blank when the form
+      // would otherwise be left with nothing to type in.
+      expect(screen.getAllByRole('textbox')).toHaveLength(1);
+      expect(rowInput(0).value).toBe('');
+    });
+
+    it('should deselect a suggestion whose row is removed with its remove button', () => {
+      // The second way, and the reason the selection is derived from the rows rather than stored
+      // beside them: this needs no code of its own to work.
+      renderLanding();
+      const sample = SUGGESTED_PLAYLISTS[0]!;
+
+      selectSuggestion(sample.label);
+      fireEvent.click(screen.getByRole('button', { name: COPY.landing.removeRow(1) }));
+
+      expect(isPressed(sample.label)).toBe(false);
+      expect(rowInput(0).value).toBe('');
+    });
+
+    it('should offer a remove button beside a lone row once it holds a selection', () => {
+      // The behaviour change that makes the test above possible at all. A lone EMPTY row still
+      // has none, because removing it would do nothing observable.
+      renderLanding();
+
+      expect(screen.queryByRole('button', { name: COPY.landing.removeRow(1) })).toBeNull();
+
+      selectSuggestion(SUGGESTED_PLAYLISTS[0]!.label);
+
+      expect(screen.queryByRole('button', { name: COPY.landing.removeRow(1) })).not.toBeNull();
+    });
+
+    it('should stop selecting at the maximum number of playlists', () => {
+      // The cap is the FORM'S, not the suggestions': five rows is five rows however they were
+      // filled. The screen is already showing its cap sentence in this state, which is why the
+      // refusal is silent.
+      renderLanding();
+      const picks = SUGGESTED_PLAYLISTS.slice(0, MAX_DECK_PLAYLISTS + 1);
+
+      selectSuggestion(picks[0]!.label);
+      for (const playlist of picks.slice(1)) pressSuggestion(playlist.label);
+
+      expect(screen.getAllByRole('textbox')).toHaveLength(MAX_DECK_PLAYLISTS);
+      expect(isPressed(picks[MAX_DECK_PLAYLISTS]!.label)).toBe(false);
+    });
+
+    it('should still deselect at the cap', () => {
+      // Otherwise a full form is a trap: nothing can go in and nothing can come out.
+      renderLanding();
+      const picks = SUGGESTED_PLAYLISTS.slice(0, MAX_DECK_PLAYLISTS);
+
+      selectSuggestion(picks[0]!.label);
+      for (const playlist of picks.slice(1)) pressSuggestion(playlist.label);
+      pressSuggestion(picks[0]!.label);
+
+      expect(isPressed(picks[0]!.label)).toBe(false);
+      expect(screen.getAllByRole('textbox')).toHaveLength(MAX_DECK_PLAYLISTS - 1);
+    });
+
+    it('should start one game from every selected playlist and every typed row', () => {
+      // The payoff, and the reason nothing below React had to change: `onSubmit` has taken an
+      // array since multi-playlist, so a suggestion-built deck is the same call a multi-row paste
+      // already made.
+      const first = SUGGESTED_PLAYLISTS[0]!;
+      const second = SUGGESTED_PLAYLISTS[1]!;
+      const { onSubmit } = renderLanding();
+
+      selectSuggestion(first.label);
+      pressSuggestion(second.label);
+      pressAdd();
+      typeInRow(2, PLAYLIST_URL);
+      pressStart();
+
+      expect(onSubmit).toHaveBeenCalledExactlyOnceWith([
+        spotifyPlaylistUrl(first.id),
+        spotifyPlaylistUrl(second.id),
+        PLAYLIST_URL,
+      ]);
+    });
+
+    it('should light the suggestion a player pasted the link to by hand', () => {
+      // Not a nicety -- it is the derivation working. The highlight is a function of the rows, so
+      // a link typed into a box is as selected as one that arrived by a hold, and the `?si=` tail
+      // is what Spotify's own share button appends to the commonest paste of all.
+      renderLanding();
+      const sample = SUGGESTED_PLAYLISTS[0]!;
+
+      typeInRow(0, `https://open.spotify.com/playlist/${sample.id}?si=abc123`);
+
+      expect(isPressed(sample.label)).toBe(true);
+    });
+
+    it('should render no track information while suggestions are selected', () => {
+      // The screen-level leak assertion, re-run against the selected markup: the tick, the
+      // pressed state and a full form are all surfaces that did not exist when it was written.
+      const { container } = renderLanding();
+      const picks = SUGGESTED_PLAYLISTS.slice(0, MAX_DECK_PLAYLISTS);
+
+      selectSuggestion(picks[0]!.label);
+      for (const playlist of picks.slice(1)) pressSuggestion(playlist.label);
+
       const text = auditableText(container).replace(COPYRIGHT_NOTICE, '');
 
       for (const card of fixtureDeck) {

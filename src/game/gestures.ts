@@ -1,6 +1,19 @@
 /**
- * The gesture DECISIONS, as pure functions: does this drag advance the card, and was that
- * pointer sequence a tap.
+ * The gesture DECISIONS, as pure functions: does this drag advance the card, was that pointer
+ * sequence a tap, and has a press moved too far to still be a hold.
+ *
+ * ===========================================================================
+ *  MOSTLY THE CARD, BUT NOT ONLY THE CARD: THE LAST TWO CONSTANTS ARE THE
+ *  LANDING SCREEN'S, AND THEY LIVE HERE FOR THE INVARIANT.
+ *
+ *  `LONG_PRESS_DURATION_MS` must stay ABOVE `TAP_MAX_DURATION_MS`, or a press
+ *  can be both a tap and a hold. Nothing enforces that but proximity and one
+ *  assertion in `gestures.test.ts` -- and a separate `long-press.ts` module is
+ *  exactly how someone lowers one of the two without ever seeing the other.
+ *
+ *  So the file is now "every press threshold in the app", and the card sections
+ *  below say so where they used to say "this file".
+ * ===========================================================================
  *
  * ===========================================================================
  *  WHY THIS FILE EXISTS AT ALL, INSTEAD OF THE LOGIC LIVING IN THE HOOK.
@@ -117,6 +130,66 @@ export const TAP_MAX_MOVEMENT_Y_PX = 16;
  * press as a long-press.
  */
 export const TAP_MAX_DURATION_MS = 400;
+
+/**
+ * How long a press must be held before it selects a suggested playlist, in milliseconds.
+ *
+ * The landing screen's, not the card's. 500ms is the platform convention -- it is what Android
+ * and iOS themselves use to enter a selection mode -- and the constant above already names it as
+ * the point "at which mobile browsers start treating a press as a long-press". Matching the OS
+ * rather than beating it is what makes the gesture feel like the one the player already knows.
+ *
+ * ===========================================================================
+ *  THIS MUST STAY ABOVE `TAP_MAX_DURATION_MS`, AND THAT IS WHY THE TWO ARE
+ *  ADJACENT.
+ *
+ *  They govern different elements, so nothing in the app compares them at
+ *  runtime and no rendering would change if they crossed. What would change is
+ *  that a single press could satisfy both readings, and the thing that decides
+ *  which one wins would be event ordering rather than intent.
+ *
+ *  `gestures.test.ts` asserts the ordering, because it is the only place it can
+ *  be asserted at all.
+ * ===========================================================================
+ *
+ * Unlike every other threshold in this file, this one is spent by a TIMER rather than measured
+ * across a completed sequence: the highlight has to appear while the finger is still down, so
+ * `useLongPress` cannot wait for the pointer-up that would let it do the arithmetic.
+ */
+export const LONG_PRESS_DURATION_MS = 500;
+
+/**
+ * How far a pointer may drift during a hold and still be selecting, in CSS pixels.
+ *
+ * ONE symmetric bound rather than the per-axis pair above, because a press on a button has no
+ * privileged axis: the card's asymmetry exists because a swipe lives on x, and there is no swipe
+ * here. 10px matches the tighter of the two card bounds -- a hold that has travelled further than
+ * that is a scroll starting under the finger, and the suggestions sit in the one column of this
+ * app that is expected to scroll.
+ *
+ * Misreading in this direction is cheap in a way the card's never is: a cancelled hold falls back
+ * to a plain press, which either starts a game or toggles, both of which the player can undo.
+ */
+export const LONG_PRESS_MAX_MOVEMENT_PX = 10;
+
+/** How far a press has drifted from where it started. Signed, in CSS pixels. */
+export interface PressMovement {
+  deltaX: number;
+  deltaY: number;
+}
+
+/**
+ * Has this press moved too far to still count as a hold?
+ *
+ * Strictly `>`, so a press sitting exactly ON the bound survives -- the same inclusive tolerance
+ * `isTap` gives, and for the same reason: at-threshold resolves to the reading that does not
+ * cancel what the player was doing.
+ */
+export function exceedsLongPressMovement({ deltaX, deltaY }: PressMovement): boolean {
+  return (
+    Math.abs(deltaX) > LONG_PRESS_MAX_MOVEMENT_PX || Math.abs(deltaY) > LONG_PRESS_MAX_MOVEMENT_PX
+  );
+}
 
 /** One drag's end state, as Motion reports it in `PanInfo` (x axis only -- the card drags on x). */
 export interface DragEnd {
