@@ -16,15 +16,18 @@
  *  which fights Motion for control of the same transform it is animating --
  *  visible as a stutter, and on a mid-range phone as a dropped gesture.
  *
- *  `exitDirection` IS state, because it is read during render (the exit
- *  animation needs it) and it changes exactly once per card, at commit.
+ *  Nothing in here is state at all. Until 2026-09-19 the exit direction was
+ *  (`useState`, set at commit, read by the card's exit animation) -- and it
+ *  was set ONLY by a drag, so a keyboard advance flew every card out the
+ *  "back" way once left meant PREVIOUS. The exit now reads the index delta in
+ *  `CardStack` (`exitDirectionFor`), which drag and keyboard both move, so
+ *  this hook has nothing to say about how a card leaves.
  * ===========================================================================
  */
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 
 import { isTap, shouldCommitSwipe, swipeDirection, swipeIntent } from '../game/gestures';
-import type { CommitDirection } from '../game/gestures';
 
 /**
  * The part of Motion's `PanInfo` this hook reads.
@@ -97,14 +100,6 @@ export interface UseCardGesturesOptions {
 
 export interface UseCardGesturesResult {
   gestureProps: CardGestureProps;
-  /**
-   * Which way the last committed swipe went, for the exit animation.
-   *
-   * Sticky rather than transient: `AnimatePresence` reads it while the outgoing card is
-   * still animating, which is after the commit that set it. Defaults to `left` so a keyboard
-   * advance -- which has no direction -- exits consistently.
-   */
-  exitDirection: CommitDirection;
 }
 
 /** Snap-back resistance while dragging against the constraints. 0 = rigid, 1 = no resistance. */
@@ -120,7 +115,6 @@ export function useCardGestures({
   const didDragRef = useRef(false);
   /** Per-gesture latch. See `handleDragEnd`. */
   const hasCommittedRef = useRef(false);
-  const [exitDirection, setExitDirection] = useState<CommitDirection>('left');
 
   /**
    * Pointer-down RESETS the whole gesture, rather than only recording the start.
@@ -153,14 +147,17 @@ export function useCardGestures({
 
       hasCommittedRef.current = true;
 
-      const direction = swipeDirection(drag);
-      setExitDirection(direction);
       // No `stop()` on the audio here: `GameScreen` already stops on card change (Phase 4),
       // keyed on card id, so it covers a swipe in EITHER direction for free. Verified rather than
       // duplicated -- two owners of one stop rule is how one of them quietly stops being called.
       //
+      // And no exit direction recorded here either: the card leaves the way the DECK moves,
+      // which `CardStack` derives from the index (`exitDirectionFor`). A right throw calls
+      // `onNext`, the index rises, the card flies right -- the same answer, with nothing to keep
+      // in step and nothing for a keyboard advance to miss.
+      //
       // Which way is which is `swipeIntent`'s decision, not this file's -- see `gestures.ts`.
-      if (swipeIntent(direction) === 'next') onNext();
+      if (swipeIntent(swipeDirection(drag)) === 'next') onNext();
       else onPrevious();
     },
     [isEnabled, onNext, onPrevious],
@@ -216,5 +213,5 @@ export function useCardGestures({
     [handleDragStart, handleDragEnd, handlePointerDown, handlePointerUp, handlePointerCancel],
   );
 
-  return { gestureProps, exitDirection };
+  return { gestureProps };
 }

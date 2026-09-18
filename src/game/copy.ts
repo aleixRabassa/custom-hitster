@@ -86,10 +86,12 @@ export const COPY = {
    * playlist picker, and the printable year cards for playing without a screen.
    *
    * A PRE-START SURFACE like `landing` and `preparing`, so nothing here names a track, an artist or a
-   * year that came from a card. `printDetail` DOES carry two year-shaped numbers -- the printed
-   * range -- and every leak proxy that renders this screen subtracts that exact string, the same
-   * way they subtract `COPYRIGHT_NOTICE`. Reword it freely; do not move the range into a second
-   * string without teaching the proxies about it.
+   * year that came from a card. Three strings here DO carry year-shaped numbers: `printDetail`
+   * names the first printed year, and the printed range "1970-2033" lives in `yearCardsFileName`
+   * (the download link's `download` attribute) and in the asset path beside the component (its
+   * `href`). `WelcomeScreen.test.tsx` audits both attributes and subtracts all three by exact
+   * string, the same way every leak proxy subtracts `COPYRIGHT_NOTICE`. Reword any of them
+   * freely; a new home for the range needs a new subtraction, or the proxy fails -- on purpose.
    */
   welcome: {
     /** The `alt` of the logo, which is this screen's `<h1>` name too -- never empty. */
@@ -116,7 +118,7 @@ export const COPY = {
     printHeading: 'Prefer paper?',
     /** The download link's accessible name and label. */
     printCards: 'Print your cards',
-    /** Carries the printed range -- the one year-shaped text on a pre-start screen. See the block above. */
+    /** Names the first printed year; the range itself is in `yearCardsFileName`. See the block above. */
     printDetail:
       'A printable PDF of year cards from 1970. Print it, cut them out, and lay out the timeline on a table.',
     /**
@@ -131,7 +133,7 @@ export const COPY = {
     /** The `alt` of the logo, which is the `<h1>`'s accessible name -- never empty. */
     logoAlt: APP_NAME,
     intro: (maxPlaylists: number) =>
-      `Paste up to ${maxPlaylists} public Spotify playlist links to deal one deck. Play a card or scan it to hear the song, then guess the year.`,
+      `Paste or select up to ${maxPlaylists} Spotify playlists to deal a deck and start playing.`,
     /**
      * The visible label of row `index` (0-based).
      *

@@ -190,10 +190,12 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
    *  Three consequences, all of them the design rather than gaps in it. A SHARE
    *  LINK NEVER SEES IT ON THE WAY IN: the flag is seeded true from `deckLink`,
    *  so a link deals immediately exactly as it always did. A SAVED
-   *  SESSION RESUMES PAST IT: any status other than `idle` never reaches the
-   *  check. And EXIT / HOME LAND ON THE PICKER, not here -- both handlers SET
-   *  this flag on the way through, because a player who just quit a game does
-   *  not need the rules explained again.
+   *  SESSION RESUMES PAST IT: the flag is seeded true from a restored session
+   *  too (any status other than `idle` on the first render), so the front door
+   *  is behind it from the start -- NOT merely because a resumed status skips
+   *  the check, see the seed below. And EXIT / HOME LAND ON THE PICKER, not
+   *  here -- both handlers SET this flag on the way through, because a player
+   *  who just quit a game does not need the rules explained again.
    *
    *  IT GOES BOTH WAYS (later on 2026-09-18). The picker carries a Back button
    *  that clears the flag, and the welcome screen is reachable from EVERY state
@@ -203,16 +205,18 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
    *  relying on the player having pressed through -- a share link never did,
    *  so without those two writes a link-dealt game would exit onto the front
    *  door. Every branch that shows the picker reads this flag alone -- `idle`
-   *  included, since the flag is seeded from `deckLink` (below) -- so Back
-   *  works after a link's game ends, and after a link's fetch fails, exactly as
-   *  it does from a fresh visit.
+   *  included, since the flag is seeded from `deckLink` and from a restored
+   *  session (below) -- so Back works after a link's game ends, after a link's
+   *  fetch fails, and after a resumed deck collapses, exactly as it does from a
+   *  fresh visit.
    *
    *  Ephemeral by design, like `endedView`: a reload shows the front door again.
    *  A "seen it" flag in `localStorage` is the obvious next step and was NOT
    *  built -- nobody asked, and a returning player pays one press for it.
    *
-   *  DECLARED BELOW `deckLink`, BECAUSE ITS INITIAL VALUE IS `deckLink !== null`
-   *  (2026-09-18, third pass). A link starts the player ON the picker -- its
+   *  DECLARED BELOW `deckLink`, BECAUSE ITS INITIAL VALUE IS
+   *  `deckLink !== null || state.status !== 'idle'` (2026-09-18, third pass;
+   *  the second term 2026-09-19). A link starts the player ON the picker -- its
    *  request is already in flight and the picker is where its loading state and
    *  its error slot live -- so the honest reading is "a link presses through for
    *  you", and that is what seeding the flag from it says. It replaced a
@@ -222,6 +226,22 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
    *  link-dealt deck that collapsed to zero showed the front door instead of the
    *  `no-years-found` warning. With the flag seeded, every branch that shows the
    *  picker reads this one boolean and nothing else.
+   *
+   *  A RESTORED SESSION SEEDS IT TOO, FOR THE SAME REASON A LINK DOES. A player
+   *  with a save has already been through the front door once, and the seed is
+   *  what makes that true in the one state where it is observable: a saved
+   *  `preparing` session (or a pre-reversal save of all-null years) can resume
+   *  straight into a deck that collapses to zero, which lands on the
+   *  `deckCollapsed` branch -- and with the flag seeded only from the link, that
+   *  branch showed the FRONT DOOR with no warning, the third hole of the same
+   *  shape. It is a SEED and not an effect because `useGameSession` restores the
+   *  save in `useReducer`'s LAZY INITIALISER, so `state.status` on this very
+   *  first render is already the restored status -- the same fact `deckLink`'s
+   *  initialiser above already relies on. Were `RESUME` ever moved into an
+   *  effect, the first render would read `idle`, this seed would read false,
+   *  and the hole would silently reopen: that is the invariant the test
+   *  "should land on the picker with a warning when a resumed session
+   *  collapses" pins.
    * ===========================================================================
    */
 
@@ -251,8 +271,13 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
     state.status === 'idle' ? parseDeckLink(search ?? window.location.search) : null,
   );
 
-  // See the block above `deckLink`: a link counts as having pressed through the front door.
-  const [hasEnteredPicker, setHasEnteredPicker] = useState(deckLink !== null);
+  // See the block above `deckLink`: a link counts as having pressed through the front door, and so
+  // does a restored session (`state.status` is already the restored status on this first render).
+  // The two terms are exclusive by construction -- `deckLink` is only read when the status is
+  // `idle` -- so on a resume the second term is the whole truth.
+  const [hasEnteredPicker, setHasEnteredPicker] = useState(
+    deckLink !== null || state.status !== 'idle',
+  );
 
   /**
    * The saved-playlist library, and the container is the only file that writes it.
@@ -591,9 +616,11 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
 
   /**
    * The front door. Built beside `landing` because the same states choose between the two, and the
-   * choice is the one flag: `hasEnteredPicker ? landing : welcome`, in every branch that shows either.
+   * choice is the one flag, computed ONCE as `picker`: every branch that shows either returns it,
+   * so the three branches cannot drift into reading two different conditions.
    */
   const welcome = <WelcomeScreen onStart={handleEnterPicker} />;
+  const picker = hasEnteredPicker ? landing : welcome;
 
   /**
    * The notice banner, or null. Built once and given to whichever screen is showing, because it has
@@ -626,10 +653,11 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
 
   if (state.status === 'idle') {
     // The front door, until the player walks through it -- or until a link does it for them: the
-    // flag is SEEDED from `deckLink`, so a valid link starts on the picker with its request in
-    // flight, and a MALFORMED link (`deckLink === null`) gets the plain front door with no error.
-    // One boolean, the same one every other branch reads; no `deckLink` check here any more.
-    return hasEnteredPicker ? landing : welcome;
+    // flag is SEEDED from `deckLink` (the only one of its two terms that can be true at `idle`), so
+    // a valid link starts on the picker with its request in flight, and a MALFORMED link
+    // (`deckLink === null`) gets the plain front door with no error. One boolean, the same one
+    // every other branch reads; no `deckLink` check here any more.
+    return picker;
   }
 
   if (state.status === 'ended') {
@@ -639,13 +667,14 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
     //
     // The welcome screen sits behind the picker HERE TOO (2026-09-18), so Back works from every
     // state that shows the picker. A link-dealt deck arrives here with the flag already true (it is
-    // seeded from `deckLink`), so its `no-years-found` warning is shown, not the front door.
-    if (deckCollapsed) return hasEnteredPicker ? landing : welcome;
+    // seeded from `deckLink`), and so does a RESUMED deck that drained to zero (seeded from the
+    // restored status), so the `no-years-found` warning is shown in both cases, not the front door.
+    if (deckCollapsed) return picker;
 
     // Exit and "Home" both mean `landing`; only a deck that ran out gets the end screen. Both
     // handlers set `hasEnteredPicker`, so the picker is what they show -- the welcome branch here
     // is reached only by pressing Back from it.
-    if (endedView === 'landing') return hasEnteredPicker ? landing : welcome;
+    if (endedView === 'landing') return picker;
 
     return (
       <EndScreen

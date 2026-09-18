@@ -12,6 +12,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { COPYRIGHT_NOTICE } from './Footer';
 import { WelcomeScreen, YEAR_CARDS_PDF_PATH } from './WelcomeScreen';
 import { COPY } from '../game/copy';
+import { auditableText } from './__fixtures__/auditable-text';
 import { fixtureDeck } from './__fixtures__/cards';
 
 function renderWelcome() {
@@ -19,19 +20,6 @@ function renderWelcome() {
   const rendered = render(<WelcomeScreen onStart={onStart} />);
 
   return { ...rendered, onStart };
-}
-
-/**
- * Everything on the screen a leak could hide in -- the same audit `LandingScreen.test.tsx` runs, for
- * the same reason: `textContent` misses `alt`, and this screen's `<h1>` is an image.
- */
-function auditableText(container: HTMLElement): string {
-  const spoken = ['alt', 'aria-label', 'title', 'placeholder', 'value'];
-  const attributes = [...container.querySelectorAll('*')].flatMap((element) =>
-    spoken.map((name) => element.getAttribute(name) ?? ''),
-  );
-
-  return [container.textContent ?? '', ...attributes].join(' ');
 }
 
 describe('WelcomeScreen', () => {
@@ -146,17 +134,42 @@ describe('WelcomeScreen', () => {
     //  exists to make adding one -- "here is what a card looks like", with a
     //  real card -- fail a test.
     //
-    //  TWO STRINGS ARE SUBTRACTED, NOT TOLERATED. The footer's "2026-present"
-    //  as on every other screen, and `COPY.welcome.printDetail`, which names
-    //  the printed range and is the one year-shaped text this screen carries
-    //  by design. Both are removed by EXACT string, so the proxy stays
-    //  absolute for everything else: reword either and it still matches;
-    //  add a year anywhere else and it fails.
+    //  FIVE STRINGS ARE SUBTRACTED, NOT TOLERATED, each by EXACT string, so
+    //  the proxy stays absolute for everything else: reword any of them and
+    //  it still matches; add a year anywhere else and it fails.
+    //
+    //  - `COPYRIGHT_NOTICE` ("2026-present") and `COPY.footer.authorUrl`, as
+    //    on every screen that hosts the footer. The URL carries no year today;
+    //    it is subtracted so the audit describes every string on the screen
+    //    rather than tolerating the ones that happen to pass.
+    //  - `COPY.welcome.printDetail`, which names the first printed year.
+    //  - `COPY.welcome.yearCardsFileName` and `YEAR_CARDS_PDF_PATH`, which is
+    //    WHERE THE PRINTED RANGE "1970-2033" ACTUALLY IS: the link's
+    //    `download` attribute and its `href`. Until 2026-09-19 neither
+    //    attribute was audited, so this test passed by OMISSION -- the range
+    //    was believed subtracted and was in fact never read. The audit now
+    //    reads both (see `__fixtures__/auditable-text.ts`), so the range has
+    //    to be removed here, by name, from both of the strings it lives in.
+    //
+    //  `String.replace` with a string removes the FIRST occurrence, and each
+    //  of the five appears once. Neither range string contains the other (one
+    //  starts with `/`, the other with `jitster-`), so the order is free.
     // ===================================================================
     const { container } = renderWelcome();
-    const text = auditableText(container)
+    const audited = auditableText(container);
+
+    // The subtraction is load-bearing only if the audit READS the two attributes: this is what
+    // fails if `download` or `href` ever drops out of the shared list and the proxy goes back to
+    // passing by omission.
+    expect(audited).toContain(COPY.welcome.yearCardsFileName);
+    expect(audited).toContain(YEAR_CARDS_PDF_PATH);
+
+    const text = audited
       .replace(COPYRIGHT_NOTICE, '')
-      .replace(COPY.welcome.printDetail, '');
+      .replace(COPY.footer.authorUrl, '')
+      .replace(COPY.welcome.printDetail, '')
+      .replace(COPY.welcome.yearCardsFileName, '')
+      .replace(YEAR_CARDS_PDF_PATH, '');
 
     for (const card of fixtureDeck) {
       expect(text).not.toContain(card.title);

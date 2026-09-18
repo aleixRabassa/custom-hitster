@@ -7,10 +7,13 @@
  *
  *  Same rule as `LandingScreen` and `PreparingScreen`: no track title, no
  *  artist, no year that came from a card -- and this screen takes no `Card` at
- *  all, which is what makes the rule cheap to keep. The ONE year-shaped text on
- *  it is the printed range in `COPY.welcome.printDetail`, which derives from a
- *  PDF on disk rather than from any deck; `WelcomeScreen.test.tsx` subtracts it
- *  by exact string, exactly as every leak proxy subtracts `COPYRIGHT_NOTICE`.
+ *  all, which is what makes the rule cheap to keep. The year-shaped text on it
+ *  is the printed range in the download link's `download`
+ *  (`COPY.welcome.yearCardsFileName`) and `href` (`YEAR_CARDS_PDF_PATH`), plus
+ *  the start year in `COPY.welcome.printDetail` -- all derived from a PDF on
+ *  disk rather than from any deck. `WelcomeScreen.test.tsx` audits both
+ *  attributes and subtracts all three by exact string, exactly as every leak
+ *  proxy subtracts `COPYRIGHT_NOTICE`.
  *  The decorative card below draws a `?`, never a number, for the same reason.
  * ===========================================================================
  *

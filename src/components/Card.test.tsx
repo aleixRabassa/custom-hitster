@@ -7,7 +7,7 @@ import { MotionConfig } from 'motion/react';
 import { createRef } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { Card } from './Card';
+import { CARD_VARIANTS, Card } from './Card';
 import { highConfidenceCard } from './__fixtures__/cards';
 import { clearQrCache } from '../game/qr-cache';
 
@@ -81,6 +81,36 @@ describe('Card', () => {
     const outer = container.querySelector('[data-testid="card-inner"]')?.parentElement;
     expect(ref.current).not.toBeNull();
     expect(ref.current).toBe(outer);
+  });
+
+  it('should fly out the way the deck moved, read from the presence custom value', () => {
+    // ===================================================================
+    //  THE HALF OF THE EXIT DIRECTION THAT IS TESTABLE (2026-09-19).
+    //
+    //  An exiting child animates with the props of its LAST render before
+    //  removal, and a keyboard advance changes the index and removes the
+    //  card in the same render -- so a direction passed as a plain prop
+    //  never reaches the outgoing card. The exit is therefore a dynamic
+    //  variant reading `AnimatePresence custom`, which Motion carries to
+    //  the child on the very render that removes it.
+    //
+    //  What is pinned is the RESOLVER: left is a negative x, right is a
+    //  positive one, and no direction at all (a `Card` outside any
+    //  `AnimatePresence`, as every render in this file is) still resolves.
+    //  That Motion reads `custom` into it, and which way the eye sees the
+    //  card go, are browser checks -- jsdom paints nothing.
+    // ===================================================================
+    const left = CARD_VARIANTS.exit('left');
+    const right = CARD_VARIANTS.exit('right');
+    const none = CARD_VARIANTS.exit(undefined);
+
+    expect(left.x).toBeLessThan(0);
+    expect(right.x).toBeGreaterThan(0);
+    expect(none.x).toBe(right.x);
+    // Same distance either way, and the card fades as it goes.
+    expect(Math.abs(left.x)).toBe(right.x);
+    expect(left.opacity).toBe(0);
+    expect(right.opacity).toBe(0);
   });
 
   it('should not mount the revealed side while unflipped', () => {

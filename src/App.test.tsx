@@ -23,7 +23,12 @@ import { StrictMode } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import App from './App';
-import { fixtureDeck, highConfidenceCard, pendingYearCard } from './components/__fixtures__/cards';
+import {
+  fixtureDeck,
+  highConfidenceCard,
+  noYearCard,
+  pendingYearCard,
+} from './components/__fixtures__/cards';
 import { COPY } from './game/copy';
 import { PLAYLIST_ERROR_MESSAGES } from './game/messages';
 import { clearQrCache } from './game/qr-cache';
@@ -553,6 +558,96 @@ describe('App', () => {
       expect(screen.queryByTestId('hud')).not.toBeNull();
     });
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('should land on the picker with a warning when a resumed session collapses', async () => {
+    // ===================================================================
+    //  THE COLLAPSE, REACHED FROM A SAVE RATHER THAN FROM START.
+    //
+    //  `hasEnteredPicker` is seeded from the link OR from a restored session
+    //  (2026-09-19). Before the second term, a save that resumed into a deck
+    //  which then drained to zero reached `deckCollapsed` with the flag still
+    //  false -- and the welcome screen came up with NO warning, for a player
+    //  who had already been through it once. The scenario is real: closing
+    //  the tab during the card-1 gate persists `preparing`, and every
+    //  remaining lookup can come back empty.
+    //
+    //  The seed works only because `useGameSession` restores the save in
+    //  `useReducer`'s LAZY INITIALISER, so the first render already carries
+    //  the restored status. If `RESUME` ever moved into an effect this test
+    //  is what fails, and the fix is not to weaken it.
+    // ===================================================================
+    stubDroppingYearApi();
+    const storage = memoryStorage();
+    // Three distinct ids, so the drain is exactly three drops and not a dedupe question.
+    const deck = UNRESOLVED_DECK.slice(0, 3);
+    storage.map.set(
+      SESSION_STORAGE_KEY,
+      JSON.stringify({
+        version: SESSION_VERSION,
+        playlists: [PLAYLIST],
+        seed: 'resumed-seed',
+        deck,
+        currentIndex: 0,
+        isFlipped: false,
+        status: 'preparing',
+      } satisfies PersistedSession),
+    );
+    // A 500, so any playlist request a resume wrongly made would fail the test rather than pass it.
+    const fetchImpl = playlistFetch(500, { code: 'internal-error' });
+
+    renderApp(fetchImpl, storage);
+
+    // Awaited on the alert: it is the one thing that exists only after the last card has gone.
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      PLAYLIST_ERROR_MESSAGES['no-years-found'],
+    );
+    expect(fetchImpl).not.toHaveBeenCalled();
+
+    // The PICKER, with its Back button -- not the front door, and not the end screen.
+    expect(screen.queryByLabelText(COPY.landing.playlistLinkLabel(0))).not.toBeNull();
+    expect(screen.queryByRole('button', { name: COPY.landing.backToWelcome })).not.toBeNull();
+    expect(screen.queryByRole('button', { name: COPY.welcome.enter })).toBeNull();
+    expect(screen.queryByText(COPY.end.heading)).toBeNull();
+    expect(screen.queryByTestId('hud')).toBeNull();
+
+    // Nothing about the dropped tracks leaks on the way out, as on the fresh-START collapse.
+    for (const card of deck) {
+      expect(screen.queryByText(card.title)).toBeNull();
+    }
+
+    // And Back is LIVE, not decorative: it is the flag it clears, so the front door is one press away.
+    fireEvent.click(screen.getByRole('button', { name: COPY.landing.backToWelcome }));
+    expect(screen.queryByRole('button', { name: COPY.welcome.enter })).not.toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('should land on the picker with a warning when a pre-reversal save has no years at all', () => {
+    // The third of the reducer's empty-deck exits named by `deckCollapsed`: `RESUME` filters
+    // `year: null` cards out, so a save written before the 2026-08-05 reversal whose every card
+    // was yearless is `ended` with an empty deck on the FIRST RENDER. No lookup, no await -- which
+    // is what makes this the sharpest check that the seed reads the restored status synchronously.
+    stubHangingYearApi();
+    const storage = memoryStorage();
+    storage.map.set(
+      SESSION_STORAGE_KEY,
+      JSON.stringify({
+        version: SESSION_VERSION,
+        playlists: [PLAYLIST],
+        seed: 'resumed-seed',
+        deck: [noYearCard],
+        currentIndex: 0,
+        isFlipped: false,
+        status: 'playing',
+      } satisfies PersistedSession),
+    );
+
+    renderApp(playlistFetch(500, { code: 'internal-error' }), storage);
+
+    expect(screen.getByRole('alert').textContent).toBe(PLAYLIST_ERROR_MESSAGES['no-years-found']);
+    expect(screen.queryByRole('button', { name: COPY.landing.backToWelcome })).not.toBeNull();
+    expect(screen.queryByRole('button', { name: COPY.welcome.enter })).toBeNull();
+    expect(screen.queryByText(noYearCard.title)).toBeNull();
   });
 
   it('should keep playing the cards that do have a year when others are dropped', async () => {

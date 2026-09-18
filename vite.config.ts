@@ -136,8 +136,20 @@ export default defineConfig({
             is not a defence -- whether a download request even reaches the worker as a navigation
             differs by browser. This is. Unobservable under any dev server (`devOptions` is absent),
             so it is a Pending row in `docs/development.md` §5.
+
+            THE ANCHOR IS `(\?|$)`, NOT `$`, because of the string workbox tests it against.
+            `NavigationRoute._match` in `workbox-routing/NavigationRoute.js` builds
+            `const pathnameAndSearch = url.pathname + url.search;` and runs every denylist regex
+            over THAT -- so `/\.pdf$/` matched `/year-cards-1970-2033.pdf` and stopped matching the
+            moment anything appended a query (`/year-cards-1970-2033.pdf?v=2`), handing the download
+            back to the SPA fallback: the exact failure this entry exists to prevent, and one that
+            still passes every local check. `(\?|$)` covers the bare path and the first character
+            of any search string. `url.hash` is never concatenated in that function, so there is no
+            `#` case to anchor against. No test can import this literal (the plugin closes over it);
+            the throwaway check is `/\.pdf(\?|$)/.test(...)` over `/x.pdf`, `/x.pdf?v=2`,
+            `/index.html` and `/pdf-viewer`, and the observable is the regex in `dist/sw.js`.
           */
-          /\.pdf$/,
+          /\.pdf(\?|$)/,
         ],
       },
 

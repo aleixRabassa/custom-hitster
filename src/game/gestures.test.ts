@@ -23,6 +23,7 @@ import {
   TAP_MAX_MOVEMENT_X_PX,
   TAP_MAX_MOVEMENT_Y_PX,
   exceedsLongPressMovement,
+  exitDirectionFor,
   isTap,
   shouldCommitSwipe,
   swipeDirection,
@@ -124,6 +125,41 @@ describe('swipeIntent', () => {
     // End to end over the two pure functions: a card thrown right advances, thrown left steps back.
     expect(swipeIntent(swipeDirection({ offsetX: 120, velocityX: 800 }))).toBe('next');
     expect(swipeIntent(swipeDirection({ offsetX: -120, velocityX: -800 }))).toBe('previous');
+  });
+});
+
+describe('exitDirectionFor', () => {
+  it('should fly the card right when the deck advanced and left when it stepped back', () => {
+    // ===================================================================
+    //  THE EXIT READS THE INDEX DELTA, NOT THE GESTURE (2026-09-19). The
+    //  direction used to be hook state set only by a drag, so a keyboard
+    //  advance flew every card out the "back" way once left meant PREVIOUS.
+    //  jsdom cannot see which way a card flies, so the sign lives here.
+    // ===================================================================
+    expect(exitDirectionFor(3, 4)).toBe('right');
+    expect(exitDirectionFor(4, 3)).toBe('left');
+    // Any distance, not just one: a resumed or clamped index still has a sign.
+    expect(exitDirectionFor(0, 7)).toBe('right');
+    expect(exitDirectionFor(7, 0)).toBe('left');
+  });
+
+  it('should treat an unchanged index as the deck moving on', () => {
+    // The one way a card leaves with the index unchanged is the CURRENT card being dropped
+    // yearless and replaced in place by the next one. That is the deck advancing under the
+    // player, not stepping back, so it flies the advance way -- and the function stays total.
+    expect(exitDirectionFor(2, 2)).toBe('right');
+  });
+
+  it('should agree with a thrown card about which way it leaves', () => {
+    // Drag and keyboard meet here: a right throw is `next`, `next` raises the index, and the
+    // raised index says `right` -- the same answer the throw gave. A left throw likewise.
+    const thrownRight = swipeDirection({ offsetX: 120, velocityX: 800 });
+    const thrownLeft = swipeDirection({ offsetX: -120, velocityX: -800 });
+
+    expect(swipeIntent(thrownRight)).toBe('next');
+    expect(exitDirectionFor(1, 2)).toBe(thrownRight);
+    expect(swipeIntent(thrownLeft)).toBe('previous');
+    expect(exitDirectionFor(2, 1)).toBe(thrownLeft);
   });
 });
 

@@ -3745,3 +3745,95 @@ exact `props.pageProps.state.data.entity.trackList` shape the adapter parses. On
 way: `vercel dev` itself refused to start with "The specified token is not valid" until `vercel login`,
 and the preceding "Worker timed out after 10 seconds / write EPIPE" lines are the CLI's update check,
 not the failure.
+
+## 2026-09-19 — Eight review findings on the welcome-screen and left-swipe work, and what each turned out to be
+
+A `/code-review` of `develop` against `main` produced eight findings; all eight were acted on the same day.
+What follows is what was measured, not what the review claimed. Existing dated entries above that
+describe the 2026-09-18 state (`/\.pdf$/`, the `printDetail` range, the 20 s test timeout, the
+link-only seed) are left as history and are superseded here.
+
+1. **The committed PDF blob really was corrupt, and the working tree was not — both facts at once.**
+   `git cat-file -s HEAD:public/year-cards-1970-2033.pdf` = 239331 bytes; the working tree = 239354.
+   Git's binary heuristic is a NUL in the first 8000 bytes; this PDFsharp file is pure ASCII there, so
+   with `core.autocrlf=true` and no `.gitattributes` the add stripped every CR — all 23 of them inside
+   object 28, an uncompressed XMP metadata stream (`/Length 1446`, first divergent byte 237161). Both
+   files say `startxref 238571`; the working tree's `xref` is at 238571, the blob's at 238548, and the
+   blob's `/Length` overstates its stream by 23. Every PNG/WebP in `public/` is `i/-text w/-text`
+   (their headers hold NULs), so this was the only file exposed. Why the deployed download still opened:
+   readers rebuild the xref when `startxref` misses and tolerate an overlong `/Length` on an
+   uncompressed stream. The worse latent hazard was the OTHER direction: the blob is 100% LF, so any
+   Windows checkout rewriting the path would have CRLF-converted every LF, including inside the
+   FlateDecode streams, which is not recoverable. Fix: `.gitattributes` with exactly `*.pdf binary` (no
+   `* text=auto` — on this Windows checkout that would renormalise unrelated files on the next add),
+   then `git rm --cached` + `git add` on the path — a bare `git add` skips a stat-clean file. After:
+   `attr/-text` (the `i/mixed` reading is git's content heuristic and is expected for a NUL-free
+   binary-by-attribute file), staged blob = 239354 bytes, `cmp` identical to the working tree. Any
+   future NUL-free binary format needs the same attribute line.
+
+2. **The service-worker PDF denylist failed on any query string.** `workbox-routing@7.4.1`'s
+   `NavigationRoute._match` runs the denylist over `const pathnameAndSearch = url.pathname + url.search`
+   (and never reads `url.hash`), so `/\.pdf$/` did not match `/year-cards-1970-2033.pdf?v=2` and the
+   worker would have served `index.html` for the download. Fixed to `/\.pdf(\?|$)/`; `dist/sw.js` now
+   carries `denylist:[/^\/api\//,/\.pdf(\?|$)/]` and `year-cards` still appears nowhere in it. The
+   literal is closed over inside the `VitePWA` plugin call and is not importable by any test, so the
+   check is a regex table plus the built worker. Accepted corner: a URL whose _query_ ends in `.pdf` is
+   also exempted; no such route exists.
+
+3. **A resumed session that collapsed to zero reached the welcome screen with no warning.**
+   `hasEnteredPicker` was seeded from `deckLink` alone, which is `null` for any non-link resume. A save
+   taken during the card-1 gate (`persistence.ts` accepts `preparing`) whose every remaining lookup finds
+   nothing, or a pre-reversal save of all-null years (which `RESUME` filters to empty on the spot),
+   landed on `deckCollapsed` with the flag false. Fix: `useState(deckLink !== null || state.status !==
+'idle')`. The discriminating fact was hydration timing: `useGameSession` runs `RESUME` inside
+   `useReducer`'s lazy initializer (`use-game-session.ts:101`), so `state.status` on App's first render is
+   already the restored status — the same fact `deckLink`'s own initializer relied on. Had `RESUME` been an
+   effect the seed would read `idle` and be a no-op. Rejected: making `deckCollapsed` force the picker
+   (a dead Back button — Back clears the flag while the collapsed state persists) and any `deckLink`
+   check in a branch. Two `App.test.tsx` tests pin it; the pre-reversal one asserts synchronously on the
+   first render, so it is the one that fails if `RESUME` ever moves into an effect. The three
+   `hasEnteredPicker ? landing : welcome` branches collapsed into one `picker` constant.
+
+4. **The exit animation contradicted the deck once left meant "previous".** `exitDirection` was hook
+   state only a drag ever set, defaulting to `'left'`, so every keyboard advance flew left and an
+   ArrowLeft after a right swipe flew right. Now `exitDirectionFor(previousIndex, nextIndex)` in
+   `gestures.ts` (pure, node-tested; equal → `'right'`), latched in `CardStack` and handed to
+   `<AnimatePresence custom>`, read by `CARD_VARIANTS.exit(direction)` in `Card.tsx`. Three Motion facts
+   from the installed source (motion-dom / framer-motion 12.43.0) make `custom` the only correct channel:
+   an exiting child animates with the props of its LAST render, and a keyboard advance changes the index
+   and removes the card in the same render, so a plain prop never reaches it; `animation-state.mjs` ~36
+   reads `type === "exit"`'s custom from `visualElement.presenceContext?.custom`, i.e. the
+   `AnimatePresence` prop of the render that removes the child; and lines ~138–150 never re-resolve an
+   exit already running, so a year landing or a second fast swipe cannot redirect a leaving card. Two
+   type/lint constraints shaped the code: Motion's `exit` prop type is `TargetAndTransition |
+VariantLabels` (no function), so `variants` + `exit="exit"` is the typed route to a dynamic exit;
+   and `eslint-plugin-react-hooks` 7's `refs` rule forbids reading `ref.current` in render, so the
+   previous index is a `useState` latch (adjust-state-in-render shape, one discarded render per index
+   change) rather than a ref. The latch tracks the presence KEY, not the index: a yearless card dropped
+   from behind lowers the index under the same card with no exit, and the current card dropped yearless
+   changes the key with a zero delta. Card-1 decline: the reducer returns the same object, `useReducer`
+   bails, the key does not change, nothing exits. jsdom cannot see which way a card flies; row 9 of
+   `development.md` §5 is the manual check.
+
+5. **A leak proxy that subtracts a string it never reads is indistinguishable from one that works.**
+   `COPY.welcome.printDetail` no longer carries "1970 to 2033" (it says "from 1970"); the range lives in
+   the download link's `download` (`COPY.welcome.yearCardsFileName`) and `href` (`YEAR_CARDS_PDF_PATH`),
+   neither of which the `auditableText` attribute list read, so the year proxy passed by omission. Fix:
+   the helper moved to the shared `src/components/__fixtures__/auditable-text.ts` (both copies were
+   verbatim), its list gained `download` and `href`, and `WelcomeScreen.test.tsx` asserts `toContain` on
+   both strings BEFORE subtracting them — that assertion is what fails if an attribute drops out of the
+   list. Adding `href` costs subtracting `COPY.footer.authorUrl` on every screen that runs the audit.
+   `PreparingScreen.test.tsx` still audits `textContent` alone (it renders no audited attribute today).
+
+6. **The 20 s test timeout was hiding cost, not defending behaviour.** The per-suggestion submission
+   test rendered thirteen full landing screens; what it defended is the round-trip
+   `parsePlaylistUrl(spotifyPlaylistUrl(id))` for every entry of `SUGGESTED_PLAYLISTS`, which now runs
+   with no render in 0 ms. The "render once, click each in turn" alternative does not work: after the
+   first press the row is lit, `isSelecting` flips, and the next press toggles selection instead.
+
+7. Copy: `COPY.landing.intro` was reworded at the developer's request to "Paste or select up to 5
+   Spotify playlists to deal a deck and start playing." — one value, no test touched.
+
+Under concurrent edits to the game-screen chunk, `App.test.tsx` showed 1–2 timeouts (~1.1–1.3 s against
+the 1 s default) on 3 of 8 runs, each a different pre-existing test, never on a quiet tree. Re-run before
+trusting a red result from a tree that is changing under Vite's transform cache.

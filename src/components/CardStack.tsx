@@ -2,7 +2,8 @@
  * The deck as the player sees it: the current card, draggable, directly over the next card --
  * which is the same size, exactly behind, and therefore invisible until the top card moves.
  *
- * Owns two things and nothing else -- WHEN a card leaves (presence and keying) and the
+ * Owns three things and nothing else -- WHEN a card leaves (presence and keying), WHICH WAY it
+ * leaves (the index delta, handed to `AnimatePresence custom` -- see `DeckMovement`), and the
  * gesture wiring it needs. How a card looks and how its own element moves stay in `Card`.
  *
  * ===========================================================================
@@ -49,10 +50,13 @@
  */
 
 import { AnimatePresence } from 'motion/react';
+import { useState } from 'react';
 
 import { Card } from './Card';
 import { CardHiddenSide } from './CardHiddenSide';
 import { useCardGestures } from '../hooks/useCardGestures';
+import { exitDirectionFor } from '../game/gestures';
+import type { CommitDirection } from '../game/gestures';
 import type { Card as CardData } from '../../shared/types';
 
 /**
@@ -97,6 +101,50 @@ function cardPresenceKey(deck: CardData[], currentIndex: number, currentCard: Ca
   return `${currentCard.id}:${occurrence}`;
 }
 
+/**
+ * What the stack remembers between renders so it can say which way the deck MOVED.
+ *
+ * ===========================================================================
+ *  THE EXIT DIRECTION IS DERIVED FROM THE INDEX DELTA AND LATCHED IN STATE
+ *  (2026-09-19). READ THIS BEFORE MOVING IT INTO A REF OR BACK INTO THE HOOK.
+ *
+ *  It used to be `useCardGestures` state, set by a drag and defaulting to
+ *  `left`. Once a left swipe meant PREVIOUS that told three lies -- every
+ *  keyboard advance flew out the "back" way, an ArrowLeft after a right swipe
+ *  flew the card out the "advance" way, and a declined step back on card 1
+ *  latched `left`. The delta cannot lie: a right throw calls `onNext`, the
+ *  index rises, the card flies right. Drag and keyboard agree by construction.
+ *
+ *  Why STATE and not a ref: the previous index has to be READ during render
+ *  (the value goes into a prop), and a ref read during render is what the
+ *  `react-hooks/refs` rule forbids. The sanctioned shape is "store what the
+ *  previous render knew in state and adjust it when the props disagree" --
+ *  the guarded `setState` below, which React applies before committing.
+ *
+ *  Why the PRESENCE KEY and not the index alone: an exit fires exactly when
+ *  the key changes, and the two can move apart. A yearless card dropped from
+ *  BEHIND the player lowers the index under the SAME card (see
+ *  `cardPresenceKey`) -- no exit, but an index-only latch would record `left`
+ *  and hand it to the next card that does leave. And the CURRENT card being
+ *  dropped changes the key with the index unchanged -- an exit with no delta,
+ *  which `exitDirectionFor` resolves to `right` because the deck moved on. So
+ *  the direction is recomputed only when the key changes, from the last index
+ *  the stack saw, and the stored index tracks every change.
+ *
+ *  The latch is also why a re-render mid-flight is harmless: the direction
+ *  does not change until the next card leaves, and Motion in any case refuses
+ *  to re-resolve an exit that is already running.
+ * ===========================================================================
+ */
+interface DeckMovement {
+  /** The `AnimatePresence` key the stack last rendered. */
+  key: string;
+  /** The `currentIndex` the stack last rendered. */
+  index: number;
+  /** Which way the card that last left went -- what `AnimatePresence custom` carries. */
+  direction: CommitDirection;
+}
+
 export interface CardStackProps {
   /** The shuffled deck, straight from `GameState.deck`. */
   deck: CardData[];
@@ -123,7 +171,7 @@ export function CardStack({
   onPrevious,
   isEnabled,
 }: CardStackProps) {
-  const { gestureProps, exitDirection } = useCardGestures({
+  const { gestureProps } = useCardGestures({
     onFlip,
     onNext,
     onPrevious,
@@ -131,6 +179,24 @@ export function CardStack({
   });
 
   const currentCard = deck[currentIndex];
+  const presenceKey = currentCard ? cardPresenceKey(deck, currentIndex, currentCard) : null;
+
+  // See `DeckMovement`. Right is the advance direction, and nothing has left yet.
+  const [movement, setMovement] = useState<DeckMovement>({
+    key: presenceKey ?? '',
+    index: currentIndex,
+    direction: 'right',
+  });
+
+  const exitDirection =
+    presenceKey !== null && presenceKey !== movement.key
+      ? exitDirectionFor(movement.index, currentIndex)
+      : movement.direction;
+
+  if (presenceKey !== null && (presenceKey !== movement.key || currentIndex !== movement.index)) {
+    // Guarded, so React re-renders once with the new value before committing rather than looping.
+    setMovement({ key: presenceKey, index: currentIndex, direction: exitDirection });
+  }
 
   /**
    * The card behind, or `undefined` on the last card of the deck.
@@ -143,7 +209,7 @@ export function CardStack({
 
   // Possibly-undefined for the same reason. The reducer clamps `currentIndex`, so it should not
   // happen -- but rendering nothing beats throwing.
-  if (!currentCard) return null;
+  if (!currentCard || presenceKey === null) return null;
 
   return (
     /*
@@ -241,18 +307,23 @@ export function CardStack({
          consequence: jsdom computes no layout, so Motion's measurement bails there
          no matter what, and the check is manual (a swipe, in a browser).
         ===========================================================================
+
+        `custom` is HOW THE DIRECTION REACHES THE OUTGOING CARD, and a prop on `Card` cannot
+        do the job: an exiting child animates with the props of its last render before removal,
+        and a keyboard advance changes the index and removes the card in the same render. The
+        presence context carries `custom` to the child on the render that removes it, and the
+        card's exit variant reads it -- see `CARD_VARIANTS` in `Card.tsx` and `DeckMovement` above.
       */}
-      <AnimatePresence initial={false} mode="popLayout">
+      <AnimatePresence initial={false} mode="popLayout" custom={exitDirection}>
         <Card
           // Identity, not position -- see `cardPresenceKey`. An index here is what made a
           // resolved year elsewhere in the deck throw the player's own card off the screen.
-          key={cardPresenceKey(deck, currentIndex, currentCard)}
+          key={presenceKey}
           card={currentCard}
           isFlipped={isFlipped}
           isYearPending={isYearPending}
           onFlip={onFlip}
           gestureProps={gestureProps}
-          exitDirection={exitDirection}
         />
       </AnimatePresence>
     </div>

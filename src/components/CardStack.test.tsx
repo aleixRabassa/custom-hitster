@@ -11,6 +11,8 @@
  */
 
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { createElement } from 'react';
+import type { ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CardStack } from './CardStack';
@@ -25,14 +27,34 @@ import {
 import { clearQrCache } from '../game/qr-cache';
 import type { Card } from '../../shared/types';
 
-const { toDataURLMock } = vi.hoisted(() => ({
+const { toDataURLMock, presenceCustomSpy } = vi.hoisted(() => ({
   toDataURLMock: vi.fn<(text: string, options?: unknown) => Promise<string>>(),
+  presenceCustomSpy: vi.fn<(custom: unknown) => void>(),
 }));
 
 vi.mock('qrcode', () => ({ toDataURL: toDataURLMock }));
 
-function renderStack(deck: Card[], currentIndex: number) {
-  return render(
+/*
+  `AnimatePresence` is the REAL one, wrapped so each render's `custom` prop is recorded.
+
+  That prop is the only way the exit direction reaches the outgoing card (see `CARD_VARIANTS`
+  in `Card.tsx`) and it never touches the DOM, so this is the one seam where a test can see what
+  the stack decided. Everything else -- `motion`, the presence behaviour the key tests rely on --
+  is untouched, which is why the module is spread rather than replaced.
+*/
+vi.mock('motion/react', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('motion/react')>();
+  return {
+    ...actual,
+    AnimatePresence: (props: ComponentProps<typeof actual.AnimatePresence>) => {
+      presenceCustomSpy(props.custom);
+      return createElement(actual.AnimatePresence, props);
+    },
+  };
+});
+
+function stackElement(deck: Card[], currentIndex: number) {
+  return (
     <CardStack
       deck={deck}
       currentIndex={currentIndex}
@@ -42,8 +64,17 @@ function renderStack(deck: Card[], currentIndex: number) {
       onNext={vi.fn()}
       onPrevious={vi.fn()}
       isEnabled
-    />,
+    />
   );
+}
+
+function renderStack(deck: Card[], currentIndex: number) {
+  return render(stackElement(deck, currentIndex));
+}
+
+/** The `custom` value `AnimatePresence` was given on the LAST committed render. */
+function lastPresenceCustom(): unknown {
+  return presenceCustomSpy.mock.calls.at(-1)?.[0];
 }
 
 describe('CardStack', () => {
@@ -59,6 +90,7 @@ describe('CardStack', () => {
       the generation counts below would read 0 and the placeholder would never appear.
     */
     clearQrCache();
+    presenceCustomSpy.mockClear();
   });
 
   // Testing Library does NOT auto-clean up here: its `afterEach(cleanup)` only registers when
@@ -368,6 +400,79 @@ describe('CardStack', () => {
 
     const inners = [...container.querySelectorAll('[data-testid="card-inner"]')];
     expect(inners).toEqual([before]);
+  });
+
+  it('should tell AnimatePresence which way the deck moved', () => {
+    // ===================================================================
+    //  THE EXIT DIRECTION IS THE INDEX DELTA, ROUTED THROUGH `custom`
+    //  (2026-09-19). It was gesture-hook state set only by a drag, so once
+    //  a left swipe meant PREVIOUS every keyboard advance flew the card out
+    //  the "back" way, and an ArrowLeft after a right swipe flew it out the
+    //  "advance" way while the deck stepped back.
+    //
+    //  A `rerender` with a new index is exactly what a keyboard press does
+    //  to this component -- no drag, no hook state, just the prop. jsdom
+    //  cannot see which way the card flies, so the assertion is on the
+    //  value handed to `AnimatePresence`, which is where Motion reads it
+    //  from for the child it is removing.
+    // ===================================================================
+    const { rerender } = renderStack(fixtureDeck, 1);
+
+    rerender(stackElement(fixtureDeck, 2));
+    expect(lastPresenceCustom()).toBe('right');
+
+    rerender(stackElement(fixtureDeck, 1));
+    expect(lastPresenceCustom()).toBe('left');
+
+    // Two steps at once still has a sign.
+    rerender(stackElement(fixtureDeck, 3));
+    expect(lastPresenceCustom()).toBe('right');
+  });
+
+  it('should keep the direction across renders that move no card', () => {
+    // A flip, a resolved year, a re-render for any reason: the outgoing card may still be in
+    // flight, and Motion keeps its running exit either way -- but the value the stack hands over
+    // must not flip back to a default underneath it. The latch holds until the next card leaves.
+    const { rerender } = renderStack(fixtureDeck, 2);
+
+    rerender(stackElement(fixtureDeck, 1));
+    expect(lastPresenceCustom()).toBe('left');
+
+    rerender(stackElement(fixtureDeck, 1));
+    expect(lastPresenceCustom()).toBe('left');
+  });
+
+  it('should fly a current card dropped in place the advance way, even after a step back', () => {
+    // ===================================================================
+    //  THE TWO WAYS THE INDEX AND THE KEY MOVE APART, back to back, and
+    //  why the latch tracks the PRESENCE KEY rather than the index.
+    //
+    //  1. A yearless card dropped from BEHIND the player lowers the index
+    //     under the SAME card -- no exit. An index-only latch would record
+    //     `left` here and hand it to the next card that does leave.
+    //  2. The CURRENT card dropped yearless changes the key with the index
+    //     UNCHANGED -- an exit with no delta. The deck moved on under the
+    //     player, so it must fly the advance way, whatever the last step was.
+    // ===================================================================
+    const deck = [highConfidenceCard, noYearCard, lowConfidenceCard, duplicateIdCardA];
+
+    const { rerender } = renderStack(deck, 3);
+    // A genuine step back first, so the latch really holds `left` going in.
+    rerender(stackElement(deck, 2));
+    expect(lastPresenceCustom()).toBe('left');
+
+    // (1) `noYearCard` leaves from behind: same card, index 2 -> 1, no exit. The element identity
+    // that proves "no exit" is pinned by the two drop-from-behind tests above; what matters here
+    // is that the latch did NOT move -- the index fell, and the value is still what it was.
+    const afterDropBehind = [highConfidenceCard, lowConfidenceCard, duplicateIdCardA];
+    rerender(stackElement(afterDropBehind, 1));
+    expect(lastPresenceCustom()).toBe('left');
+
+    // (2) The current card leaves in place: `duplicateIdCardA` takes index 1. An index-only
+    // latch would say `left` here (the last index change was downward); the key-tracked one
+    // compares 1 with 1 and says the deck moved on.
+    rerender(stackElement([highConfidenceCard, duplicateIdCardA], 1));
+    expect(lastPresenceCustom()).toBe('right');
   });
 
   it('should keep the same element when a duplicated card is dropped from behind the player', () => {

@@ -14,11 +14,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { LandingScreen, SUGGESTED_PLAYLISTS } from './LandingScreen';
 import { COPY, COPYRIGHT_NOTICE } from '../game/copy';
+import { auditableText } from './__fixtures__/auditable-text';
 import { fixtureDeck } from './__fixtures__/cards';
 import { LONG_PRESS_DURATION_MS } from '../game/gestures';
 import { MAX_DECK_PLAYLISTS } from '../game/deck-merge';
 import { PLAYLIST_ERROR_MESSAGES } from '../game/messages';
-import { spotifyPlaylistUrl } from '../../shared/spotify-url';
+import { parsePlaylistUrl, spotifyPlaylistUrl } from '../../shared/spotify-url';
 
 const PLAYLIST_URL = 'https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M';
 const SECOND_URL = 'https://open.spotify.com/playlist/2zmXlpkOMN92NlQaE2M62c';
@@ -83,34 +84,6 @@ function rowInput(index: number): HTMLInputElement {
 
 function typeInRow(index: number, value: string) {
   fireEvent.change(rowInput(index), { target: { value } });
-}
-
-/**
- * Everything on the screen a leak could hide in: the rendered text AND the attributes that speak.
- *
- * ===========================================================================
- *  `textContent` ALONE STOPPED BEING ENOUGH ON 2026-08-12, and nothing failed
- *  when it did.
- *
- *  The `<h1>` used to be the words "Playlist Jitster" and is now
- *  `<img alt="Playlist Jitster">`. `textContent` does not include `alt`, so the
- *  audit below quietly narrowed: a heading, a decorative image or an icon
- *  button added later could name a track and both leak tests would still pass.
- *  AGENTS.md lists `alt` text, `aria-label`s and attributes as leak surfaces in
- *  their own right -- this is the proxy catching up with the rule.
- *
- *  `placeholder` and `value` are in the list because the suggestion buttons fill
- *  a row's value, and a future "recently played" affordance would fill it with
- *  something derived from a deck.
- * ===========================================================================
- */
-function auditableText(container: HTMLElement): string {
-  const spoken = ['alt', 'aria-label', 'title', 'placeholder', 'value'];
-  const attributes = [...container.querySelectorAll('*')].flatMap((element) =>
-    spoken.map((name) => element.getAttribute(name) ?? ''),
-  );
-
-  return [container.textContent ?? '', ...attributes].join(' ');
 }
 
 function pressStart() {
@@ -493,26 +466,30 @@ describe('LandingScreen', () => {
     expect(screen.getAllByRole('textbox')).toHaveLength(1);
   });
 
-  it('should submit a full URL for every suggestion', { timeout: 20_000 }, () => {
-    // Every one, not just the sampled Top 50 Global above: a suggestion whose id were mistyped to
-    // the wrong length would still fill the box, and only the submission would reveal it.
+  it('should derive a submittable URL from every suggested id', () => {
+    // ===================================================================
+    //  EVERY ONE, NOT JUST THE SAMPLED FIRST ENTRY ABOVE -- AND WITH NO
+    //  RENDER AT ALL.
     //
-    // ITS OWN TIMEOUT, added 2026-09-18: this renders THIRTEEN full landing screens in one test.
-    // Measured ~1.2 s with the file run alone and 7-9 s under a fully parallel run of the 51-file
-    // suite, against Vitest's 5 s default -- so it failed in 2 of 2 full runs while passing in
-    // isolation, which reads as a broken suggestion rather than as load. Same shape as the
-    // `beforeAll` timeout in `App.test.tsx` (2026-08-06); 20 s is a ceiling, not a duration anything
-    // normally waits.
+    //  What this defends is that a suggestion whose id were mistyped to the
+    //  wrong length does not reach the form: the box would still fill, and
+    //  only the client-side parse on submit would refuse it. That parse is
+    //  `parsePlaylistUrl`, and the component builds the link it parses with
+    //  `spotifyPlaylistUrl(id)` (`submitPlaylistIds`), so the whole claim is
+    //  that the two round-trip for each checked-in id. It is a pure mapping
+    //  over a constant, which is why it is asserted as one.
+    //
+    //  It USED to render thirteen full landing screens and click each, which
+    //  measured 7-9 s under a fully parallel run and needed a 20 s timeout to
+    //  stop flaking (2026-09-18). Rendering exercised nothing the sampled
+    //  test above does not: the component's path from a press to `onSubmit`
+    //  is the same code for every entry, and that one press is already
+    //  asserted against the full URL and against the absence of an alert.
+    // ===================================================================
     for (const playlist of SUGGESTED_PLAYLISTS) {
-      const { onSubmit } = renderLanding();
+      const url = spotifyPlaylistUrl(playlist.id);
 
-      fireEvent.click(suggestionButton(playlist.label));
-
-      expect(onSubmit).toHaveBeenCalledWith([`https://open.spotify.com/playlist/${playlist.id}`]);
-      // Submitted at all, which means the client-side parse passed -- so the id really is a
-      // well-formed 22-character Spotify id and the derived link is one the server will accept.
-      expect(screen.queryByRole('alert')).toBeNull();
-      cleanup();
+      expect(parsePlaylistUrl(url)).toEqual({ ok: true, id: playlist.id });
     }
   });
 
@@ -698,8 +675,15 @@ describe('LandingScreen', () => {
       card, so the narrow fix is to remove that one known string and keep the proxy absolute for
       everything else, rather than to loosen the pattern until any 20xx passes. If the footer ever
       renders something else, this stops matching and the assertion sees every digit again.
+
+      The author's URL is subtracted the same way since 2026-09-19, when `href` joined the audited
+      attributes (`__fixtures__/auditable-text.ts`). It carries no year today; it is named here so
+      the audit describes every string on the screen rather than tolerating the ones that pass. This
+      screen's only `href` is the footer's -- the suggestions and the library are buttons.
     */
-    const text = auditableText(container).replace(COPYRIGHT_NOTICE, '');
+    const text = auditableText(container)
+      .replace(COPYRIGHT_NOTICE, '')
+      .replace(COPY.footer.authorUrl, '');
 
     for (const card of fixtureDeck) {
       expect(text).not.toContain(card.title);
@@ -995,7 +979,9 @@ describe('LandingScreen', () => {
       // "2026-present" is a year-shaped constant that derives from no card. Attributes are audited
       // too -- a saved entry's name reaches an `aria-label` ("Remove X from your playlists") as well
       // as the button's text, so `textContent` alone would check one of the two places it appears.
-      const text = auditableText(container).replace(COPYRIGHT_NOTICE, '');
+      const text = auditableText(container)
+        .replace(COPYRIGHT_NOTICE, '')
+        .replace(COPY.footer.authorUrl, '');
 
       for (const card of fixtureDeck) {
         expect(text).not.toContain(card.title);
@@ -1218,7 +1204,9 @@ describe('LandingScreen', () => {
       selectSuggestion(picks[0]!.label);
       for (const playlist of picks.slice(1)) pressSuggestion(playlist.label);
 
-      const text = auditableText(container).replace(COPYRIGHT_NOTICE, '');
+      const text = auditableText(container)
+        .replace(COPYRIGHT_NOTICE, '')
+        .replace(COPY.footer.authorUrl, '');
 
       for (const card of fixtureDeck) {
         expect(text).not.toContain(card.title);

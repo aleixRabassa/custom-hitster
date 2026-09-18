@@ -69,26 +69,46 @@ request is loading, required `onBack` prop) that returns to the front door — a
 anchor, because there is no router and no history entry to go back to, and `App.tsx` still never touches
 the address bar. `App.tsx` decides with `hasEnteredPicker`, a `useState` of the same shape as
 `endedView`, and **the flag is set true by THREE things and cleared by ONE**: the welcome button, Exit
-and Home set it; Back clears it — **and it is SEEDED from the link**: `useState(deckLink !== null)`, so a
-valid share link counts as having pressed through. Every branch that shows the picker — `idle`, and both
-`ended` branches (`deckCollapsed`, and `endedView === 'landing'`) — reads `hasEnteredPicker ? landing :
-welcome` and nothing else. So **a share link never sees the welcome screen** (it deals immediately, as it always did), **a
-saved session resumes past it**, and **Exit and Home land on the picker** — no longer because those paths
-go through `ended` (through `ended` alone they would now reach the front door) but because they SET the
-flag; Back is how a player gets from there to the front door. **No branch checks `deckLink` any more, and the seed is what
-replaced the check**: the first version guarded the `idle` branch with `deckLink === null`, which left a
-link whose fetch FAILED showing a Back button that did nothing (the flag was already false and the
-guard still refused) and sent a link-dealt deck that collapsed to zero to the front door instead of to
-the `no-years-found` warning. Seeding the flag closes both; a `deckLink` check anywhere reopens one. It is ephemeral: a reload shows the front door again, and a "seen it" flag
+and Home set it; Back clears it — **and it is SEEDED from the link OR from a restored session**:
+`useState(deckLink !== null || state.status !== 'idle')`, so a valid share link and a saved session both
+count as having pressed through. The second term works only because `useGameSession` restores the save
+in `useReducer`'s LAZY INITIALIZER, so the first render already carries the restored status — move
+`RESUME` into an effect and the seed silently reads `idle`. Every branch that shows the picker — `idle`,
+and both `ended` branches (`deckCollapsed`, and `endedView === 'landing'`) — returns the one `picker`
+value, `hasEnteredPicker ? landing : welcome`, computed once, and nothing else. So **a share link never
+sees the welcome screen** (it deals immediately, as it always did), **a saved session resumes past it**
+(because it SEEDS the flag — not merely because a `preparing`/`playing` status skips the check; a resumed
+deck that collapses reaches the `ended` branch and needs the flag true), and **Exit and Home land on the
+picker** — no longer because those paths go through `ended` (through `ended` alone they would now reach
+the front door) but because they SET the flag; Back is how a player gets from there to the front door.
+**No branch checks `deckLink` any more, and the seed is what replaced the check**: the first version
+guarded the `idle` branch with `deckLink === null`, which left a link whose fetch FAILED showing a Back
+button that did nothing (the flag was already false and the guard still refused) and sent a link-dealt
+deck that collapsed to zero to the front door instead of to the `no-years-found` warning. A THIRD hole
+survived the link seed until 2026-09-19: a RESUMED session (a save taken during the card-1 gate, or a
+pre-reversal save of all-null years) that drained to zero also reached `deckCollapsed` with the flag
+false and showed the front door with no warning. Seeding the flag from the link and from the restored
+status closes all three; a `deckLink` check anywhere reopens one. It is ephemeral: a reload shows the front door again, and a "seen it" flag
 in `localStorage` was deliberately not built. Four things to know. **The PDF is `public/year-cards-1970-2033.pdf`, served statically and NOT precached** —
 the worker's `globPatterns` has no `pdf` on purpose (240 kB on every install, for a file most players
-never download), and `vercel.json`'s SPA rewrite already excludes any path with a dot. **`vite.config.ts`
-denylists `/\.pdf$/` from the SPA fallback**, because a controlled tab navigating to a URL the worker has
-not cached is served `index.html` — the `download` attribute is not a defence, since whether a download
-even reaches the worker as a navigation differs by browser. Neither half is observable under any dev
-server. **The printed range "1970 to 2033" is the one year-shaped text on a pre-start surface**, in
-`COPY.welcome.printDetail`, and `WelcomeScreen.test.tsx` subtracts it by exact string exactly as every
-leak proxy subtracts `COPYRIGHT_NOTICE` — reword it freely, but do not put the range in a second string.
+never download), and `vercel.json`'s SPA rewrite already excludes any path with a dot. **It is pinned
+`binary` in `.gitattributes`** (2026-09-19), because a PDFsharp file has no NUL in its first 8 kB, so git's
+text heuristic let `core.autocrlf` strip its 23 carriage returns on add — the blob shipped 23 bytes short
+with a broken `startxref` from `fbb4860` until the re-add; any future NUL-free binary needs the same line.
+**`vite.config.ts` denylists `/\.pdf(\?|$)/` from the SPA fallback** (workbox's `NavigationRoute` matches
+the denylist against `pathname + search`, so a bare `$` failed on any query string), because a controlled
+tab navigating to a URL the worker has not cached is served `index.html` — the `download` attribute is not
+a defence, since whether a download even reaches the worker as a navigation differs by browser. Neither
+half is observable under any dev server. **The printed range "1970–2033" is the one year-shaped text on a
+pre-start surface, and it is NOT in a sentence**: it lives in the PDF's saved name
+(`COPY.welcome.yearCardsFileName`, the download link's `download` attribute) and in the asset path
+(`YEAR_CARDS_PDF_PATH`, its `href`); `COPY.welcome.printDetail` carries only the start year. Until
+2026-09-19 neither attribute was audited, so the leak proxy passed by OMISSION. The shared
+`src/components/__fixtures__/auditable-text.ts` now audits `download` and `href` beside
+`alt`/`aria-label`/`title`/`placeholder`/`value`, and `WelcomeScreen.test.tsx` first asserts the audit
+READS both strings, then subtracts all three (plus `COPYRIGHT_NOTICE` and `COPY.footer.authorUrl`) by
+exact string — reword any of them freely, but a new home for the range needs a new subtraction, or the
+proxy fails, which is the intended failure.
 And **the decorative card is the first `card-ring` caller that is not `absolute inset-0`**, so it carries
 `relative` itself (and `rounded-card`, and `aria-hidden`, and draws a `?` rather than a number); its test
 pins all four. The download link is the app's **second `<a>`**, with `focus-visible:focus-ring` and
@@ -111,8 +131,14 @@ resets it**: `isFlipped` describes the current card and nothing remembers which 
 revealed, so carrying it over could hand a year to a player who never flipped that card; coming back to
 one they did reveal costs a tap, which is the cheaper error. **Audio stops on a left swipe for free**,
 because `GameScreen`'s stop rule is keyed on card id, not on direction — do not add a second stop. The
-exit animation is unchanged (the card still flies out the way it was thrown), and the gesture has been
-felt by **no thumb**: the manual rows are in [`docs/development.md`](./docs/development.md) §5.
+exit animation is DERIVED FROM THE INDEX DELTA as of 2026-09-19 (`exitDirectionFor` in `gestures.ts`,
+latched in `CardStack` and handed to `AnimatePresence custom`, read by `CARD_VARIANTS.exit` in
+`Card.tsx`) — so a thrown card still flies out the way it was thrown, and the KEYBOARD NOW MATCHES:
+ArrowRight flies right, ArrowLeft flies left, where before every keyboard advance flew left because the
+direction was hook state only a drag ever set. It goes through `custom` because an exiting child animates
+with the props of its last render, and a keyboard advance changes the index and removes the card in the
+same render. The gesture has been felt by **no thumb**: the manual rows are in
+[`docs/development.md`](./docs/development.md) §5.
 
 **A DECK IS 1..5 PLAYLISTS AND BOTH PLANS ARE BUILT — plan 1 on 2026-08-07, plan 2 with it.** This
 paragraph claimed until 2026-08-12 that plan 2 was unbuilt and that `App.tsx`, `DeckActions.tsx` and
@@ -237,7 +263,7 @@ identically with the artist rule reverted. Same false-comfort shape as the pre-2
 
 **Everything plan 2 built is a caller change: the reducer, `GameState` and the persistence format are untouched.** Three new pure modules in `src/game/` (`deck-link.ts`, `playlist-library.ts`, `pdf-sheet.ts` + `pdf-text.ts`), one new hook (`src/hooks/usePdfExport.ts`), and the shared `src/game/qrcode-loader.ts`. **Which subtree each landed in was the usual decision, and the rule is "put it where it can be tested":** `deck-link.ts` takes a query STRING rather than reading `location`, `playlist-library.ts` takes an injected `StorageLike` exactly as `persistence.ts` does, and `pdf-sheet.ts` holds every millimetre as arithmetic over numbers — the same decision/binding split as `gestures.ts` and `resolver.ts`, for the same reason: **getting the duplex column mirror wrong pairs every printed card with the wrong answer and is discoverable only by printing and cutting.** The binding halves are `App.tsx`, `EndScreen.tsx` and `usePdfExport.ts`. See [`docs/architecture.md`](./docs/architecture.md) §3.
 
-**A shared link promises "same playlist, same shuffle", NEVER "the same deck", and the copy is the feature.** Yearless cards are dropped at play time and editorial playlists refresh their tracks, so the seeded shuffle is exact while its input is not. The rule now lives as a comment on `COPY.deckActions.shareCaption`; the test that asserted the phrase "same deck" was absent went with the 2026-08-12 copy centralisation, because it is the one kind of assertion `COPY` cannot express. Also load-bearing: a **saved session outranks a link** (opening an old one must not discard a game in progress), a malformed link is the plain **welcome** screen with **no error** (the front door since 2026-09-18 — `deckLink === null` is exactly what shows it), and `App.tsx` **never touches the address bar** — no `pushState`, no `replaceState`. That rule is still true **of `App.tsx`** and is not the whole story any more: see the back-press block below, and do not delete the `pushState` in `useBackNavigation.ts` on the strength of this sentence. The link effect deliberately has **no "already submitted" ref**: such a guard survives StrictMode's simulated unmount, whose cleanup has already aborted the request it was recording, so the app would sit on the landing screen forever. That is measured and written up in [`docs/agent_findings.md`](./docs/agent_findings.md) (2026-08-06).
+**A shared link promises "same playlist, same shuffle", NEVER "the same deck", and the copy is the feature.** Yearless cards are dropped at play time and editorial playlists refresh their tracks, so the seeded shuffle is exact while its input is not. The rule now lives as a comment on `COPY.deckActions.shareCaption`; the test that asserted the phrase "same deck" was absent went with the 2026-08-12 copy centralisation, because it is the one kind of assertion `COPY` cannot express. Also load-bearing: a **saved session outranks a link** (opening an old one must not discard a game in progress), a malformed link is the plain **welcome** screen with **no error** (the front door since 2026-09-18 — with nothing to resume, `deckLink === null` is exactly what leaves the flag unseeded), and `App.tsx` **never touches the address bar** — no `pushState`, no `replaceState`. That rule is still true **of `App.tsx`** and is not the whole story any more: see the back-press block below, and do not delete the `pushState` in `useBackNavigation.ts` on the strength of this sentence. The link effect deliberately has **no "already submitted" ref**: such a guard survives StrictMode's simulated unmount, whose cleanup has already aborted the request it was recording, so the app would sit on the landing screen forever. That is measured and written up in [`docs/agent_findings.md`](./docs/agent_findings.md) (2026-08-06).
 
 **THE ANDROID BACK PRESS IS AN IN-APP CONTROL AS OF 2026-08-12, SO THERE IS EXACTLY ONE `pushState` IN
 THE APP AND IT IS NOT IN `App.tsx`.** `GameScreen` calls `useBackNavigation`, which pushes ONE history

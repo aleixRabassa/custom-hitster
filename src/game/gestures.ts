@@ -52,11 +52,12 @@
  */
 
 /**
- * Which way a committed swipe went.
+ * Which way a committed swipe went -- and, since 2026-09-19, which way the deck MOVED.
  *
  * Until 2026-09-18 both directions ADVANCED (Phase 5, decision 2) and this only picked the exit
- * animation. It now also picks the ACTION, through `swipeIntent` below -- the animation half is
- * unchanged: the card still flies out the way it was thrown.
+ * animation. It now picks the ACTION, through `swipeIntent` below. The exit animation no longer
+ * reads the swipe at all: it reads `exitDirectionFor` on the index delta, so a thrown card still
+ * flies out the way it was thrown (right → next → right) and a keyboard advance flies the same way.
  */
 export type CommitDirection = 'left' | 'right';
 
@@ -85,6 +86,32 @@ export type SwipeIntent = 'next' | 'previous';
  */
 export function swipeIntent(direction: CommitDirection): SwipeIntent {
   return direction === 'right' ? 'next' : 'previous';
+}
+
+/**
+ * Which way the outgoing card leaves, given where the deck WAS and where it now IS.
+ *
+ * ===========================================================================
+ *  THE EXIT IS DERIVED FROM THE INDEX DELTA, NEVER FROM THE GESTURE (2026-09-19).
+ *
+ *  Until then the direction was hook state set by the last drag and defaulting
+ *  to `left`. That was fine while both directions advanced. Once left meant
+ *  PREVIOUS, direction carried meaning and the sticky state told three lies: a
+ *  keyboard ArrowRight flew every card out the LEFT ("back") way, an ArrowLeft
+ *  after a right swipe flew the card out to the RIGHT while the deck stepped
+ *  back, and a declined PREVIOUS on card 1 latched `left` for whatever came next.
+ *
+ *  Reading the delta makes drag and keyboard agree by construction: a right
+ *  throw calls `onNext`, the index rises, and this says `right` -- the same
+ *  thing the throw said. There is nothing to keep in step.
+ *
+ *  Total, and equal indices resolve to `right`: the one way a card leaves with
+ *  the index unchanged is a yearless CURRENT card being dropped and replaced in
+ *  place by the next one, which is the deck moving on, not stepping back.
+ * ===========================================================================
+ */
+export function exitDirectionFor(previousIndex: number, nextIndex: number): CommitDirection {
+  return nextIndex < previousIndex ? 'left' : 'right';
 }
 
 /**
@@ -245,11 +272,14 @@ export function shouldCommitSwipe({ offsetX, velocityX }: DragEnd): boolean {
 }
 
 /**
- * Which way a committed drag went, for the exit animation only.
+ * Which way a committed drag went, for `swipeIntent` to turn into an action.
+ *
+ * It chose the exit animation until 2026-09-19; that is now `exitDirectionFor` over the index
+ * delta, so this function's only reader is the hook deciding between `onNext` and `onPrevious`.
  *
  * Offset decides, and velocity is the tiebreak for the flick case: a fast flick can be
- * released with a near-zero offset (thrown and let go almost immediately), and an exit
- * animation is better wrong-by-convention than driven off a meaningless sign. With both at
+ * released with a near-zero offset (thrown and let go almost immediately), and the action is
+ * better wrong-by-convention than driven off a meaningless sign. With both at
  * zero -- which `shouldCommitSwipe` would never have committed -- it falls through to `left`,
  * so the return type stays total and no caller needs a null branch.
  */

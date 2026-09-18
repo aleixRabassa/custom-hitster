@@ -61,6 +61,7 @@
  */
 
 import { motion } from 'motion/react';
+import type { Variants } from 'motion/react';
 import type { Ref } from 'react';
 
 import { CardHiddenSide } from './CardHiddenSide';
@@ -86,6 +87,44 @@ const EXIT_DISTANCE_PX = 600;
  */
 const EXIT_DURATION_S = 0.25;
 
+/**
+ * The exit, as a DYNAMIC variant that reads `AnimatePresence`'s `custom` -- and it has to be.
+ *
+ * ===========================================================================
+ *  AN EXITING CHILD ANIMATES WITH THE PROPS IT HAD ON ITS LAST RENDER BEFORE
+ *  REMOVAL, SO A DIRECTION PASSED AS A PLAIN PROP NEVER REACHES IT (2026-09-19).
+ *
+ *  This used to be `exit={{ x: exitDirection === 'left' ? -600 : 600 }}` with
+ *  `exitDirection` a prop from the gesture hook's state. The drag path worked
+ *  only because the hook set that state BEFORE dispatching, which forced one
+ *  re-render with the new prop and then removed the card. A keyboard advance
+ *  changes the index and removes the card in the SAME render, so the outgoing
+ *  card never sees a fresh prop -- it animates with the stale one.
+ *
+ *  `custom` is Motion's answer: the presence context carries it to the child
+ *  being removed on the very render that removes it, and the exit type resolves
+ *  its target through `presenceContext.custom` rather than through the child's
+ *  own props. So `CardStack` computes the direction from the index delta
+ *  (`exitDirectionFor`) and hands it to `<AnimatePresence custom>`, and this
+ *  function reads it. Motion also refuses to re-resolve an exit that is already
+ *  running, so a year landing mid-flight cannot redirect the card.
+ *
+ *  The typed route is `variants` + `exit="exit"`: the `exit` prop's type does
+ *  not admit a function, `Variant` does. Exported for `Card.test.tsx`, which
+ *  can pin the sign of `x` and nothing more -- jsdom paints nothing.
+ * ===========================================================================
+ *
+ * Total over `undefined`: a `Card` rendered outside any `AnimatePresence` (every `Card.test.tsx`
+ * render) has no `custom`, and it must not throw for it. Right is the advance direction.
+ */
+export const CARD_VARIANTS = {
+  exit: (direction: CommitDirection | undefined) => ({
+    x: direction === 'left' ? -EXIT_DISTANCE_PX : EXIT_DISTANCE_PX,
+    opacity: 0,
+    transition: { duration: EXIT_DURATION_S },
+  }),
+} satisfies Variants;
+
 export interface CardProps {
   card: CardData;
   isFlipped: boolean;
@@ -104,13 +143,6 @@ export interface CardProps {
    * which is what lets the Phase 4 card tests stay free of gesture setup.
    */
   gestureProps?: CardGestureProps;
-  /**
-   * Which way this card leaves when it is committed, from `useCardGestures`.
-   *
-   * The card exits the way it was thrown rather than always the same way. Only meaningful
-   * inside an `AnimatePresence` (see `CardStack`); harmless elsewhere.
-   */
-  exitDirection?: CommitDirection;
   /**
    * A ref to the card's OUTER element, and it is not a convenience -- the deck's exit animation
    * is broken without it.
@@ -151,14 +183,7 @@ export interface CardProps {
   ref?: Ref<HTMLDivElement>;
 }
 
-export function Card({
-  card,
-  isFlipped,
-  isYearPending,
-  gestureProps,
-  exitDirection = 'left',
-  ref,
-}: CardProps) {
+export function Card({ card, isFlipped, isYearPending, gestureProps, ref }: CardProps) {
   return (
     /*
       `touch-none` is `touch-action: none`, and on a touch device it is the difference between
@@ -172,11 +197,9 @@ export function Card({
       ref={ref}
       className="perspective-distant h-(--card-height) w-(--card-width) touch-none"
       {...gestureProps}
-      exit={{
-        x: exitDirection === 'left' ? -EXIT_DISTANCE_PX : EXIT_DISTANCE_PX,
-        opacity: 0,
-        transition: { duration: EXIT_DURATION_S },
-      }}
+      // The direction comes from `AnimatePresence custom`, not from a prop -- see `CARD_VARIANTS`.
+      variants={CARD_VARIANTS}
+      exit="exit"
     >
       <div
         data-testid="card-inner"
