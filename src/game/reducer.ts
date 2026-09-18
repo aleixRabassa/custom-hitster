@@ -206,7 +206,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
       // The current card was dropped and nothing followed it: the deck is exhausted, exactly as
       // `NEXT` past the last card is. Clamping instead would send the player BACKWARDS onto a
-      // card they have already played, which the one-directional deck has no other way to do.
+      // card they have already played without their asking -- `PREVIOUS` exists since 2026-09-18,
+      // but it is the player's move, never the resolver's.
       if (droppedCurrent && shifted > deck.length - 1) {
         return { ...state, deck, currentIndex: deck.length - 1, isFlipped: false, status: 'ended' };
       }
@@ -273,6 +274,39 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       }
 
       return { ...state, currentIndex: state.currentIndex + 1, isFlipped: false };
+    }
+
+    case 'PREVIOUS': {
+      /*
+        ===========================================================================
+         THE DECK STOPPED BEING ONE-DIRECTIONAL ON 2026-09-18, AND THIS IS THE
+         WHOLE OF WHAT CHANGED BELOW REACT.
+
+         A left swipe (and ArrowLeft) steps back to the card before this one; a
+         right swipe still advances exactly as it always did. Three things to know.
+
+         IT NEVER ENDS THE SESSION AND NEVER LEAVES THE DECK: on card 1 it is a
+         no-op that returns the SAME state object, so the hook's commit latch
+         fires, the reducer declines, and Motion snaps the card back to its
+         constraints -- the card stays on screen because its id did not change.
+
+         THE FLIP IS RESET, exactly as `NEXT` resets it. `isFlipped` describes the
+         CURRENT card and nothing remembers which earlier cards were revealed, so
+         carrying it over would hand the previous card's year straight to a
+         player who never flipped it -- e.g. when `YEAR_RESOLVED` had already
+         slid the deck under them. Coming back to a card the player DID reveal
+         costs them one tap; that is the cheaper error.
+
+         IT DOES NOT TOUCH THE CRAWL. Every card before `currentIndex` already has
+         a year (a yearless one was removed by `YEAR_RESOLVED`), and `RESUME`'s
+         "slice before the index" rule still holds because the index only ever
+         moves over resolved cards in this direction.
+        ===========================================================================
+      */
+      if (state.status !== 'playing') return state;
+      if (state.currentIndex === 0) return state;
+
+      return { ...state, currentIndex: state.currentIndex - 1, isFlipped: false };
     }
 
     case 'END': {

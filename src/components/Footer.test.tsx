@@ -78,12 +78,13 @@ describe('Footer', () => {
 
   it("should link the author's name to their site, safely and focusably", () => {
     // ===================================================================
-    //  THE APP'S ONLY ANCHOR, added 2026-08-12 -- so none of the habits the
+    //  THE APP'S FIRST ANCHOR, added 2026-08-12 (the welcome screen's PDF download
+    //  is the second, since 2026-09-18) -- so none of the habits the
     //  rest of the app has for interactive elements were already in place
     //  here, and each one is asserted rather than assumed.
     //
     //  `focus-visible:focus-ring` is the repo-wide rule for anything
-    //  focusable, and this element is now in the tab order of all four
+    //  focusable, and this element is now in the tab order of all five
     //  screens. `rel` must carry `noopener`: without it the opened page can
     //  reach back through `window.opener` into a tab that is holding a game.
     //
@@ -117,7 +118,8 @@ describe('Footer', () => {
     // ===================================================================
     //  THE FOOTER'S HALF OF A TWO-ENDED CONTRACT: this element positions
     //  itself, and its host supplies `relative pb-20`. Each screen's own test
-    //  holds the other end -- all four of them, since 2026-08-12.
+    //  holds the other end -- all five of them (four since 2026-08-12, the welcome screen since
+    //  2026-09-18).
     //
     //  `bottom-8` AND `pb-20` ARE ONE NUMBER SPLIT IN TWO: 80px of band, a 32px
     //  offset and a ~16px line put exactly 32px above the copyright and 32px

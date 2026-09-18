@@ -1,6 +1,10 @@
 /**
  * The landing screen: paste up to five playlist links, or pick one of the suggestions.
  *
+ * Reached from `WelcomeScreen` since 2026-09-18 -- the front door explains the game and its big button
+ * lands here. This file kept its name because the docs and the tests name it in forty-odd places;
+ * where they say "landing screen" they mean this picker.
+ *
  * ===========================================================================
  *  THIS IS A PRE-START SURFACE, SO IT MUST LEAK NOTHING ABOUT ANY DECK.
  *
@@ -170,6 +174,15 @@ export interface LandingScreenProps {
    */
   onSubmit: (urls: string[]) => void;
   /**
+   * Go back to the welcome screen (2026-09-18).
+   *
+   * REQUIRED rather than optional, because this picker is never the app's front door any more: every
+   * state that shows it -- a fresh `idle`, an Exit, Home, a collapsed deck -- has a welcome screen
+   * behind it, and a picker with no way back to that screen is a dead end on a phone with no
+   * browser chrome (the TWA). The container owns the flag this flips; see `App.tsx`.
+   */
+  onBack: () => void;
+  /**
    * The player's saved playlists, most-recent-first, from `playlist-library.ts` via the container.
    *
    * Playlist-level data only, which is what makes this section safe on a pre-start surface: an
@@ -194,6 +207,7 @@ export interface LandingScreenProps {
 
 export function LandingScreen({
   onSubmit,
+  onBack,
   isLoading,
   errorCode,
   savedPlaylists = [],
@@ -403,6 +417,41 @@ export function LandingScreen({
       =============================================================================
     */
     <main className="relative flex min-h-dvh flex-col items-center gap-8 bg-page px-6 pt-6 pb-20 text-fg">
+      {/*
+        ===========================================================================
+         THE WAY BACK TO THE FRONT DOOR (2026-09-18).
+
+         The welcome screen went in front of this picker on the same day, and a
+         screen a player can walk INTO needs a way back OUT -- on a phone inside
+         the TWA there is no browser chrome, so this button is the only route.
+         Top-left (`self-start`, first child of `<main>`), where a back control
+         is expected to be, and ghost-styled so it does not compete with Start.
+
+         A `<button>`, NOT an `<a>`, and that is not a style choice: there is no
+         router and no history entry to return to (`App.tsx`'s header commits to
+         neither), so an anchor would have no `href` that means anything. It
+         flips a container flag, exactly as the welcome screen's own button
+         does in the other direction.
+
+         The accessible name is the VISIBLE text -- no `aria-label`, for the
+         WCAG 2.5.3 reason the inputs below give -- and the arrow is
+         `aria-hidden` decoration, the same split as the "+" and the ✕.
+
+         Disabled while a request is in flight, like every other control here:
+         leaving mid-fetch would put the loading state and the error slot on a
+         screen that no longer exists.
+        ===========================================================================
+      */}
+      <button
+        type="button"
+        onClick={onBack}
+        disabled={isLoading}
+        className="touch-target flex items-center gap-2 self-start rounded-lg px-3 py-2 text-sm text-fg-secondary hover:text-fg focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)"
+      >
+        <span aria-hidden="true">←</span>
+        {COPY.landing.backToWelcome}
+      </button>
+
       {/*
         ===========================================================================
          THE HERO: THE LOGO, THE ONE SENTENCE, AND THE FORM.

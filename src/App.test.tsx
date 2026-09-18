@@ -242,8 +242,22 @@ function cardsLeftInHud(): number {
   return -1;
 }
 
-/** Paste a URL and press Start. */
+/**
+ * Walk through the welcome screen, if it is showing.
+ *
+ * Conditional rather than unconditional, because not every path starts there: a share link deals
+ * straight into the picker's loading state, a resumed session never reaches `idle`, and Exit / Home
+ * land on the picker. The tests that assert the welcome screen's presence or absence call
+ * `screen.getByRole` themselves; this is for the ones whose subject is what happens after it.
+ */
+function enterPicker() {
+  const enter = screen.queryByRole('button', { name: COPY.welcome.enter });
+  if (enter) fireEvent.click(enter);
+}
+
+/** Walk through the welcome screen if needed, paste a URL and press Start. */
 function startPlaylist(url = PLAYLIST_URL) {
+  enterPicker();
   fireEvent.change(screen.getByLabelText(COPY.landing.playlistLinkLabel(0)), {
     target: { value: url },
   });
@@ -252,6 +266,7 @@ function startPlaylist(url = PLAYLIST_URL) {
 
 /** Press "+" until there are enough rows, fill them all in order, and press Start. */
 function startPlaylists(urls: readonly string[]) {
+  enterPicker();
   for (let index = 1; index < urls.length; index += 1) {
     fireEvent.click(screen.getByRole('button', { name: COPY.landing.addRow }));
   }
@@ -325,12 +340,105 @@ describe('App', () => {
     vi.restoreAllMocks();
   });
 
-  it('should render the landing screen when idle', () => {
+  it('should render the welcome screen when idle, and the picker once it is entered', () => {
+    // The front door comes first (2026-09-18): an `idle` session with no link shows the welcome
+    // screen, and ONE press puts the picker on screen. The picker's input is the proof of arrival.
     stubHangingYearApi();
     renderApp(playlistFetch(200, playlistResult()));
 
+    expect(screen.queryByLabelText(COPY.landing.playlistLinkLabel(0))).toBeNull();
+    expect(screen.queryByTestId('hud')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: COPY.welcome.enter }));
+
+    expect(screen.queryByRole('button', { name: COPY.welcome.enter })).toBeNull();
     expect(screen.queryByLabelText(COPY.landing.playlistLinkLabel(0))).not.toBeNull();
     expect(screen.queryByTestId('hud')).toBeNull();
+  });
+
+  it('should not show the welcome screen again after an exit', async () => {
+    // Exit goes through `ended`, and the welcome flag is set for the session -- so a player who
+    // quits a game lands on the picker, not on the rules.
+    stubYearApi();
+    renderApp(playlistFetch(200, playlistResult()));
+    startPlaylist();
+    await waitFor(() => {
+      expect(screen.queryByTestId('hud')).not.toBeNull();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: COPY.controls.exit }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.exitDialog.confirm }));
+
+    expect(await screen.findByLabelText(COPY.landing.playlistLinkLabel(0))).not.toBeNull();
+    expect(screen.queryByRole('button', { name: COPY.welcome.enter })).toBeNull();
+  });
+
+  it('should reach the welcome screen with Back after a share link fails to load', async () => {
+    // The case the first version got wrong: a link seeds the flag TRUE (it pressed through for the
+    // player), so when its fetch fails the picker shows the error AND a Back that actually works. With a
+    // `deckLink === null` guard on the `idle` branch instead, this Back was an enabled no-op.
+    stubHangingYearApi();
+    const fetchImpl = playlistFetch(404, { code: 'not-found-or-private', message: 'nope' });
+    render(
+      <App
+        storage={memoryStorage()}
+        fetchImpl={fetchImpl}
+        search={`?playlist=${PLAYLIST.id}&seed=a1b2c3d4e5f60718`}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert').textContent).toBe(
+        PLAYLIST_ERROR_MESSAGES['not-found-or-private'],
+      );
+    });
+    // The link went straight to the picker, never the front door.
+    expect(screen.queryByRole('button', { name: COPY.welcome.enter })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: COPY.landing.backToWelcome }));
+
+    expect(screen.queryByRole('button', { name: COPY.welcome.enter })).not.toBeNull();
+    expect(screen.queryByLabelText(COPY.landing.playlistLinkLabel(0))).toBeNull();
+  });
+
+  it('should return to the welcome screen from the picker with Back', () => {
+    // The front door goes both ways (2026-09-18): the picker's Back clears the same flag the welcome
+    // button set, so the rules are one press away again and the picker is gone.
+    stubHangingYearApi();
+    renderApp(playlistFetch(200, playlistResult()));
+    enterPicker();
+    expect(screen.queryByLabelText(COPY.landing.playlistLinkLabel(0))).not.toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: COPY.landing.backToWelcome }));
+
+    expect(screen.queryByRole('button', { name: COPY.welcome.enter })).not.toBeNull();
+    expect(screen.queryByLabelText(COPY.landing.playlistLinkLabel(0))).toBeNull();
+  });
+
+  it('should reach the welcome screen with Back after an exit, and the picker again after it', async () => {
+    // Exit lands on the picker while the session sits at `ended`, and the welcome screen must be
+    // reachable from THAT picker too -- the `ended` branches read the flag, not the status. Pressing
+    // through again puts the picker back, since nothing about the session changed in between.
+    stubYearApi();
+    renderApp(playlistFetch(200, playlistResult()));
+    startPlaylist();
+    await waitFor(() => {
+      expect(screen.queryByTestId('hud')).not.toBeNull();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: COPY.controls.exit }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.exitDialog.confirm }));
+    expect(await screen.findByLabelText(COPY.landing.playlistLinkLabel(0))).not.toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: COPY.landing.backToWelcome }));
+
+    expect(screen.queryByRole('button', { name: COPY.welcome.enter })).not.toBeNull();
+    expect(screen.queryByLabelText(COPY.landing.playlistLinkLabel(0))).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: COPY.welcome.enter }));
+
+    expect(screen.queryByLabelText(COPY.landing.playlistLinkLabel(0))).not.toBeNull();
+    expect(screen.queryByRole('button', { name: COPY.welcome.enter })).toBeNull();
   });
 
   it('should render the preparing screen while preparing', async () => {
@@ -556,6 +664,34 @@ describe('App', () => {
     fireEvent.keyDown(window, { key: ' ' });
     const inners = screen.getAllByTestId('card-inner');
     expect(inners.some((inner) => inner.getAttribute('data-flipped') === 'true')).toBe(true);
+  });
+
+  it('should step back to the previous card on ArrowLeft and stop on the first', async () => {
+    // The left swipe's action, end to end through the session hook and the reducer (2026-09-18).
+    // The HUD's count is the observable: it falls on →, rises again on ←, and a second ← on card 1
+    // changes nothing -- the reducer declines rather than ending the game or wrapping round.
+    stubYearApi();
+    renderApp(playlistFetch(200, playlistResult()));
+
+    startPlaylist();
+    await waitFor(() => {
+      expect(screen.queryByTestId('hud')).not.toBeNull();
+    });
+    const atStart = cardsLeftInHud();
+
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    await waitFor(() => {
+      expect(cardsLeftInHud()).toBe(atStart - 1);
+    });
+
+    fireEvent.keyDown(window, { key: 'ArrowLeft' });
+    await waitFor(() => {
+      expect(cardsLeftInHud()).toBe(atStart);
+    });
+
+    fireEvent.keyDown(window, { key: 'ArrowLeft' });
+    expect(cardsLeftInHud()).toBe(atStart);
+    expect(screen.queryByText(COPY.end.heading)).toBeNull();
   });
 
   it('should render the end screen when the deck runs out', async () => {
@@ -902,9 +1038,10 @@ describe('App', () => {
       expect(saved.seed).toBe('resumed-seed');
     });
 
-    it('should show the plain landing screen for a malformed link', async () => {
+    it('should show the plain welcome screen for a malformed link', async () => {
       // Someone mangling a URL in a chat client is not a failure state worth a red banner (step 6).
-      // The seed here is one character short, which is the likeliest real corruption.
+      // The seed here is one character short, which is the likeliest real corruption. A malformed
+      // link is not a link, so it gets the front door (2026-09-18) -- with no error, as before.
       stubHangingYearApi();
       const fetchImpl = playlistFetch(200, playlistResult());
       render(
@@ -915,7 +1052,7 @@ describe('App', () => {
         />,
       );
 
-      expect(await screen.findByLabelText(COPY.landing.playlistLinkLabel(0))).not.toBeNull();
+      expect(await screen.findByRole('button', { name: COPY.welcome.enter })).not.toBeNull();
       expect(screen.queryByRole('alert')).toBeNull();
       expect(fetchImpl).not.toHaveBeenCalled();
     });
@@ -1007,6 +1144,7 @@ describe('App', () => {
       );
 
       renderApp(playlistFetch(200, playlistResult()), storage);
+      enterPicker();
 
       expect(screen.queryByRole('button', { name: 'From last time' })).not.toBeNull();
     });
@@ -1023,6 +1161,7 @@ describe('App', () => {
       );
 
       renderApp(playlistFetch(200, playlistResult()), storage);
+      enterPicker();
 
       fireEvent.click(screen.getByRole('button', { name: COPY.landing.removeSaved('Going away') }));
 
@@ -1046,6 +1185,7 @@ describe('App', () => {
       const fetchImpl = playlistFetch(200, playlistResult());
 
       renderApp(fetchImpl, storage);
+      enterPicker();
       fireEvent.click(screen.getByRole('button', { name: 'Playable' }));
 
       await waitFor(() => {
@@ -1062,6 +1202,7 @@ describe('App', () => {
       storage.map.set(LIBRARY_STORAGE_KEY, '{ not json');
 
       renderApp(playlistFetch(200, playlistResult()), storage);
+      enterPicker();
 
       expect(screen.queryByLabelText(COPY.landing.playlistLinkLabel(0))).not.toBeNull();
       expect(screen.queryByText(COPY.landing.savedHeading)).toBeNull();
@@ -1436,6 +1577,7 @@ describe('App', () => {
       const fetchImpl = bothLoad();
 
       renderApp(fetchImpl, storage);
+      enterPicker();
       fireEvent.click(screen.getByRole('button', { name: COPY.deck.label(PLAYLIST.name, 1) }));
 
       await waitFor(() => {

@@ -26,6 +26,7 @@ import {
   isTap,
   shouldCommitSwipe,
   swipeDirection,
+  swipeIntent,
 } from './gestures';
 
 describe('shouldCommitSwipe', () => {
@@ -57,9 +58,9 @@ describe('shouldCommitSwipe', () => {
   });
 
   it('should commit for a left swipe and for a right swipe', () => {
-    // Decision 2: both directions advance. There is no previous card, so a right swipe has
-    // nothing else it could mean -- and snapping it back would read as a broken gesture
-    // rather than a deliberate refusal.
+    // Both directions COMMIT. Until 2026-09-18 both also advanced (Phase 5, decision 2); now the
+    // direction chooses the action through `swipeIntent`, below -- but the commit rule itself is
+    // symmetric, and snapping either direction back would read as a broken gesture.
     const distance = SWIPE_COMMIT_DISTANCE_PX + 20;
 
     expect(shouldCommitSwipe({ offsetX: -distance, velocityX: 0 })).toBe(true);
@@ -103,6 +104,26 @@ describe('swipeDirection', () => {
     // `shouldCommitSwipe` would never have committed this, so the value is arbitrary -- but
     // the function must still return a direction so no caller needs a null branch.
     expect(swipeDirection({ offsetX: 0, velocityX: 0 })).toBe('left');
+  });
+});
+
+describe('swipeIntent', () => {
+  it('should advance on a right swipe and step back on a left swipe', () => {
+    // ===================================================================
+    //  THE ONE MAPPING THE WHOLE FEATURE RESTS ON (2026-09-18), and it is
+    //  here rather than in the hook because jsdom cannot exercise a drag:
+    //  written inline, a backwards mapping would turn every "next card" into
+    //  "the card before" and no DOM test would notice. Right keeps the
+    //  meaning it has always had -- Phase 5 already threw the card that way.
+    // ===================================================================
+    expect(swipeIntent('right')).toBe('next');
+    expect(swipeIntent('left')).toBe('previous');
+  });
+
+  it('should agree with swipeDirection about a thrown card', () => {
+    // End to end over the two pure functions: a card thrown right advances, thrown left steps back.
+    expect(swipeIntent(swipeDirection({ offsetX: 120, velocityX: 800 }))).toBe('next');
+    expect(swipeIntent(swipeDirection({ offsetX: -120, velocityX: -800 }))).toBe('previous');
   });
 });
 

@@ -12,7 +12,7 @@
  *  ("margen debajo igual al margen superior") -- before it, `bottom-4` inside a
  *  `pb-12`/`pb-20` band put the copyright 16px off the screen's edge with anything
  *  from 16px to 48px of air above it. Change `bottom-8` without changing `pb-20`
- *  on all four hosts, or the reverse, and the symmetry is silently gone: jsdom
+ *  on all five hosts, or the reverse, and the symmetry is silently gone: jsdom
  *  computes no layout, so nothing here can measure it.
  *
  *  That is the same shape of contract as `card-ring` in `src/index.css` -- the
@@ -52,7 +52,8 @@
  * ===========================================================================
  *
  * ===========================================================================
- *  IT IS RENDERED ON ALL FOUR OF THE APP'S SCREENS, INCLUDING THE GAME SCREEN
+ *  IT IS RENDERED ON ALL FIVE OF THE APP'S SCREENS (the welcome screen joined
+ *  on 2026-09-18), INCLUDING THE GAME SCREEN
  *  (2026-08-12) -- AND THE ONE SCREEN IT IS KEPT OFF IS THE ONLY INTERESTING
  *  DECISION LEFT IN THIS FILE.
  *
@@ -120,7 +121,7 @@ export function Footer() {
       screen-reader user navigates by, where a copyright line is noise.
 
       NO EXPLICIT `role`, and that is the part a future edit could get wrong: adding
-      `role="contentinfo"` would make the landmark real in every browser, and all four screens render
+      `role="contentinfo"` would make the landmark real in every browser, and all five screens render
       this component. `Footer.test.tsx` asserts the absence -- and records that Testing Library maps
       `footer` to `contentinfo` regardless of ancestry, so a role QUERY cannot be used to check any
       of this.
@@ -160,12 +161,13 @@ export function Footer() {
         =========================================================================
 
         =========================================================================
-         IT IS THE APP'S ONLY ANCHOR (2026-08-12), so the conventions every other
+         IT WAS THE APP'S ONLY ANCHOR (2026-08-12) until the welcome screen's PDF
+         download became the second on 2026-09-18, so the conventions every other
          interactive element here follows had to be applied by hand.
 
          `focus-visible:focus-ring` because the repo's rule is that EVERY
          interactive element gets one, and this is now interactive: it is
-         reachable by Tab on all four screens, and a keyboard user who lands on
+         reachable by Tab on all five screens, and a keyboard user who lands on
          an unringed link has no idea where they are. `font-bold` is what the
          developer asked for and also the non-colour half of "this is a link",
          which matters because colour alone is not an affordance.

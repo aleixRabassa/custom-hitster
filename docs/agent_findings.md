@@ -3643,3 +3643,87 @@ progress and is fixed — the assertions use `getAttribute()`, and it stands as 
 nothing compares them at runtime, and **no rendering would change if they crossed** — a press would
 merely satisfy both readings with event ordering picking the winner. Proximity plus one assertion is
 the entire enforcement.
+
+## 2026-09-18 — A welcome screen in front of the picker, a static PDF behind a service worker, and the deck's first step backwards
+
+Two developer requests, both outside any plan: an explanatory front door with a big Start button (and a
+button downloading a supplied PDF of year cards for playing on a table), and a left swipe that steps back
+a card while a right swipe keeps advancing. Findings, in the order they bit:
+
+1. **The service worker's SPA fallback would have served the app in place of the PDF.** `generateSW`
+   defaults `navigateFallback` to `index.html` for any navigation the precache does not hold, and the PDF
+   is deliberately not precached (`globPatterns` has no `pdf`; 240 kB on every install for a file most
+   players never download). So a click on the link in a worker-controlled tab would have been a
+   navigation to an uncached URL — i.e. the welcome screen reloading. Fixed by adding `/\.pdf$/` to
+   `navigateFallbackDenylist`, next to `/^\/api\//`. The `download` attribute is NOT the fix: whether
+   an `<a download>` request even reaches the worker as a `navigate`-mode request differs by browser.
+   Verified in the built `dist/sw.js` (the denylist carries `pdf$`, and `year-cards` appears nowhere in
+   the precache manifest); **unobservable under `pnpm dev` or `vercel dev`**, since `devOptions` is absent.
+2. **`vercel.json`'s rewrite already lets the file through.** Its source is `/((?!api/|@)[^.]*)` — any
+   path with a dot is excluded from the SPA rewrite — so `public/year-cards-1970-2033.pdf` needs no
+   configuration to be served. Worth knowing before adding a second static asset with an extension.
+3. **The leak proxies fire on a printed year range, and the right response is the footer's.** The welcome
+   copy says "year cards from 1970 to 2033", which matches `\b(19|20)\d{2}\b` twice. It derives from a
+   PDF on disk rather than from any deck, so it is not a leak — and the pattern was NOT loosened. The
+   sentence lives in ONE constant (`COPY.welcome.printDetail`) and `WelcomeScreen.test.tsx` subtracts it
+   by exact string, exactly as every pre-start proof subtracts `COPYRIGHT_NOTICE`. Putting the range in a
+   second string would silently escape the proxy's subtraction and fail the test — which is the intended
+   failure.
+4. **`card-ring` met its first caller that is not `absolute inset-0`.** The welcome screen's decorative
+   card is in flow, so it has to carry `relative` itself — the utility deliberately declares no `position`
+   (the cascade-order reasoning is in `index.css`), and without it the gradient band anchors to `<main>`
+   and draws a 2px ring around the whole screen. Its test pins `relative`, `rounded-card`, `aria-hidden`
+   and "no digit", the same both-ends shape as `Card.test.tsx`.
+5. **The welcome screen is a container flag, and the three edge cases fell out of one condition.**
+   `idle && deckLink === null && !hasEnteredPicker` — a share link never sees the welcome screen, a saved
+   session resumes past it, and Exit/Home land on the picker. One documented behaviour did change: a
+   **malformed** link now shows the welcome screen rather than the picker, still with no error, because
+   `parseDeckLink` returns `null` for it. `App.test.tsx`'s test and AGENTS.md's sentence were updated
+   rather than papered over. In `App.test.tsx` the walk-through is a CONDITIONAL `enterPicker()` inside
+   the two `start*` helpers, because not every path starts at the front door.
+6. **`PREVIOUS` resets the flip, and that is a leak rule rather than a preference.** `isFlipped` describes
+   the current card and nothing records which earlier cards were revealed; `YEAR_RESOLVED` can slide the
+   deck under the player, so "the card before this one" may be a card they never flipped, and carrying the
+   flag over would show its year. Resetting costs a player who DID reveal it one tap. On card 1 the action
+   returns the SAME state object, which is what lets the hook's latched commit end as a Motion snap-back
+   rather than as anything the reducer has to model.
+7. **Direction became a decision, so it moved into `gestures.ts`.** `swipeDirection` used to pick only the
+   exit animation (both directions advanced — Phase 5 decision 2). `swipeIntent(direction)` now also picks
+   the action, as a pure function with node tests, because jsdom cannot exercise a drag and an inline
+   mapping in `useCardGestures` would be untested full stop — while a backwards one turns every "next"
+   into "previous" with no DOM test noticing. Every "the deck is one-directional" sentence in `src/`, `README.md` and the top-level `docs/` was rewritten with it; `docs/plans/` (Phase 5 decision 2 and its neighbours) records what was decided at the time and was left alone.
+8. **`LandingScreen.test.tsx > should submit a full URL for every suggestion` needed its own timeout, and the numbers say load rather than a defect.** It renders THIRTEEN full landing screens in one test. In this tree it failed **2 of 2** full runs against Vitest's 5 s default (8.7 s, then 7.2 s); a full run of the untouched last commit, in a worktree sharing the same `node_modules`, passed it at 386 ms; and in isolation it measured anywhere from 281 ms to 1.4 s in EITHER tree depending on whether the transform cache was warm. `LandingScreen` and its test were not otherwise changed, so the likeliest cause is scheduling -- a 51st jsdom file and a longer `App.test.tsx` moving this file alongside the `motion` transform. Fixed the way the 2026-08-06 `beforeAll` finding fixed the same shape: `{ timeout: 20_000 }` on that one test, with the measurements in its comment. Not a behavioural change to anything the test asserts.
+
+## 2026-09-18 — The picker got a Back button, and "Exit lands on the picker" survived it as a flag set from three places
+
+The welcome screen went in front of the picker earlier today with no way back to it short of a reload.
+The developer asked for a Back button on the picker (`COPY.landing.backToWelcome`, a ghost `<button>`
+top-left, disabled while a request is loading). Three findings:
+
+1. **The flag is set by three things and cleared by one, and the `ended` branches had to honour it.**
+   Entry 5 above explained "Exit and Home land on the picker" as a consequence of those paths going
+   through `ended`. That stopped being the reason today: `hasEnteredPicker` is now set true by the
+   welcome button AND by Exit AND by Home, and set false by Back — and the two `ended` branches that show
+   the landing screen (`deckCollapsed`, and `endedView === 'landing'`) render the welcome screen instead
+   while the flag is false. Without that second half, Back after an Exit would have been a dead button:
+   the status is still `ended`, the branch would have kept returning the picker whatever the flag said,
+   and the only way to the front door would have stayed a reload. The `idle` branch first kept its
+   `deckLink === null` guard, and that was wrong in two reachable states, both found in review: a link
+   whose fetch FAILED showed the picker with an ENABLED Back that did nothing (the flag was already
+   false, the guard still refused), and a link-dealt deck collapsing to zero reached the front door
+   instead of the `no-years-found` warning. The fix is `useState(deckLink !== null)` — a link counts as
+   having pressed through — after which every picker-showing branch reads the one flag and no branch
+   consults `deckLink`. `App.test.tsx` pins the failed-link case. Exit and Home still land on the picker; they do it by setting the flag,
+   which is what the heading of this entry means.
+2. **Returning to the picker from the welcome screen remounts `LandingScreen`, so typed rows are lost.**
+   The rows live in the picker's own state, and the container switches components rather than hiding
+   one, so a welcome → Back → welcome-button round trip starts from a blank row. The loss is accepted, not
+   persisted; the button is disabled while a request is loading, so nothing in flight can be lost, only
+   text that was typed. Anyone wanting to keep the rows would have to lift them out of `LandingScreen`
+   (into `App.tsx` or a storage shadow), which widens the one file that knows all the statuses. Recorded
+   as row 8 of `development.md` §5's welcome-screen table.
+3. **The lead sentence under the tagline was cut, and the copy rule made it a one-line change.**
+   `COPY.welcome.lead` restated the three "How it works" steps in one breath, so the hero is now the logo,
+   one tagline and the button. Deleting the constant and its one render site touched no test, because no
+   test ever knew what the sentence said — the property `src/game/copy.ts`'s header promises, cashed in.
+   The tagline was reworded in the same pass; likewise nothing to update outside `copy.ts`.

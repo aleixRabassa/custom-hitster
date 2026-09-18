@@ -37,9 +37,10 @@
  *  A TAP AND A DRAG BEGIN WITH THE IDENTICAL POINTER EVENT, AND BOTH
  *  MISREADINGS ARE DESTRUCTIVE.
  *
- *  A tap misread as a swipe SKIPS A CARD IRRECOVERABLY: the deck is
- *  one-directional by design and there is no previous card, so the player has
- *  permanently lost a track they never saw.
+ *  A tap misread as a swipe SKIPS A CARD -- or, since 2026-09-18, steps back
+ *  onto one. A left swipe can undo the first, which is new; what it cannot undo
+ *  is the second, because a step back resets the flip and the audio, so the
+ *  guess in progress is lost either way.
  *
  *  A swipe misread as a tap FLIPS THE CARD, revealing the answer the player was
  *  in the middle of guessing -- which is the entire game.
@@ -53,12 +54,38 @@
 /**
  * Which way a committed swipe went.
  *
- * Both directions ADVANCE (decision 2) -- this is only used to pick the exit animation, so
- * the card flies out the way it was thrown instead of always the same way. A right swipe that
- * snapped back would read as a broken gesture rather than a deliberate one, because there is
- * no previous card for it to mean.
+ * Until 2026-09-18 both directions ADVANCED (Phase 5, decision 2) and this only picked the exit
+ * animation. It now also picks the ACTION, through `swipeIntent` below -- the animation half is
+ * unchanged: the card still flies out the way it was thrown.
  */
 export type CommitDirection = 'left' | 'right';
+
+/** What a committed swipe asks the session to do. */
+export type SwipeIntent = 'next' | 'previous';
+
+/**
+ * Which action a committed swipe in `direction` means.
+ *
+ * ===========================================================================
+ *  RIGHT ADVANCES, LEFT STEPS BACK (2026-09-18). A DECISION, HERE, FOR THE
+ *  REASON EVERYTHING ELSE IN THIS FILE IS HERE.
+ *
+ *  jsdom cannot exercise a drag, so a mapping written inline in
+ *  `useCardGestures` would be untested full stop -- and getting it backwards
+ *  is invisible to every DOM test while turning every "next card" into "the
+ *  card before". The mapping is the developer's call: right is the direction
+ *  the game has always advanced in (Phase 5's exit animation already threw
+ *  the card that way), so it keeps its meaning, and left is the direction
+ *  that was free.
+ *
+ *  Keyboard mirrors it in `GameScreen`: ArrowRight advances, ArrowLeft steps
+ *  back. The two are kept in step by reading THIS function's output in the
+ *  gesture tests and the key names in the screen's.
+ * ===========================================================================
+ */
+export function swipeIntent(direction: CommitDirection): SwipeIntent {
+  return direction === 'right' ? 'next' : 'previous';
+}
 
 /**
  * How far a drag must travel horizontally to advance, in CSS pixels.

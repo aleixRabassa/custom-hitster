@@ -16,11 +16,17 @@
  *  first time anyone pressed it. No screen in v1 is worth deep-linking to; the
  *  shareable deck URL is Phase 8 and enters through `start`'s optional seed,
  *  not through history.
+ *
+ *  FIVE SCREENS SINCE 2026-09-18, STILL FOUR STATUSES: the welcome screen is
+ *  what `idle` shows until the player presses through to the picker, decided
+ *  by a container flag (`hasEnteredPicker`) exactly as `endedView` decides
+ *  which of two screens `ended` shows. Neither is a status, and neither is
+ *  in the reducer.
  * ===========================================================================
  *
  * ## `dispatch` is deliberately out of reach
  *
- * `useGameSession` exposes four callbacks and no dispatcher, so no screen can invent a transition
+ * `useGameSession` exposes five callbacks and no dispatcher, so no screen can invent a transition
  * the reducer's tests never considered. Nothing here should want one: if a screen seems to need a
  * fifth action, the reducer is the place to add it, with its tests.
  */
@@ -31,6 +37,7 @@ import { EndScreen } from './components/EndScreen';
 import { LandingScreen } from './components/LandingScreen';
 import { NoticeBanner } from './components/NoticeBanner';
 import { PreparingScreen } from './components/PreparingScreen';
+import { WelcomeScreen } from './components/WelcomeScreen';
 import { parseDeckLink } from './game/deck-link';
 import { deckLabel } from './game/deck-merge';
 import { loadLibrary, removePlaylist, savePlaylist, savedDeckKey } from './game/playlist-library';
@@ -155,6 +162,9 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
     start,
     flip,
     next,
+    // The left swipe's action (2026-09-18). Added to the REDUCER with its tests, which is what the
+    // header above says a screen needing a fifth action has to do -- not invented in a screen.
+    previous,
     end,
   } = useGameSession(storage ? { storage } : {});
   const {
@@ -164,6 +174,56 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
   } = usePlaylist(fetchImpl ? { fetchImpl } : {});
 
   const [endedView, setEndedView] = useState<EndedView>('end-screen');
+
+  /**
+   * Has the player pressed the welcome screen's button yet?
+   *
+   * ===========================================================================
+   *  THE WELCOME SCREEN IS A CONTAINER FLAG, NOT A FIFTH STATUS (2026-09-18).
+   *
+   *  It is the same shape as `endedView`: a presentation question -- which of
+   *  two screens an `idle` session shows -- answered here rather than by
+   *  reopening Phase 3's reducer, its types and its persistence format. `idle`
+   *  still means "nothing to resume"; this only decides whether the player has
+   *  been shown the front door yet.
+   *
+   *  Three consequences, all of them the design rather than gaps in it. A SHARE
+   *  LINK NEVER SEES IT ON THE WAY IN: the flag is seeded true from `deckLink`,
+   *  so a link deals immediately exactly as it always did. A SAVED
+   *  SESSION RESUMES PAST IT: any status other than `idle` never reaches the
+   *  check. And EXIT / HOME LAND ON THE PICKER, not here -- both handlers SET
+   *  this flag on the way through, because a player who just quit a game does
+   *  not need the rules explained again.
+   *
+   *  IT GOES BOTH WAYS (later on 2026-09-18). The picker carries a Back button
+   *  that clears the flag, and the welcome screen is reachable from EVERY state
+   *  that shows the picker: the `idle` branch and BOTH `ended` branches that
+   *  would render the picker render the welcome screen instead while this is
+   *  false. That is why Exit and Home have to set it explicitly rather than
+   *  relying on the player having pressed through -- a share link never did,
+   *  so without those two writes a link-dealt game would exit onto the front
+   *  door. Every branch that shows the picker reads this flag alone -- `idle`
+   *  included, since the flag is seeded from `deckLink` (below) -- so Back
+   *  works after a link's game ends, and after a link's fetch fails, exactly as
+   *  it does from a fresh visit.
+   *
+   *  Ephemeral by design, like `endedView`: a reload shows the front door again.
+   *  A "seen it" flag in `localStorage` is the obvious next step and was NOT
+   *  built -- nobody asked, and a returning player pays one press for it.
+   *
+   *  DECLARED BELOW `deckLink`, BECAUSE ITS INITIAL VALUE IS `deckLink !== null`
+   *  (2026-09-18, third pass). A link starts the player ON the picker -- its
+   *  request is already in flight and the picker is where its loading state and
+   *  its error slot live -- so the honest reading is "a link presses through for
+   *  you", and that is what seeding the flag from it says. It replaced a
+   *  `deckLink === null` guard in the `idle` branch, which had two holes: a link
+   *  whose fetch FAILED left the picker showing an error with a Back button that
+   *  did nothing (the flag was already false and the guard still refused), and a
+   *  link-dealt deck that collapsed to zero showed the front door instead of the
+   *  `no-years-found` warning. With the flag seeded, every branch that shows the
+   *  picker reads this one boolean and nothing else.
+   * ===========================================================================
+   */
 
   /**
    * The shareable deck link, read ONCE and never again.
@@ -190,6 +250,9 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
   const [deckLink] = useState(() =>
     state.status === 'idle' ? parseDeckLink(search ?? window.location.search) : null,
   );
+
+  // See the block above `deckLink`: a link counts as having pressed through the front door.
+  const [hasEnteredPicker, setHasEnteredPicker] = useState(deckLink !== null);
 
   /**
    * The saved-playlist library, and the container is the only file that writes it.
@@ -367,6 +430,10 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
     // `GameScreen` has already stopped the audio by the time this runs -- it calls `stop()` before
     // `onExit` for exactly this reason, so a pending `play()` cannot outlive the screen.
     setEndedView('landing');
+    // Exit lands on the PICKER, not the front door (2026-09-18): a player who just quit a game does
+    // not need the rules again. Set explicitly, because a link-dealt game never pressed through the
+    // welcome screen and the `ended` branches below read this flag alone. Back is one press away.
+    setHasEnteredPicker(true);
     end();
   }, [end]);
 
@@ -403,8 +470,25 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
     [libraryStorage],
   );
 
+  const handleEnterPicker = useCallback(() => {
+    setHasEnteredPicker(true);
+  }, []);
+
+  /**
+   * The picker's Back button (2026-09-18): the welcome screen's `onStart`, in reverse.
+   *
+   * Touches NOTHING else -- not `endedView`, not the request, not the notice. The session stays
+   * wherever it is (`idle` or `ended`) and the status switch simply renders the front door instead
+   * of the picker while the flag is false, so pressing through again puts the exact picker back.
+   */
+  const handleBackToWelcome = useCallback(() => {
+    setHasEnteredPicker(false);
+  }, []);
+
   const handleHome = useCallback(() => {
     setEndedView('landing');
+    // Same rule as Exit: Home lands on the picker, and says so rather than assuming the flag is set.
+    setHasEnteredPicker(true);
     setNotice(null);
     // The session is already `ended` and its save already cleared by `END`, so clearing the request
     // is all that is left. `endedView` is what actually puts the landing screen on screen.
@@ -497,12 +581,19 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
   const landing = (
     <LandingScreen
       onSubmit={handleSubmit}
+      onBack={handleBackToWelcome}
       isLoading={requestState.status === 'loading'}
       {...(startFailureCode ? { errorCode: startFailureCode } : {})}
       savedPlaylists={savedPlaylists}
       onRemoveSaved={handleRemoveSaved}
     />
   );
+
+  /**
+   * The front door. Built beside `landing` because the same states choose between the two, and the
+   * choice is the one flag: `hasEnteredPicker ? landing : welcome`, in every branch that shows either.
+   */
+  const welcome = <WelcomeScreen onStart={handleEnterPicker} />;
 
   /**
    * The notice banner, or null. Built once and given to whichever screen is showing, because it has
@@ -533,16 +624,28 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
   //  THE STATUS SWITCH
   // =========================================================================
 
-  if (state.status === 'idle') return landing;
+  if (state.status === 'idle') {
+    // The front door, until the player walks through it -- or until a link does it for them: the
+    // flag is SEEDED from `deckLink`, so a valid link starts on the picker with its request in
+    // flight, and a MALFORMED link (`deckLink === null`) gets the plain front door with no error.
+    // One boolean, the same one every other branch reads; no `deckLink` check here any more.
+    return hasEnteredPicker ? landing : welcome;
+  }
 
   if (state.status === 'ended') {
     // Checked BEFORE `endedView`, because a collapsed deck is not a destination the player chose --
     // `endedView` is still `end-screen` from the `START` that dealt it, and honouring that would
     // show "Deck finished" for a game that never began. See `deckCollapsed`.
-    if (deckCollapsed) return landing;
+    //
+    // The welcome screen sits behind the picker HERE TOO (2026-09-18), so Back works from every
+    // state that shows the picker. A link-dealt deck arrives here with the flag already true (it is
+    // seeded from `deckLink`), so its `no-years-found` warning is shown, not the front door.
+    if (deckCollapsed) return hasEnteredPicker ? landing : welcome;
 
-    // Exit and "Home" both mean `landing`; only a deck that ran out gets the end screen.
-    if (endedView === 'landing') return landing;
+    // Exit and "Home" both mean `landing`; only a deck that ran out gets the end screen. Both
+    // handlers set `hasEnteredPicker`, so the picker is what they show -- the welcome branch here
+    // is reached only by pressing Back from it.
+    if (endedView === 'landing') return hasEnteredPicker ? landing : welcome;
 
     return (
       <EndScreen
@@ -597,6 +700,7 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
         isYearPending={isCurrentYearPending}
         onFlip={flip}
         onNext={next}
+        onPrevious={previous}
         onExit={handleExit}
         // `status === 'playing'` is the whole condition, and reaching this line is that condition.
         // Derived here because `GameScreen` deliberately knows nothing about `GameStatus`.

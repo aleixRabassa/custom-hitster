@@ -11,8 +11,8 @@
  *  A notice describes a deck that is already playable, so it has nothing to
  *  ask. Exit DESTROYS one: `END` clears the saved session, so the shuffle, the
  *  position in the deck and every year resolved so far are gone, and there is
- *  no undo anywhere in the app -- the deck is one-directional by design and
- *  "Play again" reshuffles rather than restores. The button that does it is a
+ *  no undo for it anywhere in the app -- a left swipe steps back a card, but
+ *  nothing brings back a deck, and "Play again" reshuffles rather than restores. The button that does it is a
  *  44px round target three positions from Play, on the surface a thumb is
  *  swiping. That is the case for a confirm step: an irreversible action, one
  *  mis-press away.

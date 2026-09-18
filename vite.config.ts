@@ -124,7 +124,21 @@ export default defineConfig({
           confusing error this app can show, because it is the same code `pnpm dev`
           produces for a completely different reason.
         */
-        navigateFallbackDenylist: [/^\/api\//],
+        navigateFallbackDenylist: [
+          /^\/api\//,
+          /*
+            The printable year cards (2026-09-18). `public/year-cards-1970-2033.pdf` is served
+            statically and is deliberately NOT in `globPatterns` above -- 240 kB precached on every
+            install, for a file most players never download, is the same class of cost as the logo
+            master this repo keeps out of `public/`. But a PDF the worker has not cached is exactly
+            what the SPA fallback is for: a controlled tab clicking the link would get `index.html`
+            back and see the app reload instead of the file. The `download` attribute on the link
+            is not a defence -- whether a download request even reaches the worker as a navigation
+            differs by browser. This is. Unobservable under any dev server (`devOptions` is absent),
+            so it is a Pending row in `docs/development.md` §5.
+          */
+          /\.pdf$/,
+        ],
       },
 
       /*

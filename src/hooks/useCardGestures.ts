@@ -23,7 +23,7 @@
 
 import { useCallback, useMemo, useRef, useState } from 'react';
 
-import { isTap, shouldCommitSwipe, swipeDirection } from '../game/gestures';
+import { isTap, shouldCommitSwipe, swipeDirection, swipeIntent } from '../game/gestures';
 import type { CommitDirection } from '../game/gestures';
 
 /**
@@ -81,8 +81,10 @@ export interface CardGestureProps {
 export interface UseCardGesturesOptions {
   /** Called for a tap. */
   onFlip: () => void;
-  /** Called for a committed swipe. */
+  /** Called for a committed RIGHT swipe. */
   onNext: () => void;
+  /** Called for a committed LEFT swipe (2026-09-18). The mapping is `swipeIntent` in `gestures.ts`. */
+  onPrevious: () => void;
   /**
    * False whenever the session is not playable -- `preparing`, `ended`, or mid-transition.
    *
@@ -111,6 +113,7 @@ const DRAG_ELASTIC = 0.35;
 export function useCardGestures({
   onFlip,
   onNext,
+  onPrevious,
   isEnabled,
 }: UseCardGesturesOptions): UseCardGesturesResult {
   const pointerStartRef = useRef<{ x: number; y: number; t: number } | null>(null);
@@ -149,13 +152,18 @@ export function useCardGestures({
       if (!isEnabled) return;
 
       hasCommittedRef.current = true;
-      setExitDirection(swipeDirection(drag));
+
+      const direction = swipeDirection(drag);
+      setExitDirection(direction);
       // No `stop()` on the audio here: `GameScreen` already stops on card change (Phase 4),
-      // keyed on card id, so it covers a swipe for free. Verified rather than duplicated --
-      // two owners of one stop rule is how one of them quietly stops being called.
-      onNext();
+      // keyed on card id, so it covers a swipe in EITHER direction for free. Verified rather than
+      // duplicated -- two owners of one stop rule is how one of them quietly stops being called.
+      //
+      // Which way is which is `swipeIntent`'s decision, not this file's -- see `gestures.ts`.
+      if (swipeIntent(direction) === 'next') onNext();
+      else onPrevious();
     },
-    [isEnabled, onNext],
+    [isEnabled, onNext, onPrevious],
   );
 
   const handlePointerUp = useCallback(

@@ -40,6 +40,7 @@ function renderStack(deck: Card[], currentIndex: number) {
       isYearPending={false}
       onFlip={vi.fn()}
       onNext={vi.fn()}
+      onPrevious={vi.fn()}
       isEnabled
     />,
   );
@@ -320,6 +321,7 @@ describe('CardStack', () => {
         isYearPending={false}
         onFlip={vi.fn()}
         onNext={vi.fn()}
+        onPrevious={vi.fn()}
         isEnabled
       />,
     );
@@ -359,6 +361,7 @@ describe('CardStack', () => {
         isYearPending={false}
         onFlip={vi.fn()}
         onNext={vi.fn()}
+        onPrevious={vi.fn()}
         isEnabled
       />,
     );
@@ -385,6 +388,7 @@ describe('CardStack', () => {
         isYearPending={false}
         onFlip={vi.fn()}
         onNext={vi.fn()}
+        onPrevious={vi.fn()}
         isEnabled
       />,
     );

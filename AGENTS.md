@@ -33,7 +33,7 @@ Several decisions in this repo look like mistakes and are not. If something seem
 | [`docs/plans/plan.year-accuracy.md`](./docs/plans/plan.year-accuracy.md)                     | The tier ladder — Singles/EPs in the top rung, the graded middle rung, the re-captured fixtures. **Built**  |
 | [`docs/plans/plan.suggestion-multi-select.md`](./docs/plans/plan.suggestion-multi-select.md) | Hold a suggested playlist to select it — the pure selection module, the press hook. **Built**               |
 
-**Do not build ahead of the current phase.** The plan defers things deliberately. Current phase: **8, CODE COMPLETE.** Phases 1–7 are complete, all three Phase 8 plans are resolved, and the app is playable end to end, has a design surface, is installable, and fails legibly. `src/App.tsx` is the **real container** and the only caller of `useGameSession()`. Plan 2 built the shareable deck URL, the saved-playlist library, the printable PDF export and the audio reversal; plan 1 built the neon ring, the contrast re-audit, the PWA and the icon set; plan 3 resolved "Added by" as won't-build with no code. Note that plan 2 depended on plan 1 only **softly** and did not wait — so the PDF's print palette is deliberately its own and did not change when the screen was redesigned.
+**Do not build ahead of the current phase.** The plan defers things deliberately. Current phase: **8, CODE COMPLETE.** Phases 1–7 are complete, all three Phase 8 plans are resolved, and the app is playable end to end, has a design surface, is installable, and fails legibly. `src/App.tsx` is the **real container** and the only caller of `useGameSession()`. Plan 2 built the shareable deck URL, the saved-playlist library, the printable PDF export and the audio reversal; plan 1 built the neon ring, the contrast re-audit, the PWA and the icon set; plan 3 resolved "Added by" as won't-build with no code. Note that plan 2 depended on plan 1 only **softly** and did not wait — so the PDF's print palette is deliberately its own and did not change when the screen was redesigned. **Two developer requests landed on 2026-09-18 outside any plan**: a welcome screen in front of the picker (with a printable year-cards PDF), and a left swipe that steps BACK a card. Both blocks are below.
 
 **EVERY SENTENCE THE PLAYER READS LIVES IN `src/game/copy.ts` AS OF 2026-08-12, AND THE RULE HAS TWO
 ENDS: A COMPONENT RENDERS `COPY.*`, AND A TEST ASSERTS AGAINST `COPY.*`. Neither may hold a
@@ -57,6 +57,62 @@ them pure-wording checks with no constant to point at: the `/same deck/i` and `/
 -style substring assertions — replaced by "every code has a sentence of its own", which is the
 property those were really defending and which survives any rewrite. Full reasoning in the module's
 own header; the deletions are logged in [`docs/agent_findings.md`](./docs/agent_findings.md).
+
+**THE FRONT DOOR IS A WELCOME SCREEN AS OF 2026-09-18, IT IS A CONTAINER FLAG AND NOT A FIFTH STATUS,
+AND `LandingScreen` STILL MEANS THE PLAYLIST PICKER.** `src/components/WelcomeScreen.tsx` explains the
+game — the hero is the logo, ONE tagline (`COPY.welcome.tagline`; the lead sentence it used to carry was
+cut on 2026-09-18 as a restatement of the three steps) and one big button reading `COPY.welcome.enter`,
+then three ordered "How it works" steps and the printable year cards; the button lands on
+`LandingScreen`, which kept its name because forty-odd doc and test lines use it. **The picker has a
+Back button** (`COPY.landing.backToWelcome`, a ghost `<button>` top-left above the hero, disabled while a
+request is loading, required `onBack` prop) that returns to the front door — a `<button>` and not an
+anchor, because there is no router and no history entry to go back to, and `App.tsx` still never touches
+the address bar. `App.tsx` decides with `hasEnteredPicker`, a `useState` of the same shape as
+`endedView`, and **the flag is set true by THREE things and cleared by ONE**: the welcome button, Exit
+and Home set it; Back clears it — **and it is SEEDED from the link**: `useState(deckLink !== null)`, so a
+valid share link counts as having pressed through. Every branch that shows the picker — `idle`, and both
+`ended` branches (`deckCollapsed`, and `endedView === 'landing'`) — reads `hasEnteredPicker ? landing :
+welcome` and nothing else. So **a share link never sees the welcome screen** (it deals immediately, as it always did), **a
+saved session resumes past it**, and **Exit and Home land on the picker** — no longer because those paths
+go through `ended` (through `ended` alone they would now reach the front door) but because they SET the
+flag; Back is how a player gets from there to the front door. **No branch checks `deckLink` any more, and the seed is what
+replaced the check**: the first version guarded the `idle` branch with `deckLink === null`, which left a
+link whose fetch FAILED showing a Back button that did nothing (the flag was already false and the
+guard still refused) and sent a link-dealt deck that collapsed to zero to the front door instead of to
+the `no-years-found` warning. Seeding the flag closes both; a `deckLink` check anywhere reopens one. It is ephemeral: a reload shows the front door again, and a "seen it" flag
+in `localStorage` was deliberately not built. Four things to know. **The PDF is `public/year-cards-1970-2033.pdf`, served statically and NOT precached** —
+the worker's `globPatterns` has no `pdf` on purpose (240 kB on every install, for a file most players
+never download), and `vercel.json`'s SPA rewrite already excludes any path with a dot. **`vite.config.ts`
+denylists `/\.pdf$/` from the SPA fallback**, because a controlled tab navigating to a URL the worker has
+not cached is served `index.html` — the `download` attribute is not a defence, since whether a download
+even reaches the worker as a navigation differs by browser. Neither half is observable under any dev
+server. **The printed range "1970 to 2033" is the one year-shaped text on a pre-start surface**, in
+`COPY.welcome.printDetail`, and `WelcomeScreen.test.tsx` subtracts it by exact string exactly as every
+leak proxy subtracts `COPYRIGHT_NOTICE` — reword it freely, but do not put the range in a second string.
+And **the decorative card is the first `card-ring` caller that is not `absolute inset-0`**, so it carries
+`relative` itself (and `rounded-card`, and `aria-hidden`, and draws a `?` rather than a number); its test
+pins all four. The download link is the app's **second `<a>`**, with `focus-visible:focus-ring` and
+`touch-target` applied by hand as the footer's was, and no `target="_blank"`.
+
+**A LEFT SWIPE STEPS BACK ONE CARD AS OF 2026-09-18, A RIGHT SWIPE STILL ADVANCES, AND THE DECK IS NO
+LONGER ONE-DIRECTIONAL — every sentence in `src/`, `README.md` and the top-level `docs/` that said it was
+has been updated, so if you find one there, it is stale; `docs/plans/` records what was decided at the
+time and was deliberately left alone.** The mapping is `swipeIntent(direction)` in `src/game/gestures.ts` — a pure function,
+node-tested, because jsdom cannot exercise a drag and an inline mapping in the hook would be untested full
+stop while turning every "next" into "previous" invisibly. `useCardGestures` gained `onPrevious` and
+reads the intent; `CardStack` and `GameScreen` pass it through; **`PREVIOUS` is a reducer action** with
+its tests, added exactly as `App.tsx`'s header says a fifth action must be, and `useGameSession` exposes
+`previous` as its fifth callback. ArrowLeft is the keyboard's left swipe — it was **deliberately
+unhandled** before, and `GameScreen.test.tsx`'s "should ignore ArrowLeft" became "should step back". Three
+rules before touching any of it. **On card 1 `PREVIOUS` returns the SAME state object**: the hook has
+already latched its commit, the reducer declines, Motion snaps the card back because its id did not
+change — it never ends the session and never wraps to the last card. **The flip is reset, as `NEXT`
+resets it**: `isFlipped` describes the current card and nothing remembers which earlier cards were
+revealed, so carrying it over could hand a year to a player who never flipped that card; coming back to
+one they did reveal costs a tap, which is the cheaper error. **Audio stops on a left swipe for free**,
+because `GameScreen`'s stop rule is keyed on card id, not on direction — do not add a second stop. The
+exit animation is unchanged (the card still flies out the way it was thrown), and the gesture has been
+felt by **no thumb**: the manual rows are in [`docs/development.md`](./docs/development.md) §5.
 
 **A DECK IS 1..5 PLAYLISTS AND BOTH PLANS ARE BUILT — plan 1 on 2026-08-07, plan 2 with it.** This
 paragraph claimed until 2026-08-12 that plan 2 was unbuilt and that `App.tsx`, `DeckActions.tsx` and
@@ -181,7 +237,7 @@ identically with the artist rule reverted. Same false-comfort shape as the pre-2
 
 **Everything plan 2 built is a caller change: the reducer, `GameState` and the persistence format are untouched.** Three new pure modules in `src/game/` (`deck-link.ts`, `playlist-library.ts`, `pdf-sheet.ts` + `pdf-text.ts`), one new hook (`src/hooks/usePdfExport.ts`), and the shared `src/game/qrcode-loader.ts`. **Which subtree each landed in was the usual decision, and the rule is "put it where it can be tested":** `deck-link.ts` takes a query STRING rather than reading `location`, `playlist-library.ts` takes an injected `StorageLike` exactly as `persistence.ts` does, and `pdf-sheet.ts` holds every millimetre as arithmetic over numbers — the same decision/binding split as `gestures.ts` and `resolver.ts`, for the same reason: **getting the duplex column mirror wrong pairs every printed card with the wrong answer and is discoverable only by printing and cutting.** The binding halves are `App.tsx`, `EndScreen.tsx` and `usePdfExport.ts`. See [`docs/architecture.md`](./docs/architecture.md) §3.
 
-**A shared link promises "same playlist, same shuffle", NEVER "the same deck", and the copy is the feature.** Yearless cards are dropped at play time and editorial playlists refresh their tracks, so the seeded shuffle is exact while its input is not. The rule now lives as a comment on `COPY.deckActions.shareCaption`; the test that asserted the phrase "same deck" was absent went with the 2026-08-12 copy centralisation, because it is the one kind of assertion `COPY` cannot express. Also load-bearing: a **saved session outranks a link** (opening an old one must not discard a game in progress), a malformed link is the plain landing screen with **no error**, and `App.tsx` **never touches the address bar** — no `pushState`, no `replaceState`. That rule is still true **of `App.tsx`** and is not the whole story any more: see the back-press block below, and do not delete the `pushState` in `useBackNavigation.ts` on the strength of this sentence. The link effect deliberately has **no "already submitted" ref**: such a guard survives StrictMode's simulated unmount, whose cleanup has already aborted the request it was recording, so the app would sit on the landing screen forever. That is measured and written up in [`docs/agent_findings.md`](./docs/agent_findings.md) (2026-08-06).
+**A shared link promises "same playlist, same shuffle", NEVER "the same deck", and the copy is the feature.** Yearless cards are dropped at play time and editorial playlists refresh their tracks, so the seeded shuffle is exact while its input is not. The rule now lives as a comment on `COPY.deckActions.shareCaption`; the test that asserted the phrase "same deck" was absent went with the 2026-08-12 copy centralisation, because it is the one kind of assertion `COPY` cannot express. Also load-bearing: a **saved session outranks a link** (opening an old one must not discard a game in progress), a malformed link is the plain **welcome** screen with **no error** (the front door since 2026-09-18 — `deckLink === null` is exactly what shows it), and `App.tsx` **never touches the address bar** — no `pushState`, no `replaceState`. That rule is still true **of `App.tsx`** and is not the whole story any more: see the back-press block below, and do not delete the `pushState` in `useBackNavigation.ts` on the strength of this sentence. The link effect deliberately has **no "already submitted" ref**: such a guard survives StrictMode's simulated unmount, whose cleanup has already aborted the request it was recording, so the app would sit on the landing screen forever. That is measured and written up in [`docs/agent_findings.md`](./docs/agent_findings.md) (2026-08-06).
 
 **THE ANDROID BACK PRESS IS AN IN-APP CONTROL AS OF 2026-08-12, SO THERE IS EXACTLY ONE `pushState` IN
 THE APP AND IT IS NOT IN `App.tsx`.** `GameScreen` calls `useBackNavigation`, which pushes ONE history
@@ -380,8 +436,9 @@ because the reference's nodes are solid and three rings read as noise at 20px. T
 rationale is not wrong, it is answered — see the comment above `KeepDeckIcon`. `aria-label` is
 unchanged ("Keep this deck"), and `CardControls.test.tsx` pins the shape counts and the `fill="none"`.
 
-**There is a copyright footer, it is on ALL FOUR screens as of 2026-08-12, and the one omission is
-the decision.** `src/components/Footer.tsx` renders on **landing, preparing, game and end**. There is
+**There is a copyright footer, it is on ALL FIVE screens (four as of 2026-08-12, the welcome screen since
+2026-09-18), and the one omission is the decision.** `src/components/Footer.tsx` renders on **welcome,
+landing, preparing, game and end**. There is
 no shell to hang it on — every screen is its own `min-h-dvh justify-center` column, so one footer in
 `App.tsx` or `main.tsx` is a sibling of a full-viewport column and gives every screen a permanent
 scrollbar. **The game screen's old exclusion is still TRUE, it was OVERRULED**: that column is a
@@ -405,7 +462,7 @@ instead of ending the scroll. Two more traps. The `<footer>` is inside each `<ma
 `contentinfo` regardless of ancestry**, so a role query cannot check any of this (a `toBeNull()` was
 written first and failed against correct code). And its **"2026-present" is a year-shaped number on a
 pre-reveal surface**: three leak proxies asserting `not.toMatch(/\b(19|20)\d{2}\b/)` caught it, and they
-now subtract `COPYRIGHT_NOTICE` by exact string rather than loosening the pattern. **That string now lives in `src/game/copy.ts`** (re-exported from `Footer.tsx` for its importers), and since 2026-08-12 the author's name is a **bold `<a>`** inside the same line — `font-bold text-accent focus-visible:focus-ring`, `target="_blank" rel="noreferrer noopener"`, href from `COPY.footer.authorUrl`. It is the app's one use of the accent as TEXT (measured 5.13:1 on `--color-page`) and **the app's only anchor**, so it is also the only place the everything-focusable-gets-a-focus-ring rule had to be applied by hand. The URL is deliberately **not part of `notice`** — that string is what the leak proxies subtract, and an `href` is not text a player reads. The three parts concatenate with **no separator**, so `<footer>`'s `textContent` is still the notice character for character; break that and the leak proxies fail on screens that have no leak. `getByText` cannot see it (its matcher reads only DIRECT text-node children), which is why `Footer.test.tsx` reads `textContent`.
+now subtract `COPYRIGHT_NOTICE` by exact string rather than loosening the pattern. **That string now lives in `src/game/copy.ts`** (re-exported from `Footer.tsx` for its importers), and since 2026-08-12 the author's name is a **bold `<a>`** inside the same line — `font-bold text-accent focus-visible:focus-ring`, `target="_blank" rel="noreferrer noopener"`, href from `COPY.footer.authorUrl`. It is the app's one use of the accent as TEXT (measured 5.13:1 on `--color-page`) and **was the app's only anchor until 2026-09-18**, when the welcome screen's PDF download became the second — both apply the everything-focusable-gets-a-focus-ring rule by hand, and the download also carries `touch-target`. The URL is deliberately **not part of `notice`** — that string is what the leak proxies subtract, and an `href` is not text a player reads. The three parts concatenate with **no separator**, so `<footer>`'s `textContent` is still the notice character for character; break that and the leak proxies fail on screens that have no leak. `getByText` cannot see it (its matcher reads only DIRECT text-node children), which is why `Footer.test.tsx` reads `textContent`.
 
 **The app is "Playlist Jitster" as of 2026-08-11 — and the RENAME'S BOUNDARY is the part to know.**
 Renamed: `index.html`'s `<title>`, `manifest.name`/`short_name`, `LandingScreen`'s `<h1>`, README's
@@ -447,6 +504,7 @@ something `plan.md` had already resolved, so read these before "fixing" the code
 
 **Manual verification outstanding, and no local check will ever close it:**
 
+- 2026-09-18: **nothing about the welcome screen, the PDF download or the left swipe has been seen outside jsdom.** The two that matter: a click on the download in a tab the service worker controls must save the PDF and not reload the app (the `.pdf` denylist is unobservable under any dev server), and a left swipe on a phone must step back where a right swipe advances — the mapping is unit-tested, the thumb is not. Rows in [`docs/development.md`](./docs/development.md) §5.
 - Phase 4: the QR scan was verified on a real phone (2026-08-05, re-confirmed 2026-08-06). The **devtools DOM search on an unflipped card** is still owed.
 - Phase 5: **the iOS half of the touch pass has still never been run** — the 2026-08-06 pass was Android only, so tap-versus-swipe under Safari, pull-to-refresh suppression, whether the card needs `select-none`, and whether audio starts from the first tap are all open. Checklist in [`docs/development.md`](./docs/development.md) §5.
 - The **lock-screen fix needs one re-check** on the phone: play, lock, confirm silence, unlock, confirm Play continues rather than restarting.

@@ -4,7 +4,7 @@ Turn any public Spotify playlist link into a playable digital [Hitster](https://
 
 Built with **Vite 8 + React 19 + TypeScript + Tailwind CSS v4**, with a thin **Vercel Functions** backend that exists only to do what a browser can't: reach a CORS-blocked endpoint, set a custom `User-Agent`, and hold a cache shared across users.
 
-> **Status: playable end to end. Phases 0–8 code complete** — 588 tests across 41 files. Paste a link or pick one of the suggested playlists, and you get a shuffled deck you can flip, swipe, scan and play audio from, with a HUD, an exit confirmation and an end screen. The deck resumes across a reload. Phase 8 added **a shareable deck link, a saved-playlist library, a printable PDF export, the neon-ring card design and an installable offline shell** (all 2026-08-06). What remains is **manual verification** — a printer, a phone, a deployment and a screen reader — scoped in [`docs/development.md`](./docs/development.md) §5. See [`docs/plans/plan.md`](./docs/plans/plan.md).
+> **Status: playable end to end. Phases 0–8 code complete** — 844 tests across 51 files. Paste a link or pick one of the suggested playlists, and you get a shuffled deck you can flip, swipe, scan and play audio from, with a HUD, an exit confirmation and an end screen. The deck resumes across a reload. Phase 8 added **a shareable deck link, a saved-playlist library, a printable PDF export, the neon-ring card design and an installable offline shell** (all 2026-08-06). On 2026-09-18 a **welcome screen** went in front of the playlist picker (with a downloadable PDF of printable year cards, 1970–2033), and a **left swipe now steps back** a card while a right swipe advances. What remains is **manual verification** — a printer, a phone, a deployment and a screen reader — scoped in [`docs/development.md`](./docs/development.md) §5. See [`docs/plans/plan.md`](./docs/plans/plan.md).
 >
 > **You must run it under `vercel dev`, not `pnpm dev`** — see [Quickstart](#quickstart). Under `pnpm dev` the app loads but Start always fails, and it fails in a way that looks like an app bug.
 
@@ -67,6 +67,10 @@ The end screen offers three things beyond "play again", and each has one caveat 
 > **Print double-sided on the LONG edge.** The back sheet's columns are mirrored to compensate for exactly that, and a printer set to short-edge binding will pair every card with the wrong answer. The app cannot read your printer's settings, so this is the one instruction it cannot enforce.
 
 Cards whose year has not arrived yet are left out and counted, never listed. Titles print in a Latin-1 font, so Cyrillic, Greek and CJK titles come out as `?` — the year and the QR code are unaffected, so the card still plays and still scans.
+
+**Or skip the screen entirely.** The welcome screen — the first thing a fresh visit shows, before the playlist picker — offers _Print your cards_: a ready-made PDF of year cards from 1970 to 2033 to print, cut out and lay along a table. It is a static file, so it downloads even before any playlist is chosen. The playlist picker has a Back button at the top left that returns to the welcome screen, so the cards are one press away from wherever you are choosing a playlist.
+
+**Mid-game, a right swipe deals the next card and a left swipe goes back one** (ArrowRight and ArrowLeft on a keyboard). Going back never ends the game and never wraps round: on the first card a left swipe simply snaps back. The card you return to arrives face down again.
 
 ---
 

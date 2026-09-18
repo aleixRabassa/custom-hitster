@@ -94,8 +94,17 @@ import type { Card as CardData } from '../../shared/types';
 /** `KeyboardEvent.key` for the flip. A literal because `'Space'` is the *code*, not the key. */
 const FLIP_KEY = ' ';
 
-/** `KeyboardEvent.key` for advancing. `ArrowLeft` is deliberately unhandled -- see below. */
+/** `KeyboardEvent.key` for advancing -- the keyboard's right swipe. */
 const NEXT_KEY = 'ArrowRight';
+
+/**
+ * `KeyboardEvent.key` for stepping back -- the keyboard's left swipe (2026-09-18).
+ *
+ * Handled since the deck stopped being one-directional; until then it was DELIBERATELY unhandled,
+ * because there was no previous card for it to mean. The pairing mirrors `swipeIntent` in
+ * `gestures.ts`: right advances, left steps back.
+ */
+const PREVIOUS_KEY = 'ArrowLeft';
 
 export interface GameScreenProps {
   /** The shuffled deck, straight from `GameState.deck`. */
@@ -106,7 +115,10 @@ export interface GameScreenProps {
   /** True only for `year === undefined` — from `isCurrentYearPending`. */
   isYearPending: boolean;
   onFlip: () => void;
+  /** Advance: a right swipe or ArrowRight. */
   onNext: () => void;
+  /** Step back one card: a left swipe or ArrowLeft (2026-09-18). A no-op on card 1. */
+  onPrevious: () => void;
   onExit: () => void;
   /**
    * Whether the session can actually be played right now -- `status === 'playing'`.
@@ -183,6 +195,7 @@ export function GameScreen({
   isYearPending,
   onFlip,
   onNext,
+  onPrevious,
   onExit,
   isPlayable,
   cardsRemaining,
@@ -249,8 +262,9 @@ export function GameScreen({
    *  for other things, hence the three guards below. Each one is a real
    *  bug, not defensive padding:
    *
-   *  1. AUTO-REPEAT. Leaning on → deals the entire deck, and the deck is
-   *     one-directional -- there is no way back from that.
+   *  1. AUTO-REPEAT. Leaning on → deals the entire deck and ends the game
+   *     on the last card, and there is no way back from THAT; ← can undo a
+   *     step, but not a held key's worth of them before the hand lifts.
    *  2. TEXT ENTRY. Plan 3's landing input would lose every space to the
    *     flip handler, so typing a playlist URL would silently flip cards.
    *  3. SPACE ON A FOCUSED BUTTON. The subtle one, and invisible until
@@ -295,22 +309,21 @@ export function GameScreen({
 
       if (event.key === NEXT_KEY) {
         onNext();
+        return;
       }
 
-      // ArrowLeft is intentionally unhandled. There is no previous card -- the deck is
-      // one-directional by design -- so the safe response to a player pressing it is nothing
-      // at all.
-      //
-      // A "no going back" hint was pencilled in as a Phase 7 call and NEITHER Phase 7 plan
-      // took it up: plan 1 is tokens, layout and a11y, plan 2 is error and offline states.
-      // So it is unowned rather than pending, and it stays unowned until somebody decides a
-      // silent ArrowLeft is actually a problem.
+      // Since 2026-09-18 -- the keyboard's left swipe. Not guarded on "is there a previous card":
+      // the reducer's `PREVIOUS` is a no-op on card 1, and this screen deliberately knows nothing
+      // about where in the deck it is beyond the index it renders.
+      if (event.key === PREVIOUS_KEY) {
+        onPrevious();
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
 
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isPlayable, isExitConfirmOpen, isDeckActionsOpen, onFlip, onNext]);
+  }, [isPlayable, isExitConfirmOpen, isDeckActionsOpen, onFlip, onNext, onPrevious]);
 
   /**
    * The Exit button ASKS. It no longer ends the game.
@@ -431,6 +444,7 @@ export function GameScreen({
           isYearPending={isYearPending}
           onFlip={onFlip}
           onNext={onNext}
+          onPrevious={onPrevious}
           isEnabled={isPlayable}
         />
 

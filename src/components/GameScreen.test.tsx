@@ -39,6 +39,7 @@ function renderScreen(props: {
   onExit?: () => void;
   onFlip?: () => void;
   onNext?: () => void;
+  onPrevious?: () => void;
   onSavePlaylist?: () => void;
   pendingYearCount?: number;
   isPlayable?: boolean;
@@ -51,6 +52,7 @@ function renderScreen(props: {
       isYearPending={false}
       onFlip={props.onFlip ?? vi.fn()}
       onNext={props.onNext ?? vi.fn()}
+      onPrevious={props.onPrevious ?? vi.fn()}
       onExit={props.onExit ?? vi.fn()}
       isPlayable={props.isPlayable ?? true}
       // HUD props, arbitrary here: every assertion in this file is about the audio element or the
@@ -287,7 +289,7 @@ describe('GameScreen', () => {
     //
     //  `END` clears the saved session, so the shuffle, the position in the
     //  deck and every year resolved so far go with it, and nothing in the
-    //  app can bring them back -- the deck is one-directional and "Play
+    //  app can bring them back -- a left swipe steps back a CARD, not a deck, and "Play
     //  again" reshuffles rather than restores. This asserts the press only
     //  ASKS.
     //
@@ -600,8 +602,8 @@ describe('GameScreen keyboard controls', () => {
   });
 
   it('should ignore auto-repeat key events', () => {
-    // Leaning on the arrow key would otherwise deal the entire deck, and the deck is
-    // one-directional -- there is no way back from that.
+    // Leaning on → would otherwise deal the entire deck and end the game on the last card, and
+    // there is no way back from THAT; ← undoes a step, not a held key's worth of them.
     const onFlip = vi.fn();
     const onNext = vi.fn();
     render(renderScreen({ onFlip, onNext }));
@@ -628,18 +630,40 @@ describe('GameScreen keyboard controls', () => {
     expect(onNext).not.toHaveBeenCalled();
   });
 
-  it('should ignore ArrowLeft', () => {
-    // There is no previous card -- the deck is one-directional by design -- so the safe
-    // response to a player pressing it is nothing at all. Asserted rather than left implicit,
-    // because "back" is exactly the behaviour someone will later add without reading Phase 3.
+  it('should step back on ArrowLeft', () => {
+    // The keyboard's left swipe (2026-09-18). This test used to assert the OPPOSITE -- that
+    // ArrowLeft did nothing, because the deck was one-directional -- and it is the same guard
+    // reversed: the key reaches `onPrevious` and ONLY `onPrevious`. Whether there is a previous
+    // card is the reducer's question, not this screen's.
     const onFlip = vi.fn();
     const onNext = vi.fn();
-    render(renderScreen({ onFlip, onNext }));
+    const onPrevious = vi.fn();
+    render(renderScreen({ onFlip, onNext, onPrevious }));
 
     fireEvent.keyDown(window, { key: 'ArrowLeft' });
 
+    expect(onPrevious).toHaveBeenCalledTimes(1);
     expect(onFlip).not.toHaveBeenCalled();
     expect(onNext).not.toHaveBeenCalled();
+  });
+
+  it('should not step back while a dialog is open or the game is not playable', () => {
+    // Guard 4 and the `isPlayable` gate cover ArrowLeft exactly as they cover ArrowRight: a ← that
+    // moved the deck under a modal's backdrop would be the same bug as a → that dealt a card there.
+    const onPrevious = vi.fn();
+    render(renderScreen({ onPrevious, isPlayable: false }));
+
+    fireEvent.keyDown(window, { key: 'ArrowLeft' });
+
+    expect(onPrevious).not.toHaveBeenCalled();
+    cleanup();
+
+    const onPreviousDialog = vi.fn();
+    render(renderScreen({ onPrevious: onPreviousDialog }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.controls.exit }));
+    fireEvent.keyDown(window, { key: 'ArrowLeft' });
+
+    expect(onPreviousDialog).not.toHaveBeenCalled();
   });
 
   it('should remove the key handler on unmount', () => {

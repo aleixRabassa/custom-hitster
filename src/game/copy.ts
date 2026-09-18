@@ -81,6 +81,52 @@ export const COPY = {
     name: APP_NAME,
   },
 
+  /**
+   * The front door (2026-09-18): what the game is, how a round goes, one big button into the
+   * playlist picker, and the printable year cards for playing without a screen.
+   *
+   * A PRE-START SURFACE like `landing` and `preparing`, so nothing here names a track, an artist or a
+   * year that came from a card. `printDetail` DOES carry two year-shaped numbers -- the printed
+   * range -- and every leak proxy that renders this screen subtracts that exact string, the same
+   * way they subtract `COPYRIGHT_NOTICE`. Reword it freely; do not move the range into a second
+   * string without teaching the proxies about it.
+   */
+  welcome: {
+    /** The `alt` of the logo, which is this screen's `<h1>` name too -- never empty. */
+    logoAlt: APP_NAME,
+    tagline: 'The music game, from your own Spotify playlists.',
+    /** The big button. Distinct from `landing.start` so no screen ever has two buttons called "Start". */
+    enter: 'Start playing',
+    howItWorksHeading: 'How it works',
+    steps: {
+      pick: {
+        title: 'Pick your playlists',
+        body: (maxPlaylists: number) =>
+          `Paste up to ${maxPlaylists} public Spotify playlist links, or start from one of the suggestions. The tracks are shuffled into one deck.`,
+      },
+      play: {
+        title: 'Play the card',
+        body: 'Press Play to hear a preview, or scan the QR code on the card to open the full song in Spotify.',
+      },
+      guess: {
+        title: 'Guess the year',
+        body: 'Say when it came out, then tap the card to flip it and see the answer. Swipe right to deal the next card, or left to go back one.',
+      },
+    },
+    printHeading: 'Prefer paper?',
+    /** The download link's accessible name and label. */
+    printCards: 'Print your cards',
+    /** Carries the printed range -- the one year-shaped text on a pre-start screen. See the block above. */
+    printDetail:
+      'A printable PDF of year cards from 1970. Print it, cut them out, and lay out the timeline on a table instead of a screen.',
+    /**
+     * The saved file's name, user-visible in a downloads list -- which is why it is copy, exactly as
+     * `pdf.fileName` is. The asset's path under `public/` is a different string and lives with the
+     * component, as `/logo.webp` does.
+     */
+    yearCardsFileName: 'jitster-year-cards-1970-2033.pdf',
+  },
+
   landing: {
     /** The `alt` of the logo, which is the `<h1>`'s accessible name -- never empty. */
     logoAlt: APP_NAME,
@@ -101,6 +147,8 @@ export const COPY = {
     atMaxRows: (maxPlaylists: number) => `${maxPlaylists} playlists is the maximum for one deck.`,
     start: 'Start',
     starting: 'Loading…',
+    /** The way back to the welcome screen (2026-09-18). The ← beside it is `aria-hidden` decoration. */
+    backToWelcome: 'Back',
     savedHeading: 'Your playlists',
     removeSaved: (name: string) => `Remove ${name} from your playlists`,
     suggestionsHeading: 'Or try one of these',

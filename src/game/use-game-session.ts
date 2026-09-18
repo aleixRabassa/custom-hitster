@@ -73,6 +73,8 @@ export interface GameSession {
   start: (cards: Card[], playlists: readonly PlaylistSummary[], seed?: string) => void;
   flip: () => void;
   next: () => void;
+  /** Step back one card (2026-09-18). A no-op on card 1 -- the reducer decides, not the caller. */
+  previous: () => void;
   end: () => void;
 }
 
@@ -209,6 +211,10 @@ export function useGameSession(options: UseGameSessionOptions = {}): GameSession
     dispatch({ type: 'NEXT' });
   }, []);
 
+  const previous = useCallback(() => {
+    dispatch({ type: 'PREVIOUS' });
+  }, []);
+
   const end = useCallback(() => {
     dispatch({ type: 'END' });
   }, []);
@@ -223,6 +229,7 @@ export function useGameSession(options: UseGameSessionOptions = {}): GameSession
     start,
     flip,
     next,
+    previous,
     end,
   };
 }

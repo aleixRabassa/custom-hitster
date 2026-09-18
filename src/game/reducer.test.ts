@@ -347,8 +347,9 @@ describe('gameReducer transitions', () => {
 
   it('should end the session when the dropped current card was the last one', () => {
     // Clamping the index instead would send the player BACKWARDS onto a card they have already
-    // played, which nothing else in this one-directional deck can do. `NEXT` past the last card
-    // ends the session; so does losing the last card.
+    // played without their asking -- stepping back is the player's move (`PREVIOUS`, since
+    // 2026-09-18), never the resolver's. `NEXT` past the last card ends the session; so does losing
+    // the last card.
     let state = playing([card('a'), card('b')], 'two');
     state = gameReducer(state, { type: 'NEXT' });
 
@@ -434,6 +435,31 @@ describe('gameReducer transitions', () => {
     expect(next.status).toBe('playing');
   });
 
+  it('should step back one card and reset the flip on PREVIOUS', () => {
+    // The left swipe (2026-09-18). Reset the flip exactly as `NEXT` does: `isFlipped` describes the
+    // CURRENT card and nothing remembers which earlier cards were revealed, so carrying it over
+    // would hand the previous card's year to a player who may never have flipped it.
+    let state = gameReducer(playing(), { type: 'NEXT' });
+    state = gameReducer(state, { type: 'FLIP' });
+
+    const previous = gameReducer(state, { type: 'PREVIOUS' });
+
+    expect(previous.currentIndex).toBe(0);
+    expect(previous.isFlipped).toBe(false);
+    expect(previous.status).toBe('playing');
+    // The deck itself is untouched: stepping back re-deals nothing and drops nothing.
+    expect(previous.deck).toBe(state.deck);
+  });
+
+  it('should be a no-op on the first card for PREVIOUS', () => {
+    // The SAME object, not an equal one: the gesture hook has already latched its commit, so the
+    // reducer declining is what leaves the card on screen -- and it must never end the session or
+    // wrap round to the last card.
+    const state = playing();
+
+    expect(gameReducer(state, { type: 'PREVIOUS' })).toBe(state);
+  });
+
   it('should enter ended when NEXT is dispatched on the last card', () => {
     let state = playing([card('a'), card('b')], 'two-cards');
     state = gameReducer(state, { type: 'NEXT' });
@@ -473,11 +499,13 @@ describe('gameReducer transitions', () => {
     // Returning the identical object is what keeps a no-op free of re-renders.
     expect(gameReducer(initialGameState, { type: 'FLIP' })).toBe(initialGameState);
     expect(gameReducer(initialGameState, { type: 'NEXT' })).toBe(initialGameState);
+    expect(gameReducer(initialGameState, { type: 'PREVIOUS' })).toBe(initialGameState);
     expect(gameReducer(initialGameState, { type: 'END' })).toBe(initialGameState);
 
     const prepared = preparing();
     expect(gameReducer(prepared, { type: 'FLIP' })).toBe(prepared);
     expect(gameReducer(prepared, { type: 'NEXT' })).toBe(prepared);
+    expect(gameReducer(prepared, { type: 'PREVIOUS' })).toBe(prepared);
 
     const ended = gameReducer(playing(), { type: 'END' });
     expect(gameReducer(ended, { type: 'END' })).toBe(ended);

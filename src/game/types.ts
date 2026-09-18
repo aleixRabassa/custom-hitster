@@ -130,6 +130,12 @@ export type GameAction =
   | { type: 'YEAR_LOOKUPS_UNAVAILABLE' }
   | { type: 'FLIP' }
   | { type: 'NEXT' }
+  /**
+   * Step back one card (2026-09-18). A LEFT swipe or ArrowLeft; a no-op on card 1. The deck is
+   * no longer one-directional -- see the `PREVIOUS` case in `reducer.ts` for what that did and did
+   * not change.
+   */
+  | { type: 'PREVIOUS' }
   | { type: 'RESUME'; session: PersistedSession }
   | { type: 'END' };
 

@@ -16,7 +16,7 @@ Custom Hitster is a **client-heavy single-page app with a thin serverless backen
 
 | Component            | Technology                         | Location                        | Status                                                    |
 | -------------------- | ---------------------------------- | ------------------------------- | --------------------------------------------------------- |
-| Browser SPA          | Vite 8 + React 19 + Tailwind CSS 4 | `src/`                          | **[built]** container, 4 screens, gestures, token layer   |
+| Browser SPA          | Vite 8 + React 19 + Tailwind CSS 4 | `src/`                          | **[built]** container, 5 screens, gestures, token layer   |
 | Client game layer    | Pure TS + one React hook           | `src/game/`                     | **[built]** reducer, shuffle, resolver, persistence       |
 | Card UI              | React 19 + Tailwind 3D transforms  | `src/components/`, `src/hooks/` | **[built]** flip card, QR, audio                          |
 | Serverless functions | Vercel Functions (Node 24 runtime) | `api/`                          | **[built]** `hello`, `playlist`, `year`                   |
@@ -279,20 +279,22 @@ Phase 5 splits gestures the same way Phase 3 split the resolver: **a framework-f
 
 **jsdom cannot exercise a drag.** Motion's drag handling reads element geometry — `getBoundingClientRect`, layout boxes, transform matrices — that jsdom does not compute. A simulated pointer sequence in a test therefore asserts that the test double works, not that the gesture does. So every threshold and every comparison lives in `src/game/gestures.ts` as pure functions over numbers, which the node environment tests exhaustively on both sides of every boundary; `useCardGestures` is left thin enough that reading it is sufficient review.
 
-| Lives in                       | What it owns                                                                                                 |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------ |
-| `src/game/gestures.ts`         | `shouldCommitSwipe`, `swipeDirection`, `isTap`, and 5 named threshold constants. No React, no DOM, no Motion |
-| `src/hooks/useCardGestures.ts` | Refs for pointer state, Motion's drag props, the commit latch. Returns `gestureProps` + `exitDirection`      |
-| `src/components/CardStack.tsx` | Calls the hook (it is where `exitDirection` is consumed), owns `AnimatePresence` and the keys                |
-| `src/components/Card.tsx`      | Spreads `gestureProps` onto its outer `motion.div`; owns its own exit variant                                |
+| Lives in                       | What it owns                                                                                              |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------- |
+| `src/game/gestures.ts`         | `shouldCommitSwipe`, `swipeDirection`, `swipeIntent`, `isTap`, and 5 named threshold constants. No React  |
+| `src/hooks/useCardGestures.ts` | Refs for pointer state, Motion's drag props, the commit latch; routes a commit to `onNext` / `onPrevious` |
+| `src/components/CardStack.tsx` | Calls the hook (it is where `exitDirection` is consumed), owns `AnimatePresence` and the keys             |
+| `src/components/Card.tsx`      | Spreads `gestureProps` onto its outer `motion.div`; owns its own exit variant                             |
 
 Four things about this are load-bearing:
 
-- **A tap and a drag begin with the identical pointer event, and both misreadings are destructive.** A tap misread as a swipe skips a card _irrecoverably_ — the deck is one-directional and there is no previous card. A swipe misread as a tap reveals the answer the player was mid-guess on. This is why `isTap` requires four independent signals to agree, and why the tap radius and the commit distance are asserted not to overlap.
+- **A tap and a drag begin with the identical pointer event, and both misreadings are destructive.** A tap misread as a swipe skips a card — or, since 2026-09-18, steps back onto one; a left swipe can undo the skip, but not the guess in progress, because a step back resets the flip and the audio. A swipe misread as a tap reveals the answer the player was mid-guess on. This is why `isTap` requires four independent signals to agree, and why the tap radius and the commit distance are asserted not to overlap.
 - **The drag transform and the flip transform are on different elements, and must stay that way.** Both are CSS transforms on the same box if they share an element: Motion writes `translateX` from the drag while Tailwind's `rotate-y-180` writes its own, and the last writer wins. Drag on the outer element, rotation on the inner face wrapper.
 - **The back is ONE card, the next one, and it renders its HIDDEN face and nothing else — reversed 2026-08-06.** It used to be two empty divs, centre-scaled to 96% / 92% and offset 10px, and that produced "two cards, one inside the other" the moment a drag uncovered them: a centre-origin `scale()` insets every edge, so what showed was two concentric rectangles smaller than the card. It is now `absolute inset-0` with **no transform** — covered pixel for pixel at rest, and revealed complete, with its QR already generated, the instant the top card moves. **The leak rule is unchanged and still asserted:** the back mounts `CardHiddenSide`, `CardStack` does not import `CardRevealSide`, and no title, artist or year reaches the document a card early in text or in any attribute. The track **id** does, because the QR encodes it — accepted deliberately: 22 opaque characters, on a face that is a mystery by construction, for the card the player is in the act of dealing themselves. The cost is one extra `toDataURL()` per advance, which is the feature. `CardStack.test.tsx` still asserts against the "just reuse `Card` for the back" refactor, because `Card` mounts a reveal face.
 - **A generated QR outlives the element that generated it (`src/game/qr-cache.ts`).** Without it the preload buys nothing: the back is a plain div in `CardStack` and the front card is a `Card` inside `AnimatePresence`, so an advance unmounts the element holding the code and mounts a new one. The cache is read **during render** rather than in an effect, because `useEffect` runs after paint and would still show one frame of the placeholder. Test consequence: every DOM test file that renders a card calls `clearQrCache()` in `beforeEach` — Vitest isolates modules per file, not per test.
 - **`AnimatePresence` keys are card id _plus_ deck index.** A playlist may legitimately hold the same track twice — Phase 3's reducer handles duplicate ids explicitly for that reason — so two adjacent cards can share an id, and a bare-id key makes React reuse one element for both.
+
+**Right advances, left steps back (2026-09-18), and the mapping is a pure function.** Until then both directions advanced and `swipeDirection` only chose the exit animation. `swipeIntent(direction)` in `gestures.ts` now also chooses the action — in that file rather than in the hook for the reason everything else is there: jsdom cannot exercise a drag, so a mapping written inline would be untested full stop, and getting it backwards turns every "next card" into "the card before" with no DOM test noticing. Right kept its meaning because Phase 5 already threw the card that way; left was the free direction. The hook reads the intent and calls `onNext` or `onPrevious`; `PREVIOUS` is a reducer action (a no-op on card 1 that returns the **same** state object, so the latched commit simply snaps back; the flip is reset as `NEXT` resets it, because nothing remembers which earlier cards were revealed). ArrowLeft mirrors it on the keyboard. Audio stops for free — the stop rule is keyed on card id, not direction.
 
 **Keyboard controls are a window-level handler in `GameScreen`, not a handler on a focused card.** The card is not a control and nobody's hands are on it; a focus-dependent handler would be dead most of the time, and "the keyboard works only after you click the card first" is indistinguishable from broken. The cost is that the handler sees keystrokes meant for other things, hence four guards — auto-repeat, text-entry focus, `isPlayable`, and **Space while focus is on a button**, which would otherwise make one press both activate Play/Pause and flip the card.
 
@@ -300,15 +302,19 @@ Four things about this are load-bearing:
 
 ### The game flow screens (`src/App.tsx` + the screens) — built
 
-Phase 6 closed the loop: there is now a real container, a real client, and four screens.
+Phase 6 closed the loop: there is now a real container, a real client, and four screens — five since 2026-09-18, when a welcome screen went in front of the picker.
 
 ```
 src/App.tsx             THE container. The only caller of useGameSession(). Switches
                         on state.status; holds the ended-destination flag and the
                         notice-dismissal state. No router
 src/components/
+  WelcomeScreen.tsx     The front door (2026-09-18): tagline, three steps, one big button
+                        into the picker, and the printable year-cards PDF. Count-free
   LandingScreen.tsx     URL input, inline validation, the suggested playlists, and
-                        "Your playlists" — the saved library, above the suggestions
+                        "Your playlists" — the saved library, above the suggestions.
+                        A Back button (2026-09-18) top-left returns to WelcomeScreen
+                        through the container's flag; a <button>, not an anchor
   PreparingScreen.tsx   The card-1 gate. COUNT-ONLY
   Hud.tsx               Cards remaining + playlist name. Counts only, no Exit
   NoticeBanner.tsx      truncated / skippedCount / yearLookupsUnavailable
@@ -336,7 +342,7 @@ Three things in the client are not obvious:
 - **A 200 whose body is not JSON is `unexpected-payload`, and that is the `pnpm dev` case.** Vite serves `api/playlist.ts` as a transpiled module with status 200, so anyone running `pnpm dev` instead of `npx vercel dev` hits exactly this on their first Start.
 - **The deck is validated card by card**, unlike the year client's single result: `START` shuffles this array and every card in it reaches a render, so one malformed entry would surface as a blank card mid-game, a long way from its cause. An empty deck is rejected outright.
 
-**Four statuses, four screens, no router.** `GameState.status` already models exactly `idle` / `preparing` / `playing` / `ended`, one per screen. A router would add a dependency plus a second source of truth to keep in sync — and a browser Back mid-deck is a transition the reducer never modelled, so the two would disagree the first time anyone pressed it.
+**Four statuses, five screens, no router.** `GameState.status` already models exactly `idle` / `preparing` / `playing` / `ended`, one per screen — and the fifth screen, the welcome screen of 2026-09-18, is what `idle` shows until a container flag (`hasEnteredPicker`) says the player pressed through, in exactly the way `endedView` decides which of two screens `ended` shows. Neither flag is a status. A router would add a dependency plus a second source of truth to keep in sync — and a browser Back mid-deck is a transition the reducer never modelled, so the two would disagree the first time anyone pressed it.
 
 **Exit and deck-exhaustion are indistinguishable in `GameState`, so the container carries the distinction.** Both produce `status: 'ended'` and `currentIndex` cannot separate them either — an Exit on the last card looks identical to finishing. A container-local flag resolves it rather than an `endReason` field on `GameState`, which keeps Phase 3's reducer, types, persistence format and tests untouched for what is purely a presentation question. It is phrased as a **destination** (`'end-screen' | 'landing'`) rather than as a reason, because "Home" from the end screen also has to reach the landing screen and the reducer has no action that returns `ended` to `idle` — deliberately, since there is nothing to un-end. That phrasing is also why renaming the button from "New playlist" to "Home" on 2026-08-06 touched no state: the flag was already named after where the press **goes** rather than after what the player was assumed to want next.
 
@@ -363,7 +369,7 @@ Browser (SPA)                          Serverless (Vercel Functions)
 │ shuffle (seeded)     │  [built]                     ↓
 │ localStorage resume  │  [built]            Upstash Redis (year cache)
 │ flip / swipe / audio │  [built]
-│ 4 screens, no router │  [built]
+│ 5 screens, no router │  [built]
 └──────────────────────┘
 ```
 
@@ -374,6 +380,22 @@ Browser (SPA)                          Serverless (Vercel Functions)
 3. **Shared cache** — a year cache across all users makes repeat playlists instant.
 
 **Why progressive loading is structural, not polish:** a lookup costs two paced MusicBrainz requests, so a cold 100-track playlist takes **~3-5 minutes** — measured 1.3-3.6 s per track on 2026-08-04, against a warm cache 0 ms. Years resolve in the background, the game starts as soon as **card 1** is ready, and it only blocks if the player outruns the resolver. Two invariants fall out of that, both easy to violate without any test failing: **shuffle runs before resolution** (so the resolver walks the deck in play order and card 1 is genuinely the card the player sees first), and the resolver is a **sequential loop, not a fan-out** — a `Promise.all` over 100 cards turns the shared 1 req/s gate into ~99 429s. See [`plans/plan.md`](./plans/plan.md) §1 and §3.
+
+---
+
+### The front door and the printable year cards (`src/components/WelcomeScreen.tsx`) — built 2026-09-18
+
+The developer asked for "an explanatory, visual landing page with a big Start button that leads to the current playlist screen", plus a button that downloads a PDF of year cards for playing on a table. In code the new screen is `WelcomeScreen`, and **`LandingScreen` still means the playlist picker** — renaming it would have touched forty-odd doc and test lines for a word.
+
+**It is a container flag, not a fifth status.** `App.tsx` holds `hasEnteredPicker` in a `useState`, the same shape as `endedView`, seeded as `useState(deckLink !== null)` — a valid share link counts as having pressed through — and every branch that shows the picker renders `hasEnteredPicker ? landing : welcome`. The first version guarded the `idle` branch with `deckLink === null` instead; the seed replaced it the same day (see below). What the picker's Back button added is the other end of the flag. **It is set true from three places and cleared from one**: the welcome button sets it, and so do Exit and Home; Back clears it. And **both `ended` branches that show the picker — `deckCollapsed`, and `endedView === 'landing'` — now render the welcome screen instead while the flag is false.** Together those buy the edge cases with no code of their own: **a share link never sees it** (the link's request is already in flight and the picker is where its loading state and error slot live), **a saved session resumes past it** (any status other than `idle` or `ended` never reaches a check), and **Exit and Home land on the picker** — a player who just quit a game does not need the rules again — but note the reason moved: they land there because they **set the flag**, not because they go through `ended`; through `ended` alone they would now reach the front door, which is exactly what Back relies on. **No branch consults `deckLink`, and that is what the seed bought.** The `deckLink === null` guard on the `idle` branch had two holes: a link whose fetch FAILED left the picker showing its error with a Back button that did nothing (the flag was already false, the guard still refused), and a link-dealt deck that collapsed to zero showed the front door instead of the `no-years-found` warning. Seeding the flag from the link says the honest thing — the link pressed through for you — and closes both. A malformed link is `deckLink === null`, so it gets the plain front door — with no error, as before. The flag is ephemeral: a reload shows the welcome screen again, and a persisted "seen it" flag was deliberately not built.
+
+**What is on it.** The same 192px logo as the picker, as the `<h1>`; one tagline (`COPY.welcome.tagline` — the lead sentence beneath it was cut on 2026-09-18 because the three steps already say it, a one-line change under the copy rule with no test touched); the one big button (`COPY.welcome.enter`, kept distinct from `COPY.landing.start` so no session ever has two buttons called "Start"); "How it works" as an `<ol>` of three step cards with inline-SVG icons in `CardControls`' style; and "Prefer paper?" with a decorative neon card beside the download. Every sentence is `COPY.welcome`. It is a **pre-start surface** and takes no `Card`; its leak proxy subtracts `COPYRIGHT_NOTICE` and `COPY.welcome.printDetail` — the printed range "1970 to 2033" is the one year-shaped text it carries by design — by exact string, so the `\b(19|20)\d{2}\b` pattern stays absolute for everything else.
+
+**The picker has a Back button, and it is a `<button>`.** `LandingScreen` renders `COPY.landing.backToWelcome` as a ghost button top-left above its hero — an `aria-hidden` `←` glyph beside visible text, `touch-target` and `focus-visible:focus-ring` like every control, and **disabled while a request is loading** — the picker is where the request's loading state and error slot live, so Back waits for it. It takes a required `onBack` prop, and `App.tsx` answers it by clearing `hasEnteredPicker`. It is not an anchor and pushes nothing: there is no router, and the app's one `pushState` stays in `useBackNavigation.ts` for the game screen alone. Consequence to know: returning to the picker from the welcome screen **remounts** `LandingScreen`, so rows typed before pressing Back are gone — accepted, not persisted.
+
+**The PDF is a static asset, and two properties of the shell are load-bearing.** It ships from `public/year-cards-1970-2033.pdf` (20 A4 pages, ReportLab, supplied by the developer). `vercel.json`'s SPA rewrite excludes any path containing a dot, so it is served as a file. It is **not precached**: `globPatterns` deliberately has no `pdf`, because 240 kB on every install for a file most players never download is the same class of cost as the logo master this repo keeps out of `public/`. But the worker's SPA fallback would then serve `index.html` for a navigation to it, so `vite.config.ts` adds `/\.pdf$/` to `navigateFallbackDenylist` beside `/^\/api\//`. The link's `download` attribute (its value is `COPY.welcome.yearCardsFileName`, user-visible in a downloads list and therefore copy) is not a defence on its own — whether a download reaches the worker as a navigation differs by browser. Neither half can be observed under any dev server; both are Pending rows in `development.md` §5.
+
+**Two firsts.** The decorative card is the first `card-ring` caller that is not `absolute inset-0`, so it carries `relative` itself (the utility declares no `position`, for the cascade reason recorded in `index.css`), plus `rounded-card`, `aria-hidden`, and a `?` rather than a digit; it is `hidden sm:flex` so a phone gets the text first. And the download is the app's **second `<a>`** after the footer's author link, so the conventions applied there by hand — `focus-visible:focus-ring`, and here also `touch-target` — were applied again; no `target="_blank"`, since it is a same-origin download.
 
 ---
 
@@ -436,7 +458,7 @@ Three features that add to the app without changing how a game is played, and al
 
 **A saved session outranks a link**, because opening an old link must not silently discard a game in progress. `useGameSession`'s own lazy initialiser has already run when `App` reads the params, so `state.status === 'idle'` is exactly "there was nothing to resume".
 
-**A malformed link is `null`, and `null` is the plain landing screen with no error.** Someone whose chat client ate half a URL is a visitor, not a failure state. The playlist id is validated through `shared/spotify-url.ts` — reuse, so a link is judged by the same code the form and `api/playlist.ts` use — and the seed is bounded to `generateSeed`'s own 16-hex alphabet, because an accepted seed is hashed and then **persisted**.
+**A malformed link is `null`, and `null` is the plain welcome screen with no error** (the picker, before the welcome screen existed on 2026-09-18). Someone whose chat client ate half a URL is a visitor, not a failure state. The playlist id is validated through `shared/spotify-url.ts` — reuse, so a link is judged by the same code the form and `api/playlist.ts` use — and the seed is bounded to `generateSeed`'s own 16-hex alphabet, because an accepted seed is hashed and then **persisted**.
 
 **The library stores playlists, not sessions** (ids, name, timestamp; deduped by `savedDeckKey`, capped at 20). The alternative — generalising the session key into a keyed collection of full mid-game decks — reopens persistence validation, `RESUME` and the localStorage quota, and makes the known two-tab clobber materially worse. There is still exactly one resumable game. The store is read on the **landing screen**, which is a pre-start surface, so it is rebuilt field by field on the **write** as well as on the read: `SavedPlaylist` is a structural interface and TypeScript's excess-property check does not fire for a spread, so a caller passing something larger would otherwise put track data one devtools panel away from a player who has not started.
 
@@ -704,10 +726,10 @@ flip for free, and reproducing that with `{isFlipped ? null : …}` would remove
 `justify-center` column — so the card itself would jump on every flip. The flip is a toggle, so the
 sentence stays true.
 
-#### The footer is on all four screens, and the one omission is the decision
+#### The footer is on all five screens, and the one omission is the decision
 
-`src/components/Footer.tsx` renders the copyright line on the **landing, preparing, game and end**
-screens. There is no shell to hang it on: every screen is its own `min-h-dvh` centred column, so a
+`src/components/Footer.tsx` renders the copyright line on the **welcome (since 2026-09-18), landing,
+preparing, game and end** screens. There is no shell to hang it on: every screen is its own `min-h-dvh` centred column, so a
 footer rendered once in `App.tsx` or `main.tsx` would be a sibling of a full-viewport column and give
 every screen a permanent scrollbar.
 
@@ -726,8 +748,8 @@ because auto margins beat `justify-content` and the card would stop being centre
 would be read out to a screen-reader user in the middle of being told the game crashed.
 
 **It is pinned to the bottom out of flow, and that is a two-ended contract.** `Footer` is
-`absolute inset-x-0 bottom-8`; every host carries **`relative pb-20`** — the same band on all four
-screens since 2026-08-12. **The two numbers are one number split in two**: 80px of band, a 32px offset
+`absolute inset-x-0 bottom-8`; every host carries **`relative pb-20`** — the same band on all five
+screens (four since 2026-08-12, the welcome screen since 2026-09-18). **The two numbers are one number split in two**: 80px of band, a 32px offset
 and a ~16px line put exactly **32px above the copyright and 32px below it**, which is the symmetry the
 developer asked for ("margen debajo igual al margen superior"). Before it, `bottom-4` inside a
 `pb-12`/`pb-20` band left the line 16px off the screen's edge under anything from 16px to 48px of air.
@@ -758,7 +780,7 @@ made it worth writing down.** It is `font-bold text-accent focus-visible:focus-r
 with `rel="noreferrer noopener"`, pointing at `COPY.footer.authorUrl` — the URL lives in `copy.ts`
 beside the words for the same reason they do, and deliberately **outside `notice`**, because that
 string is what the three leak proxies subtract and an `href` is not text a player reads. Three things
-follow. The `focus-ring` is not decoration: the link is now in the tab order of **all four screens**,
+follow. The `focus-ring` is not decoration: the link is now in the tab order of **all five screens**,
 including mid-game, and the repo's rule is that everything focusable carries one. Both dialogs trap
 Tab, so it stays unreachable behind a backdrop — that is what makes the footer-before-dialogs DOM
 order above still sufficient. And `font-bold` is doing accessibility work as well as what was asked

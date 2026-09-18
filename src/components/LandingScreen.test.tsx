@@ -26,10 +26,12 @@ const THIRD_URL = 'https://open.spotify.com/playlist/37i9dQZF1DX1HCSfq0nSal';
 
 function renderLanding(props: Partial<Parameters<typeof LandingScreen>[0]> = {}) {
   const onSubmit = props.onSubmit ?? vi.fn();
+  const onBack = props.onBack ?? vi.fn();
   const onRemoveSaved = props.onRemoveSaved ?? vi.fn();
   const rendered = render(
     <LandingScreen
       onSubmit={onSubmit}
+      onBack={onBack}
       isLoading={props.isLoading ?? false}
       {...(props.errorCode ? { errorCode: props.errorCode } : {})}
       // Defaults to empty, which is the first-time visitor's screen and the one every assertion
@@ -39,7 +41,7 @@ function renderLanding(props: Partial<Parameters<typeof LandingScreen>[0]> = {})
     />,
   );
 
-  return { ...rendered, onSubmit, onRemoveSaved };
+  return { ...rendered, onSubmit, onBack, onRemoveSaved };
 }
 
 /** Two saved decks: one of a single playlist, one of three. */
@@ -410,6 +412,31 @@ describe('LandingScreen', () => {
     }
   });
 
+  describe('the way back to the welcome screen', () => {
+    it('should call onBack once when the back button is pressed', () => {
+      // The picker is behind a front door since 2026-09-18, and this is the only way back through it
+      // on a phone with no browser chrome. Queried by its VISIBLE text, which is its accessible name.
+      const { onBack, onSubmit } = renderLanding();
+
+      fireEvent.click(screen.getByRole('button', { name: COPY.landing.backToWelcome }));
+
+      expect(onBack).toHaveBeenCalledOnce();
+      // A `type="button"` outside the form: leaving must not also submit whatever is in the rows.
+      expect(onSubmit).not.toHaveBeenCalled();
+    });
+
+    it('should disable the back button while loading', () => {
+      // Leaving mid-fetch would put the loading state and the error slot on a screen that no longer
+      // exists, so it is disabled alongside every other control here.
+      renderLanding({ isLoading: true });
+
+      expect(
+        (screen.getByRole('button', { name: COPY.landing.backToWelcome }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(true);
+    });
+  });
+
   it('should render every suggested playlist', () => {
     // A FLOOR rather than an exact count, and no named row anywhere in this file. The set is edited
     // on request, so an exact length turns every such edit into a failing test that says nothing --
@@ -455,9 +482,16 @@ describe('LandingScreen', () => {
     expect(screen.getAllByRole('textbox')).toHaveLength(1);
   });
 
-  it('should submit a full URL for every suggestion', () => {
+  it('should submit a full URL for every suggestion', { timeout: 20_000 }, () => {
     // Every one, not just the sampled Top 50 Global above: a suggestion whose id were mistyped to
     // the wrong length would still fill the box, and only the submission would reveal it.
+    //
+    // ITS OWN TIMEOUT, added 2026-09-18: this renders THIRTEEN full landing screens in one test.
+    // Measured ~1.2 s with the file run alone and 7-9 s under a fully parallel run of the 51-file
+    // suite, against Vitest's 5 s default -- so it failed in 2 of 2 full runs while passing in
+    // isolation, which reads as a broken suggestion rather than as load. Same shape as the
+    // `beforeAll` timeout in `App.test.tsx` (2026-08-06); 20 s is a ceiling, not a duration anything
+    // normally waits.
     for (const playlist of SUGGESTED_PLAYLISTS) {
       const { onSubmit } = renderLanding();
 
@@ -620,8 +654,8 @@ describe('LandingScreen', () => {
     pressAdd();
 
     const interactive = [...container.querySelectorAll('button, input')];
-    // Two inputs, two removes, the "+", Start, and one button per suggestion.
-    expect(interactive).toHaveLength(2 + 2 + 1 + 1 + SUGGESTED_PLAYLISTS.length);
+    // Back (2026-09-18), two inputs, two removes, the "+", Start, and one button per suggestion.
+    expect(interactive).toHaveLength(1 + 2 + 2 + 1 + 1 + SUGGESTED_PLAYLISTS.length);
 
     for (const element of interactive) {
       expect(element.className).toContain('focus-visible:focus-ring');
@@ -875,8 +909,8 @@ describe('LandingScreen', () => {
       renderLanding({ savedPlaylists: [] });
 
       expect(screen.queryByText(COPY.landing.savedHeading)).toBeNull();
-      // The "+", Start, and the suggestions. No remove button: there is one row.
-      expect(screen.getAllByRole('button')).toHaveLength(2 + SUGGESTED_PLAYLISTS.length);
+      // Back, the "+", Start, and the suggestions. No remove button: there is one row.
+      expect(screen.getAllByRole('button')).toHaveLength(1 + 2 + SUGGESTED_PLAYLISTS.length);
     });
 
     it('should remove a saved deck by its deck key', () => {
@@ -918,8 +952,11 @@ describe('LandingScreen', () => {
       const { container } = renderLanding({ savedPlaylists: SAVED });
 
       const interactive = [...container.querySelectorAll('button, input')];
-      // One row's input, the "+", Start, two buttons per saved row, and one per suggestion.
-      expect(interactive).toHaveLength(1 + 1 + 1 + SAVED.length * 2 + SUGGESTED_PLAYLISTS.length);
+      // Back (2026-09-18), one row's input, the "+", Start, two buttons per saved row, and one per
+      // suggestion.
+      expect(interactive).toHaveLength(
+        1 + 1 + 1 + 1 + SAVED.length * 2 + SUGGESTED_PLAYLISTS.length,
+      );
 
       for (const element of interactive) {
         expect(element.className).toContain('focus-visible:focus-ring');

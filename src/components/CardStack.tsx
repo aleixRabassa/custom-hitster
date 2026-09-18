@@ -105,7 +105,10 @@ export interface CardStackProps {
   isFlipped: boolean;
   isYearPending: boolean;
   onFlip: () => void;
+  /** A right swipe. */
   onNext: () => void;
+  /** A left swipe -- the card before this one (2026-09-18). */
+  onPrevious: () => void;
   /** Passed through to `useCardGestures` — see `UseCardGesturesOptions.isEnabled`. */
   isEnabled: boolean;
 }
@@ -117,9 +120,15 @@ export function CardStack({
   isYearPending,
   onFlip,
   onNext,
+  onPrevious,
   isEnabled,
 }: CardStackProps) {
-  const { gestureProps, exitDirection } = useCardGestures({ onFlip, onNext, isEnabled });
+  const { gestureProps, exitDirection } = useCardGestures({
+    onFlip,
+    onNext,
+    onPrevious,
+    isEnabled,
+  });
 
   const currentCard = deck[currentIndex];
 
