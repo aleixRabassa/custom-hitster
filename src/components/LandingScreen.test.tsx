@@ -425,6 +425,17 @@ describe('LandingScreen', () => {
       expect(onSubmit).not.toHaveBeenCalled();
     });
 
+    it('should position the back button out of flow', () => {
+      // In the `gap-8` column it cost a 44px `touch-target` row plus the gap, i.e. ~76px of nothing
+      // above the logo (2026-09-18). It is `absolute` against the `<main>` whose `relative` the footer
+      // test already asserts -- the other end of the same two-ended contract.
+      renderLanding();
+
+      expect(screen.getByRole('button', { name: COPY.landing.backToWelcome }).className).toContain(
+        'absolute',
+      );
+    });
+
     it('should disable the back button while loading', () => {
       // Leaving mid-fetch would put the loading state and the error slot on a screen that no longer
       // exists, so it is disabled alongside every other control here.

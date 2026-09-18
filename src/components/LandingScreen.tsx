@@ -389,6 +389,7 @@ export function LandingScreen({
       `Footer` is `absolute bottom-4`, so it anchors to this element and rides in the padding band
       this reserves. Drop either and the line either escapes to the viewport or lands on the last
       suggestion. `Footer.tsx` has the reasoning; `LandingScreen.test.tsx` asserts both.
+      Since 2026-09-18 `relative` has a SECOND dependent: the Back button below is `absolute` too.
 
       `pb-20` is the band every host now reserves, and it is sized by the footer rather than chosen:
       `Footer` is `absolute bottom-8` and its line is ~16px, so 80px of padding puts exactly 32px
@@ -424,8 +425,19 @@ export function LandingScreen({
          The welcome screen went in front of this picker on the same day, and a
          screen a player can walk INTO needs a way back OUT -- on a phone inside
          the TWA there is no browser chrome, so this button is the only route.
-         Top-left (`self-start`, first child of `<main>`), where a back control
-         is expected to be, and ghost-styled so it does not compete with Start.
+         Top-left corner, where a back control is expected to be, and
+         ghost-styled so it does not compete with Start.
+
+         OUT OF FLOW -- `absolute top-6 left-6`, anchored to `<main>`'s
+         `relative`, on the padding edges `pt-6` / `px-6` already draw. It
+         shipped first as `self-start` in the column, and that put ~76px of
+         nothing above the logo: a `touch-target` row is 44px tall and the
+         column's `gap-8` added 32px more before the hero. Out of flow, the
+         hero sits at the same 24px it had before the button existed. It stays
+         the FIRST DOM child so the tab order still reaches it first. Known
+         cost: on a 320px viewport the button's right padding grazes the logo's
+         top-left corner (the text clears it); a "three widths" row in
+         `docs/development.md` §5.
 
          A `<button>`, NOT an `<a>`, and that is not a style choice: there is no
          router and no history entry to return to (`App.tsx`'s header commits to
@@ -446,7 +458,7 @@ export function LandingScreen({
         type="button"
         onClick={onBack}
         disabled={isLoading}
-        className="touch-target flex items-center gap-2 self-start rounded-lg px-3 py-2 text-sm text-fg-secondary hover:text-fg focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)"
+        className="touch-target absolute top-6 left-6 flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-fg-secondary hover:text-fg focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)"
       >
         <span aria-hidden="true">←</span>
         {COPY.landing.backToWelcome}

@@ -94,7 +94,7 @@ export const COPY = {
   welcome: {
     /** The `alt` of the logo, which is this screen's `<h1>` name too -- never empty. */
     logoAlt: APP_NAME,
-    tagline: 'The music game, from your own Spotify playlists.',
+    tagline: 'The music timeline game, from your own Spotify playlists.',
     /** The big button. Distinct from `landing.start` so no screen ever has two buttons called "Start". */
     enter: 'Start playing',
     howItWorksHeading: 'How it works',
@@ -118,7 +118,7 @@ export const COPY = {
     printCards: 'Print your cards',
     /** Carries the printed range -- the one year-shaped text on a pre-start screen. See the block above. */
     printDetail:
-      'A printable PDF of year cards from 1970. Print it, cut them out, and lay out the timeline on a table instead of a screen.',
+      'A printable PDF of year cards from 1970. Print it, cut them out, and lay out the timeline on a table.',
     /**
      * The saved file's name, user-visible in a downloads list -- which is why it is copy, exactly as
      * `pdf.fileName` is. The asset's path under `public/` is a different string and lives with the

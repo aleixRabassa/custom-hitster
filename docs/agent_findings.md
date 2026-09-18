@@ -3727,3 +3727,21 @@ top-left, disabled while a request is loading). Three findings:
    one tagline and the button. Deleting the constant and its one render site touched no test, because no
    test ever knew what the sentence said — the property `src/game/copy.ts`'s header promises, cashed in.
    The tagline was reworded in the same pass; likewise nothing to update outside `copy.ts`.
+
+## 2026-09-18 — Under Vite 8.2 `GET /api/playlist` returns `index.html`, not the handler's transpiled source
+
+Reproduced the `pnpm dev` trap while diagnosing a "Spotify returned something we could not read" on Start
+with a suggested playlist selected. `docs/development.md` §4 and the comment above `parsePlaylistBody`'s
+caller in `src/game/playlist-client.ts` both describe Vite serving `api/playlist.ts` as **transpiled
+source** with `text/javascript`. On Vite 8.2.0 the observed response to
+`http://localhost:5173/api/playlist?url=…` is the **SPA fallback** — `index.html`, `text/html`, status
+`200`. The `vercel.json` rewrite that excludes `api/` from the fallback is read by Vercel only, so Vite
+knows nothing about it. The client's outcome is identical either way: a 200 whose body is not JSON, so
+`readJson` yields `undefined` and the player reads `unexpected-payload`. Not a bug, and the prescription
+is unchanged — `npx vercel dev`. Confirmed the app side is healthy the same day: the real `api/playlist.ts`
+served over a throwaway `node:http` wrapper (`tsx`) returned the full 100-card deck for the "Hitster"
+suggestion and a 200 for "Top 50 Global", and the live embed page still carries `__NEXT_DATA__` with the
+exact `props.pageProps.state.data.entity.trackList` shape the adapter parses. One more trap met on the
+way: `vercel dev` itself refused to start with "The specified token is not valid" until `vercel login`,
+and the preceding "Worker timed out after 10 seconds / write EPIPE" lines are the CLI's update check,
+not the failure.

@@ -64,7 +64,7 @@ game — the hero is the logo, ONE tagline (`COPY.welcome.tagline`; the lead sen
 cut on 2026-09-18 as a restatement of the three steps) and one big button reading `COPY.welcome.enter`,
 then three ordered "How it works" steps and the printable year cards; the button lands on
 `LandingScreen`, which kept its name because forty-odd doc and test lines use it. **The picker has a
-Back button** (`COPY.landing.backToWelcome`, a ghost `<button>` top-left above the hero, disabled while a
+Back button** (`COPY.landing.backToWelcome`, a ghost `<button>` absolute in the top-left corner, out of flow, disabled while a
 request is loading, required `onBack` prop) that returns to the front door — a `<button>` and not an
 anchor, because there is no router and no history entry to go back to, and `App.tsx` still never touches
 the address bar. `App.tsx` decides with `hasEnteredPicker`, a `useState` of the same shape as
