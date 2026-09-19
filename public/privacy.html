@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <!--
+      COMMENTS AND COPY HERE ARE SHIPPED BYTES. This file is served straight out of `public/` with
+      no build step, so it cannot import a runtime module — which puts it outside the
+      `src/game/copy.ts` rule for the same reason `index.html` and `src/pwa/manifest.ts` are
+      outside it. `COPY.app.name` and `COPY.footer.authorUrl` are the values to copy from by hand.
+      Every factual claim below was read out of the source. Change the code and change this page.
+    -->
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="index" />
+    <meta
+      name="description"
+      content="Privacy policy for Playlist Jitster: what stays on your device, what our server receives, and what Spotify sees."
+    />
+    <!-- Must track `--color-page` in `src/index.css` by hand; a meta attribute cannot hold a var(). -->
+    <meta name="theme-color" content="#0a0a0a" />
+    <link rel="icon" type="image/webp" href="/logo.webp" />
+    <title>Privacy Policy — Playlist Jitster</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+
+      body {
+        margin: 0;
+        padding: 2.5rem 1.5rem 4rem;
+        background: #0a0a0a;
+        color: #f5f5f5;
+        font-family:
+          system-ui,
+          -apple-system,
+          'Segoe UI',
+          Roboto,
+          sans-serif;
+        font-size: 1rem;
+        line-height: 1.65;
+      }
+
+      main {
+        max-width: 42rem;
+        margin: 0 auto;
+      }
+
+      h1 {
+        font-size: 1.75rem;
+        line-height: 1.2;
+        margin: 0 0 0.5rem;
+      }
+
+      h2 {
+        font-size: 1.15rem;
+        line-height: 1.3;
+        margin: 2.5rem 0 0.75rem;
+        padding-top: 1.5rem;
+        border-top: 1px solid #262626;
+      }
+
+      p,
+      ul {
+        margin: 0 0 1rem;
+      }
+
+      ul {
+        padding-left: 1.25rem;
+      }
+
+      li {
+        margin-bottom: 0.5rem;
+      }
+
+      code {
+        font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+        font-size: 0.9em;
+        color: #d4d4d4;
+        background: #171717;
+        border: 1px solid #262626;
+        border-radius: 0.25rem;
+        padding: 0.1em 0.35em;
+      }
+
+      a {
+        color: #10b981;
+      }
+
+      a:focus-visible {
+        outline: 2px solid #10b981;
+        outline-offset: 2px;
+      }
+
+      .lede,
+      .updated {
+        color: #a3a3a3;
+      }
+
+      .updated {
+        margin-top: 3rem;
+        padding-top: 1.5rem;
+        border-top: 1px solid #262626;
+        font-size: 0.9rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Privacy Policy</h1>
+      <p class="lede">
+        This policy covers Playlist Jitster, both the website and the Android app, which are the
+        same application.
+      </p>
+
+      <h2>Who runs this</h2>
+      <p>
+        Playlist Jitster is made and run by Aleix Rabassa as a personal project. Contact:
+        <a href="https://aleixrabassa.vercel.app/" target="_blank" rel="noreferrer noopener"
+          >aleixrabassa.vercel.app</a
+        >.
+      </p>
+
+      <h2>The short version</h2>
+      <p>
+        There are no accounts, so the app never asks who you are. It stores your game on your own
+        device and nowhere else. It sends a playlist link and, for each track, a title, artist and
+        duration to its own server so it can look up release years. It has no advertising, no
+        analytics and no third-party tracking code of any kind.
+      </p>
+
+      <h2>What stays on your device</h2>
+      <p>
+        The app uses your browser's <code>localStorage</code> under exactly two keys, and neither is
+        ever transmitted anywhere:
+      </p>
+      <ul>
+        <li>
+          <code>hitster:session:v1</code> — the game in progress: the playlists it was dealt from,
+          the shuffled deck with the years already resolved, and which card you are on. It lets you
+          reload or come back later and carry on.
+        </li>
+        <li>
+          <code>hitster:library:v1</code> — playlists you chose to keep, stored as a name and a list
+          of Spotify playlist ids so they can be offered again on the start screen.
+        </li>
+      </ul>
+      <p>
+        Both are written and read by your browser only. There is no account, no sync and no server
+        copy of either. Deck PDFs and share links are also produced entirely on your device: a share
+        link is just playlist ids plus a shuffle seed placed on your clipboard, and a printable deck
+        is generated in the browser and never uploaded.
+      </p>
+
+      <h2>What our server receives</h2>
+      <p>
+        The app calls two endpoints of its own. They hold no database of users and store nothing
+        tied to you.
+      </p>
+      <ul>
+        <li>
+          <strong>Reading a playlist.</strong> When you start a game, the playlist link you pasted
+          is sent to our server, which reduces it to the playlist id and fetches Spotify's public
+          embed page for that playlist to get the track list. This request is made by our server, so
+          Spotify sees the server rather than you. The track list is returned to your device; we
+          keep no copy of it, though our hosting provider's CDN may hold the response for a few
+          minutes so a repeated request is not fetched twice.
+        </li>
+        <li>
+          <strong>Looking up a year.</strong> For each track, the app sends the track's title,
+          artist and duration to our server, which queries the public MusicBrainz database for the
+          original release year. MusicBrainz is contacted by our server, so it does not see you
+          either.
+        </li>
+      </ul>
+      <p>
+        Year answers are cached so the same track is not looked up repeatedly for everyone. The
+        cache entry is keyed on the artist and title alone, holds the year, how confident the lookup
+        was and a few technical notes about how it was found, and expires by itself: 30 days for a
+        confident answer, 7 days for a weaker one, 1 day when no year was found. It runs on Upstash
+        Redis. The same answers are also held by our hosting provider's CDN for similar periods.
+        Nothing in either cache identifies a person, a device or a playlist — a cached year is
+        indistinguishable from one looked up by anybody else.
+      </p>
+
+      <h2>What Spotify receives directly</h2>
+      <p>
+        One thing only: the 30-second preview clip. When you press Play, your browser loads the
+        audio straight from Spotify's servers, so Spotify receives your IP address and the usual
+        request details for that file, under its own privacy policy. If you never press Play, your
+        device never contacts Spotify.
+      </p>
+      <p>
+        The QR code on a card is generated on your device — nothing is sent to produce it. It
+        encodes a public Spotify track link, so scanning it opens Spotify on whichever device did
+        the scanning, and that device's use of Spotify is covered by Spotify's policy, not this one.
+      </p>
+
+      <h2>Hosting</h2>
+      <p>
+        The site and its two endpoints are hosted on Vercel. As with any website, requests from your
+        device reach the host, which processes ordinary connection metadata such as your IP address
+        and browser user agent in order to serve the request and to protect the service from abuse.
+        The app itself does not read, use or retain that metadata.
+      </p>
+
+      <h2>What the app does not do</h2>
+      <ul>
+        <li>No accounts, sign-in, email addresses or profiles.</li>
+        <li>No advertising and no ad networks.</li>
+        <li>No analytics, telemetry, crash reporting or usage measurement.</li>
+        <li>No third-party SDKs, tag managers, social widgets or embedded trackers.</li>
+        <li>No cookies are set by the app.</li>
+        <li>No selling or sharing of data, because there is no data about you to sell or share.</li>
+        <li>Nothing is knowingly collected from children, or from anyone else.</li>
+      </ul>
+
+      <h2>The Android app</h2>
+      <p>
+        The Android app is a thin shell around the same website. It contains no code of its own that
+        collects information, includes no Google Play services or advertising libraries, requests no
+        notification permission and asks for no device permissions such as location, contacts,
+        camera, microphone or storage. Everything described above applies to it unchanged.
+      </p>
+
+      <h2>The printable year cards</h2>
+      <p>
+        The year-cards PDF offered on the welcome screen is a fixed file served from this site. The
+        download sends nothing about you beyond the ordinary request for the file described under
+        Hosting.
+      </p>
+
+      <h2>Deleting your data</h2>
+      <p>
+        Everything the app keeps is on your device. Clearing this site's data in your browser — on
+        Android, in Chrome, since the app runs inside it — removes both storage keys and leaves
+        nothing behind. There is no server-side record tied to you, so there is nothing to request
+        the deletion of.
+      </p>
+
+      <h2>Changes to this policy</h2>
+      <p>
+        If the app starts handling information differently, this page changes with it and the date
+        below is updated.
+      </p>
+
+      <p class="updated">Last updated: 19 September 2026.</p>
+    </main>
+  </body>
+</html>

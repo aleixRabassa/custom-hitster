@@ -659,7 +659,9 @@ what makes the game's payoff audible at all.
       [`plan.google-play-shell.md`](./plan.google-play-shell.md) (Bubblewrap shell in a new `android/`
       tree, `public/.well-known/assetlinks.json` with BOTH certificate fingerprints, `public/privacy.html`,
       four manifest fields, the listing under `docs/store/`, and the store's closed-testing gate of
-      twelve testers for fourteen days — **not started as of 2026-09-19**) and
+      twelve testers for fourteen days — **steps 1-5 built 2026-09-19**: the origin, the four manifest
+      fields, the privacy page, the placeholder asset-links file and the toolchain. Step 6 onward needs a
+      device and a Play Console account, and `android/` does not exist yet) and
       [`plan.google-play-back-button.md`](./plan.google-play-back-button.md) (Android's back gesture
       becomes an exit REQUEST through `ExitConfirmDialog`, via one pushed history entry while
       `GameScreen` is mounted — **code built 2026-08-12**, seven device rows still Pending because only

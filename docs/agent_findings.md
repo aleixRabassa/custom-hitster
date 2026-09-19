@@ -3910,3 +3910,200 @@ Measured for the plan rather than remembered: `@bubblewrap/cli` is at **1.25.0**
 2026-09-16 (`npm view`); `vite-plugin-pwa`'s `ManifestOptions` already types `id`, `lang`,
 `dir: 'ltr' | 'rtl'` and `categories: string[]`, so step 2 is a value change with no type work; and
 the Vercel CLI is not installed here, so the production alias is confirmed in the dashboard.
+
+## 2026-09-19 — Vite copies `public/.well-known/` into `dist/`, and the asset-links file stays out of the precache manifest
+
+Step 4 of [`plan.google-play-shell.md`](./plans/plan.google-play-shell.md) asked for three things to
+be **measured rather than assumed**. Two of them can be measured locally and were; the third needs a
+deploy and there was none in this session.
+
+**The dot-directory is copied.** `public/.well-known/assetlinks.json` (223 bytes) lands at
+`dist/.well-known/assetlinks.json` byte for byte after `pnpm build` under Vite 8.2. This was worth
+checking rather than trusting: `publicDir` copying has historically skipped dotfiles in some
+versions, and the failure would have been a 404 on the one path Android fetches — with a green build,
+a working app and no message anywhere. It is copied, so no `viteStaticCopy` workaround or rename is
+needed, and the `.well-known` path can stay where the spec requires it.
+
+**It is absent from the precache manifest, as intended.** `dist/sw.js` holds **20** precache entries
+and none of them is the asset-links file: `grep assetlinks dist/sw.js dist/workbox-*.js` returns
+nothing, and neither does `well-known`. The reason is `globPatterns` in `vite.config.ts`, which lists
+`js,css,html,webp,png,svg,woff2` and deliberately not `json` — the one `.json`-shaped entry in the
+list is `manifest.webmanifest`, which the plugin adds itself. This is the right outcome rather than a
+lucky one: **asset-link verification is performed by the Android system, not by the webview**, so a
+browser-local copy could never be the one that is read, and a stale cached statement would be a
+liability with no upside. It is the same reasoning that keeps `year-cards-1970-2033.pdf` out of the
+glob.
+
+One thing the same build output shows in passing: **`public/privacy.html` IS precached**, because it
+matches the `html` pattern. That is harmless — it is a static page with no freshness story — but it
+is worth knowing that the two new static files this plan adds are treated differently by the worker,
+and that the difference comes from their extensions rather than from any decision about them.
+
+**The third finding is not available here.** "Deploy, then fetch the file from the production origin
+and confirm it returns the JSON with a JSON content type and is not rewritten to `index.html`" needs
+a deployment; none was made in this session, so that sub-bullet is left unticked in the plan. The
+local half of that concern is now pinned by `src/pwa/assetlinks.test.ts`'s
+`should keep the SPA rewrite away from the well-known path and the policy`, which asserts
+`vercel.json`'s one rewrite `source` still contains the `[^.]*` dot exclusion — a string assertion,
+because re-implementing path-to-regexp's semantics in a test would produce a second answer that could
+disagree with Vercel's, and a wrong test is worse than the manual fetch it would be pretending to
+replace.
+
+`src/pwa/assetlinks.test.ts` carries four tests, and its header names the **two it deliberately does
+not carry** — `should list two colon-separated SHA-256 fingerprints` and `should agree with
+android/twa-manifest.json about the package id`. Both belong to step 12: the fingerprint list is
+empty until a keystore exists and `android/` does not exist at all, so writing them now would put two
+red tests in the suite for eight steps, which is how a suite stops being trusted.
+
+## 2026-09-19 — The Android toolchain installs, but neither half of it works the way Bubblewrap documents
+
+Step 5 of [`plan.google-play-shell.md`](./plans/plan.google-play-shell.md) reads as three installs.
+It is three installs and two traps, both of which present as "your SDK is broken" and neither of
+which is. Written down because the next release runs against whatever the machine has then, and both
+traps are in the tooling rather than in this repo — so they will still be there.
+
+**Bubblewrap cannot be driven by an agent's shell, and `--version` proves it.** On first run it
+prompts `Do you want Bubblewrap to install the JDK (recommended)?` before doing anything else, so
+with stdin on the null device even `bubblewrap --version` dies with
+`ERR_USE_AFTER_CLOSE: readline was closed`. The prompt is not specific to `init`; it is the CLI
+noticing `~/.bubblewrap/config.json` is empty. Writing that file by hand is what makes every later
+command non-interactive. **`init` and `build` remain interactive regardless** — they ask for the
+application id, the colours and the keystore passwords — so those two are the developer's to run, and
+the passwords must not reach a shell history either way.
+
+**`~/.bubblewrap/config.json` must use forward slashes.** It holds `jdkPath` and `androidSdkPath` as
+plain JSON strings, so a pasted Windows path fails with
+`Bad escaped character in JSON at position 15` — position 15 being the `\U` of `C:\Users`. Forward
+slashes work on Windows for both Java and Node, and avoid the double-escaping entirely.
+
+**The current command-line tools have retired `sdkmanager`, and the shim does not forward package
+names.** `commandlinetools-win-16111833` (cmdline-tools 23.0, the newest in Google's
+`repository2-3.xml`) replaces `sdkmanager` with a new `android` CLI. The old binary still exists and
+still runs, but `sdkmanager "build-tools;36.1.0"` answers `Package build-tools not found. Package
+36.1.0 not found.` — it splits the argument on the semicolon. It also prints
+`Warning: The --licenses option is no longer needed`, so the familiar `yes | sdkmanager --licenses`
+does nothing. The invocation that works is
+`android.exe sdk --sdk=C:/Android/sdk install "build-tools;36.1.0" "platform-tools" "platforms;android-36"`,
+and licences are accepted as part of it.
+
+**Bubblewrap then rejects a correctly installed SDK.** `AndroidSdkTools.validatePath` requires the
+SDK root to contain a `tools/` **or** a `bin/` directory — it is looking for the pre-2020 layout where
+the command-line tools unzipped flat into the SDK root. A modern SDK puts them at
+`cmdline-tools/latest/bin`, so `bubblewrap doctor` reports
+`The androidSdkPath isn't correct ... such that the folder of the path contains the folder "build"`,
+which names neither the directory it actually checked nor the one it wants. Two NTFS junctions fix it
+without a second copy of the 168 MB `lib/`:
+
+```
+New-Item -ItemType Junction -Path "C:\Android\sdk\bin" -Target "C:\Android\sdk\cmdline-tools\latest\bin"
+New-Item -ItemType Junction -Path "C:\Android\sdk\lib" -Target "C:\Android\sdk\cmdline-tools\latest\lib"
+```
+
+After that, `bubblewrap doctor` reports `Your jdkpath and androidSdkPath are valid.`
+
+**The build-tools version is not a free choice.** Bubblewrap 1.25.0 hard-codes
+`BUILD_TOOLS_VERSION = '36.1.0'` and calls `zipalign` and `apksigner` from
+`<sdk>/build-tools/36.1.0/` by that literal path, so a newer or older revision installed instead is
+simply not found. Read the constant out of
+`@bubblewrap/cli/node_modules/@bubblewrap/core/dist/lib/androidSdk/AndroidSdkTools.js` when the CLI
+version changes rather than guessing from the SDK manager's "latest".
+
+Installed and verified this session: `@bubblewrap/cli` 1.25.0 (global), Microsoft OpenJDK 17.0.10
+(`17.0.10+7-LTS`), Android build-tools 36.1.0, platform-tools 37.0.1, platforms;android-36,
+cmdline-tools 23.0. `platform-tools` is not optional despite Bubblewrap never calling it: `adb` is
+the only instrument step 12 has for
+`adb shell pm get-app-links aleixrabassa.playlistjitster`, which is how the Android verifier's own
+verdict is read rather than inferred from a missing URL bar.
+
+## 2026-09-19 — `bubblewrap update` regenerates the whole Gradle project, so `android/` does not need tracking — with one trap
+
+Decision 5 of [`plan.google-play-shell.md`](./plans/plan.google-play-shell.md) left it open whether
+the generated Gradle project must be committed beside `android/twa-manifest.json`, and made the
+answer depend on whether `bubblewrap update` can rebuild it from that file alone. **It can.** Read
+out of the installed CLI (1.25.0) rather than run, because `android/` does not exist yet:
+
+`update.js` calls `updateProject()` in `cmds/shared.js`, which loads `TwaManifest.fromFile()` and
+then does exactly two things in order — `twaGenerator.removeTwaProject(targetDirectory)` and
+`generateTwaProject(...)`. `removeTwaProject` deletes `DELETE_PROJECT_FILE_LIST`, which is
+`settings.gradle`, `gradle.properties`, `build.gradle`, `gradlew`, `gradlew.bat`, `store_icon.png`,
+`gradle/` and `app/` — the entire generated project. Everything put back comes from templates shipped
+inside the CLI package, from `twa-manifest.json`, and from the icons it **re-fetches over the
+network** from `iconUrl` (which it validates, and throws if absent).
+
+**So `android/twa-manifest.json` alone is the release record, and the generated project can be
+ignored** — which is what decision 5 hoped for and what `.gitignore`'s new block is already shaped
+for (`android/build/`, `android/app/build/`, `android/.gradle/`, never `android/` itself).
+
+**The trap is step 8.** That step says to read `targetSdkVersion` in the generated Gradle files and
+bump it if Bubblewrap's default is behind Play's current minimum. `app/build.gradle` is in
+`TEMPLATE_FILE_LIST`, so it is regenerated from the manifest on every `update` — **a hand-edit there
+is silently discarded the next time anybody runs one**, and the symptom arrives months later as a
+Play upload rejected for a target SDK that the repo appears to have fixed. Any such bump has to be
+expressed in `twa-manifest.json` (or in a newer Bubblewrap), never in the generated file.
+
+Two smaller consequences worth knowing before the first release. `update` re-fetches and re-validates
+the icon URLs, so it needs the origin reachable and is not a purely local operation. And
+`updateProject` writes a checksum file beside the manifest (`generateManifestChecksumFile`), which is
+how `bubblewrap build` notices a `twa-manifest.json` edited without a following `update` — so the two
+commands are a pair, and editing the manifest by hand without running `update` is a state the tooling
+will complain about rather than silently accept.
+
+## 2026-09-19 — `App.test.tsx`'s "should reset the end reason when a new game starts" is FLAKY, and it pre-dates this session
+
+Observed while running the commit gate for
+[`plan.google-play-shell.md`](./plans/plan.google-play-shell.md): the suite failed **twice in eight
+runs** on one test and passed the other six, with no code change between runs.
+
+```
+FAIL  src/App.test.tsx > App > should reset the end reason when a new game starts
+TestingLibraryElementError: Unable to find an element with the text: Deck finished
+```
+
+**It is not caused by that work.** `src/App.tsx` and `src/App.test.tsx` are untouched — `git status`
+lists neither — and the plan that was being executed changes no application code by design. The
+printed DOM shows why it is a race rather than a wrong assertion: the query runs while the **game
+screen** is still mounted (the dump has the `session-audio` element and the HUD with its card count),
+so the test is asserting on the end screen before the deck has finished advancing to it. It is a
+missing wait, not a broken reducer, which is also why it passes most of the time.
+
+**Two things to know before chasing a red suite here.** First, this one is **timing-dependent, so a
+green run is not evidence a change is safe** and a single red run is not evidence a change broke
+something — re-run before concluding anything. Second, a **loaded machine makes it much worse**: the
+first run of the session, taken while an Android SDK was unzipping and three agents were working,
+produced **15 `[vitest-pool-runner]: Timeout waiting for worker to respond` errors** alongside 572
+passing tests in 37 files, and reported far fewer files than the 52 a clean run collects. That is the
+pool giving up on workers under CPU pressure rather than anything about the tests, and it is worth
+recognising because the output looks alarming and names no test.
+
+Not fixed here — it is outside the google-play plans, which touch no application code. The fix is a
+`findBy*`/`waitFor` on the end-screen assertion rather than a `getBy*`.
+
+## 2026-09-19 — `pnpm format:check` fails on 31 files in this checkout, and it is a line-ending artifact rather than a regression
+
+Worth recording so the next session does not chase it. `pnpm format:check` (`prettier --check .`)
+reports **31 files** with "code style issues", almost all of them files nobody has edited —
+`src/App.tsx`, `src/game/copy.ts`, `vite.config.ts`, most of `src/components/`.
+
+**They are formatted correctly; they are just CRLF on disk.** `git config core.autocrlf` is `true`
+here, so git writes CRLF into the working tree while storing LF, and `.prettierrc`'s
+`"endOfLine": "lf"` makes Prettier flag every line. The proof is that the same content passes
+straight from the object store:
+
+```
+git show HEAD:src/App.tsx | pnpm exec prettier --check --stdin-filepath src/App.tsx   # clean
+```
+
+`src/App.tsx` is clean at `HEAD`, carries CR bytes in the working tree, and is not listed by
+`git status` — all three at once, which is only possible for a line-ending difference. Files written
+directly by a tool rather than checked out by git are LF and pass, which is why the failing set looks
+arbitrary.
+
+**One file genuinely is unformatted at `HEAD`:** `docs/plans/plan.multi-playlist-core.md` fails the
+same check when piped from the object store, so that one is real and predates this session.
+
+**This does not make the repo's gate red.** `AGENTS.md`'s "Before committing" is
+`pnpm typecheck && pnpm lint && pnpm test && pnpm build` — `format:check` is not one of the four, and
+those four pass. Check formatting per-file on the files you actually touched
+(`pnpm exec prettier --check <paths>`) rather than repo-wide, or the signal is drowned. Do **not**
+"fix" it by running `pnpm format` across the repo: that would rewrite 30 untouched files and commit a
+diff that is pure line endings.

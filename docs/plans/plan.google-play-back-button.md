@@ -1,5 +1,5 @@
 <!-- Plans for google-play (in order):
-  1. plan.google-play-shell.md       — packaging the PWA as a Trusted Web Activity and getting it through Play to production. NOT STARTED
+  1. plan.google-play-shell.md       — packaging the PWA as a Trusted Web Activity and getting it through Play to production. STEPS 1-5 BUILT 2026-09-19; step 6 on needs a device and a Console
   2. plan.google-play-back-button.md — making Android's back gesture an in-app control instead of an app exit  ← this file. CODE BUILT 2026-08-12; device verification pending on plan 1
 -->
 

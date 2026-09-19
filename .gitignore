@@ -31,3 +31,26 @@ pnpm-debug.log*
 Thumbs.db
 
 .vercel
+
+# Android / Trusted Web Activity packaging (plan.google-play-shell.md, step 7).
+#
+# APPENDED BELOW THE `.env` FAMILY ON PURPOSE, AND IT INTRODUCES NO NEW `.env*`
+# PATTERN. The negation above is last in its family because later patterns win; a
+# block added here that re-broadened `.env*` would silently re-ignore `.env.example`,
+# which is exactly what `vercel link` did on 2026-08-04. Keep new rules unrelated to
+# that family, as these are.
+#
+# The SIGNING KEYSTORE IS NEVER TRACKED. Committing it publishes the upload key, and
+# an upload key in a public history is one anyone can build a release with. Losing it
+# is recoverable through Play Console support (Google holds the app signing key under
+# Play App Signing); leaking it is not.
+*.keystore
+*.jks
+
+# Gradle build output and the machine-local SDK path. `android/twa-manifest.json` is
+# the one file in that tree that MUST stay tracked -- it is what makes a release
+# reproducible -- so nothing here may widen to `android/`.
+android/build/
+android/app/build/
+android/.gradle/
+local.properties

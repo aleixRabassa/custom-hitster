@@ -94,6 +94,72 @@ describe('the web app manifest', () => {
     }
   });
 
+  it('should declare the fields Bubblewrap and the store read', () => {
+    // These four are not installability fields -- a PWA installs without any of them -- so the
+    // failure they guard against is a PACKAGING one, which happens on somebody's machine weeks
+    // later and reports nothing back here. `bubblewrap init` prompts for a language and a
+    // direction, and Play seeds the default listing language from the manifest; a missing value
+    // means whoever runs the tool answers from memory, and a wrong answer is a listing in the
+    // wrong language rather than an error.
+    expect(manifest.id).toBe('/');
+    expect(manifest.lang).toBe('en');
+    expect(manifest.dir).toBe('ltr');
+
+    // `games` first and `music` with it: the app is a game whose material is music. The values are
+    // asserted rather than just the field's presence, because an unregistered category string is
+    // ignored silently and reads exactly like a declared one from in here.
+    expect(manifest.categories).toContain('games');
+    expect(manifest.categories).toContain('music');
+  });
+
+  it('should keep id equal to start_url', () => {
+    // ===================================================================
+    //  THE STORE-IDENTITY INVARIANT, AND NOTHING ELSE IN THE TOOLCHAIN
+    //  WOULD REPORT ITS VIOLATION.
+    //
+    //  `id` is what an app store and a browser use to decide whether an
+    //  install is an UPDATE to something already there or a new thing. The
+    //  spec defaults it to `start_url`, which is why it was implicit here
+    //  for so long -- and why a future edit to `start_url` (a deep link, a
+    //  tracking tail on the listing's URL) would have moved it silently.
+    //
+    //  A moved `id` does not fail a build, fail an install, or warn: the
+    //  next Play release installs a SECOND app beside the first, and the
+    //  installed PWA gets a second home-screen entry. So the equality is
+    //  asserted here, where a diff can see it.
+    //
+    //  Both sides are also pinned to `/` so the test still fails if the two
+    //  drift together to something that is not the root -- an equal pair
+    //  pointing at a deep link is a different bug, not a passing one.
+    // ===================================================================
+    expect(manifest.id).toBe(manifest.start_url);
+    expect(manifest.start_url).toBe('/');
+  });
+
+  it('should not declare an orientation', () => {
+    // ===================================================================
+    //  AN ASSERTION ABOUT AN ABSENCE, WHICH IS THE ONLY WAY THIS DECISION
+    //  SURVIVES CONTACT WITH A PACKAGING TOOL.
+    //
+    //  No `orientation` is deliberate: `--card-height`'s clamp exists so a
+    //  short wide viewport gets a SMALLER card rather than an overflowing
+    //  one, which makes landscape a supported layout, and locking rotation
+    //  would override a player who turned their phone on purpose.
+    //
+    //  The pressure that undoes it comes from outside this repo:
+    //  `bubblewrap init` asks for an orientation interactively, and the
+    //  obvious way to stop a tool asking is to answer it in the manifest.
+    //  Adding it breaks nothing visible on a phone held upright, so nobody
+    //  would find out.
+    //
+    //  `in` rather than `toBeUndefined()`, because `orientation: undefined`
+    //  passes the second and is exactly what a half-applied edit leaves
+    //  behind -- and it is a key a JSON serialiser drops today and a future
+    //  plugin version might not.
+    // ===================================================================
+    expect('orientation' in manifest).toBe(false);
+  });
+
   it('should point theme_color and background_color at the page colour', () => {
     expect(manifest.theme_color).toBe(PAGE_COLOR);
     // The same value, so a launcher's splash screen does not flash a different shade

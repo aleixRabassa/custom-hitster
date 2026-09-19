@@ -1021,6 +1021,86 @@ icon to the favicon slot.**
 `/sw.js`, `/manifest.webmanifest`, `/registerSW.js` and the icons all serve as files. That was checked
 against the actual pattern rather than assumed.
 
+### The Android store shell (Google Play TWA) — repo side built 2026-09-19, shell not generated
+
+**The store build is the deployed site, not a copy of it.** A Trusted Web Activity is an Android
+activity that renders one origin full-screen with no browser chrome — it ships no HTML, no
+JavaScript and no `dist/`, only the binding to a URL. So a Vercel redeploy updates every install at
+once, and the store release adds a **distribution channel** rather than a second build to keep in
+step: there is no version skew between "the app" and "the website", because there is only one of
+them. Everything below exists to make that binding verifiable. None of it changes what the app does,
+and a store release that starts editing `src/`, `api/` or `shared/` has gone wrong by definition.
+
+```
+public/.well-known/assetlinks.json  The Digital Asset Links statement. Its fingerprint
+                                    list is EMPTY today, on purpose
+public/privacy.html                 Self-contained static page, mandatory for the listing.
+                                    Outside the src/game/copy.ts rule, as index.html is
+src/pwa/assetlinks.test.ts          A `node` test over the statement's shape, the privacy
+                                    page's existence, and vercel.json's rewrite pattern
+src/pwa/manifest.ts                 `id`, `lang`, `dir` and `categories` added for the
+                                    packager; `orientation` still absent, now pinned
+android/                            NOT PRESENT. The generated Gradle project and its
+                                    twa-manifest.json land here at the plan's step 6
+```
+
+**Digital Asset Links makes the origin a second consumer of the production alias.** The origin is
+`https://playlistjitster.vercel.app` — decided and measured 2026-09-19, at which point the older
+`custom-hitster.vercel.app` was found to `307`-redirect to it. That redirect is not a detail: a TWA
+whose origin redirects is treated as having left the verified origin, which is a URL bar. The
+binding is permanent from the moment the shell is generated, which is why it must be an **alias and
+never a per-deployment URL** — deployment URLs change on every push, so a shell bound to one is
+broken by the next commit, with no error a player could interpret.
+
+**`assetlinks.json` is fetched by the Android system verifier, not by the webview**, and two things
+that read as oversights follow from that. It is **deliberately absent from the precache**:
+`globPatterns` lists no `json`, measured this session — `dist/sw.js` carries 20 entries and none of
+them is the statement. A copy in one browser's cache is not what the verifier reads, so precaching
+it would cost bytes and prove nothing. And it depends on `vercel.json`'s rewrite keeping the `[^.]*`
+dot exclusion that §6 spells out: a rewrite widened to `.*` would answer the verifier with
+`index.html` and a **200**, which is indistinguishable from success to everything except the
+verifier. `src/pwa/assetlinks.test.ts` pins the pattern as a string, because `vercel.json` cannot
+carry a comment saying so.
+
+**The whole arrangement is shaped around a single failure mode.** A wrong or missing certificate
+fingerprint produces an app that installs, launches and plays perfectly — with a Chrome URL bar
+pinned across the top of every screen and no error message anywhere. That bar is the entire
+difference between a store app and a bookmark, and nothing announces it. The file therefore carries
+**two** fingerprints, the Play app-signing key and the upload key: either alone is a _valid file_
+that verifies for half the installs and shows the bar on the other half — Google's app signing key
+covers what users install from the store, the upload key covers what the developer sideloads. As of
+today the list is **empty on purpose**, and that is deliberate sequencing rather than an unfinished
+edit: the plan deploys the placeholder and proves its path reachable _before_ any keystore exists,
+so "is the file reachable and un-rewritten" is debugged separately from "are the fingerprints
+right" — two questions that otherwise present as the same vague symptom. The list is filled at the
+plan's step 12, which is also when the fingerprint-count test and the package-id cross-pin against
+`android/twa-manifest.json` are written.
+
+**Bubblewrap is the toolchain, and the two rejections are the architecturally interesting part.**
+Bubblewrap reads the deployed `manifest.webmanifest` over the network and generates the Gradle
+project, so the web deployment stays the single source of truth. **Capacitor was rejected on
+architecture**: it bundles `dist/` into the app, which breaks the property this subsection opens
+with — a redeploy would stop updating installs, and every change would need a new store release —
+and a webview serving its HTML from its own origin would force CORS headers onto `api/playlist.ts`
+and `api/year.ts`, neither of which sets any today. Real work on both handlers, for nothing the
+store asks for. **PWABuilder was rejected for a different reason**: its packaging step lives outside
+version control, so `android/twa-manifest.json` could not be the committed record of what a release
+was built from.
+
+**What is built and what is not, as of 2026-09-19.** Built: the four manifest fields, the privacy
+page, the placeholder asset-links file, their tests, and the toolchain — Bubblewrap **1.25.0**, JDK
+**17.0.10** (installed but _not_ on the `PATH`; Bubblewrap keeps its location in
+`~/.bubblewrap/config.json`) and Android build-tools **36.1.0**. Not built: **`android/` does not
+exist**, no shell has been generated, no keystore exists, nothing has been installed on a device,
+and there is no Play Console app. So every sentence above about verification, the URL bar and the
+store describes a plan rather than a measurement —
+[`plans/plan.google-play-shell.md`](./plans/plan.google-play-shell.md) holds the steps, and the
+device checks are rows in [`development.md`](./development.md) §5.
+
+**The TWA shares `localStorage` with Chrome** — same profile, same origin, so the two storage keys
+are one store seen from two launchers; written up as a documented property in
+[`development.md`](./development.md) §8.
+
 ## 4. External dependencies
 
 | Service                                                 | Access                          | Auth                 | Notes                                                                                                                                                                                                                              |

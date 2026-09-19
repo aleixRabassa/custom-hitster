@@ -8,32 +8,32 @@ Several decisions in this repo look like mistakes and are not. If something seem
 
 ## Documentation Index
 
-| File                                                                                         | What it covers                                                                                              |
-| -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| [`docs/architecture.md`](./docs/architecture.md)                                             | Components, import boundaries between `src`/`api`/`shared`, data flow, external services, planned phases    |
-| [`docs/api.md`](./docs/api.md)                                                               | The `api/` surface, handler conventions, environment variable reference                                     |
-| [`docs/toolchain.md`](./docs/toolchain.md)                                                   | The two TypeScript installs, the four tsconfigs, ESLint/Prettier, pnpm and the Node pin, Tailwind, Vitest   |
-| [`docs/development.md`](./docs/development.md)                                               | Setup, scripts, running functions locally, tests, deploy, known limitations                                 |
-| [`docs/agent_findings.md`](./docs/agent_findings.md)                                         | Running log of discoveries and gotchas found while working here                                             |
-| [`docs/plans/plan.md`](./docs/plans/plan.md)                                                 | **Authoritative phase plan** — what belongs in which phase, plus all Phase 0 research findings              |
-| [`docs/plans/plan.phase-1.md`](./docs/plans/plan.phase-1.md)                                 | Phase 1 detail, decisions, and execution notes                                                              |
-| [`docs/plans/plan.phase-2-playlist.md`](./docs/plans/plan.phase-2-playlist.md)               | Phase 2, first half — URL parsing, the embed adapter, `/api/playlist`                                       |
-| [`docs/plans/plan.phase-2-year.md`](./docs/plans/plan.phase-2-year.md)                       | Phase 2, second half — the cache, the MusicBrainz adapter, year resolution, `/api/year`                     |
-| [`docs/plans/plan.phase-3.md`](./docs/plans/plan.phase-3.md)                                 | Phase 3 — the reducer, seeded shuffle, persistence, and the progressive-loading resolver                    |
-| [`docs/plans/plan.phase-4-6-card-ui.md`](./docs/plans/plan.phase-4-6-card-ui.md)             | Phase 4 — the DOM test environment, the flip card, the QR code, and card audio                              |
-| [`docs/plans/plan.phase-4-6-gestures.md`](./docs/plans/plan.phase-4-6-gestures.md)           | Phase 5 — swipe, tap-versus-drag, the stacked deck, keyboard controls                                       |
-| [`docs/plans/plan.phase-4-6-screens.md`](./docs/plans/plan.phase-4-6-screens.md)             | Phase 6 — landing, the playlist client, notices, the HUD, the end screen, the session container             |
-| [`docs/plans/plan.phase-7-look.md`](./docs/plans/plan.phase-7-look.md)                       | Phase 7, first half — the `@theme` token layer, the fluid card, reduced motion, focus and ARIA              |
-| [`docs/plans/plan.phase-7-robustness.md`](./docs/plans/plan.phase-7-robustness.md)           | Phase 7, second half — failure codes, the error boundary, the chunk splits, the meta tags, Lighthouse       |
-| [`docs/plans/plan.phase-8-look-and-shell.md`](./docs/plans/plan.phase-8-look-and-shell.md)   | Phase 8, plan 1 — neon-ring card design, contrast re-audit, PWA, icon set. **Built**                        |
-| [`docs/plans/plan.phase-8-features.md`](./docs/plans/plan.phase-8-features.md)               | Phase 8, plan 2 — the share link, the saved-playlist library, the PDF export, the audio reversal. **Built** |
-| [`docs/plans/plan.phase-8-added-by.md`](./docs/plans/plan.phase-8-added-by.md)               | Phase 8, plan 3 — the "Added by" decision. Writes no code; resolved as won't-build                          |
-| [`docs/plans/plan.multi-playlist-core.md`](./docs/plans/plan.multi-playlist-core.md)         | Multi-playlist, plan 1 — the merge module, the widened state, both v2 storage formats, the link. **Built**  |
-| [`docs/plans/plan.multi-playlist-ui.md`](./docs/plans/plan.multi-playlist-ui.md)             | Multi-playlist, plan 2 — the landing rows, the fan-out hook, the container wiring, the labels. **Built**    |
-| [`docs/plans/plan.year-accuracy.md`](./docs/plans/plan.year-accuracy.md)                     | The tier ladder — Singles/EPs in the top rung, the graded middle rung, the re-captured fixtures. **Built**  |
-| [`docs/plans/plan.suggestion-multi-select.md`](./docs/plans/plan.suggestion-multi-select.md) | Hold a suggested playlist to select it — the pure selection module, the press hook. **Built**               |
-| [`docs/plans/plan.google-play-shell.md`](./docs/plans/plan.google-play-shell.md)             | Google Play, plan 1 — the Bubblewrap TWA shell, asset links, the listing, the store tracks. **Not started** |
-| [`docs/plans/plan.google-play-back-button.md`](./docs/plans/plan.google-play-back-button.md) | Google Play, plan 2 — Android back as an in-app control. **Built 2026-08-12**; device rows wait on plan 1   |
+| File                                                                                         | What it covers                                                                                                                                                        |
+| -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`docs/architecture.md`](./docs/architecture.md)                                             | Components, import boundaries between `src`/`api`/`shared`, data flow, external services, planned phases                                                              |
+| [`docs/api.md`](./docs/api.md)                                                               | The `api/` surface, handler conventions, environment variable reference                                                                                               |
+| [`docs/toolchain.md`](./docs/toolchain.md)                                                   | The two TypeScript installs, the four tsconfigs, ESLint/Prettier, pnpm and the Node pin, Tailwind, Vitest                                                             |
+| [`docs/development.md`](./docs/development.md)                                               | Setup, scripts, running functions locally, tests, deploy, known limitations                                                                                           |
+| [`docs/agent_findings.md`](./docs/agent_findings.md)                                         | Running log of discoveries and gotchas found while working here                                                                                                       |
+| [`docs/plans/plan.md`](./docs/plans/plan.md)                                                 | **Authoritative phase plan** — what belongs in which phase, plus all Phase 0 research findings                                                                        |
+| [`docs/plans/plan.phase-1.md`](./docs/plans/plan.phase-1.md)                                 | Phase 1 detail, decisions, and execution notes                                                                                                                        |
+| [`docs/plans/plan.phase-2-playlist.md`](./docs/plans/plan.phase-2-playlist.md)               | Phase 2, first half — URL parsing, the embed adapter, `/api/playlist`                                                                                                 |
+| [`docs/plans/plan.phase-2-year.md`](./docs/plans/plan.phase-2-year.md)                       | Phase 2, second half — the cache, the MusicBrainz adapter, year resolution, `/api/year`                                                                               |
+| [`docs/plans/plan.phase-3.md`](./docs/plans/plan.phase-3.md)                                 | Phase 3 — the reducer, seeded shuffle, persistence, and the progressive-loading resolver                                                                              |
+| [`docs/plans/plan.phase-4-6-card-ui.md`](./docs/plans/plan.phase-4-6-card-ui.md)             | Phase 4 — the DOM test environment, the flip card, the QR code, and card audio                                                                                        |
+| [`docs/plans/plan.phase-4-6-gestures.md`](./docs/plans/plan.phase-4-6-gestures.md)           | Phase 5 — swipe, tap-versus-drag, the stacked deck, keyboard controls                                                                                                 |
+| [`docs/plans/plan.phase-4-6-screens.md`](./docs/plans/plan.phase-4-6-screens.md)             | Phase 6 — landing, the playlist client, notices, the HUD, the end screen, the session container                                                                       |
+| [`docs/plans/plan.phase-7-look.md`](./docs/plans/plan.phase-7-look.md)                       | Phase 7, first half — the `@theme` token layer, the fluid card, reduced motion, focus and ARIA                                                                        |
+| [`docs/plans/plan.phase-7-robustness.md`](./docs/plans/plan.phase-7-robustness.md)           | Phase 7, second half — failure codes, the error boundary, the chunk splits, the meta tags, Lighthouse                                                                 |
+| [`docs/plans/plan.phase-8-look-and-shell.md`](./docs/plans/plan.phase-8-look-and-shell.md)   | Phase 8, plan 1 — neon-ring card design, contrast re-audit, PWA, icon set. **Built**                                                                                  |
+| [`docs/plans/plan.phase-8-features.md`](./docs/plans/plan.phase-8-features.md)               | Phase 8, plan 2 — the share link, the saved-playlist library, the PDF export, the audio reversal. **Built**                                                           |
+| [`docs/plans/plan.phase-8-added-by.md`](./docs/plans/plan.phase-8-added-by.md)               | Phase 8, plan 3 — the "Added by" decision. Writes no code; resolved as won't-build                                                                                    |
+| [`docs/plans/plan.multi-playlist-core.md`](./docs/plans/plan.multi-playlist-core.md)         | Multi-playlist, plan 1 — the merge module, the widened state, both v2 storage formats, the link. **Built**                                                            |
+| [`docs/plans/plan.multi-playlist-ui.md`](./docs/plans/plan.multi-playlist-ui.md)             | Multi-playlist, plan 2 — the landing rows, the fan-out hook, the container wiring, the labels. **Built**                                                              |
+| [`docs/plans/plan.year-accuracy.md`](./docs/plans/plan.year-accuracy.md)                     | The tier ladder — Singles/EPs in the top rung, the graded middle rung, the re-captured fixtures. **Built**                                                            |
+| [`docs/plans/plan.suggestion-multi-select.md`](./docs/plans/plan.suggestion-multi-select.md) | Hold a suggested playlist to select it — the pure selection module, the press hook. **Built**                                                                         |
+| [`docs/plans/plan.google-play-shell.md`](./docs/plans/plan.google-play-shell.md)             | Google Play, plan 1 — the Bubblewrap TWA shell, asset links, the listing, the store tracks. **Steps 1–5 built 2026-09-19**; `android/` and the store work outstanding |
+| [`docs/plans/plan.google-play-back-button.md`](./docs/plans/plan.google-play-back-button.md) | Google Play, plan 2 — Android back as an in-app control. **Built 2026-08-12**; device rows wait on plan 1                                                             |
 
 **Do not build ahead of the current phase.** The plan defers things deliberately. Current phase: **8, CODE COMPLETE.** Phases 1–7 are complete, all three Phase 8 plans are resolved, and the app is playable end to end, has a design surface, is installable, and fails legibly. `src/App.tsx` is the **real container** and the only caller of `useGameSession()`. Plan 2 built the shareable deck URL, the saved-playlist library, the printable PDF export and the audio reversal; plan 1 built the neon ring, the contrast re-audit, the PWA and the icon set; plan 3 resolved "Added by" as won't-build with no code. Note that plan 2 depended on plan 1 only **softly** and did not wait — so the PDF's print palette is deliberately its own and did not change when the screen was redesigned. **Two developer requests landed on 2026-09-18 outside any plan**: a welcome screen in front of the picker (with a printable year-cards PDF), and a left swipe that steps BACK a card. Both blocks are below.
 
@@ -50,10 +50,11 @@ to know. **A value that varies is a FUNCTION, never a template a caller assemble
 component will render, and `App.test.tsx`'s `cardsLeftInHud()` reads the count BACK through it
 rather than with a regex over the sentence. **`messages.ts` deliberately stays where it is**: it is
 already one keyed map, typed `Record<StartFailureCode, string>` so a new code fails the typecheck,
-and that exhaustiveness is what folding it into a loose object would cost. **`index.html` and
-`src/pwa/manifest.ts` are outside the rule** — the first is shipped bytes on the critical path, the
-second is read by `vite.config.ts` at BUILD time, so neither can import a runtime module; `COPY.app.name`
-is the value to copy from by hand. And **six assertions were DELETED rather than converted**, all of
+and that exhaustiveness is what folding it into a loose object would cost. **`index.html`,
+`src/pwa/manifest.ts` and `public/privacy.html` are outside the rule** — the first is shipped bytes on
+the critical path, the second is read by `vite.config.ts` at BUILD time, and the third is served straight
+out of `public/` with no build step at all, so none of the three can import a runtime module;
+`COPY.app.name` is the value to copy from by hand in each. And **six assertions were DELETED rather than converted**, all of
 them pure-wording checks with no constant to point at: the `/same deck/i` and `/new playlist/i` and
 `Restart` absences, the `'our side'` phrase check, and `messages.test.ts`'s seven `toContain('private')`
 -style substring assertions — replaced by "every code has a sentence of its own", which is the
@@ -293,6 +294,82 @@ the phantom pop that the counter exists to swallow. The browser-side change is *
 suppressed**: desktop and mobile-Chrome back now open the confirmation too, and there is deliberately
 no user-agent sniff. Full reasoning in [`docs/architecture.md`](./docs/architecture.md) §3; **every
 device check is still outstanding** and cannot be run in Chrome.
+
+**THE STORE SHELL IS A FOURTH TOP-LEVEL TREE, AND AS OF 2026-09-19 THE TREE IS NOT THERE YET — grepping
+for `android/` and finding nothing is the CORRECT reading of this repo, not a stale doc.**
+[`docs/plans/plan.google-play-shell.md`](./docs/plans/plan.google-play-shell.md) packages the deployed
+PWA as a Trusted Web Activity, and its steps 1–5 landed on 2026-09-19 while steps 6–18 did not. **What
+exists today**: `public/.well-known/assetlinks.json`, `public/privacy.html`, `src/pwa/assetlinks.test.ts`,
+four new manifest fields (`id`, `lang`, `dir`, `categories`) and an Android block in `.gitignore`. **What
+does not**: `android/`, any keystore, any certificate fingerprint, any Play Console app. The rules below
+are written as rules rather than as plans because each governs an edit that is cheap to make today and
+expensive to discover later — **every one of them fails on a DEVICE, after an install, with a green
+build**. Six things.
+
+**`android/` is subject to none of the `src`/`api`/`shared` import rules**, because it is not TypeScript:
+it is a Gradle project Bubblewrap generates from `android/twa-manifest.json`, and **that one file must
+stay tracked** — it is what makes a release reproducible, and it is the second home of the application
+id. **The rest of the generated project need not be tracked** — answered 2026-09-19 by reading the
+installed CLI: `bubblewrap update` DELETES `settings.gradle`, `build.gradle`, `gradlew`, `gradle/` and
+`app/` outright and rebuilds them from the config plus re-fetched icons, so committing them would only
+commit output. Their ignore entries land at step 6, when the files first exist; today `.gitignore`
+names `android/build/`, `android/app/build/` and `android/.gradle/` **one at a time and never widens to
+`android/`** — the widening is the edit that silently untracks the config. **The trap that follows
+from the same reading:** `app/build.gradle` is regenerated too, so step 8's `targetSdkVersion` bump
+must be expressed in `twa-manifest.json` — hand-edit it and the next `update` discards it, and the
+symptom is a Play upload rejected months later. See `docs/agent_findings.md` (2026-09-19).
+
+**`@bubblewrap/cli` is installed globally with `npm i -g`, and must NEVER enter `devDependencies`.** It is
+an explicit, recorded exception to the pnpm-only rule rather than a violation of it: a project dependency
+would pull an Android toolchain into `pnpm-lock.yaml` for a tool **not one of the four pre-commit checks
+needs**; the install goes through `npm i -g`, so it never touches `pnpm-lock.yaml` at all. `pnpm add -D
+@bubblewrap/cli` is the edit to refuse. The installed versions belong beside the release process in
+[`docs/development.md`](./docs/development.md), because the next release runs against whatever the
+machine has then.
+
+**The keystore is never committed** — `*.keystore` and `*.jks` are ignored, and no keystore exists yet
+(step 7 mints it). **State the recovery position accurately, because the folklore overstates it**: with
+Play App Signing, Google holds the app _signing_ key, so a lost **upload** key is a Play Console support
+round-trip rather than the end of the app's update path. **Leaking one is the unrecoverable direction** —
+an upload key in a public history is one anyone can build a release with, and no rotation un-publishes it.
+
+**The application id (`aleixrabassa.playlistjitster`), `manifest.id` and `start_url` are PERMANENT after
+the first publish**, and changing any of them installs a **SECOND APP** rather than an update — with no
+build error, no install failure and no warning anywhere. That is exactly why `id` is now written out in
+`src/pwa/manifest.ts` instead of left to default: the spec defaults `id` to `start_url`, so an edit to
+`start_url` (a deep link, a `?utm_source=` tail) would have moved the store identity as a **side
+effect**. It is pinned by **`should keep id equal to start_url`** in `src/pwa/manifest.test.ts`, and the
+package id by **`should target the android_app namespace and the committed package id`** in
+`src/pwa/assetlinks.test.ts` — half a pin until step 12 adds the cross-file half against
+`android/twa-manifest.json`, which is the only thing that can catch the two copies drifting apart.
+**`id` resolves against the ORIGIN**, so the origin sits inside the app's identity: the last rule below is
+the same fact seen from the other end — so moving to a custom domain later is a rebuilt shell and a new
+asset-links deployment for the TWA, a SECOND install identity for every browser PWA install, and never a
+redirect from the old origin: a TWA whose origin redirects has left the verified origin, which is a URL
+bar.
+
+**The TWA shares `localStorage` with the browser hosting it** — a Chrome TWA runs in Chrome's own
+profile, so `hitster:session:v1` and `hitster:library:v1` on the origin are **one store seen from two
+launchers**: a game started in the installed app resumes in the browser, and the reverse. **That is the
+persistence design doing its job, not a defect**, and it is what makes the back-press block's "a relaunch
+resumes" true at all. Namespacing the keys per launcher to "fix" it breaks that, and a renamed key is not
+read — see the rename block. Unverified on a device; it is step 9.
+
+**The origin `https://playlistjitster.vercel.app` is load-bearing and permanent**, and
+`public/.well-known/assetlinks.json` is fetched from it by the **Android system verifier**, not by the
+webview. Three consequences. It is deliberately **absent from the precache** — `globPatterns` lists no
+`json` — because a browser-local copy of a file the OS reads over HTTPS is useless as well as wrong.
+`vercel.json`'s one rewrite `source`, `/((?!api/|@)[^.]*)`, **must keep its `[^.]*` dot exclusion**:
+widen it to `.*` and the file comes back as `index.html` with a **200**, which the verifier reads as no
+statement at all and the installed app grows an address bar — **a URL bar on a green build**, the single
+failure this plan is shaped to prevent. `assetlinks.test.ts` pins that character class, and a string
+assertion is the honest ceiling there (re-implementing path-to-regexp in a test would be worse than no
+test). And **the fingerprint list is `[]` ON PURPOSE** until step 12, which fills it with **two**
+SHA-256 fingerprints — Play's app signing key _and_ the upload key. Do not read the emptiness as a bug
+and do not guess a value into it: an incomplete list is **a valid file that produces a URL bar**, and one
+fingerprint is the classic version of that mistake. Fuller reasoning in
+[`docs/architecture.md`](./docs/architecture.md) §3; the device checks are rows in
+[`docs/development.md`](./docs/development.md) §5, **all of them Pending**.
 
 **`playlist-library.ts` rebuilds an entry field by field on the WRITE as well as on the read, and that is a leak rule.** `SavedPlaylist` is a structural interface and TypeScript's excess-property check does not fire for a spread, so `savePlaylist(storage, { ...somethingLarger })` type-checked and wrote every extra field into a store the **landing screen** reads — a pre-start surface. Caught by the module's own leak test. **Validating only on read is not enough when the store itself is the leak surface.**
 
@@ -568,10 +645,10 @@ something `plan.md` had already resolved, so read these before "fixing" the code
 
 **Conventions**
 
-- **pnpm only.** Don't add `package-lock.json` or `yarn.lock`; keep `pnpm-lock.yaml` committed.
+- **pnpm only**, with exactly one recorded exception. Don't add `package-lock.json` or `yarn.lock`; keep `pnpm-lock.yaml` committed. The exception is `@bubblewrap/cli`, installed globally with `npm i -g` and never a project dependency — see the store-shell block above.
 - **`engines.node` is `24.x` and deliberately does not match local Node.** Don't "fix" it. The `Unsupported engine` install warning is expected.
 - **Prettier owns formatting.** No hand-formatting, no stylistic ESLint rules.
-- **The copy surface is `src/game/copy.ts`, exactly as the design surface is the `@theme static` block.** A component renders `COPY.*` and a test asserts against `COPY.*`; a user-facing literal in either is the thing to catch in review, for the same reason a stray `bg-neutral-900` is — copy is reworded by changing one value, and a literal is invisible to that. Templated strings are functions so pluralisation cannot drift. `messages.ts` keeps the error map (its `Record<StartFailureCode, string>` exhaustiveness is the point); `index.html` and `src/pwa/manifest.ts` are outside the rule and copy `COPY.app.name` by hand.
+- **The copy surface is `src/game/copy.ts`, exactly as the design surface is the `@theme static` block.** A component renders `COPY.*` and a test asserts against `COPY.*`; a user-facing literal in either is the thing to catch in review, for the same reason a stray `bg-neutral-900` is — copy is reworded by changing one value, and a literal is invisible to that. Templated strings are functions so pluralisation cannot drift. `messages.ts` keeps the error map (its `Record<StartFailureCode, string>` exhaustiveness is the point); `index.html`, `src/pwa/manifest.ts` and `public/privacy.html` are outside the rule — none can import a runtime module — and copy `COPY.app.name` by hand.
 - **Tailwind v4 is CSS-first** — no `tailwind.config.js`. **The design surface is the `@theme static` block in `src/index.css`**, which is where a v3 reader would look for that config file: every colour, dimension, duration and interaction minimum in the app is named there. **A new component consumes tokens rather than inventing literals** — a colour written as `bg-neutral-900` instead of `bg-surface` is the thing to catch in review, because Phase 8 redesigns by changing token values and a stray literal is invisible to that. `focus-ring` and `touch-target` are `@utility` composites in the same file; every interactive element gets `focus-visible:focus-ring`.
 - **An unknown Tailwind colour utility is a SILENT no-op, and all four checks pass either way.** `text-text-muted` against a theme defining `--color-fg-muted` emits **no rule at all** — no warning, no build error. It shipped once: the only text on the card's hidden face lost its colour and rendered near-black on a near-black card while typecheck, lint, test and build stayed green. When adding or renaming a token, grep the built CSS (`dist/assets/*.css`) for the utility, and prefer a class-name assertion in the component's test — `CardHiddenSide.test.tsx` has one.
 - **`@theme static`, not bare `@theme`.** A plain `@theme` tree-shakes any token no generated utility references, which silently kills the ones consumed only through `h-(--card-height)`-style arbitrary values, through an `@utility`, or from inside the `prefers-reduced-motion` block.

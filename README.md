@@ -98,6 +98,28 @@ matches the real one — and being told to reconnect is better than being quietl
 
 ---
 
+## Google Play
+
+**A Google Play release is planned, and the app is not on the store yet** — there is no listing and
+no install link, so this section deliberately has neither.
+
+The store build is a **Trusted Web Activity**: a thin Android shell that renders this same
+deployment full-screen with no browser chrome, verified by Digital Asset Links. It is not a copy of
+the app, it is the app — so **a redeploy updates every install**, with no new release to build,
+upload or wait for. The only things that live in the store build are the shell, the signing key and
+the listing.
+
+The release process — toolchain, build, upload and staged rollout — lives in
+[`docs/development.md`](./docs/development.md) §9, "The Android release (Google Play)"; the manual checks
+the shell introduces are in that file's §5, under "The Trusted Web Activity shell". The plan behind it,
+including every step still outstanding, is
+[`docs/plans/plan.google-play-shell.md`](./docs/plans/plan.google-play-shell.md), and the store
+listing copy is kept under [`docs/store/`](./docs/store/) rather than only in the Play Console.
+
+**The install line lands here when the listing does**, together with the store link.
+
+---
+
 ## Environment variables
 
 Full reference, including exactly how the app behaves when each is missing, in [`docs/api.md`](./docs/api.md) §"Environment variables".
