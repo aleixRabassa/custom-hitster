@@ -3837,3 +3837,76 @@ VariantLabels` (no function), so `variants` + `exit="exit"` is the typed route t
 Under concurrent edits to the game-screen chunk, `App.test.tsx` showed 1–2 timeouts (~1.1–1.3 s against
 the 1 s default) on 3 of 8 runs, each a different pre-existing test, never on a quiet tree. Re-run before
 trusting a red result from a tree that is changing under Vite's transform cache.
+
+## 2026-09-19 — Reviewing the two Google Play plans against the repo: one was finished but unticked, the other was never started and had gone stale in four places
+
+Neither [`plan.google-play-shell.md`](./plans/plan.google-play-shell.md) nor
+[`plan.google-play-back-button.md`](./plans/plan.google-play-back-button.md) had ever been added to
+`AGENTS.md`'s Documentation Index, which is how a built plan and an unstarted one came to be reviewed
+together five weeks after they were written. Both are corrected in place; what follows is what the
+review found, so the next reader of either does not re-derive it.
+
+**Plan 2 (the back button) was complete except for its device rows, and looked half-done.** Steps 1–4
+and every unit test were ticked on 2026-08-12, but all five Documentation Updates were still `[ ]`
+while every one of them had landed — the AGENTS.md block, the `architecture.md` §3 subsection, the
+seven `development.md` §5 rows, the findings entry above, both file headers. Ticked now, each with a
+pointer to where it landed. The plan also predates the welcome screen (2026-09-18): its
+"landing, preparing or end" lists gained "welcome", and it gained an open question the front door
+created — the picker's on-screen Back button returns to the welcome screen while Android's back
+gesture closes the app, so the two "back" affordances now disagree on that screen. Not built, and
+deliberately: it would be the app's second `pushState`.
+
+**Plan 1 (the shell) has not been started — no `android/`, no `.well-known/`, no `privacy.html`, no
+`docs/store/`, no JDK, no SDK, no Bubblewrap on this machine — and four of its statements were wrong
+or stale by the time anyone read it:**
+
+1. **"The PWA icons carry no wordmark" was false when written and is false now for a different
+   reason.** They read "PLAYLIST HITSTER" on 2026-08-11 (AGENTS.md records that nobody opened the
+   image) and "PLAYLIST JITSTER" since the 2026-08-12 artwork. The plan's conclusion — the rename
+   invalidated no artwork — happened to come true by regeneration, not by the reason it gave.
+2. **The trademark pass has one concrete player-visible hit the plan did not name**:
+   `SUGGESTED_PLAYLISTS[0].label === 'Hitster'` in `LandingScreen.tsx`, a button on the picker. It is
+   a rendering of the Spotify playlist's own title, but it is also what a listing screenshot shows.
+   Left in place and recorded as the plan's open question; renaming it is the developer's call.
+3. **Its sequencing note planned for plan 2 to land inside the fourteen-day closed test.** Plan 2
+   landed before plan 1 started, so the note is rewritten: plan 2's seven device rows run on plan 1's
+   step 9 (URL-bar) and step 12 (verified) installs, and the plan says so at both steps.
+4. **Its unit tests were sequenced to be red for eight steps.** "Should list two fingerprints" and
+   the `twa-manifest.json` cross-pin cannot pass between step 4 (placeholder file, empty list, no
+   `android/`) and step 12 (fingerprints known). Split into two batches.
+
+Three things the review added rather than corrected. The **two download paths** the shell has to
+prove — the welcome screen's static `<a download>` (a navigation the service worker must not answer
+with `index.html`; its denylist entry is unobservable under any dev server) and jsPDF's `doc.save()` —
+are step 9 rows. **A Chrome TWA shares `localStorage` with Chrome on the same origin**, so
+`hitster:session:v1` is one store seen from two launchers; a game started in the installed app
+resumes in the browser and vice versa. Documented as a property, not a defect, because a tester who
+does not know it will report a ghost game. And **Bubblewrap's default application id** reverses the
+origin's host, which for a `*.vercel.app` origin puts the app under `app.vercel.…` — a namespace
+the developer does not own, frozen into the one string that can never change. The plan now says
+developer-owned reverse-DNS; the value is still open.
+
+Later the same day the origin was decided: **`https://playlistjitster.vercel.app`**. Measured with
+`curl`: it answers `200` from Vercel and serves the manifest at its root, and the old
+`custom-hitster.vercel.app` — which this log recorded as the deployment origin on 2026-08-04 —
+now `307`-redirects to it. The TWA must therefore bind to the new host and never the old one: a
+TWA whose bound origin redirects is a URL bar. The developer's first application id,
+`playlist-jitster`, is not a valid one (no hyphens; at least two dot-separated segments); the
+decided value is **`aleixrabassa.playlistjitster`** — the developer's name as namespace, since no
+domain is owned. Both permanent strings are now in the plan's step 1 and step 6.
+
+Three adjacent staleness fixes made in passing, all in files the plans point at. `architecture.md`
+§6 quoted the SPA rewrite as `/((?!api/).*)`; the file has been `/((?!api/|@)[^.]*)` for some time,
+and the `[^.]*` is exactly what plan 1's steps 3 and 4 rely on to keep `/privacy.html` and
+`/.well-known/assetlinks.json` out of the shell. `plan.md`'s Post-Phase-8 entry still called the
+multi-playlist UI plan "not built" — it was built 2026-08-07, as AGENTS.md has said since 2026-08-12.
+And `development.md` §5's back-press table said every row needed the asset-link-VERIFIED build and
+repeated the superseded landing window; it now says which rows run on which of plan 1's two installs.
+One wording rule the review applied to itself: "rows 1–6 can run on the URL-bar build" rests on a
+Custom Tab having the same history stack as a verified TWA, which is expected and not yet observed,
+so every place that says it now says so.
+
+Measured for the plan rather than remembered: `@bubblewrap/cli` is at **1.25.0**, published
+2026-09-16 (`npm view`); `vite-plugin-pwa`'s `ManifestOptions` already types `id`, `lang`,
+`dir: 'ltr' | 'rtl'` and `categories: string[]`, so step 2 is a value change with no type work; and
+the Vercel CLI is not installed here, so the production alias is confirmed in the dashboard.

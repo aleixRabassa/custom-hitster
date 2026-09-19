@@ -1,14 +1,14 @@
 <!-- Plans for google-play (in order):
-  1. plan.google-play-shell.md       — packaging the PWA as a Trusted Web Activity and getting it through Play to production
-  2. plan.google-play-back-button.md — making Android's back gesture an in-app control instead of an app exit  ← this file
+  1. plan.google-play-shell.md       — packaging the PWA as a Trusted Web Activity and getting it through Play to production. NOT STARTED
+  2. plan.google-play-back-button.md — making Android's back gesture an in-app control instead of an app exit  ← this file. CODE BUILT 2026-08-12; device verification pending on plan 1
 -->
 
 # Plan: google-play — Android back button as an in-app control
 
 > **Task:** `google-play`
-> **Date:** 2026-08-11
+> **Date:** 2026-08-11 · **Code landed:** 2026-08-12 · **Reviewed against the repo:** 2026-09-19
 > **Author:** Aleix Rabassa
-> **Depends on:** [plan.google-play-shell.md](plan.google-play-shell.md) — **for verification only.** The code and its tests are independently implementable; the behaviour cannot be observed without an installed TWA, because a browser has its own back affordance and its own history stack.
+> **Depends on:** [plan.google-play-shell.md](plan.google-play-shell.md) — **for verification only, and that is now the ONLY thing left.** Steps 1–4 and every unit test are built and in `main` (commit `1441a6c`); every Documentation Update below has landed. What remains is step 5, which cannot be observed without an installed TWA, because a browser has its own back affordance and its own history stack.
 
 ---
 
@@ -21,14 +21,20 @@ Mid-game that means a reflexive edge swipe ends the game, bypassing `ExitConfirm
 and worse, it bypasses it _invisibly_, because the session survives in `localStorage` and a relaunch
 resumes, so the player experiences it as the app randomly quitting rather than as a lost game.
 
-The fix is to give the game screen one history entry to consume, and to interpret a back press as
-the in-app action the player almost certainly meant: close the open dialog if one is open, otherwise
-request an exit through the same confirmation the Exit button already goes through.
+The fix gives the game screen one history entry to consume, and interprets a back press as the
+in-app action the player almost certainly meant: close the open dialog if one is open, otherwise
+request an exit through the same confirmation the Exit button already goes through. **This is built**
+— `src/game/back-navigation.ts`, `src/hooks/useBackNavigation.ts`, one call in `GameScreen`, and
+the four decisions recorded below that went beyond the plan (the re-pushed entry,
+`pendingCleanupTraversals`, the position-not-length assertion, the call-order pin).
 
-Two things this deliberately does **not** do. It does not intercept back on the landing, preparing or
-end screens — there, closing the app is the correct behaviour and Android should be left alone. And
-it does not make back a silent exit: back becomes a _request_, exactly like the Exit button, so the
-irreversible act still needs a confirmation.
+Two things this deliberately does **not** do. It does not intercept back on the welcome, landing,
+preparing or end screens — there, closing the app is the correct behaviour and Android should be
+left alone. (The welcome screen did not exist when this plan was written; it is the front door since
+2026-09-18 and is covered by the same mounting-is-scoping argument, because only `GameScreen` calls
+the hook. See the new open question about the picker's own Back button.) And it does not make back a
+silent exit: back becomes a _request_, exactly like the Exit button, so the irreversible act still
+needs a confirmation.
 
 ---
 
@@ -47,8 +53,10 @@ irreversible act still needs a confirmation.
 | --------------- | ----------- |
 | (no downstream) | —           |
 
-**Recommended landing window:** inside plan 1's fourteen-day closed test, so the testers already
-recruited exercise the fix and the calendar time is spent once rather than twice.
+**Landing window — superseded.** The plan recommended landing this inside plan 1's fourteen-day
+closed test. In the event the code landed on 2026-08-12, before plan 1 started, so there is nothing
+to time: plan 1's first local install (its step 9) and its verified install (its step 12) are where
+step 5 below runs, and plan 1 says so at both steps.
 
 ---
 
@@ -162,13 +170,21 @@ rather than by an exclusion list somebody has to remember to update.
       than a side effect. _Accepted. Recorded in `useBackNavigation.ts`'s header, which also states
       the two things not to add later: a user-agent sniff and a `display-mode: standalone` check._
 
-- [ ] **Step 5 — Verify on the device.** Requires plan 1's installed build.
+- [ ] **Step 5 — Verify on the device.** Requires plan 1's installed build — the URL-bar build from
+      its step 9 should be enough for rows 1–6 (the unverified shell is a Custom Tab with what should
+      be the same history stack, so the behaviour should not depend on asset-link verification — an
+      expectation, not a measurement; a row that fails there and passes on the verified build is a
+      finding in its own right), and the verified build from its step 12 is where all seven are
+      re-run once, because that is what testers and the store get. These are the seven rows in
+      `docs/development.md` §5, "The Android back press".
   - [ ] Start a game, press back → the confirmation appears, the deck is intact, cancelling returns
         to the same card.
   - [ ] Open the deck-actions dialog, press back → the dialog closes and the game is untouched.
   - [ ] Open the exit confirmation, press back → it closes without exiting.
-  - [ ] Confirm back is **not** intercepted on the landing, preparing and end screens — one press
-        closes the app.
+  - [ ] Confirm back is **not** intercepted on the welcome, landing, preparing and end screens — one
+        press closes the app. On the landing screen note the asymmetry deliberately: the on-screen
+        Back button returns to the welcome screen, the Android back gesture closes the app (open
+        question below).
   - [ ] Exit a game properly through the dialog, land on the landing screen, press back once → the
         app closes. A second press being needed means step 2's cleanup left an entry behind.
   - [ ] Test the **edge-swipe gesture** as well as the on-screen button; they are the same event but
@@ -246,22 +262,31 @@ Step 5 is the real check.
 
 ## Documentation Updates
 
-- [ ] `AGENTS.md` — amend the rule that currently reads as "`App.tsx` never touches the address bar —
+All five landed with the code on 2026-08-12; the boxes were left unticked until the 2026-09-19
+review, which is the only reason this section looked outstanding. One item was genuinely missing and
+is fixed in that review: neither google-play plan was ever added to `AGENTS.md`'s Documentation Index.
+
+- [x] `AGENTS.md` — amend the rule that currently reads as "`App.tsx` never touches the address bar —
       no `pushState`, no `replaceState`". It stays **true of `App.tsx`**, and that is worth keeping
       rather than loosening; add that `GameScreen` now pushes exactly one entry for the duration of a
       game, via `useBackNavigation`, and why. A future reader finding a `pushState` in the codebase
-      against a flat "never" rule will otherwise assume it is a bug and delete it.
-- [ ] `docs/architecture.md` §3 — a short subsection: back as an in-app control, why the hook's
+      against a flat "never" rule will otherwise assume it is a bug and delete it. _Done: the block
+      "THE ANDROID BACK PRESS IS AN IN-APP CONTROL AS OF 2026-08-12", and the share-link block points
+      at it._
+- [x] `docs/architecture.md` §3 — a short subsection: back as an in-app control, why the hook's
       mounting is the scoping mechanism, and the cleanup-ordering hazard, which is the kind of thing
-      that gets reintroduced by a well-meaning refactor.
-- [ ] `docs/development.md` §5 — new rows for step 5's device checks, marked Pending until the TWA
-      exists. Note explicitly that these cannot be run in Chrome.
-- [ ] `docs/agent_findings.md` — a dated entry recording whether jsdom's `history.back()` actually
+      that gets reintroduced by a well-meaning refactor. _Done: "The platform back press"._
+- [x] `docs/development.md` §5 — new rows for step 5's device checks, marked Pending until the TWA
+      exists. Note explicitly that these cannot be run in Chrome. _Done: seven rows, all Pending; §8
+      carries the matching limitation._
+- [x] `docs/agent_findings.md` — a dated entry recording whether jsdom's `history.back()` actually
       fires `popstate` and whether the cleanup ordering is observable in that environment. Both are
-      load-bearing for how much the hook's tests are worth, and neither should be a guess.
-- [ ] `src/game/back-navigation.ts` and `src/hooks/useBackNavigation.ts` — file headers carrying the
+      load-bearing for how much the hook's tests are worth, and neither should be a guess. _Done:
+      the 2026-08-12 entry, with the four jsdom measurements tabulated under Testing Strategy above._
+- [x] `src/game/back-navigation.ts` and `src/hooks/useBackNavigation.ts` — file headers carrying the
       reasoning: back is a request rather than an exit, and the split exists so the precedence is a
       function call rather than an event sequence.
+- [x] `AGENTS.md` Documentation Index — both plan files, added 2026-09-19.
 
 ---
 
@@ -311,15 +336,25 @@ Step 5 is the real check.
 - [ ] Should back on the **end screen** be intercepted to return to the landing screen rather than
       closing the app? Currently out of scope, and the end screen's own "Home" button already covers
       the intent, but it is the next thing a tester will ask about.
+- [ ] **Added 2026-09-19 — the same question for the picker, and it is sharper now.** Since
+      2026-09-18 the landing screen (the playlist picker) has an on-screen Back button that returns to
+      the welcome screen, implemented as a `<button>` flipping `hasEnteredPicker` in `App.tsx` — no
+      history entry, because there is no router. So on a device the two "back" affordances disagree:
+      the button goes to the front door, the gesture closes the app. A tester will press the gesture
+      first. If this is ever taken up, the shape is the one this plan already built — one pushed entry
+      while the picker is mounted, consumed into the same state change the button makes — but it
+      would be the SECOND `pushState` in the app and would have to coexist with the game screen's
+      entry across the landing → preparing → playing transition. Not a deliverable of either plan;
+      decide after step 5 says how the gesture actually feels.
 
 ---
 
 ## Out of Scope
 
 - **Everything in plan 1** — packaging, asset links, the listing, the store.
-- **Intercepting back anywhere other than the game screen.** Landing, preparing and end keep
-  Android's default behaviour deliberately; the end-screen variant is an open question, not a
-  deliverable.
+- **Intercepting back anywhere other than the game screen.** Welcome, landing, preparing and end keep
+  Android's default behaviour deliberately; the end-screen and picker variants are open questions, not
+  deliverables.
 - **A general in-app navigation or routing layer.** The app is one screen at a time driven by
   `GameState.status`, and one history entry for one screen is the whole requirement. Adding a router
   to solve a back button would be the tail wagging the dog.

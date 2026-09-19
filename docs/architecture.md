@@ -1086,13 +1086,15 @@ Use `vercel dev` (port 3000) to exercise functions for real. See [`development.m
 
 ## 6. Routing and deployment topology
 
-`vercel.json` declares the build command, the `dist` output directory, and one rewrite:
+`vercel.json` declares the build command, the `dist` output directory, a 30 s `maxDuration` for the functions, and one rewrite:
 
 ```json
-{ "source": "/((?!api/).*)", "destination": "/index.html" }
+{ "source": "/((?!api/|@)[^.]*)", "destination": "/index.html" }
 ```
 
-An SPA needs a catch-all rewrite so unmatched paths return `index.html` and client-side routing works. A naive catch-all (`/(.*)`) would swallow the API routes too — a request to `/api/playlist` would receive the HTML shell instead of reaching the function. The negative lookahead `(?!api/)` makes the rewrite skip everything under `/api/`, leaving those paths to the functions.
+An SPA needs a catch-all rewrite so unmatched paths return `index.html` and client-side routing works. A naive catch-all (`/(.*)`) would swallow the API routes too — a request to `/api/playlist` would receive the HTML shell instead of reaching the function. The negative lookahead `(?!api/|@)` makes the rewrite skip everything under `/api/` and Vite's `/@…` dev paths, leaving those to the functions and the dev server.
+
+**The `[^.]*` is the load-bearing part, and this section quoted the rewrite as `(?!api/).*` — without it — until 2026-09-19.** Any path containing a dot falls through to the static file or to a 404 rather than to the shell: that is what serves `/robots.txt`, the year-cards `.pdf` and, once [`plans/plan.google-play-shell.md`](./plans/plan.google-play-shell.md) runs, `/privacy.html` and `/.well-known/assetlinks.json` — the asset-links file rewritten to `index.html` with a 200 would be a Trusted Web Activity with a URL bar and a green build. Widening the class to `.*` breaks all of them silently; that plan adds a test pinning the character class because `vercel.json` cannot carry a comment saying so.
 
 `vercel.json` must be strict JSON and cannot carry comments, which is why this rationale lives here.
 

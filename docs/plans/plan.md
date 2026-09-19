@@ -261,7 +261,7 @@ Browser (SPA)                          Serverless (Vercel Functions)
   **The set itself is deliberately NOT listed here, or anywhere else in `docs/`.** It is edited on
   request and its contents drift on their own — Spotify refreshes an editorial playlist's tracks and
   an owner can re-point, empty or hide a personal one — so a document naming the rows is stale
-  shortly after it is written, and a stale note about a *verified* id is worse than no note at all:
+  shortly after it is written, and a stale note about a _verified_ id is worse than no note at all:
   it reads as evidence. `SUGGESTED_PLAYLISTS` in `src/components/LandingScreen.tsx` is the only
   record, and the rule that outlives any edit lives beside it there.
 
@@ -640,9 +640,9 @@ what makes the game's payoff audible at all.
       [`plan.multi-playlist-core.md`](./plan.multi-playlist-core.md) (the merge module, the widened
       `GameState`, both v2 storage formats, the multi-id link — **built 2026-08-07**) and
       [`plan.multi-playlist-ui.md`](./plan.multi-playlist-ui.md) (the landing rows, the fan-out hook,
-      the container wiring and the labels — **not built**). Until plan 2 lands there is no way for a
-      player to name a second playlist, so the app behaves exactly as it did: the whole feature is the
-      `n = 1` case.
+      the container wiring and the labels — **built 2026-08-07** too; this entry said "not built" until
+      2026-09-19, long after AGENTS.md had corrected the same claim). The landing screen is a list of
+      1..5 rows and `usePlaylist.request(urls)` fans out under one `AbortController`.
       **It SUPERSEDES the "Multiple decks / saved playlists" item above in the number of PLAYLISTS
       ONLY, not in the number of SESSIONS** — a library entry is now `ids[]` rather than one id, keyed
       by `savedDeckKey()`, and `hitster:library:v1` carries a v2 payload that still reads v1. **There is
@@ -654,6 +654,22 @@ what makes the game's payoff audible at all.
       the handler's exhaustive status table, and the edge cache key. A playlist that fails is dropped
       with a **count**, and only a total failure blocks Start. See
       [`../architecture.md`](../architecture.md) §3, "The combined deck".
+- [ ] **Google Play — the deployed PWA as a Trusted Web Activity on the store.** Two plans, and the
+      order they were written in is not the order they were built in:
+      [`plan.google-play-shell.md`](./plan.google-play-shell.md) (Bubblewrap shell in a new `android/`
+      tree, `public/.well-known/assetlinks.json` with BOTH certificate fingerprints, `public/privacy.html`,
+      four manifest fields, the listing under `docs/store/`, and the store's closed-testing gate of
+      twelve testers for fourteen days — **not started as of 2026-09-19**) and
+      [`plan.google-play-back-button.md`](./plan.google-play-back-button.md) (Android's back gesture
+      becomes an exit REQUEST through `ExitConfirmDialog`, via one pushed history entry while
+      `GameScreen` is mounted — **code built 2026-08-12**, seven device rows still Pending because only
+      an installed TWA can observe them). The store build is the deployed site, not a copy: a Vercel
+      redeploy updates every install, `runtimeCaching` stays empty, and no application code changes
+      for the shell. The one string that can never change after first publish is the application id,
+      `aleixrabassa.playlistjitster`; the origin it binds to is `https://playlistjitster.vercel.app`
+      (both decided 2026-09-19; the old `custom-hitster.vercel.app` redirects to it). The two things
+      plan 1's review found stale are recorded there: the icons DO carry a wordmark, and the first
+      suggested playlist is labelled "Hitster", which the trademark pass has to decide on.
 
 ---
 

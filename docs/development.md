@@ -596,11 +596,16 @@ iOS-specific column is closed by it.
 ### The Android back press — built 2026-08-12, and NONE of it can be checked in Chrome
 
 Seven checks from [`plan.google-play-back-button.md`](./plans/plan.google-play-back-button.md).
-**Every row needs the installed, asset-link-verified TWA from
+**Every row needs an installed TWA from
 [`plan.google-play-shell.md`](./plans/plan.google-play-shell.md)** — a browser supplies its own back
 affordance and its own history entries, so a Chrome tab observes a different system and a green result
-there proves nothing about the device. The recommended window is inside plan 1's fourteen-day closed
-test, so the testers already recruited exercise it and the calendar time is spent once.
+there proves nothing about the device. Two builds, and which rows run on which (rewritten 2026-09-19;
+the plan's code landed 2026-08-12, so the "land it inside the closed test" window this paragraph used
+to describe never applied): rows 1–6 run first on plan 1's **step 9 URL-bar build** — the unverified
+shell is a Custom Tab with what should be the same history stack, so the history behaviour should not
+depend on asset-link verification; if those rows behave differently there, re-run on the verified
+build before concluding anything — and all seven run again on the **step 12 asset-link-verified
+build**, which is the one testers and the store get.
 
 What the unit tests do cover: the decision's full truth table, the entry count, the cleanup's
 call order, the query string, and that a press reaches the confirmation instead of `onExit`. What they

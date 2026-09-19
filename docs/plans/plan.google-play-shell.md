@@ -1,14 +1,14 @@
 <!-- Plans for google-play (in order):
-  1. plan.google-play-shell.md       — packaging the PWA as a Trusted Web Activity and getting it through Play to production  ← this file
-  2. plan.google-play-back-button.md — making Android's back gesture an in-app control instead of an app exit
+  1. plan.google-play-shell.md       — packaging the PWA as a Trusted Web Activity and getting it through Play to production  ← this file. NOT STARTED
+  2. plan.google-play-back-button.md — making Android's back gesture an in-app control instead of an app exit. CODE BUILT 2026-08-12; its device rows run on THIS plan's installs
 -->
 
 # Plan: google-play — Ship the app to Google Play (TWA shell and store release)
 
 > **Task:** `google-play`
-> **Date:** 2026-08-11
+> **Date:** 2026-08-11 · **Reviewed against the repo:** 2026-09-19 (nothing in this plan had been started; every step below is still open)
 > **Author:** Aleix Rabassa
-> **Depends on:** nothing. This is plan 1 of 2 and is independently shippable.
+> **Depends on:** nothing. This is plan 1 of 2 and is independently shippable. Plan 2's code is already in `main`, so this plan's installs are also where plan 2's seven device rows get run.
 
 ---
 
@@ -30,22 +30,39 @@ Nothing here is technically difficult. Almost everything here is silently failab
 certificate fingerprint produces an app that launches with a Chrome URL bar across the top and no
 error message anywhere, which is the single failure mode this plan is shaped to prevent.
 
+**What changed between the plan's date and its review (2026-09-19), and where each change lands
+below.** The app grew a **welcome screen** in front of the picker (2026-09-18) — so a cold launch of
+the TWA shows the front door every time, by a recorded decision (step 6, step 13's screenshots, and a
+new manual row). It gained a **static PDF download** (`public/year-cards-1970-2033.pdf`, an
+`<a download>`), which is a second download path through the shell beside jsPDF's `doc.save()` (new
+manual row; open question). The **PWA icons now carry a wordmark** — the 2026-08-12 artwork reads
+"PLAYLIST JITSTER" — which reverses a claim this plan made in step 13. **Plan 2 landed**, so the
+sequencing note below is rewritten. And the machine this would run on has **no JDK, no Android SDK
+and no Bubblewrap** as of the review, while Bubblewrap itself is at **1.25.0** (published
+2026-09-16), so step 5 is a real install rather than a check.
+
 ---
 
 ## Dependency Contract
 
 ### Produces for downstream plans
 
-| Output                                | Consumed by                    | Description                                                                                                                                                                 |
-| ------------------------------------- | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| An installed, asset-link-verified TWA | `plan.google-play-back-button` | The back-button behaviour cannot be observed in a browser, because a browser has its own back affordance and its own history. Verification requires this build on a device. |
-| The permanent application id          | `plan.google-play-back-button` | Only for the device-install instructions in that plan's manual checks.                                                                                                      |
-| The closed-testing track              | `plan.google-play-back-button` | Recommended landing window — see the sequencing note below.                                                                                                                 |
+| Output                                | Consumed by                    | Description                                                                                                                                                                   |
+| ------------------------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| An installed, asset-link-verified TWA | `plan.google-play-back-button` | The back-button behaviour cannot be observed in a browser, because a browser has its own back affordance and its own history. Verification requires this build on a device.   |
+| The permanent application id          | `plan.google-play-back-button` | Only for the device-install instructions in that plan's manual checks.                                                                                                        |
+| The step 9 and step 12 installs       | `plan.google-play-back-button` | Where that plan's seven device rows are run — the only work it has left. Was "the closed-testing track, as a landing window" until 2026-09-19; see the sequencing note below. |
 
-**Sequencing note.** Plan 2 is not a blocker for reaching closed testing, and it should not be
-treated as one. The intended order is: this plan reaches closed testing, plan 2 lands _inside_ the
-fourteen-day window while testers are already exercising the build, and the production rollout
-carries both. That way the fourteen days are spent, not waited out twice.
+**Sequencing note — rewritten 2026-09-19.** The original note planned for plan 2 to land _inside_
+this plan's fourteen-day closed test. Plan 2's code landed on 2026-08-12 instead, before this plan
+started, so the deployed site already carries the back-press interception and there is nothing to
+overlap. What plan 2 still owes is its **step 5, seven device rows** (`docs/development.md` §5, "The
+Android back press"), and they run on this plan's installs: the first six on the step 9 URL-bar
+build (the unverified shell is a Custom Tab with what should be the same history stack, so the history
+behaviour should not depend on asset-link verification — an expectation, not a measurement; if those
+rows behave differently there, re-run on step 12 before concluding anything), all seven again on the
+step 12 verified build. Row 7 — Android 13+ predictive back — is the one that can send work back into
+`android/`, so run it before the AAB that goes to closed testing is final.
 
 ---
 
@@ -97,7 +114,15 @@ Actions migration is recorded in Out of Scope rather than built speculatively.
       establish it before generating anything.
   - [ ] Identify the **stable production alias** on Vercel, not a per-deployment URL. Deployment
         URLs change on every push; an alias does not, and a TWA bound to a deployment URL breaks on
-        the next deploy.
+        the next deploy. **DECIDED 2026-09-19: the origin is `https://playlistjitster.vercel.app`.**
+        Measured the same day: it answers `200` from Vercel and serves `manifest.webmanifest` at its
+        root (name "Playlist Jitster", `start_url: '/'`, `standalone`), and the older
+        `custom-hitster.vercel.app` — the origin the 2026-08-04 probe deploy answered on — now
+        `307`-redirects to it. Two consequences of the redirect: the TWA must be bound to the NEW
+        host and never the old one (a TWA whose origin redirects is treated as leaving the verified
+        origin, which is a URL bar), and the `assetlinks.json` is fetched by the verifier from the
+        new host only, so the old alias needs nothing. `.vercel/repo.json` still links this checkout
+        to the project `custom-hitster`; that is the project's internal name and is unaffected.
   - [ ] Confirm `manifest.webmanifest` is served at that origin's root, and that `index.html` in the
         built output carries the injected `<link rel="manifest">` and the worker registration
         script. Neither is written by hand — `vite-plugin-pwa` injects both — so confirm rather than
@@ -110,8 +135,11 @@ Actions migration is recorded in Out of Scope rather than built speculatively.
         defaults `id` to `start_url`, so writing it changes nothing today and prevents a future
         `start_url` edit from silently minting a **second app** on the store.
   - [ ] Add `lang` and `dir`, which Bubblewrap prompts for and Play uses for the default listing
-        language.
-  - [ ] Add `categories` naming games and music.
+        language. Every player-visible string is English (`src/game/copy.ts`), so `lang: 'en'`,
+        `dir: 'ltr'`.
+  - [ ] Add `categories` naming games and music. All four fields are already typed on
+        `ManifestOptions` in the installed `vite-plugin-pwa` (checked 2026-09-19: `id`, `lang`,
+        `dir: 'ltr' | 'rtl'`, `categories: string[]`), so this is a value change with no type work.
   - [ ] **Do not add `orientation`.** Its absence is a decision recorded in that file's doc comment
         (the `--card-height` clamp exists precisely so a short wide viewport gets a smaller card),
         and Bubblewrap will prompt for it — answer with the any/default option so the generated
@@ -126,16 +154,25 @@ Actions migration is recorded in Out of Scope rather than built speculatively.
       server-side in Upstash with a TTL; that preview audio and the embed are fetched by the browser
       directly from Spotify, so Spotify receives the player's IP address; that MusicBrainz is
       contacted server-side and therefore does not see the player; and that there are no accounts,
-      no ads, no analytics and no third-party SDKs. Include a contact address.
+      no ads, no analytics and no third-party SDKs. Include a contact address. Two things the shell
+      adds to that list: the TWA itself collects nothing (no Play SDKs, notification delegation
+      declined in step 6), and the static year-cards PDF is a file download with no data attached.
   - [ ] Verify after deploy that the page is served rather than swallowed by the SPA rewrite. The
-        rewrite source pattern in `vercel.json` excludes paths containing a dot, so a `.html` path
-        should pass through — confirm it, because a listing pointing at a 404 is a review rejection.
+        rewrite source in `vercel.json` is `/((?!api/|@)[^.]*)` — the `[^.]*` excludes any path
+        containing a dot, so `/privacy.html` passes through, exactly as `/robots.txt` and the
+        year-cards `.pdf` already do. Confirm it anyway, because a listing pointing at a 404 is a
+        review rejection. (`docs/architecture.md` §6 quoted an older form of this rewrite without the
+        dot exclusion until 2026-09-19; it now matches the file.)
 
 - [ ] **Step 4 — Serve a placeholder `assetlinks.json` and verify the path end to end.** Do this
       **before** any keystore exists, because it isolates the two things that can go wrong.
   - [ ] Create `public/.well-known/assetlinks.json` with the correct statement-list shape — a single
         statement delegating `common.handle_all_urls`, targeting the `android_app` namespace, naming
-        the application id, with an empty fingerprint list for now.
+        the application id, with an empty fingerprint list for now. **Write only the SHAPE tests at
+        this step** (valid JSON, one statement, `android_app`, the package id) — the two-fingerprint
+        count and the `twa-manifest.json` cross-pin belong to step 12, because neither the
+        fingerprints nor `android/` exist yet and a test that is red for eight steps gets skipped
+        rather than trusted.
   - [ ] Confirm `vite build` copies the **dot-directory** out of `public/` into `dist/`. This is the
         step most likely to surprise; verify it against the build output rather than trusting it.
   - [ ] Deploy, then fetch the file from the production origin and confirm it returns the JSON with a
@@ -147,21 +184,43 @@ Actions migration is recorded in Out of Scope rather than built speculatively.
   - [ ] Record all three findings, dated, in `docs/agent_findings.md`.
 
 - [ ] **Step 5 — Install the Android toolchain.** JDK 17 and the Android SDK build tools;
-      Bubblewrap can fetch both on first run.
-  - [ ] Install `@bubblewrap/cli` **globally**. It must never become a project dependency: it would
-        pull an Android toolchain into `devDependencies` and `pnpm-lock.yaml`, and not one of the
-        four pre-commit checks needs it. This is an explicit exception to the pnpm-only rule, not a
-        violation of it — record it in `AGENTS.md`.
+      Bubblewrap offers to fetch both on first run. **As of 2026-09-19 this machine has none of the
+      three**: `java` is not on the PATH, `ANDROID_HOME` is unset, and `bubblewrap` is not installed
+      — so this is an install, not a check, and it needs a few GB of disk and a stretch of network.
+  - [ ] Install `@bubblewrap/cli` **globally** (`npm i -g @bubblewrap/cli`; current release 1.25.0,
+        published 2026-09-16). It must never become a project dependency: it would pull an Android
+        toolchain into `devDependencies` and `pnpm-lock.yaml`, and not one of the four pre-commit
+        checks needs it. This is an explicit exception to the pnpm-only rule, not a violation of it —
+        record it in `AGENTS.md`. Record the installed Bubblewrap, JDK and build-tools versions in
+        `docs/development.md` with the release process (step 18), because the next release will be
+        run against whatever the machine has then.
 
 - [ ] **Step 6 — Generate the shell.** Run `bubblewrap init` against the deployed manifest URL from
       step 1, inside `android/`.
   - [ ] Choose the **application id** carefully. It is reverse-DNS, it is permanent after first
-        publish, and it is the one string in this plan that genuinely cannot be changed later.
+        publish, and it is the one string in this plan that genuinely cannot be changed later. **Do
+        not accept Bubblewrap's default.** It derives one from the origin's host reversed, which for
+        the candidate origin puts the app under `app.vercel.…` — a namespace the developer does not
+        own, and a name that stays wrong forever if the site ever moves to a custom domain, since the
+        id cannot follow. **DECIDED 2026-09-19: the application id is
+        `aleixrabassa.playlistjitster`** — the developer's own name as the namespace (no domain is
+        owned), two segments, letters only, which satisfies Android's rule (dot-separated segments,
+        each starting with a letter, letters/digits/underscores only, no hyphens). Type it at the
+        prompt exactly; Bubblewrap's proposed `app.vercel.playlistjitster` is the thing to overwrite.
+        The same string goes into `public/.well-known/assetlinks.json` (step 4) and is what the
+        step 12 cross-pin test compares against `twa-manifest.json`.
   - [ ] At the prompts: keep the manifest's name and short name, standalone display, the page colour
         for both theme and background, the 512 icon as the splash source, the any/default
         orientation from step 2, and **decline notification delegation** — the app has no push and
-        requesting the permission would be an unexplained permission on the listing.
+        requesting the permission would be an unexplained permission on the listing. Also decline
+        **Play Billing** and the **geolocation** permission when asked, keep the default
+        **Custom Tabs fallback** (it is what a device without a TWA-capable browser gets), and leave
+        the shortcuts list empty — the manifest declares none.
   - [ ] Confirm the resulting `twa-manifest.json` matches the deployed manifest field for field.
+  - [ ] Note what the shell will open on: `start_url` is `/`, and since 2026-09-18 that is the
+        **welcome screen**, on every cold launch, by a recorded decision (no "seen it" flag). That is
+        correct and needs no packaging change — but it is what testers and reviewers will see first,
+        so the listing's first screenshot should be it (step 13).
 
 - [ ] **Step 7 — Generate and protect the signing key.**
   - [ ] Create the upload keystore outside the repository, or inside it and ignored — never
@@ -178,14 +237,37 @@ Actions migration is recorded in Out of Scope rather than built speculatively.
 
 - [ ] **Step 8 — Check the target SDK.** Read `targetSdkVersion` in the generated Gradle files and
       compare it against Play's current minimum for new apps, which advances every August. Bump it
-      if Bubblewrap's default is behind. Record the value and the date checked.
+      if Bubblewrap's default is behind. Record the value and the date checked. **This plan was
+      written before the August 2026 advance and is being executed after it**, so do not carry over
+      any number remembered from the planning date: read the requirement in the Console's own
+      policy page on the day, and read what Bubblewrap 1.25.0 actually emitted rather than what its
+      changelog says.
 
 - [ ] **Step 9 — First local build and install.** Run `bubblewrap build` to produce the AAB and the
       accompanying APK; install the APK on a real device.
   - [ ] **Expect a URL bar at this stage.** Asset links are not verified yet, so this is the correct
         intermediate state — confirming it now is what makes step 12's disappearance meaningful
         evidence rather than a coincidence.
-  - [ ] Confirm the app launches, deals a deck, plays a preview and flips a card inside the shell.
+  - [ ] Confirm the app launches on the welcome screen, enters the picker, deals a deck, plays a
+        preview and flips a card inside the shell.
+  - [ ] **Run plan 2's device rows 1–6 here** (`docs/development.md` §5, "The Android back press").
+        They should not depend on asset-link verification (a Custom Tab has the same history stack
+        as a verified TWA — expected, not yet observed), and finding a problem now is cheaper than
+        finding it on the verified build. A row that fails here and passes on step 12 is itself a
+        finding worth writing down.
+  - [ ] **Both PDF downloads inside the shell.** The welcome screen's static `<a download>` of
+        `year-cards-1970-2033.pdf`, and a deck's `Print as PDF cards` (jsPDF's `doc.save()`). Both go
+        through Chrome's download manager rather than a WebView's, which is why they should work —
+        but neither has been seen anywhere outside jsdom, the static one has a service-worker
+        denylist entry that no dev server can exercise, and a silently missing file is the failure
+        mode. The service-worker half only becomes observable on the SECOND launch, once `sw.js`
+        controls the page.
+  - [ ] **Storage is shared with Chrome.** A Chrome TWA runs in Chrome's own profile, so
+        `hitster:session:v1` and `hitster:library:v1` on the origin are the same storage the Chrome
+        browser sees. Verify by starting a game in the installed app, opening the origin in Chrome
+        and seeing it resume (and the reverse). Not a defect — but a tester who does not know it
+        will report "the app remembered a game I never played in it", so it goes in the tester notes
+        and in `docs/development.md` §8.
 
 - [ ] **Step 10 — Create the Play Console app.** Pay the one-time 25 USD registration fee and
       complete identity verification for the personal account. Create the app: name, default
@@ -201,24 +283,55 @@ Actions migration is recorded in Out of Scope rather than built speculatively.
   - [ ] Put **both** fingerprints in `public/.well-known/assetlinks.json` and redeploy. One
         fingerprint is the classic mistake: including only the upload key means store installs show
         a URL bar, and including only the app signing key means your own local installs do.
+        Bubblewrap can hold both and write the file for you — `bubblewrap fingerprint add <sha256>`
+        for each, then `bubblewrap fingerprint generateAssetLinks` — which keeps `twa-manifest.json`
+        as the record of which fingerprints a release carried. Copy its output into `public/`
+        rather than hand-editing two files.
+  - [ ] **Now write the two tests deferred from step 4**: the fingerprint count and format, and the
+        package-id cross-pin against `android/twa-manifest.json`.
   - [ ] Reinstall and confirm there is **no URL bar**. If one appears, the fingerprints or the
         package id disagree with the build — do not proceed until it is gone.
   - [ ] Confirm the Android system verifier actually accepted the statement, via the device's
-        deep-link verification report rather than by inferring it from the missing URL bar.
+        deep-link verification report rather than by inferring it from the missing URL bar. The
+        instruments, none of which the plan named before:
+        `adb shell pm get-app-links <application id>` must list the origin's host as `verified`;
+        `adb shell pm verify-app-links --re-verify <application id>` forces a fresh attempt after a
+        redeploy (the system otherwise re-checks on its own schedule); and Google's own checker at
+        `https://digitalassetlinks.googleapis.com/v1/statements:list?source.web.site=<origin>&relation=delegate_permission/common.handle_all_urls`
+        shows what the verifier fetches, so a wrong content type or a rewrite to `index.html` is
+        visible there without a device.
   - [ ] Confirm as a bonus that a shared deck link opens the installed app as an Android App Link.
+        The link is `<origin>/?playlist=<ids>&seed=<hex>` — the query string must survive into the
+        activity, because `App.tsx` reads it in a lazy initialiser on first render, and a link that
+        opens the app on a bare `/` would silently show the welcome screen instead of dealing.
+  - [ ] **Re-run all seven plan-2 rows on this build**, including row 7 (predictive back). This is
+        the build that reaches testers, and row 7 is the one that can require a change in `android/`.
 
 - [ ] **Step 13 — Build the store listing.** Author the copy in `docs/store/` so it is reviewable,
       then paste it into the Console.
   - [ ] Short description within 80 characters; full description within 4000.
   - [ ] Verify `pwa-512x512.png` meets Play's icon spec, and produce a 1024×500 feature graphic and
-        at least two phone screenshots. The PWA icons carry no wordmark, so the rename to "Playlist
-        Jitster" does not invalidate any existing artwork.
+        at least two phone screenshots — the first of them the welcome screen, because that is what
+        a cold launch shows. **Correction (2026-09-19): the PWA icons DO carry a wordmark.** This
+        plan said they did not; they did at the time too (they read "PLAYLIST HITSTER" until the
+        2026-08-12 artwork replaced them, and AGENTS.md records that nobody had opened the image).
+        Since 2026-08-12 every icon is a downscale of `docs/assets/logo.png`, which reads "PLAYLIST
+        JITSTER" — so the artwork is consistent with the listing name, and the master to build the
+        feature graphic from is that file, never anything in `public/`. Open the 512 and look at it
+        before uploading: no check in this repo has ever opened an image.
   - [ ] **Trademark pass.** "Hitster" is a registered board-game mark and Play acts on IP
         complaints. The listing must not use it. Audit the app's own player-visible copy too — and
         note that the internal uses of the word are deliberate and must stay: the 65 mm card
         geometry in `pdf-sheet.ts`, the dropped-card messages in `reducer.ts` and `messages.ts`,
         `CardRevealSide`, the storage key names, and the package name. Renaming any of those either
-        corrupts the reasoning or silently discards a player's saved game.
+        corrupts the reasoning or silently discards a player's saved game. **The audit has one
+        concrete hit as of 2026-09-19**: `SUGGESTED_PLAYLISTS[0]` in `src/components/LandingScreen.tsx`
+        is labelled `'Hitster'` — it is a rendering of that Spotify playlist's own title, but it is
+        the text of a button on the picker, in screenshots and in front of every player. Decide it
+        here: relabel it (the label is a readable rendering, not a quotation, per that file's own
+        header) or replace the suggestion. Not decided by this plan, and not something to fix
+        quietly in passing. Also grep `README.md`, which links to the board game by name — fine for a
+        repository, not for listing copy.
 
 - [ ] **Step 14 — Policy declarations.**
   - [ ] Data safety form, using the flows enumerated in step 3. The honest position is close to "no
@@ -253,6 +366,10 @@ Actions migration is recorded in Out of Scope rather than built speculatively.
 ## Unit Tests
 
 Every test below is a **node** test needing no DOM, consistent with this repo's default environment.
+**They land in two batches, not one**: the manifest tests and the asset-links SHAPE tests at steps 2
+and 4, the fingerprint count and the cross-pin at step 12 — because between steps 4 and 12 the
+fingerprint list is deliberately empty and `android/` does not exist, and a test that stays red for
+eight steps is a test people learn to skip.
 
 - [ ] `should declare the fields Bubblewrap and the store read` — covers the added `id`, `lang`,
       `dir` and `categories` in `src/pwa/manifest.test.ts`.
@@ -267,15 +384,24 @@ Every test below is a **node** test needing no DOM, consistent with this repo's 
       of `public/.well-known/assetlinks.json` in new `src/pwa/assetlinks.test.ts`.
 - [ ] `should target the android_app namespace and the committed package id` — covers the target
       block in `src/pwa/assetlinks.test.ts`.
-- [ ] `should list two colon-separated SHA-256 fingerprints` — covers the upload-key/app-signing-key
-      pair in `src/pwa/assetlinks.test.ts`, asserting the count and the fingerprint format. One
-      fingerprint is a valid file that produces a URL bar, which is the failure this catches.
-- [ ] `should agree with android/twa-manifest.json about the package id` — covers the cross-file pin
-      in `src/pwa/assetlinks.test.ts`. Two files hold the same string, neither can derive it from the
-      other, and a mismatch fails silently on a device: the same situation as `PAGE_COLOR` and
-      `--color-page`, handled the same way.
+- [ ] `should list two colon-separated SHA-256 fingerprints` — **step 12.** Covers the
+      upload-key/app-signing-key pair in `src/pwa/assetlinks.test.ts`, asserting the count and the
+      fingerprint format. One fingerprint is a valid file that produces a URL bar, which is the
+      failure this catches.
+- [ ] `should agree with android/twa-manifest.json about the package id` — **step 12.** Covers the
+      cross-file pin in `src/pwa/assetlinks.test.ts`. Two files hold the same string, neither can
+      derive it from the other, and a mismatch fails silently on a device: the same situation as
+      `PAGE_COLOR` and `--color-page`, handled the same way.
 - [ ] `should ship a non-empty privacy policy page` — covers the existence of `public/privacy.html`
       in `src/pwa/assetlinks.test.ts` or a sibling. Cheap insurance against a listing that links to a 404.
+- [ ] `should keep the SPA rewrite away from the well-known path and the policy` — added
+      2026-09-19. Reads `vercel.json` and asserts its one rewrite `source` still contains the
+      `[^.]*` dot exclusion, in the same file. Steps 3, 4 and the existing `.pdf` all lean on that
+      one character class, `vercel.json` cannot carry a comment saying so, and nothing today would
+      fail if a well-meaning edit widened it to `.*` — the asset-links file would come back as
+      `index.html` with a 200, which is the URL bar with a green build. A string assertion over the
+      pattern is the honest ceiling: path-to-regexp semantics are not worth re-implementing in a
+      test, and the deployed behaviour is step 4's fetch.
 
 **What these tests cannot prove, stated so nobody mistakes green for verified:** that Android's
 verifier accepted the fingerprints, that the URL bar is gone, that the AAB installs, or that the
@@ -287,25 +413,32 @@ the contract and be explicit that the middle is untestable here.
 
 ## Documentation Updates
 
-- [ ] `AGENTS.md` — add both plan files to the Documentation Index table. Add the rules this tree
-      introduces: `android/` is a fourth top-level tree with none of the `src`/`api`/`shared` import
-      constraints; `@bubblewrap/cli` is global-only and must never enter `devDependencies`; the
-      keystore is never committed; and the application id, `manifest.id` and `start_url` are
-      **permanent after first publish**.
+- [x] `AGENTS.md` — add both plan files to the Documentation Index table. _Done 2026-09-19, during
+      the review; they had been missing since 2026-08-11._
+- [ ] `AGENTS.md` — add the rules this tree introduces: `android/` is a fourth top-level tree with
+      none of the `src`/`api`/`shared` import constraints; `@bubblewrap/cli` is global-only and must
+      never enter `devDependencies`; the keystore is never committed; the application id,
+      `manifest.id` and `start_url` are **permanent after first publish**; and the TWA shares
+      `localStorage` with Chrome on the same origin, so the two storage keys are one store seen from
+      two launchers.
 - [ ] `docs/architecture.md` §3 — a subsection on the TWA: that the store build is the deployed site
       rather than a copy, that Digital Asset Links makes the origin a second consumer of the
       production alias, and why Capacitor was rejected (it would break redeploy-updates-installs and
       force CORS onto both handlers).
-- [ ] `docs/development.md` — a new section holding the Android release process end to end, and the
-      pinned production origin from step 1. Add rows to §5 for the checks the TWA introduces: no URL
-      bar, the PDF export's download behaviour **inside the shell** rather than in Chrome, and a
-      re-run of the lock-screen audio check inside the shell.
+- [ ] `docs/development.md` — a new section holding the Android release process end to end, the
+      pinned production origin from step 1, and the toolchain versions from step 5. Add rows to §5
+      for the checks the TWA introduces: no URL bar; **both** PDF downloads inside the shell (the
+      welcome screen's static file and the deck export); the shared-link App Link carrying its query
+      string; the storage shared with Chrome; a re-run of the lock-screen audio check inside the
+      shell; and a note on the existing back-press table that its rows now have a build to run on.
+      Add the shared-storage behaviour to §8 as a documented property rather than a limitation.
 - [ ] `docs/agent_findings.md` — dated entries for step 4's three findings, for whether
       `bubblewrap update` regenerates the Gradle project from a committed `twa-manifest.json` alone
       (this decides whether the generated project must be tracked), and for the Play target-SDK
       minimum on the day it was checked.
-- [ ] `docs/plans/plan.md` — a row for the shipping phase, so the phase ladder does not stop at 8
-      while a release exists.
+- [x] `docs/plans/plan.md` — an entry under Post-Phase-8 naming both plans and their status. _Done
+      2026-09-19; update its status line when this plan reaches closed testing and again at
+      production._
 - [ ] `README.md` — an install line, and a pointer to the release process section.
 - [ ] `src/pwa/manifest.ts` — extend the doc comment: why `id` is now explicit, and that the absence
       of `orientation` is pinned by a test because a packaging prompt is what threatens it.
@@ -348,14 +481,29 @@ the contract and be explicit that the middle is untestable here.
 | 13  | Local builds now, GitHub Actions later.                                                     | One app, one maintainer, low cadence. CI would add secret handling to a repo that currently has no CI at all — worth doing when the cadence justifies it, not before.                                                                                   |
 | 14  | Staged production rollout rather than 100%.                                                 | This app has never run on more than a handful of devices, and most of `docs/development.md` §5 is still Pending. A halt button is worth having.                                                                                                         |
 | 15  | Store listing copy lives in `docs/store/`.                                                  | Console-only copy is unreviewable and unversioned. Every other decision in this repo is written down; the listing should not be the exception.                                                                                                          |
+| 16  | The application id is developer-owned reverse-DNS, never Bubblewrap's host-derived default. | The default reverses the origin's host, which puts the app under a namespace the developer does not own and freezes the hosting provider's name into the one string that can never change. (2026-09-19)                                                 |
+| 17  | The tests land in two batches: shape at steps 2/4, fingerprints and cross-pin at step 12.   | Between those steps the fingerprint list is empty by design and `android/` does not exist, so the later tests would be red for eight steps — and a test that is expected to be red is a test nobody reads. (2026-09-19)                                 |
+| 18  | Plan 2's device rows run on this plan's installs, not in a window of their own.             | Plan 2's code landed 2026-08-12, before this plan started. Its only remaining work is observation, and the step 9 and step 12 builds are the first devices that can observe it. (2026-09-19)                                                            |
+| 19  | Storage shared between the TWA and Chrome is documented, not worked around.                 | It is how a Chrome TWA works — same profile, same origin, same `localStorage`. A resumed game crossing launchers is the persistence design doing its job; the cost is one line in the tester notes and §8. (2026-09-19)                                 |
 
 ---
 
 ## Open Questions
 
-- [ ] Which exact production alias is the binding origin? Needed by step 1, and permanent from step 6.
-- [ ] What is the permanent application id string? Reverse-DNS, and genuinely unchangeable after
-      first publish.
+- [x] Which exact production alias is the binding origin? Needed by step 1, and permanent from step 6.
+      **Answered 2026-09-19: `https://playlistjitster.vercel.app`**, chosen by the developer, live,
+      serving the manifest, with the old `custom-hitster.vercel.app` redirecting to it. Step 1 has
+      the measurements.
+- [x] What is the permanent application id string? Reverse-DNS, and genuinely unchangeable after
+      first publish. **Answered 2026-09-19: `aleixrabassa.playlistjitster`.** The developer's first
+      proposal, `playlist-jitster`, was not a valid application id — Android requires at least two
+      dot-separated segments, each starting with a letter and made of letters, digits and underscores
+      only, no hyphens — and there is no owned domain to derive from, so the developer's name is the
+      namespace. Bubblewrap's own default for this host would have been `app.vercel.playlistjitster`,
+      which decision 16 rules out. Step 6 carries the value.
+- [ ] What happens to the `'Hitster'` label on the first suggested playlist — relabel, or replace
+      the suggestion? It is the one player-visible use of the mark (step 13), and it is in the
+      screenshots the listing needs. (2026-09-19)
 - [ ] Is moving to a custom domain foreseeable? If it is even plausible within a year, doing it
       _before_ step 6 is far cheaper than after — the origin is baked into the shell.
 - [ ] Does the content rating questionnaire's user-generated-content question apply? The app renders
@@ -369,14 +517,29 @@ the contract and be explicit that the middle is untestable here.
       provides?
 - [ ] Does the PDF export's `doc.save()` download work inside the TWA? Chrome's own download path
       should handle it — unlike the iOS WKWebView case — but it is unverified, and a silently
-      missing file is the failure mode.
+      missing file is the failure mode. _Widened 2026-09-19: the welcome screen's static
+      `<a download>` is a second download path with a different mechanism (a navigation the service
+      worker must not answer with `index.html`), and it has the same failure mode. Both are step 9
+      rows now._
+- [ ] Does the shell hand the launching intent's URL — a shared deck link with its query string — to
+      the web app intact, so `App.tsx`'s lazy read of `location.search` deals the deck? Bubblewrap's
+      generated activity is built to, but a link that lands on a bare `/` shows the welcome screen
+      with no error, which is exactly the shape of failure this app is bad at surfacing. (2026-09-19)
 
 ---
 
 ## Out of Scope
 
 - **The Android back button.** In `plan.google-play-back-button.md`, deliberately split so this plan
-  can reach closed testing without waiting on an application-code change.
+  could reach closed testing without waiting on an application-code change — and in the event built
+  first. Its device rows are run here (steps 9 and 12); its open questions about intercepting back
+  on the end screen and on the picker (whose on-screen Back button goes to the welcome screen while
+  the gesture closes the app) stay with that plan and are not this one's to answer.
+- **A persisted "seen the welcome screen" flag.** The front door shows on every cold launch of the
+  installed app, by the 2026-09-18 decision. If closed testing reports it as friction, that is a
+  product decision to reopen there, not a packaging change.
+- **Relabelling or replacing the `'Hitster'` suggestion.** Step 13 surfaces it; the decision is the
+  developer's and touches a data list that every landing-screen test renders.
 - **The App Store and iOS.** Explicitly discarded by the developer. No Capacitor, no Mac, no `$99`.
 - **Adding CORS to `api/playlist.ts` and `api/year.ts`.** Only Capacitor would need it, and Capacitor
   was rejected.
