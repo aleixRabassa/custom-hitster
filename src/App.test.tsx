@@ -67,10 +67,12 @@ vi.mock('qrcode', () => ({ toDataURL: toDataURLMock }));
  *  fully parallel run (fifteen jsdom forks on sixteen cores) each of those
  *  stretches by a small multiple, and the ceilings became the failures:
  *  `Unable to find an element with the text …` is `findBy*` giving up at 1 s,
- *  and `Test timed out in 5000ms` was the synchronous test at line ~360 taking
- *  five seconds to render once. Seven distinct tests flaked across eight runs
- *  and not one of them asserted a wrong value (`docs/agent_findings.md`,
- *  2026-09-19).
+ *  and `Test timed out in 5000ms` on the synchronous welcome-screen test can
+ *  only be that one render taking five seconds (inferred from its idle cost;
+ *  its error block was never captured). Seven distinct tests flaked across
+ *  eight runs and not one of them asserted a wrong value. Both budgets are
+ *  PROVEN to apply, by throwaway probes that could not pass under the
+ *  defaults (`docs/agent_findings.md`, 2026-09-19).
  *
  *  The arithmetic: the longest test waits FOUR times in sequence, so the test
  *  budget must exceed 4 x the wait budget with slack. Neither number is a
@@ -276,25 +278,30 @@ function stubHangingYearApi(): void {
  *  traversal lands two timer hops after the unmount -- on an idle machine
  *  ~10 ms later, under a fifteen-fork run, whenever the loop gets to it.
  *
- *  Meanwhile `beforeEach` has already reset the hook's swallow counter to
- *  zero. When the traversal then lands inside the NEXT test's game screen,
- *  the hook reads it as a real back press: it re-pushes its entry and asks
- *  to exit, the exit dialog opens, and guard 4 in `GameScreen` disables the
- *  window key handler -- so the ArrowRight that was meant to finish the deck
- *  does nothing and the test waits for an end screen that never comes. That
- *  is the `Test timed out` family. When it lands on the back-press test
- *  instead, it moves the current entry under its `history.state`
- *  assertions -- the `expected { base } to not deeply equal { base }` family.
+ *  A traversal still queued when the next test starts can move the current
+ *  entry under that test. It CANNOT open the exit dialog there -- that was
+ *  proposed, probed and refuted (2026-09-19): `pushState` clears jsdom's
+ *  traversal queue (`History-impl.js` line 97), and the next game screen's
+ *  mount pushes. `replaceState` does NOT clear it (line 107), which is why
+ *  the back-press test below, which stamps a base entry, is the one place a
+ *  late traversal could land under an assertion. So this is HYGIENE -- each
+ *  test's traversal lands inside the test that caused it -- and the fix for
+ *  the timeout flakes is the budgets at the top of the file, not this.
  *
  *  Two hops, awaited in order, is exactly enough and is DETERMINISTIC rather
  *  than probabilistic: jsdom's window timers are Node timers, and Node fires
  *  equal-delay timers in insertion order. The traversal's first hop was
  *  inserted before this helper's first timer, so it runs first and inserts
  *  the second hop; that hop was inserted before this helper's second timer,
- *  so it runs -- and dispatches `popstate`, which the counter swallows --
- *  before the helper resumes. A 50 ms sleep was the previous version and it
- *  is what a loaded machine defeats: a 0 ms timer that is late is still
- *  ordered AFTER an earlier-expiring 50 ms one.
+ *  so it runs before the helper resumes. A 50 ms sleep was the previous
+ *  version and it is what a loaded machine defeats: a 0 ms timer that is
+ *  inserted late has a LATER expiry than an earlier 50 ms one.
+ *
+ *  What it does NOT do: the hook removes its `popstate` listener BEFORE it
+ *  calls `history.back()`, so the drained traversal lands on no listener and
+ *  the hook's swallow counter stays armed. `resetBackNavigationTraversals()`
+ *  in `beforeEach` is therefore still load-bearing; do not delete it on the
+ *  strength of this helper.
  *
  *  When nothing was queued this is two idle hops and changes nothing.
  * ===========================================================================
@@ -954,9 +961,10 @@ describe('App', () => {
       expect(screen.queryByTestId('hud')).not.toBeNull();
     });
 
-    // Playing: one entry for the press to consume. The push is a mount effect, so it is committed
-    // by the time the HUD query above passes; polled anyway, because a late traversal is the one
-    // thing that can move it and a poll reports THAT rather than a coincidence of timing.
+    // Playing: one entry for the press to consume. POLLED, not read once: the push is a PASSIVE
+    // effect, and the HUD arrives through a state update the year stub triggers outside `act`, so
+    // React commits the HUD and flushes the effect in separate steps. `waitFor` above observes the
+    // commit; under load a single read landed in the gap and reported `base` (2026-09-19).
     await waitFor(() => {
       expect(window.history.state).not.toEqual(base);
     });

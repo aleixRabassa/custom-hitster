@@ -4252,84 +4252,95 @@ a flake from a regression.
 
 **Fixed later the same day — and the diagnosis in this paragraph was WRONG in the way that matters.**
 It said the remedy was `findBy*` over `getBy*` plus a longer timeout. The failing tests already used
-`findBy*`; what expired was Testing Library's own 1 s ceiling on it. And the timeouts were not
-only starvation: a cross-test race in the history traversal was opening the exit dialog inside the
-next test, which disables the arrow keys. The entry below has the mechanism and the fix.
+`findBy*`; what expired was Testing Library's own 1 s ceiling on it, which nothing in the repo had
+ever raised. The entry below has the measurements, the fix, and one mechanism that was proposed,
+probed and REFUTED on the way.
 
-## 2026-09-19 — `App.test.tsx` flaked for two reasons, and the one that was not a timeout was a stray `history.back()` landing in the NEXT test
+## 2026-09-19 — `App.test.tsx` is fixed: the ceilings were unit budgets on an integration file, one assertion raced a passive effect, and the "stray traversal opens the dialog" theory was probed and refuted
 
 The two entries above record the symptom — seven distinct tests, timeouts and mid-transition reads,
-reproducible at `HEAD` — and end with "the remedy is `findBy*` and a longer timeout". That was the
-wrong diagnosis, and it is worth writing down why, because the tests that failed **already used
-`findBy*`**. Reading the actual mechanism took one afternoon; the fix is forty lines in the test
-file and no application code.
+reproducible at `HEAD` — and the second ends with "the remedy is `findBy*` and a longer timeout".
+Half right: the failing tests **already used `findBy*`**. Commit `e3cc801` is the fix; its message
+and the first draft of this entry claimed a cross-test race that a probe then disproved, so read
+this entry rather than that message.
 
-### Reason 1 — a cross-test race, and it explains every `Test timed out` and the `history.state` failure
+### What was measured before touching anything
 
-`useBackNavigation`'s cleanup calls `history.back()` when `GameScreen` unmounts, which every test
-that reaches `playing` does in `afterEach`'s `cleanup()`. **jsdom does not traverse synchronously**:
-`go(-1)` queues a `setTimeout(0)` task that computes the target entry and then queues a SECOND
-`setTimeout(0)` task that performs the traversal and dispatches `popstate` (jsdom 30,
-`lib/jsdom/living/window/SessionHistory.js` lines 50 and 62). Two timer hops after the unmount —
-~10 ms on an idle machine, whenever the event loop gets to it under a fifteen-fork run.
+Six isolated runs of the file with `--reporter=verbose`, one at a time on an idle machine, all
+green. The slowest tests: `should not show the welcome screen again after an exit` — the first test
+to reach `playing` — at **907–1124 ms**, and `should render the welcome screen when idle…`, whose
+body is SYNCHRONOUS, at **714–874 ms** for one render. Testing Library gives every
+`waitFor`/`findBy*` **1 s** (`asyncUtilTimeout`) and Vitest gives every test **5 s**. A fully
+parallel run — fifteen jsdom forks on sixteen cores — reported `environment 1079s` across 52 files,
+i.e. ~20 s per file just to set up jsdom, and stretched every one of those numbers by a small
+multiple. That is the whole timeout family: `Unable to find an element with the text …` is `findBy*`
+giving up at 1 s (the recorded "end reason" failure, and `× … 1275ms` at `HEAD`), and
+`Test timed out in 5000ms` on the synchronous test — whose error block was never captured, so this
+is inferred from its idle cost, not observed — is one render taking five seconds. Nothing to race.
 
-Meanwhile the next test's `beforeEach` has already called `resetBackNavigationTraversals()`, which
-zeroes the hook's swallow counter **while the traversal is still queued**. So when it lands inside
-the next test's game screen, the hook reads it as a real back press: it re-pushes its entry and
-calls `onRequestExit`, the exit dialog opens, and **guard 4 in `GameScreen`
-(`if (!isPlayable || isExitConfirmOpen || isDeckActionsOpen) return`) disables the window key
-handler** — so the ArrowRight that was meant to finish the one-card deck does nothing, and the test
-waits for an end screen that never comes until Vitest's 5 s ceiling fires. That is the
-`Test timed out in 5000ms` family: `should save the whole set of playlists…`, `should not show the
-welcome screen again after an exit`, `should reach the welcome screen with Back after an exit…`. It
-also explains the recorded 2026-09-19 "end reason" failure: `findByText(COPY.end.heading)` giving up
-over a game screen with a dialog on it. When the same traversal lands on the back-press test instead,
-it moves the current entry under its `history.state` assertions — the
-`expected { base } to not deeply equal { base }` failure.
+### Fix 1 — integration budgets, per file, and PROVEN to be in effect
 
-**The fix is a drain, not a sleep.** `afterEach` now awaits `flushHistoryTraversal()` after
-`cleanup()`: two `setTimeout(0)` hops inside `act`. That is deterministic rather than probabilistic
-because jsdom's window timers are Node timers and Node fires equal-delay timers in insertion order:
-the traversal's first hop was inserted before the helper's first timer, so it runs first and inserts
-the second hop; that hop was inserted before the helper's second timer, so it runs — and dispatches
-the `popstate` the still-armed counter swallows — before the helper resumes. The back-press test's
-two fixed 50 ms sleeps were the previous version of this, and they are exactly what a loaded machine
-defeats: a 0 ms timer inserted late has a LATER expiry than an earlier-inserted 50 ms one, so the
-sleep resolves between the two hops. The test now drains and then polls `history.state` with
-`waitFor`, so a failure there reports the entry rather than a coincidence of timing.
+`configure({ asyncUtilTimeout: 5_000 })` from `@testing-library/react` and
+`vi.setConfig({ testTimeout: 30_000 })`, both at the top of the file. The longest test waits four
+times in sequence, so 4 × 5 s plus slack. Both are per file — Vitest isolates modules per file — so
+nothing leaks into the unit suites. **Proven rather than assumed**, because a green run on a quieter
+machine is consistent with "top-level `vi.setConfig` silently ignored": a throwaway `it` that slept
+7 s passed, and a throwaway `waitFor` whose predicate first held after 2.5 s passed. Neither could
+under the defaults. A green test never sees either number; a genuinely broken one fails in 5 s
+instead of 1 s, which is the whole cost.
 
-**`resetBackNavigationTraversals()` was the wrong shape of remedy and stays as belt-and-braces.** It
-was added on 2026-08-12 for a test that unmounted "without waiting for the queued traversal" — the
-counter was reset so the next test's first press would not be swallowed. But resetting the counter
-without draining the traversal is what turned a swallowed press into a phantom one. With the drain,
-the counter returns to zero by itself and the reset is a no-op.
+### Fix 2 — the `history.state` assertion polls instead of reading once
 
-### Reason 2 — the budgets were unit-test budgets on an integration file
+`should not intercept a back press outside the game screen` read `window.history.state` once,
+synchronously, right after `waitFor` saw the HUD. The entry is pushed by `useBackNavigation`'s
+mount effect — a PASSIVE effect, and the HUD arrives through a state update the year stub's promise
+triggers outside `act`, so React commits the HUD and flushes the effect in separate steps. `waitFor`
+observes the commit; under load the read landed in the gap. It is now
+`await waitFor(() => expect(window.history.state).not.toEqual(base))`, which reports the entry
+rather than a coincidence of timing.
 
-Testing Library gives every `waitFor`/`findBy*` **1 s** (`asyncUtilTimeout`) and Vitest gives every
-test **5 s**. Measured on an idle machine with `--reporter=verbose` over six isolated runs: the
-synchronous first test (`should render the welcome screen when idle…`, a `() =>` body) takes
-**714–874 ms** to render once, and `should not show the welcome screen again after an exit` — the
-first test to reach `playing` — takes **~1.1 s**. Under a fifteen-fork jsdom run on sixteen cores
-those stretch by a small multiple (the full-suite report shows `environment 1079s` for 52 files, i.e.
-~20 s per file just to set up jsdom), and the ceilings became the failures: a `findBy*` that gives up
-at 1 s reads as `Unable to find an element with the text …`, and the synchronous test at 5 s is
-starvation with nothing to race. The file now sets `configure({ asyncUtilTimeout: 5_000 })` and
-`vi.setConfig({ testTimeout: 30_000 })`, both per file — the longest test waits four times in
-sequence, so 4 × 5 s plus slack. A green test never sees either number; a genuinely broken one fails
-in 5 s instead of 1 s, which is the whole cost.
+### What was proposed, probed and REFUTED — recorded so nobody re-proposes it
 
-### What was checked and found NOT to be a race
+The tempting story: `useBackNavigation`'s cleanup calls `history.back()` when `GameScreen` unmounts
+in `afterEach`, jsdom queues that as **two nested `setTimeout(0)` hops** (jsdom 30,
+`living/window/SessionHistory.js` lines 50 and 62), `beforeEach` resets the swallow counter while
+the hops are still queued, so under load the traversal lands inside the NEXT test's game screen as
+a real back press → exit dialog → guard 4 disables ArrowRight → the deck never finishes → timeout.
+It fits every symptom and it is **wrong**, for the reason the 2026-08-12 entry already recorded:
+**jsdom discards a queued traversal that a `pushState` beats** —
+`History-impl.js`'s `_sharedPushAndReplaceState` calls `clearHistoryTraversalTasks()` on the push
+branch (line 97), and the next game screen's mount pushes. A probe that reached `playing`, called
+`cleanup()` and `resetBackNavigationTraversals()` exactly as the hooks do, reached `playing` again,
+drained two hops and looked: **no dialog, `history.state` still the back entry, ArrowRight reached
+the end screen.** Note the asymmetry that made the back-press test the one exception: the `replace`
+branch (line 107) does NOT clear the queue, so a `replaceState(base)` in a test can still see the
+previous test's traversal move the entry under it.
 
-The double `ArrowRight` in `should save the whole set of playlists…` — two `fireEvent.keyDown`s on
-a two-card deck with no wait between them. RTL's `fireEvent` is `act`-wrapped, so each dispatch
-commits before the next line; `onNext` dispatches to the reducer, which reads state rather than a
-closure over the index; two `NEXT`s on two cards reach `ended`. Left as it was.
+### What the drain in `afterEach` is, honestly
+
+`afterEach` now awaits `flushHistoryTraversal()` — two `setTimeout(0)` hops inside `act` — after
+`cleanup()`, so the previous test's traversal lands inside the test that caused it. Deterministic
+rather than probabilistic, because jsdom's window timers are Node timers and Node fires equal-delay
+timers in insertion order. It is **hygiene**, not the fix for any timeout: it keeps a traversal from
+landing during the next test's pre-game phase, where a `replaceState` would let it move the entry.
+Two things it does NOT do. The hook's cleanup removes its `popstate` listener BEFORE calling
+`history.back()`, so when the drained traversal lands nothing is listening and **the swallow counter
+stays at 1 — `resetBackNavigationTraversals()` in `beforeEach` is still load-bearing**, and deleting
+it on the strength of the drain would reintroduce the swallowed first press it was added for. And
+the two fixed 50 ms sleeps the back-press test used to have were what a loaded machine defeats (a
+0 ms timer inserted late has a LATER expiry than an earlier 50 ms one), so they are replaced by the
+drain plus the poll above, not by a longer sleep.
+
+### Checked and found not to be a race
+
+The double `ArrowRight` in `should save the whole set of playlists…`: RTL's `fireEvent` is
+`act`-wrapped so each dispatch commits before the next line, `onNext` dispatches to the reducer,
+which reads state rather than a closure over the index, and two `NEXT`s on two cards reach `ended`.
+Left as it was.
 
 ### Acceptance
 
-The bar was the isolated file green ten times consecutively, then three consecutive green full runs
-— anything less measures luck, given that the file was green six times in a row in isolation BEFORE
-the fix once the machine was idle. Results are recorded under the entry's date in
-[`docs/development.md`](./development.md) §6 if they differ from that bar; otherwise this sentence
-is the record that it was met.
+The isolated file green **10 of 10** consecutive runs, then the full suite green **3 of 3**
+(867/867, 58–64 s each, `environment` 482–536 s) — after eight consecutive red full runs before the
+change on the same day. A quieter machine than the red runs, which is why the budget probes above
+exist: the green runs alone could not distinguish "budgets applied" from "drain plus idle machine".
