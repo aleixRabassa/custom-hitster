@@ -18,7 +18,15 @@
  * directly and mount into it.
  */
 
-import { act, cleanup, render, screen, waitFor, fireEvent } from '@testing-library/react';
+import {
+  act,
+  cleanup,
+  configure,
+  render,
+  screen,
+  waitFor,
+  fireEvent,
+} from '@testing-library/react';
 import { StrictMode } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -45,6 +53,35 @@ const { toDataURLMock } = vi.hoisted(() => ({
 }));
 
 vi.mock('qrcode', () => ({ toDataURL: toDataURLMock }));
+
+/**
+ * ===========================================================================
+ *  INTEGRATION BUDGETS, NOT UNIT BUDGETS (2026-09-19).
+ *
+ *  Testing Library gives every `waitFor` / `findBy*` ONE second, and Vitest
+ *  gives every test FIVE. Those are unit-test numbers. A test in this file
+ *  renders the whole app, drives a real reducer through a stubbed year
+ *  lookup into a lazily-imported game screen, and does it up to four times in
+ *  sequence -- measured on an IDLE machine at 700-900 ms for the synchronous
+ *  first render and ~1.1 s for the first test to reach `playing`. Under a
+ *  fully parallel run (fifteen jsdom forks on sixteen cores) each of those
+ *  stretches by a small multiple, and the ceilings became the failures:
+ *  `Unable to find an element with the text …` is `findBy*` giving up at 1 s,
+ *  and `Test timed out in 5000ms` was the synchronous test at line ~360 taking
+ *  five seconds to render once. Seven distinct tests flaked across eight runs
+ *  and not one of them asserted a wrong value (`docs/agent_findings.md`,
+ *  2026-09-19).
+ *
+ *  The arithmetic: the longest test waits FOUR times in sequence, so the test
+ *  budget must exceed 4 x the wait budget with slack. Neither number is a
+ *  duration anything normally takes -- a green test never sees them, and a
+ *  genuinely broken one fails in 5 s instead of 1 s, which is the whole cost.
+ *  `configure` is per file (Vitest isolates modules per file), as is
+ *  `vi.setConfig`; nothing here leaks into the unit suites.
+ * ===========================================================================
+ */
+configure({ asyncUtilTimeout: 5_000 });
+vi.setConfig({ testTimeout: 30_000 });
 
 const PLAYLIST_URL = 'https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M';
 
@@ -223,6 +260,52 @@ function stubHangingYearApi(): void {
   );
 }
 
+/**
+ * Let a queued history traversal land before anything else happens.
+ *
+ * ===========================================================================
+ *  THE CROSS-TEST RACE THAT MADE THIS FILE FLAKY (2026-09-19), AND WHY THIS
+ *  IS THE FIX RATHER THAN A LONGER SLEEP.
+ *
+ *  `useBackNavigation`'s cleanup calls `history.back()` when `GameScreen`
+ *  unmounts -- which every test that reaches `playing` does, in `afterEach`'s
+ *  `cleanup()`. jsdom does not traverse synchronously: `go(-1)` queues a
+ *  `setTimeout(0)` task that computes the target entry and queues a SECOND
+ *  `setTimeout(0)` task that performs the traversal and dispatches `popstate`
+ *  (jsdom 30, `living/window/SessionHistory.js` lines 50 and 62). So the
+ *  traversal lands two timer hops after the unmount -- on an idle machine
+ *  ~10 ms later, under a fifteen-fork run, whenever the loop gets to it.
+ *
+ *  Meanwhile `beforeEach` has already reset the hook's swallow counter to
+ *  zero. When the traversal then lands inside the NEXT test's game screen,
+ *  the hook reads it as a real back press: it re-pushes its entry and asks
+ *  to exit, the exit dialog opens, and guard 4 in `GameScreen` disables the
+ *  window key handler -- so the ArrowRight that was meant to finish the deck
+ *  does nothing and the test waits for an end screen that never comes. That
+ *  is the `Test timed out` family. When it lands on the back-press test
+ *  instead, it moves the current entry under its `history.state`
+ *  assertions -- the `expected { base } to not deeply equal { base }` family.
+ *
+ *  Two hops, awaited in order, is exactly enough and is DETERMINISTIC rather
+ *  than probabilistic: jsdom's window timers are Node timers, and Node fires
+ *  equal-delay timers in insertion order. The traversal's first hop was
+ *  inserted before this helper's first timer, so it runs first and inserts
+ *  the second hop; that hop was inserted before this helper's second timer,
+ *  so it runs -- and dispatches `popstate`, which the counter swallows --
+ *  before the helper resumes. A 50 ms sleep was the previous version and it
+ *  is what a loaded machine defeats: a 0 ms timer that is late is still
+ *  ordered AFTER an earlier-expiring 50 ms one.
+ *
+ *  When nothing was queued this is two idle hops and changes nothing.
+ * ===========================================================================
+ */
+async function flushHistoryTraversal(): Promise<void> {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+}
+
 function renderApp(fetchImpl: PlaylistFetch, storage = memoryStorage()) {
   render(<App storage={storage} fetchImpl={fetchImpl} />);
 
@@ -339,8 +422,11 @@ describe('App', () => {
     vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     cleanup();
+    // The unmount above may have queued a history traversal; let it LAND here, inside the test
+    // that caused it, rather than inside the next one. See the helper.
+    await flushHistoryTraversal();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
@@ -847,12 +933,11 @@ describe('App', () => {
     //  Measured as the CURRENT ENTRY rather than as `history.length`, which
     //  cannot see the difference: going back does not shorten it.
     // ===================================================================
-    // Let any traversal an earlier test queued land BEFORE the base is stamped. jsdom's is
-    // asynchronous, and one arriving mid-test would move the current entry under the assertions --
-    // which reads as this feature leaking rather than as the previous test finishing.
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    });
+    // `afterEach` already drained the previous test's traversal; drained again here so THIS test's
+    // correctness does not depend on the hook ordering of the one before it. One arriving mid-test
+    // would move the current entry under the assertions -- which reads as this feature leaking
+    // rather than as the previous test finishing.
+    await flushHistoryTraversal();
 
     const base = { base: 'app-test' };
     window.history.replaceState(base, '');
@@ -869,17 +954,20 @@ describe('App', () => {
       expect(screen.queryByTestId('hud')).not.toBeNull();
     });
 
-    // Playing: one entry for the press to consume.
-    expect(window.history.state).not.toEqual(base);
+    // Playing: one entry for the press to consume. The push is a mount effect, so it is committed
+    // by the time the HUD query above passes; polled anyway, because a late traversal is the one
+    // thing that can move it and a poll reports THAT rather than a coincidence of timing.
+    await waitFor(() => {
+      expect(window.history.state).not.toEqual(base);
+    });
 
     fireEvent.keyDown(window, { key: 'ArrowRight' });
     expect(await screen.findByText(COPY.end.heading)).not.toBeNull();
 
-    // The end screen: the entry is gone again, because the game screen unmounted with it. The wait
-    // is for jsdom's queued traversal, which is asynchronous (~10ms, measured 2026-08-12).
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    });
+    // The end screen: the entry is gone again, because the game screen unmounted with it. The
+    // traversal is jsdom's two queued hops (see `flushHistoryTraversal`), drained rather than slept
+    // through, then asserted.
+    await flushHistoryTraversal();
     expect(window.history.state).toEqual(base);
   });
 
