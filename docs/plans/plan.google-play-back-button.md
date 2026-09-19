@@ -1,6 +1,7 @@
 <!-- Plans for google-play (in order):
-  1. plan.google-play-shell.md       — packaging the PWA as a Trusted Web Activity and getting it through Play to production. STEPS 1-5 BUILT 2026-09-19; step 6 on needs a device and a Console
-  2. plan.google-play-back-button.md — making Android's back gesture an in-app control instead of an app exit  ← this file. CODE BUILT 2026-08-12; device verification pending on plan 1
+  1. plan.google-play-shell.md       — packaging the PWA as a Trusted Web Activity. STEPS 1-5 BUILT 2026-09-19; the rest is FROZEN and tracked in plan 3
+  2. plan.google-play-back-button.md — Android's back gesture as an in-app control. CODE BUILT 2026-08-12; its seven device rows are tracked in plan 3  ← this file
+  3. plan.play-store-todo.md         — everything still between the committed repo work and a staged production rollout. THE ONLY EXECUTABLE ONE
 -->
 
 # Plan: google-play — Android back button as an in-app control
@@ -9,6 +10,10 @@
 > **Date:** 2026-08-11 · **Code landed:** 2026-08-12 · **Reviewed against the repo:** 2026-09-19
 > **Author:** Aleix Rabassa
 > **Depends on:** [plan.google-play-shell.md](plan.google-play-shell.md) — **for verification only, and that is now the ONLY thing left.** Steps 1–4 and every unit test are built and in `main` (commit `1441a6c`); every Documentation Update below has landed. What remains is step 5, which cannot be observed without an installed TWA, because a browser has its own back affordance and its own history stack.
+
+> **FROZEN 2026-09-19.** The code is built. Step 5's seven device rows and the two open questions that
+> wait on them are owned by [`plan.play-store-todo.md`](plan.play-store-todo.md) steps 7 and 12, and are
+> ticked from there. Point `/plan-exec` at that file, never at this one.
 
 ---
 
@@ -191,6 +196,7 @@ rather than by an exclusion list somebody has to remember to update.
         the animation differs.
   - [ ] Confirm the Android 13+ predictive-back animation does not show the app peeling away while
         the web app is in fact handling the press — see Open Questions.
+        _→ Frozen; tracked in [`plan.play-store-todo.md`](plan.play-store-todo.md) steps 7 (rows 1–6 on the URL-bar build) and 12 (all seven on the verified build, row 7 mandatory); the end-screen and picker questions are decided at its step 12. Do not execute from here._
 
 ---
 

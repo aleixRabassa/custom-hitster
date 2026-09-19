@@ -1,6 +1,7 @@
 <!-- Plans for google-play (in order):
-  1. plan.google-play-shell.md       — packaging the PWA as a Trusted Web Activity and getting it through Play to production  ← this file. STEPS 1-5 BUILT 2026-09-19; step 6 onward needs a device and a Play Console
-  2. plan.google-play-back-button.md — making Android's back gesture an in-app control instead of an app exit. CODE BUILT 2026-08-12; its device rows run on THIS plan's installs
+  1. plan.google-play-shell.md       — packaging the PWA as a Trusted Web Activity. STEPS 1-5 BUILT 2026-09-19; the rest is FROZEN and tracked in plan 3  ← this file
+  2. plan.google-play-back-button.md — Android's back gesture as an in-app control. CODE BUILT 2026-08-12; its seven device rows are tracked in plan 3
+  3. plan.play-store-todo.md         — everything still between the committed repo work and a staged production rollout. THE ONLY EXECUTABLE ONE
 -->
 
 # Plan: google-play — Ship the app to Google Play (TWA shell and store release)
@@ -11,6 +12,10 @@
 > this repo does not contain: a deploy, an Android device, or a Play Console account
 > **Author:** Aleix Rabassa
 > **Depends on:** nothing. This is plan 1 of 2 and is independently shippable. Plan 2's code is already in `main`, so this plan's installs are also where plan 2's seven device rows get run.
+
+> **FROZEN 2026-09-19.** Steps 1–5 are built. Every unfinished box below is owned by a step in
+> [`plan.play-store-todo.md`](plan.play-store-todo.md), named under each step, and is ticked only when
+> that step ticks. Point `/plan-exec` at that file, never at this one.
 
 ---
 
@@ -202,6 +207,7 @@ Actions migration is recorded in Out of Scope rather than built speculatively.
         by the Android system rather than by the webview, so a cached copy would be wrong as well as
         useless.
   - [ ] Record all three findings, dated, in `docs/agent_findings.md`.
+        _→ Frozen; tracked in [`plan.play-store-todo.md`](plan.play-store-todo.md) step 2 (the deploy happened with commit `8801190`; the fetches are recorded there). Do not execute from here._
 
 - [x] **Step 5 — Install the Android toolchain.** JDK 17 and the Android SDK build tools;
       Bubblewrap offers to fetch both on first run. **As of 2026-09-19 this machine had none of the
@@ -247,6 +253,7 @@ Actions migration is recorded in Out of Scope rather than built speculatively.
         **welcome screen**, on every cold launch, by a recorded decision (no "seen it" flag). That is
         correct and needs no packaging change — but it is what testers and reviewers will see first,
         so the listing's first screenshot should be it (step 13).
+        _→ Frozen; tracked in [`plan.play-store-todo.md`](plan.play-store-todo.md) step 4. Do not execute from here._
 
 - [ ] **Step 7 — Generate and protect the signing key.**
   - [ ] Create the upload keystore outside the repository, or inside it and ignored — never
@@ -260,6 +267,7 @@ Actions migration is recorded in Out of Scope rather than built speculatively.
         `android/.gradle/`, and `local.properties`. Append the block **below** the existing `.env`
         family and introduce no new `.env*` pattern — that file's negation-last rule is load-bearing
         and has already been broken once by a CLI.
+        _→ Frozen; tracked in [`plan.play-store-todo.md`](plan.play-store-todo.md) step 5. Do not execute from here._
 
 - [ ] **Step 8 — Check the target SDK.** Read `targetSdkVersion` in the generated Gradle files and
       compare it against Play's current minimum for new apps, which advances every August. Bump it
@@ -268,6 +276,7 @@ Actions migration is recorded in Out of Scope rather than built speculatively.
       any number remembered from the planning date: read the requirement in the Console's own
       policy page on the day, and read what Bubblewrap 1.25.0 actually emitted rather than what its
       changelog says.
+      _→ Frozen; tracked in [`plan.play-store-todo.md`](plan.play-store-todo.md) step 6. Do not execute from here._
 
 - [ ] **Step 9 — First local build and install.** Run `bubblewrap build` to produce the AAB and the
       accompanying APK; install the APK on a real device.
@@ -294,15 +303,18 @@ Actions migration is recorded in Out of Scope rather than built speculatively.
         and seeing it resume (and the reverse). Not a defect — but a tester who does not know it
         will report "the app remembered a game I never played in it", so it goes in the tester notes
         and in `docs/development.md` §8.
+        _→ Frozen; tracked in [`plan.play-store-todo.md`](plan.play-store-todo.md) step 7. Do not execute from here._
 
 - [ ] **Step 10 — Create the Play Console app.** Pay the one-time 25 USD registration fee and
       complete identity verification for the personal account. Create the app: name, default
       language, Games category with a music/trivia subcategory, free, not primarily child-directed.
+      _→ Frozen; tracked in [`plan.play-store-todo.md`](plan.play-store-todo.md) steps 1 (account and identity verification, day 0) and 9 (the app). Do not execute from here._
 
 - [ ] **Step 11 — Upload to internal testing and read both fingerprints.** Upload the AAB to the
       internal testing track. Then open the app signing page and copy **two** SHA-256 fingerprints:
       the **app signing key** (Google's, used for what users install) and the **upload key**
       (yours, used for local installs).
+      _→ Frozen; tracked in [`plan.play-store-todo.md`](plan.play-store-todo.md) step 10. Do not execute from here._
 
 - [ ] **Step 12 — Complete the asset links and prove verification.** This step is the pass/fail
       gate for the whole approach.
@@ -332,6 +344,7 @@ Actions migration is recorded in Out of Scope rather than built speculatively.
         opens the app on a bare `/` would silently show the welcome screen instead of dealing.
   - [ ] **Re-run all seven plan-2 rows on this build**, including row 7 (predictive back). This is
         the build that reaches testers, and row 7 is the one that can require a change in `android/`.
+        _→ Frozen; tracked in [`plan.play-store-todo.md`](plan.play-store-todo.md) steps 11 and 12. Do not execute from here._
 
 - [ ] **Step 13 — Build the store listing.** Author the copy in `docs/store/` so it is reviewable,
       then paste it into the Console.
@@ -358,6 +371,7 @@ Actions migration is recorded in Out of Scope rather than built speculatively.
         header) or replace the suggestion. Not decided by this plan, and not something to fix
         quietly in passing. Also grep `README.md`, which links to the board game by name — fine for a
         repository, not for listing copy.
+        _→ Frozen; tracked in [`plan.play-store-todo.md`](plan.play-store-todo.md) steps 3 (the trademark relabel, decided `'Jitster official'`) and 13. Do not execute from here._
 
 - [ ] **Step 14 — Policy declarations.**
   - [ ] Data safety form, using the flows enumerated in step 3. The honest position is close to "no
@@ -369,23 +383,28 @@ Actions migration is recorded in Out of Scope rather than built speculatively.
         the developer does not control.
   - [ ] Ads: none. Target audience: not child-directed, to stay outside the Families policy.
         Privacy policy URL from step 3.
+        _→ Frozen; tracked in [`plan.play-store-todo.md`](plan.play-store-todo.md) step 14. Do not execute from here._
 
 - [ ] **Step 15 — Read the pre-launch report.** It runs the app on real devices and reports crashes
       and accessibility findings. This overlaps directly with the manual passes still outstanding in
       `docs/development.md` §5, and is the first automated device coverage this project has ever
       had. Fix anything real before production rather than after.
+      _→ Frozen; tracked in [`plan.play-store-todo.md`](plan.play-store-todo.md) step 15. Do not execute from here._
 
 - [ ] **Step 16 — Closed testing milestone.** Create a closed track and recruit **twelve or more
       testers, opted in and kept opted in for fourteen continuous days**. This is the calendar
       critical path for a personal account. Land plan 2 inside this window.
+      _→ Frozen; tracked in [`plan.play-store-todo.md`](plan.play-store-todo.md) step 16. Do not execute from here._
 
 - [ ] **Step 17 — Apply for production access, then roll out.** Submit the application after the
       fourteen days, then release to production as a **staged rollout** rather than at 100%, so a
       crash surfaced by real installs can be halted.
+      _→ Frozen; tracked in [`plan.play-store-todo.md`](plan.play-store-todo.md) step 17. Do not execute from here._
 
 - [ ] **Step 18 — Record the release process.** Write the toolchain, build, upload and rollout steps
       into `docs/development.md` while they are fresh. A release process rediscovered in six months
       is a release that does not happen.
+      _→ Frozen; tracked in [`plan.play-store-todo.md`](plan.play-store-todo.md) step 18. Do not execute from here._
 
 ---
 
@@ -428,6 +447,8 @@ eight steps is a test people learn to skip.
       `index.html` with a 200, which is the URL bar with a green build. A string assertion over the
       pattern is the honest ceiling: path-to-regexp semantics are not worth re-implementing in a
       test, and the deployed behaviour is step 4's fetch.
+      _→ Frozen; tracked in [`plan.play-store-todo.md`](plan.play-store-todo.md) Unit Tests batch B, step 11. Do not execute from here._
+      _→ Frozen; tracked in [`plan.play-store-todo.md`](plan.play-store-todo.md) Unit Tests batch B, step 11. Do not execute from here._
 
 **What these tests cannot prove, stated so nobody mistakes green for verified:** that Android's
 verifier accepted the fingerprints, that the URL bar is gone, that the AAB installs, or that the
