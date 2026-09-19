@@ -28,8 +28,8 @@ kind.
 If Play says the app is not available, give it a few hours: a new test build takes a while to reach
 every account, and there is nothing to fix at your end.
 
-You need **Android 13 or newer** for the whole test. Older phones will run the app, but two of the
-things we most need checked do not exist on them.
+**Any Android phone is welcome.** If yours runs Android 13 or newer, so much the better — the newer
+back gesture only exists there — but nothing in the list below needs it.
 
 **Please stay in the test.** Leaving it early, even after you have finished testing, sets the
 release back by days — Google counts continuous days with testers enrolled, not days of testing.
@@ -69,8 +69,10 @@ to report. Please include a screenshot.
 back should bring up a "leave this game?" question, not close the app. Outside a game (on the
 welcome screen, the playlist picker, or the end screen), back closing the app is correct.
 
-**Music still playing after you lock the phone.** The sound should stop when the screen goes off,
-and continue from where it stopped when you unlock.
+**Music still playing after you lock the phone.** The sound should stop when the screen goes off.
+When you unlock, it stays stopped on purpose — pressing Play should then continue from where it
+stopped rather than starting the song again. Silence after unlocking is correct; a song that
+restarts from the beginning is not.
 
 **A download that does not arrive.** There are two: a "printable year cards" link on the welcome
 screen, and a "Print as PDF cards" button during a game. Both should put a PDF in your Downloads.

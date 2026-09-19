@@ -504,8 +504,11 @@ are steps 7, 12, 15 and 17 — a device and a Console.
       two are the lock-screen audio row and predictive back (decision 14).
 - [ ] What is the name and role of the checksum file `bubblewrap update` writes beside
       `twa-manifest.json` — read at step 4, not guessed.
-- [ ] Who owns playlist `34cIJlWIX9TEoA8bpI2UBu`? If it is not the developer's, does "official" still
-      hold? Read from the embed payload at step 3.
+- [x] Who owns playlist `34cIJlWIX9TEoA8bpI2UBu`? If it is not the developer's, does "official" still
+      hold? Read from the embed payload at step 3. **Answered 2026-09-19: `arich97`, confirmed by the
+      developer as their own account**, so "official" holds and decision 5 shipped unchanged. The
+      owner is in `entity.subtitle`, not in `authors` (which is `null` at playlist level, as it always
+      has been) — worth knowing for the next time something needs a playlist's owner.
 - [ ] Does the content-rating questionnaire's user-generated-content question apply to arbitrary
       track titles from a player-chosen playlist? (Carried from plan 1.)
 - [ ] Must Vercel's access-log IP retention be declared in the Data safety form, or does it fall under
