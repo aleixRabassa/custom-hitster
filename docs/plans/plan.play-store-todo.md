@@ -179,7 +179,7 @@ hands it needs.
         otherwise leave it for step 6.
         _→ Evaluated 2026-09-19: the target-SDK half is NOT recorded, so plan 1's entry stays open for step 6._
 
-- [ ] **Step 3 `[agent]` — The trademark pass, ending in a deploy. Gate M1.** Decided 2026-09-19:
+- [x] **Step 3 `[agent]` — The trademark pass, ending in a deploy. Gate M1.** Decided 2026-09-19:
       relabel, do not replace. This is the step that unblocks picker screenshots; do it before the
       shell so the first install already shows the new label.
   - [x] Re-verify the id first, because `LandingScreen.tsx`'s rule 1 says to verify before shipping
@@ -207,12 +207,18 @@ hands it needs.
         become a dated record of the decision and the new label.
   - [x] Tick plan 1's open question on the `'Hitster'` label and its custom-domain open question
         (decision 4 below), and annotate its Out-of-Scope bullet on relabelling as resolved here.
-  - [ ] Add the trademark guard test (Unit Tests below), run `pnpm typecheck && pnpm lint && pnpm test
+  - [x] Add the trademark guard test (Unit Tests below), run `pnpm typecheck && pnpm lint && pnpm test
 && pnpm build`, commit, push. A push to `main` deploys (`docs/development.md` §7; the Vercel
         CLI is not installed here). Confirm the relabelled picker is live on the origin. Two commit-gate
         traps recorded on 2026-09-19: `App.test.tsx`'s end-reason test is flaky (re-run before
         concluding), and repo-wide `format:check` fails on CRLF artefacts (check Prettier per touched
         file).
+        _→ **GATE M1 REACHED 2026-09-19.** Commit `de2d4bc`, pushed to `main`; the deploy is live and
+        confirmed on the origin: `assets/index-1CaZKK_c.js` contains `Jitster official` and ZERO
+        occurrences of the mark, and `/robots.txt` line 1 now reads "Playlist Jitster". Both traps
+        landed — `App.test.tsx` was flaky on SEVEN distinct tests across eight runs (proven
+        pre-existing at `HEAD` with the work stashed; widened finding in `docs/agent_findings.md`), and
+        the per-file Prettier check needed the same CRLF handling the 2026-09-19 entry describes._
 
 - [ ] **Step 4 `[you type it]` then `[agent]` — Generate the shell.** Absorbs plan 1 step 6 in full.
   - [ ] `[you type it]` `mkdir android`, then `! cd android && bubblewrap init
