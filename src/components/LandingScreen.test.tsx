@@ -447,6 +447,40 @@ describe('LandingScreen', () => {
     expect(new Set(SUGGESTED_PLAYLISTS.map((p) => p.label)).size).toBe(SUGGESTED_PLAYLISTS.length);
   });
 
+  it('should keep the registered mark out of every suggestion label and blurb', () => {
+    /*
+      ===================================================================
+       A TRADEMARK GUARD OVER DATA, NOT AN ASSERTION ABOUT WORDING.
+
+       "Hitster" is a registered board-game mark. `docs/store/listing.md`
+       §1 forbids it in anything that reaches the Google Play Console --
+       listing copy, metadata, and any SCREENSHOT. The picker is the screen
+       every player passes through, so a label here lands in a screenshot
+       whether or not anybody typed the word into the Console.
+
+       Why this does not break the 2026-08-12 copy rule ("a test asserts
+       against COPY.*, never a literal"): this array is not copy. It is
+       third-party playlist DATA, deliberately outside `src/game/copy.ts`
+       because it describes playlists rather than saying anything, and the
+       rule never covered it. And the constraint is not a phrasing
+       preference a rewording may freely change -- it is enforced by a
+       store that acts on IP complaints. Same shape as the leak proxies:
+       an absence asserted over rendered data.
+
+       Case-insensitive, and over BOTH fields, because the set is edited on
+       request by pasting links -- the realistic way the word comes back is
+       a new row named after whatever Spotify calls it, not an edit to the
+       row this guard was written for. That row (2026-09-19) is now
+       "Jitster official"; its real Spotify title is "Hitser", so the mark
+       only ever existed in the app's own rendering of it.
+      ===================================================================
+    */
+    for (const playlist of SUGGESTED_PLAYLISTS) {
+      expect(playlist.label).not.toMatch(/hitster/i);
+      expect(playlist.blurb).not.toMatch(/hitster/i);
+    }
+  });
+
   it('should submit a suggestion immediately as a single playlist', () => {
     // Fill AND submit, exactly as if the link had been pasted -- including leaving the value in the
     // box, which is how a player learns what a valid link looks like. The FULL link, not the bare

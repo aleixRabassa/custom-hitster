@@ -182,14 +182,14 @@ Actions migration is recorded in Out of Scope rather than built speculatively.
       Play is pressed, because the `<audio>` element is `preload="none"`. `public/privacy.html` was
       written from the code and says the corrected version; declare the form from the page, not from
       this paragraph.
-  - [ ] Verify after deploy that the page is served rather than swallowed by the SPA rewrite. The
+  - [x] Verify after deploy that the page is served rather than swallowed by the SPA rewrite. The
         rewrite source in `vercel.json` is `/((?!api/|@)[^.]*)` — the `[^.]*` excludes any path
         containing a dot, so `/privacy.html` passes through, exactly as `/robots.txt` and the
         year-cards `.pdf` already do. Confirm it anyway, because a listing pointing at a 404 is a
         review rejection. (`docs/architecture.md` §6 quoted an older form of this rewrite without the
         dot exclusion until 2026-09-19; it now matches the file.)
 
-- [ ] **Step 4 — Serve a placeholder `assetlinks.json` and verify the path end to end.** Do this
+- [x] **Step 4 — Serve a placeholder `assetlinks.json` and verify the path end to end.** Do this
       **before** any keystore exists, because it isolates the two things that can go wrong.
   - [x] Create `public/.well-known/assetlinks.json` with the correct statement-list shape — a single
         statement delegating `common.handle_all_urls`, targeting the `android_app` namespace, naming
@@ -200,13 +200,13 @@ Actions migration is recorded in Out of Scope rather than built speculatively.
         rather than trusted.
   - [x] Confirm `vite build` copies the **dot-directory** out of `public/` into `dist/`. This is the
         step most likely to surprise; verify it against the build output rather than trusting it.
-  - [ ] Deploy, then fetch the file from the production origin and confirm it returns the JSON with a
+  - [x] Deploy, then fetch the file from the production origin and confirm it returns the JSON with a
         JSON content type and is **not** rewritten to `index.html`.
   - [x] Confirm the file is absent from the generated precache manifest — `globPatterns` in
         `vite.config.ts` does not list `json`, so it should be. Asset-link verification is performed
         by the Android system rather than by the webview, so a cached copy would be wrong as well as
         useless.
-  - [ ] Record all three findings, dated, in `docs/agent_findings.md`.
+  - [x] Record all three findings, dated, in `docs/agent_findings.md`.
         _→ Frozen; tracked in [`plan.play-store-todo.md`](plan.play-store-todo.md) step 2 (the deploy happened with commit `8801190`; the fetches are recorded there). Do not execute from here._
 
 - [x] **Step 5 — Install the Android toolchain.** JDK 17 and the Android SDK build tools;
@@ -556,11 +556,22 @@ the contract and be explicit that the middle is untestable here.
       only, no hyphens — and there is no owned domain to derive from, so the developer's name is the
       namespace. Bubblewrap's own default for this host would have been `app.vercel.playlistjitster`,
       which decision 16 rules out. Step 6 carries the value.
-- [ ] What happens to the `'Hitster'` label on the first suggested playlist — relabel, or replace
+- [x] What happens to the `'Hitster'` label on the first suggested playlist — relabel, or replace
       the suggestion? It is the one player-visible use of the mark (step 13), and it is in the
-      screenshots the listing needs. (2026-09-19)
-- [ ] Is moving to a custom domain foreseeable? If it is even plausible within a year, doing it
-      _before_ step 6 is far cheaper than after — the origin is baked into the shell.
+      screenshots the listing needs. (2026-09-19) **Answered 2026-09-19: RELABEL, to
+      `'Jitster official'`, id unchanged** — the developer's choice, executed by
+      [`plan.play-store-todo.md`](plan.play-store-todo.md) step 3. Two facts read live from the embed
+      payload on the day: the playlist's real Spotify title is **"Hitser"** (one _t_), so the app's
+      own label was the only place the mark existed and nothing was being quoted; and its owner
+      `arich97` is the developer's own account, which is what entitles the label to say "official".
+      `docs/store/listing.md` §1 carries the record.
+- [x] Is moving to a custom domain foreseeable? If it is even plausible within a year, doing it
+      _before_ step 6 is far cheaper than after — the origin is baked into the shell. **Answered
+      2026-09-19: NO custom domain** (developer's answer;
+      [`plan.play-store-todo.md`](plan.play-store-todo.md) decision 4). The shell binds to
+      `https://playlistjitster.vercel.app` permanently. The cost is recorded once rather than
+      rediscovered: a later domain move is a rebuilt shell, a new asset-links deployment, a second
+      install identity for every browser PWA install, and never a redirect from the old origin.
 - [ ] Does the content rating questionnaire's user-generated-content question apply? The app renders
       arbitrary track titles from a player-chosen playlist, so it displays text the developer does
       not control.
@@ -598,7 +609,10 @@ the contract and be explicit that the middle is untestable here.
   installed app, by the 2026-09-18 decision. If closed testing reports it as friction, that is a
   product decision to reopen there, not a packaging change.
 - **Relabelling or replacing the `'Hitster'` suggestion.** Step 13 surfaces it; the decision is the
-  developer's and touches a data list that every landing-screen test renders.
+  developer's and touches a data list that every landing-screen test renders. _→ **Resolved
+  2026-09-19** and no longer out of scope anywhere: relabelled to `'Jitster official'` (id unchanged)
+  by [`plan.play-store-todo.md`](plan.play-store-todo.md) step 3, which also added the trademark
+  guard over the array. See the Open Question above._
 - **The App Store and iOS.** Explicitly discarded by the developer. No Capacitor, no Mac, no `$99`.
 - **Adding CORS to `api/playlist.ts` and `api/year.ts`.** Only Capacitor would need it, and Capacitor
   was rejected.

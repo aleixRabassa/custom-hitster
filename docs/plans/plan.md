@@ -654,8 +654,16 @@ what makes the game's payoff audible at all.
       the handler's exhaustive status table, and the edge cache key. A playlist that fails is dropped
       with a **count**, and only a total failure blocks Start. See
       [`../architecture.md`](../architecture.md) §3, "The combined deck".
-- [ ] **Google Play — the deployed PWA as a Trusted Web Activity on the store.** Two plans, and the
-      order they were written in is not the order they were built in:
+- [ ] **Google Play — the deployed PWA as a Trusted Web Activity on the store.** **Three plans since
+      2026-09-19, and exactly one of them is executable:**
+      [`plan.play-store-todo.md`](./plan.play-store-todo.md) now owns every remaining step, from the
+      trademark relabel through the Bubblewrap shell to a staged production rollout, and the two
+      below are **frozen** — they keep their reasoning and their dated history, and their unfinished
+      boxes tick only when the matching step in plan 3 does. Point `/plan-exec` at plan 3 and nothing
+      else. **Its steps 2, 3 and 8 are done (2026-09-19)**: the deployed asset-links and privacy
+      fetches are recorded, the first suggested playlist is relabelled `'Jitster official'` (gate M1),
+      and `docs/store/tester-notes.md` exists. Everything left needs a phone or the Play Console. The
+      order the first two were written in is not the order they were built in:
       [`plan.google-play-shell.md`](./plan.google-play-shell.md) (Bubblewrap shell in a new `android/`
       tree, `public/.well-known/assetlinks.json` with BOTH certificate fingerprints, `public/privacy.html`,
       four manifest fields, the listing under `docs/store/`, and the store's closed-testing gate of
@@ -669,9 +677,12 @@ what makes the game's payoff audible at all.
       redeploy updates every install, `runtimeCaching` stays empty, and no application code changes
       for the shell. The one string that can never change after first publish is the application id,
       `aleixrabassa.playlistjitster`; the origin it binds to is `https://playlistjitster.vercel.app`
-      (both decided 2026-09-19; the old `custom-hitster.vercel.app` redirects to it). The two things
-      plan 1's review found stale are recorded there: the icons DO carry a wordmark, and the first
-      suggested playlist is labelled "Hitster", which the trademark pass has to decide on.
+      (both decided 2026-09-19; the old `custom-hitster.vercel.app` redirects to it), and there will
+      be **no custom domain** — decided the same day, which is why the origin could be baked in. The
+      two things plan 1's review found stale are recorded there: the icons DO carry a wordmark, and
+      the first suggested playlist was labelled "Hitster" — **resolved 2026-09-19 by relabelling it
+      `'Jitster official'`**, the id unchanged, because the playlist's real Spotify title turned out
+      to be "Hitser" and the mark existed only in the app's own rendering of it.
 
 ---
 

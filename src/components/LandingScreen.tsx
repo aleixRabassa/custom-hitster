@@ -9,8 +9,9 @@
  *  THIS IS A PRE-START SURFACE, SO IT MUST LEAK NOTHING ABOUT ANY DECK.
  *
  *  The person pasting the link is a PLAYER -- there is no host role in this app
- *  (plan.md §6). So the suggested playlists are labelled by genre and era, never
- *  by what is in them, and nothing here ever renders a track title, an artist or
+ *  (plan.md §6). So the suggested playlists are labelled by genre and era -- or,
+ *  for the first row since 2026-09-19, by a name this app chose -- never by what
+ *  is in them, and nothing here ever renders a track title, an artist or
  *  a year. That rule is why there is no "preview the deck" affordance and no
  *  pre-Start year review: either would hand the player the answers to the whole
  *  game before it started.
@@ -136,7 +137,13 @@ function rowErrorId(rowId: string): string {
  * ===========================================================================
  *
  * The labels are readable renderings of Spotify's own titles -- real titles carry emoji, stray
- * punctuation and the occasional typo -- and the blurbs are genre/era names. Nothing in either names
+ * punctuation and the occasional typo -- and the blurbs are genre/era names. **The first row is the
+ * one exception, and it is labelled for the APP rather than for its Spotify title (2026-09-19):**
+ * its real title is "Hitser", and rendering that readably produced "Hitster", which is a registered
+ * mark the Google Play listing may not carry (`docs/store/listing.md` §1). So it reads
+ * "Jitster official" -- a label this app chose, verified as owned by the developer's own account at
+ * the time of the change. The rule the other rows follow is unchanged; this row is a deliberate
+ * departure from it with a reason that is not about readability. Nothing in either field names
  * a track or a year, which is what keeps this pre-Start section leak-free. A single-artist row is
  * allowed: it tells the player every card shares an artist, and the game is guessing the YEAR, which
  * an artist gives nothing away about. Naming a track or a year would still be a leak.
@@ -146,7 +153,7 @@ function rowErrorId(rowId: string): string {
  * disagree.
  */
 export const SUGGESTED_PLAYLISTS: readonly { id: string; label: string; blurb: string }[] = [
-  { id: '34cIJlWIX9TEoA8bpI2UBu', label: 'Hitster', blurb: 'Mixed hits' },
+  { id: '34cIJlWIX9TEoA8bpI2UBu', label: 'Jitster official', blurb: 'Mixed hits' },
   { id: '0Bq6Ofk5drHQKzevbnPzW2', label: 'Trap Argentino Prime', blurb: 'Argentine trap' },
   { id: '4wZA7zbfDuTi9yqZy8WY4y', label: 'Hits Catalans', blurb: 'Catalan hits' },
   { id: '6xrNthbRvaWedC81pc78xo', label: 'Openings Català', blurb: 'Anime openings in Catalan' },

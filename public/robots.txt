@@ -1,4 +1,4 @@
-# Custom Hitster is a single public page with nothing behind a login, so crawling is allowed in
+# Playlist Jitster is a single public page with nothing behind a login, so crawling is allowed in
 # full. `/api/` is excluded because those routes answer only to a `url` query parameter and have
 # nothing to index -- a crawler hitting `/api/playlist` with no parameters gets an error body, and
 # `/api/year` spends a request against a MusicBrainz budget shared by every user of the app.

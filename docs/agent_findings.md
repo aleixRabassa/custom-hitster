@@ -4107,3 +4107,149 @@ those four pass. Check formatting per-file on the files you actually touched
 (`pnpm exec prettier --check <paths>`) rather than repo-wide, or the signal is drowned. Do **not**
 "fix" it by running `pnpm format` across the repo: that would rewrite 30 untouched files and commit a
 diff that is pure line endings.
+
+## 2026-09-19 — The third asset-links finding, measured live: an EMPTY fingerprint list reads as MALFORMED, not as "reachable"
+
+The entry above ("Vite copies `public/.well-known/` into `dist/`") closes with "the third finding is
+not available here" — it needed a deploy and there was none in that session. Commit `8801190` was
+pushed afterwards, Vercel deployed it, and the three fetches were re-run from this machine. This is
+that third finding, and it is step 2 of
+[`plan.play-store-todo.md`](./plans/plan.play-store-todo.md).
+
+**`https://playlistjitster.vercel.app/.well-known/assetlinks.json`** answers `200`,
+`Content-Type: application/json; charset=utf-8`, `Content-Length: 223`, `Server: Vercel`,
+`X-Vercel-Cache: HIT`. The body is the statement list byte for byte — one statement, the
+`android_app` namespace, `aleixrabassa.playlistjitster`, `sha256_cert_fingerprints: []` — and **not**
+`index.html`. So `vercel.json`'s `/((?!api/|@)[^.]*)` rewrite does let the dot-directory through in
+production, which until now was only pinned by a string assertion over the rewrite `source`. The
+same fetch also confirms the file is served from `public/` untouched by the build.
+
+**`https://playlistjitster.vercel.app/privacy.html`** answers `200`, `text/html; charset=utf-8`,
+9,525 bytes. The listing's privacy-policy URL (step 14) resolves.
+
+**Google's own checker is the finding worth writing down.** Fetching
+
+```
+https://digitalassetlinks.googleapis.com/v1/statements:list?source.web.site=https://playlistjitster.vercel.app&relation=delegate_permission/common.handle_all_urls
+```
+
+returns
+
+```json
+{
+  "maxAge": "599.999999859s",
+  "debugString": "* Error: invalid_argument: Could not parse statement list (must contain at least one certificate): []\n [0] while fetching Web statements from https://playlistjitster.vercel.app./.well-known/assetlinks.json ...",
+  "errorCode": ["ERROR_CODE_MALFORMED_CONTENT"]
+}
+```
+
+**That verdict is CORRECT for the placeholder, and it is worth more than a `200` would be.** It
+proves the verifier's own fetch path end to end — right host, no SPA rewrite, a content type it
+accepts, a document it parsed far enough to complain about its contents — while telling us something
+the shape tests cannot: an empty `sha256_cert_fingerprints` list is read as **malformed content**,
+not as "a reachable file that happens to delegate to nobody". So there is no in-between state to
+mistake for progress: until step 11 writes both fingerprints, the only two readings of this URL are
+`ERROR_CODE_MALFORMED_CONTENT` and a parsed statement list. A future session that sees this error
+before step 11 should read it as the expected state, not as a bug in the file.
+
+**Two caveats for anyone using the checker as an instrument.** The response carries
+`maxAge: ~600s`, so Google caches its fetch for ten minutes — after the step-11 redeploy, wait at
+least that long before concluding the new statement did not take, rather than looping on redeploys.
+And the `debugString` shows it canonicalises the host with a trailing dot
+(`playlistjitster.vercel.app.`) before fetching; that is normal DNS-root form and not a
+misconfiguration to chase.
+
+Both caveats are recorded beside the instrument in [`docs/development.md`](./development.md) §5 and
+§9.
+
+## 2026-09-19 — The first suggested playlist is really called "Hitser", and the mark existed only in our own label
+
+Step 3 of [`plan.play-store-todo.md`](./plans/plan.play-store-todo.md) relabels
+`SUGGESTED_PLAYLISTS[0]` from `'Hitster'` to `'Jitster official'` so that a screenshot of the picker
+can reach the Google Play Console. `src/components/LandingScreen.tsx`'s own rule 1 says to verify
+before shipping **any** change to that array, by `entity.uri` **and** `entity.name` in the embed
+payload and never by a 200, so the verification was re-run rather than carried over.
+
+**Fetched with the adapter's own request shape** — `https://open.spotify.com/embed/playlist/<id>`
+with `api/_lib/spotify-embed.ts`'s `BROWSER_USER_AGENT`, because a bare curl UA is not what that
+endpoint is measured against — and parsed out of `__NEXT_DATA__`:
+
+| Field              | Value                                     |
+| ------------------ | ----------------------------------------- |
+| `entity.uri`       | `spotify:playlist:34cIJlWIX9TEoA8bpI2UBu` |
+| `entity.name`      | **`Hitser`**                              |
+| `entity.subtitle`  | `arich97`                                 |
+| `entity.authors`   | `null`                                    |
+| `trackList.length` | 100                                       |
+
+**The playlist's real title is "Hitser" — one `t`.** So the label the picker had been rendering,
+`'Hitster'`, was not a quotation of anything: it was this app's own tidied rendering of a typo, and
+in tidying it we introduced the registered mark ourselves. That reframes the relabel completely. It
+is not a departure from the array's "labels are readable renderings of Spotify's own titles" rule to
+dodge a legal problem — the rule, applied literally, is what produced the problem, and the closest
+faithful rendering available was always going to be the mark or the typo. The header comment now
+says that the first row is labelled for the app rather than for its Spotify title, with the reason
+and the date, so the rule and the array agree instead of the array quietly contradicting it.
+
+**The owner question has an answer, and it is not in the field you would reach for.** The plan asked
+who owns the playlist, because a personal playlist is a weaker promise than an editorial one and
+"official" makes a promise of its own. `authors` is `null` — which is what AGENTS.md records at
+playlist level and what both "added by" spikes found — but the owner **is** in the payload, as
+`entity.subtitle`: `arich97`. The developer confirmed on the day that this is their own account, so
+"Jitster official" is a claim this project is entitled to make. Worth knowing for the next time
+something needs a playlist's owner: `subtitle` carries it, `authors` never has, and the `open.spotify.com`
+page's `og:description` is not a reliable fallback (it returned nothing here).
+
+**The id did not change**, and neither did the blurb. The relabel is invisible to the rest of the
+suite by construction: eleven sites in `LandingScreen.test.tsx` read `SUGGESTED_PLAYLISTS[0]!.label`
+symbolically and not one holds the literal, which is the design the file's header describes. What
+was added is a guard — `should keep the registered mark out of every suggestion label and blurb`,
+case-insensitive over both fields of every row — because the realistic way the word returns is not
+an edit to this row but a NEW row named after whatever Spotify calls it. It is a leak-proxy-shaped
+assertion over data rather than an assertion about `COPY.*` wording, which is what keeps it inside
+the 2026-08-12 copy rule: the array is third-party playlist data the rule never covered, and the
+trademark constraint is enforced by a store rather than chosen as a phrasing.
+
+## 2026-09-19 — The `App.test.tsx` flakiness is the FILE, not the one test that was named, and it fails in isolation too
+
+The 2026-09-19 entry above pins one flaky test —
+`should reset the end reason when a new game starts` — and says a loaded machine makes the pool give
+up on workers. Running the commit gate for [`plan.play-store-todo.md`](./plans/plan.play-store-todo.md)
+step 3 reproduced all of that and widened it in two ways worth writing down, because the entry above
+names a single test and the natural reading is that any OTHER red test in that file is real.
+
+**Seven different tests in `src/App.test.tsx` failed across eight full-suite runs, no two runs the
+same, and never more than three in a run:**
+
+| Failure                                                                      | Shape                                                                   |
+| ---------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `should not intercept a back press outside the game screen`                  | `expect(window.history.state).not.toEqual(base)` — state not yet pushed |
+| `should save the whole set of playlists and show it on the landing screen`   | `Test timed out in 5000ms`                                              |
+| `should save a played playlist and offer it on the landing screen`           | assertion, mid-transition                                               |
+| `should render the welcome screen when idle, and the picker once entered`    | `Test timed out in 5000ms`                                              |
+| `should not show the welcome screen again after an exit`                     | `Test timed out in 5000ms`                                              |
+| `should reach the welcome screen with Back after an exit`                    | `Test timed out in 5000ms`                                              |
+| (plus runs where only the pool errors appeared and 15 files never collected) | `Timeout waiting for worker to respond`                                 |
+
+**Five of the seven are a bare `Test timed out in 5000ms`** and the other two are the shape the
+entry above diagnoses for its single test: a `getBy*` or a synchronous read taken while the app is
+still transitioning, which a slow machine loses. Not one of them is an assertion about a value being
+wrong. So **treat a
+red `App.test.tsx` as unproven rather than as a regression, whichever test it names.**
+
+**It also fails in ISOLATION, which the earlier entry did not establish.** `pnpm vitest run
+src/App.test.tsx` alone — 47 tests, no other file competing — failed **once in three runs**. So the
+pool and the parallel load are an amplifier, not the cause; the races are in the tests themselves.
+
+**Proven pre-existing, by the only check that settles it.** The working tree was stashed
+(`git stash push -u`) and the same isolated run repeated **four times at `HEAD`**: it failed once, on
+a **third** test again (`should save a played playlist and offer it on the landing screen`). Nothing
+in the step-3 change is even reachable from these assertions — it is one label string in
+`SUGGESTED_PLAYLISTS`, a comment, and a new pure test over that array — but "the change cannot have
+caused it" is an argument, and a red run at `HEAD` is evidence. Do the stash run before concluding
+anything about a red `App.test.tsx`; it costs two minutes and it is the only thing that distinguishes
+a flake from a regression.
+
+Still not fixed, and still outside these plans' scope: the remedy is `findBy*`/`waitFor` on the
+assertions that read a screen mid-transition, and raising the timeout on the library round-trip
+tests. It is a test-suite job of its own.

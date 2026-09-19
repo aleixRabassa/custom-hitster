@@ -8,32 +8,33 @@ Several decisions in this repo look like mistakes and are not. If something seem
 
 ## Documentation Index
 
-| File                                                                                         | What it covers                                                                                                                                                        |
-| -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`docs/architecture.md`](./docs/architecture.md)                                             | Components, import boundaries between `src`/`api`/`shared`, data flow, external services, planned phases                                                              |
-| [`docs/api.md`](./docs/api.md)                                                               | The `api/` surface, handler conventions, environment variable reference                                                                                               |
-| [`docs/toolchain.md`](./docs/toolchain.md)                                                   | The two TypeScript installs, the four tsconfigs, ESLint/Prettier, pnpm and the Node pin, Tailwind, Vitest                                                             |
-| [`docs/development.md`](./docs/development.md)                                               | Setup, scripts, running functions locally, tests, deploy, known limitations                                                                                           |
-| [`docs/agent_findings.md`](./docs/agent_findings.md)                                         | Running log of discoveries and gotchas found while working here                                                                                                       |
-| [`docs/plans/plan.md`](./docs/plans/plan.md)                                                 | **Authoritative phase plan** — what belongs in which phase, plus all Phase 0 research findings                                                                        |
-| [`docs/plans/plan.phase-1.md`](./docs/plans/plan.phase-1.md)                                 | Phase 1 detail, decisions, and execution notes                                                                                                                        |
-| [`docs/plans/plan.phase-2-playlist.md`](./docs/plans/plan.phase-2-playlist.md)               | Phase 2, first half — URL parsing, the embed adapter, `/api/playlist`                                                                                                 |
-| [`docs/plans/plan.phase-2-year.md`](./docs/plans/plan.phase-2-year.md)                       | Phase 2, second half — the cache, the MusicBrainz adapter, year resolution, `/api/year`                                                                               |
-| [`docs/plans/plan.phase-3.md`](./docs/plans/plan.phase-3.md)                                 | Phase 3 — the reducer, seeded shuffle, persistence, and the progressive-loading resolver                                                                              |
-| [`docs/plans/plan.phase-4-6-card-ui.md`](./docs/plans/plan.phase-4-6-card-ui.md)             | Phase 4 — the DOM test environment, the flip card, the QR code, and card audio                                                                                        |
-| [`docs/plans/plan.phase-4-6-gestures.md`](./docs/plans/plan.phase-4-6-gestures.md)           | Phase 5 — swipe, tap-versus-drag, the stacked deck, keyboard controls                                                                                                 |
-| [`docs/plans/plan.phase-4-6-screens.md`](./docs/plans/plan.phase-4-6-screens.md)             | Phase 6 — landing, the playlist client, notices, the HUD, the end screen, the session container                                                                       |
-| [`docs/plans/plan.phase-7-look.md`](./docs/plans/plan.phase-7-look.md)                       | Phase 7, first half — the `@theme` token layer, the fluid card, reduced motion, focus and ARIA                                                                        |
-| [`docs/plans/plan.phase-7-robustness.md`](./docs/plans/plan.phase-7-robustness.md)           | Phase 7, second half — failure codes, the error boundary, the chunk splits, the meta tags, Lighthouse                                                                 |
-| [`docs/plans/plan.phase-8-look-and-shell.md`](./docs/plans/plan.phase-8-look-and-shell.md)   | Phase 8, plan 1 — neon-ring card design, contrast re-audit, PWA, icon set. **Built**                                                                                  |
-| [`docs/plans/plan.phase-8-features.md`](./docs/plans/plan.phase-8-features.md)               | Phase 8, plan 2 — the share link, the saved-playlist library, the PDF export, the audio reversal. **Built**                                                           |
-| [`docs/plans/plan.phase-8-added-by.md`](./docs/plans/plan.phase-8-added-by.md)               | Phase 8, plan 3 — the "Added by" decision. Writes no code; resolved as won't-build                                                                                    |
-| [`docs/plans/plan.multi-playlist-core.md`](./docs/plans/plan.multi-playlist-core.md)         | Multi-playlist, plan 1 — the merge module, the widened state, both v2 storage formats, the link. **Built**                                                            |
-| [`docs/plans/plan.multi-playlist-ui.md`](./docs/plans/plan.multi-playlist-ui.md)             | Multi-playlist, plan 2 — the landing rows, the fan-out hook, the container wiring, the labels. **Built**                                                              |
-| [`docs/plans/plan.year-accuracy.md`](./docs/plans/plan.year-accuracy.md)                     | The tier ladder — Singles/EPs in the top rung, the graded middle rung, the re-captured fixtures. **Built**                                                            |
-| [`docs/plans/plan.suggestion-multi-select.md`](./docs/plans/plan.suggestion-multi-select.md) | Hold a suggested playlist to select it — the pure selection module, the press hook. **Built**                                                                         |
-| [`docs/plans/plan.google-play-shell.md`](./docs/plans/plan.google-play-shell.md)             | Google Play, plan 1 — the Bubblewrap TWA shell, asset links, the listing, the store tracks. **Steps 1–5 built 2026-09-19**; `android/` and the store work outstanding |
-| [`docs/plans/plan.google-play-back-button.md`](./docs/plans/plan.google-play-back-button.md) | Google Play, plan 2 — Android back as an in-app control. **Built 2026-08-12**; device rows wait on plan 1                                                             |
+| File                                                                                         | What it covers                                                                                                                                                          |
+| -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`docs/architecture.md`](./docs/architecture.md)                                             | Components, import boundaries between `src`/`api`/`shared`, data flow, external services, planned phases                                                                |
+| [`docs/api.md`](./docs/api.md)                                                               | The `api/` surface, handler conventions, environment variable reference                                                                                                 |
+| [`docs/toolchain.md`](./docs/toolchain.md)                                                   | The two TypeScript installs, the four tsconfigs, ESLint/Prettier, pnpm and the Node pin, Tailwind, Vitest                                                               |
+| [`docs/development.md`](./docs/development.md)                                               | Setup, scripts, running functions locally, tests, deploy, known limitations                                                                                             |
+| [`docs/agent_findings.md`](./docs/agent_findings.md)                                         | Running log of discoveries and gotchas found while working here                                                                                                         |
+| [`docs/plans/plan.md`](./docs/plans/plan.md)                                                 | **Authoritative phase plan** — what belongs in which phase, plus all Phase 0 research findings                                                                          |
+| [`docs/plans/plan.phase-1.md`](./docs/plans/plan.phase-1.md)                                 | Phase 1 detail, decisions, and execution notes                                                                                                                          |
+| [`docs/plans/plan.phase-2-playlist.md`](./docs/plans/plan.phase-2-playlist.md)               | Phase 2, first half — URL parsing, the embed adapter, `/api/playlist`                                                                                                   |
+| [`docs/plans/plan.phase-2-year.md`](./docs/plans/plan.phase-2-year.md)                       | Phase 2, second half — the cache, the MusicBrainz adapter, year resolution, `/api/year`                                                                                 |
+| [`docs/plans/plan.phase-3.md`](./docs/plans/plan.phase-3.md)                                 | Phase 3 — the reducer, seeded shuffle, persistence, and the progressive-loading resolver                                                                                |
+| [`docs/plans/plan.phase-4-6-card-ui.md`](./docs/plans/plan.phase-4-6-card-ui.md)             | Phase 4 — the DOM test environment, the flip card, the QR code, and card audio                                                                                          |
+| [`docs/plans/plan.phase-4-6-gestures.md`](./docs/plans/plan.phase-4-6-gestures.md)           | Phase 5 — swipe, tap-versus-drag, the stacked deck, keyboard controls                                                                                                   |
+| [`docs/plans/plan.phase-4-6-screens.md`](./docs/plans/plan.phase-4-6-screens.md)             | Phase 6 — landing, the playlist client, notices, the HUD, the end screen, the session container                                                                         |
+| [`docs/plans/plan.phase-7-look.md`](./docs/plans/plan.phase-7-look.md)                       | Phase 7, first half — the `@theme` token layer, the fluid card, reduced motion, focus and ARIA                                                                          |
+| [`docs/plans/plan.phase-7-robustness.md`](./docs/plans/plan.phase-7-robustness.md)           | Phase 7, second half — failure codes, the error boundary, the chunk splits, the meta tags, Lighthouse                                                                   |
+| [`docs/plans/plan.phase-8-look-and-shell.md`](./docs/plans/plan.phase-8-look-and-shell.md)   | Phase 8, plan 1 — neon-ring card design, contrast re-audit, PWA, icon set. **Built**                                                                                    |
+| [`docs/plans/plan.phase-8-features.md`](./docs/plans/plan.phase-8-features.md)               | Phase 8, plan 2 — the share link, the saved-playlist library, the PDF export, the audio reversal. **Built**                                                             |
+| [`docs/plans/plan.phase-8-added-by.md`](./docs/plans/plan.phase-8-added-by.md)               | Phase 8, plan 3 — the "Added by" decision. Writes no code; resolved as won't-build                                                                                      |
+| [`docs/plans/plan.multi-playlist-core.md`](./docs/plans/plan.multi-playlist-core.md)         | Multi-playlist, plan 1 — the merge module, the widened state, both v2 storage formats, the link. **Built**                                                              |
+| [`docs/plans/plan.multi-playlist-ui.md`](./docs/plans/plan.multi-playlist-ui.md)             | Multi-playlist, plan 2 — the landing rows, the fan-out hook, the container wiring, the labels. **Built**                                                                |
+| [`docs/plans/plan.year-accuracy.md`](./docs/plans/plan.year-accuracy.md)                     | The tier ladder — Singles/EPs in the top rung, the graded middle rung, the re-captured fixtures. **Built**                                                              |
+| [`docs/plans/plan.suggestion-multi-select.md`](./docs/plans/plan.suggestion-multi-select.md) | Hold a suggested playlist to select it — the pure selection module, the press hook. **Built**                                                                           |
+| [`docs/plans/plan.google-play-shell.md`](./docs/plans/plan.google-play-shell.md)             | Google Play, plan 1 — the Bubblewrap TWA shell, asset links, the listing, the store tracks. **Steps 1–5 built 2026-09-19**; `android/` and the store work outstanding   |
+| [`docs/plans/plan.google-play-back-button.md`](./docs/plans/plan.google-play-back-button.md) | Google Play, plan 2 — Android back as an in-app control. **Built 2026-08-12**; device rows wait on plan 1. **Frozen 2026-09-19** — its rows run from plan 3             |
+| [`docs/plans/plan.play-store-todo.md`](./docs/plans/plan.play-store-todo.md)                 | Google Play, plan 3 — **THE ONLY EXECUTABLE GOOGLE PLAY FILE.** Everything from the trademark relabel to a staged production rollout. Steps 2, 3 and 8 built 2026-09-19 |
 
 **Do not build ahead of the current phase.** The plan defers things deliberately. Current phase: **8, CODE COMPLETE.** Phases 1–7 are complete, all three Phase 8 plans are resolved, and the app is playable end to end, has a design surface, is installable, and fails legibly. `src/App.tsx` is the **real container** and the only caller of `useGameSession()`. Plan 2 built the shareable deck URL, the saved-playlist library, the printable PDF export and the audio reversal; plan 1 built the neon ring, the contrast re-audit, the PWA and the icon set; plan 3 resolved "Added by" as won't-build with no code. Note that plan 2 depended on plan 1 only **softly** and did not wait — so the PDF's print palette is deliberately its own and did not change when the screen was redesigned. **Two developer requests landed on 2026-09-18 outside any plan**: a welcome screen in front of the picker (with a printable year-cards PDF), and a left swipe that steps BACK a card. Both blocks are below.
 
@@ -298,7 +299,13 @@ device check is still outstanding** and cannot be run in Chrome.
 **THE STORE SHELL IS A FOURTH TOP-LEVEL TREE, AND AS OF 2026-09-19 THE TREE IS NOT THERE YET — grepping
 for `android/` and finding nothing is the CORRECT reading of this repo, not a stale doc.**
 [`docs/plans/plan.google-play-shell.md`](./docs/plans/plan.google-play-shell.md) packages the deployed
-PWA as a Trusted Web Activity, and its steps 1–5 landed on 2026-09-19 while steps 6–18 did not. **What
+PWA as a Trusted Web Activity, and its steps 1–5 landed on 2026-09-19 while steps 6–18 did not.
+**It is FROZEN as of 2026-09-19, along with the back-button plan, and
+[`docs/plans/plan.play-store-todo.md`](./docs/plans/plan.play-store-todo.md) is the only file to
+execute from** — the two old plans keep their reasoning and their history, and their unfinished boxes
+tick only when the step that owns them in plan 3 ticks. Plan 3's steps 2, 3 and 8 are built: the
+deployed asset-links and privacy fetches are recorded, the picker's first suggestion is relabelled
+(below), and `docs/store/tester-notes.md` exists. **What
 exists today**: `public/.well-known/assetlinks.json`, `public/privacy.html`, `src/pwa/assetlinks.test.ts`,
 four new manifest fields (`id`, `lang`, `dir`, `categories`) and an Android block in `.gitignore`. **What
 does not**: `android/`, any keystore, any certificate fingerprint, any Play Console app. The rules below
@@ -582,6 +589,18 @@ claim it was**: the icons did carry a "PLAYLIST HITSTER" wordmark — nobody ope
 rename was reasoned about as a string change. New artwork reading "PLAYLIST JITSTER" landed on
 2026-08-12 and the whole set was regenerated from it, so "one identity everywhere" now holds by
 regeneration rather than by the absence of a wordmark. **No check in this repo has ever opened an image.**
+**THE BOUNDARY MOVED ONCE MORE, ON 2026-09-19, AND ONLY WHERE THE STORE FORCES IT:** the `'Hitster'`
+label on `SUGGESTED_PLAYLISTS[0]` is gone from the picker, relabelled **`'Jitster official'` with the
+id unchanged**, because a Google Play listing may not carry the registered mark and the picker is in
+every screenshot of it (`docs/store/listing.md` §1). It cost nothing in faithfulness: the playlist's
+real Spotify title is **"Hitser"**, one _t_, so the mark existed only in this app's own tidied
+rendering of a typo — which is why `LandingScreen.tsx`'s "labels are readable renderings of Spotify's
+own titles" paragraph now carries a sentence saying the first row is labelled for the APP instead, and
+why `LandingScreen.test.tsx` guards every row's `label` and `blurb` against the mark case-insensitively
+(a guard over DATA, not over `COPY.*` wording — the array was never copy). **Nothing in the
+never-rename list above moved**: the two storage keys, the package name and every internal "Hitster"
+that means the board game are untouched, and a store rule about visible text is not a reason to touch
+one of them.
 
 **Five developer decisions landed on 2026-08-05, after Phase 7 plan 1. Two of them reverse
 something `plan.md` had already resolved, so read these before "fixing" the code back:**

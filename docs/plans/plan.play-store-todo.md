@@ -164,47 +164,48 @@ hands it needs.
         emulator-only verdict. Android 13 or newer is required for row 7 either way.
   - [ ] `[agent]` Record the two start dates and the device decision in `docs/agent_findings.md`.
 
-- [ ] **Step 2 `[agent]` — Close plan 1's three deploy-dependent sub-items from the measurements
+- [x] **Step 2 `[agent]` — Close plan 1's three deploy-dependent sub-items from the measurements
       above.** They were unticked because there was no deploy in the session that built them; commit
       `8801190` was pushed afterwards and Vercel deployed it, and the Overview records what the origin
       now answers. Re-run the three fetches (`curl -sI` on both files, plus the Google checker URL)
       rather than trusting the Overview, then:
-  - [ ] Tick plan 1 step 3's "Verify after deploy" sub-bullet, step 4's "Deploy, then fetch" and
+  - [x] Tick plan 1 step 3's "Verify after deploy" sub-bullet, step 4's "Deploy, then fetch" and
         "Record all three findings" sub-bullets, and step 4's parent.
-  - [ ] Append the **third finding** to `docs/agent_findings.md` (the 2026-09-19 asset-links entry
+  - [x] Append the **third finding** to `docs/agent_findings.md` (the 2026-09-19 asset-links entry
         says it is missing): the production fetch results, the checker's `MALFORMED_CONTENT` verdict
         as the expected reading of an empty list, and its 600 s cache.
-  - [ ] Tick plan 1's `docs/agent_findings.md` Documentation Update **only if** its other ask — the
+  - [x] Tick plan 1's `docs/agent_findings.md` Documentation Update **only if** its other ask — the
         Play target-SDK minimum on the day it was checked — is also recorded, which is step 6 here;
         otherwise leave it for step 6.
+        _→ Evaluated 2026-09-19: the target-SDK half is NOT recorded, so plan 1's entry stays open for step 6._
 
 - [ ] **Step 3 `[agent]` — The trademark pass, ending in a deploy. Gate M1.** Decided 2026-09-19:
       relabel, do not replace. This is the step that unblocks picker screenshots; do it before the
       shell so the first install already shows the new label.
-  - [ ] Re-verify the id first, because `LandingScreen.tsx`'s rule 1 says to verify before shipping
+  - [x] Re-verify the id first, because `LandingScreen.tsx`'s rule 1 says to verify before shipping
         **any** change to that array, by `entity.uri` **and** `entity.name` in the embed payload and
         never by a 200. Done once on 2026-09-19 — `spotify:playlist:34cIJlWIX9TEoA8bpI2UBu`, entity
         name **"Hitser"** (sic, one _t_) — so the app's label is the one place that _introduces_ the
         mark; repeat the check on the day and record both values.
-  - [ ] Read the playlist's **owner** out of the same payload, because rule 2 says a personal playlist
+  - [x] Read the playlist's **owner** out of the same payload, because rule 2 says a personal playlist
         is a weaker promise than an editorial one and a label reading "official" makes a promise of its
         own. Record who owns it; if it is not the developer's, reconsider the word "official" with the
         developer before shipping.
-  - [ ] Change `SUGGESTED_PLAYLISTS[0].label` from `'Hitster'` to **`'Jitster official'`**. Leave the
+  - [x] Change `SUGGESTED_PLAYLISTS[0].label` from `'Hitster'` to **`'Jitster official'`**. Leave the
         id and the blurb.
-  - [ ] Amend the array's header comment: the paragraph saying labels are "readable renderings of
+  - [x] Amend the array's header comment: the paragraph saying labels are "readable renderings of
         Spotify's own titles" and the block's "labelled by genre and era" need one sentence admitting
         that the first row is labelled for the app rather than for its Spotify title, and why (the
         listing's trademark rule, dated). Keep the leak reasoning — the label still names no track and
         no year.
-  - [ ] Reword `public/robots.txt` line 1 so it no longer opens "Custom Hitster is…" — the file is
+  - [x] Reword `public/robots.txt` line 1 so it no longer opens "Custom Hitster is…" — the file is
         served at `<origin>/robots.txt`. "Playlist Jitster" is the value; nothing else in the file
         changes.
-  - [ ] Rewrite `docs/store/listing.md` §1: the "blocked on one undecided trademark question" status
+  - [x] Rewrite `docs/store/listing.md` §1: the "blocked on one undecided trademark question" status
         (line 11), the "one unresolved hit — the listing is blocked on it" heading and body (from line
         40), and the "any screenshot showing the playlist picker is blocked" consequence (line 62)
         become a dated record of the decision and the new label.
-  - [ ] Tick plan 1's open question on the `'Hitster'` label and its custom-domain open question
+  - [x] Tick plan 1's open question on the `'Hitster'` label and its custom-domain open question
         (decision 4 below), and annotate its Out-of-Scope bullet on relabelling as resolved here.
   - [ ] Add the trademark guard test (Unit Tests below), run `pnpm typecheck && pnpm lint && pnpm test
 && pnpm build`, commit, push. A push to `main` deploys (`docs/development.md` §7; the Vercel
@@ -270,7 +271,7 @@ update`, so a hand edit is silently discarded and the symptom is a Play upload r
   - [ ] Mark each row's Status in `docs/development.md` and record anything that failed. `adb` is not
         on the PATH: `C:\Android\sdk\platform-tools\adb.exe`.
 
-- [ ] **Step 8 `[agent]` — Write the tester notes.** Plan 1 step 9 and its decision 19 say the
+- [x] **Step 8 `[agent]` — Write the tester notes.** Plan 1 step 9 and its decision 19 say the
       shared-storage behaviour "goes in the tester notes"; nothing ever produced them. Create
       `docs/store/tester-notes.md` with: how to opt in to the closed track; that the app shares its
       saved game and saved playlists with Chrome on the same phone, so "it remembered a game I never
@@ -367,13 +368,13 @@ people learn to skip (plan 1 decision 17).
 
 **Batch 0 — with the relabel (step 3):**
 
-- [ ] `should keep the registered mark out of every suggestion label and blurb` — covers
+- [x] `should keep the registered mark out of every suggestion label and blurb` — covers
       `SUGGESTED_PLAYLISTS` in `src/components/LandingScreen.test.tsx`. A leak-proxy-shaped guard over
       DATA rather than an assertion about `COPY` wording, which is why it is allowed under the
       2026-08-12 copy rule: the array is third-party playlist data the rule never covered, and the
       listing's trademark rule is a hard constraint the store enforces, not a phrasing choice. Case-
       insensitive over `label` and `blurb` of every row.
-- [ ] _(no new test for the relabel itself)_ — the existing landing-screen tests read
+- [x] _(no new test for the relabel itself)_ — the existing landing-screen tests read
       `SUGGESTED_PLAYLISTS[0]!.label` symbolically at eleven sites and no test holds the literal, so
       the rename is invisible to the suite by design. Stated so nobody adds one.
 
@@ -411,33 +412,40 @@ are steps 7, 12, 15 and 17 — a device and a Console.
 
 ## Documentation Updates
 
-- [ ] `docs/plans/plan.google-play-shell.md` and `docs/plans/plan.google-play-back-button.md` —
+- [x] `docs/plans/plan.google-play-shell.md` and `docs/plans/plan.google-play-back-button.md` —
       **done when this plan was written**: the three-plan index comment at the top of both, and a
       one-line "tracked in `plan.play-store-todo.md`" note under every unfinished step. Their boxes
       are ticked only by the step here that owns them (steps 2, 3, 6, 12).
-- [ ] `AGENTS.md` — Documentation Index row for this plan naming it the only executable Google Play
+- [x] `AGENTS.md` — Documentation Index row for this plan naming it the only executable Google Play
       file; the google-play decision block's status sentence; the trademark relabel recorded beside
       the rename boundary (the `'Hitster'` label is gone from the picker; the storage keys and the
       package name are still never renamed).
 - [ ] `docs/plans/plan.md` — the Post-Phase-8 Google Play entry says "Two plans"; it is three, with
       this one executable. Its status line is updated again at M3 and at M4.
+      _→ The three-plans rewrite is DONE 2026-09-19, carrying the relabel and the no-custom-domain
+      decision. M3 and M4 still owed._
 - [ ] `docs/development.md` — §9 corrected from the real release (step 18); the Google checker's two
       caveats (an empty list is `MALFORMED_CONTENT`, not "reachable"; 600 s cache) beside the
       instrument it names in §5 and §9; back-press row 4 currently reads "landing, preparing or end"
       and must add **welcome**, the front door since 2026-09-18; every §5 TWA and back-press row moves
       off Pending as it is run.
+      _→ DONE 2026-09-19: both checker caveats (in §5's row 7 and in §9) and back-press row 4's
+      "welcome". §9's rewrite from the real release and the Pending rows are still owed._
 - [ ] `docs/agent_findings.md` — dated entries for: the third asset-links finding (step 2); the
       entity name "Hitser" and the owner check (step 3); the checksum-file decision and the
       `DELETE_PROJECT_FILE_LIST` ignores (step 4); the target-SDK value and Play's minimum on the day
       (step 6); the two back-gesture decisions and any row that behaved differently between the
       URL-bar and verified builds (step 12); what the pre-launch report found (step 15).
+      _→ The step-2 and step-3 entries were appended 2026-09-19. Steps 4, 6, 12 and 15 still owed._
 - [ ] `docs/store/listing.md` — §1 rewritten after the relabel (step 3); the assets checklist ticked
       as the graphics and screenshots are made (step 13).
-- [ ] `docs/store/tester-notes.md` — new, a deliverable in its own right (step 8).
+      _→ §1 rewritten 2026-09-19: the blocked status, the unresolved-hit section and the blocked-
+      screenshot consequence are now a dated record of the relabel. The assets checklist is step 13._
+- [x] `docs/store/tester-notes.md` — new, a deliverable in its own right (step 8).
 - [ ] `README.md` — the install line and store link at M4 (step 17), where 2026-09-19 deferred them.
-- [ ] `src/components/LandingScreen.tsx` — the header sentence about labels being renderings of
+- [x] `src/components/LandingScreen.tsx` — the header sentence about labels being renderings of
       Spotify titles, amended (step 3).
-- [ ] `public/robots.txt` — line 1 (step 3).
+- [x] `public/robots.txt` — line 1 (step 3).
 
 ---
 

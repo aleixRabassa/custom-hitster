@@ -7,9 +7,9 @@ documentation, so it is outside the `src/game/copy.ts` rule — but **it must no
 `COPY.*`**. Where a line below describes a screen, it was checked against the real string in
 `src/game/copy.ts` on 2026-09-19.
 
-**Status: step 13 is NOT done.** This file is the copy half only. The graphics, the screenshots and
-the Console itself are still outstanding, and the listing is additionally **blocked on one
-undecided trademark question** (below).
+**Status: step 13 is NOT done.** This file is the copy half only — the graphics, the screenshots and
+the Console itself are still outstanding. **The trademark question that used to block it is
+RESOLVED (2026-09-19)** and the picker is no longer off-limits to a screenshot; see §1.
 
 **How the character counts below were produced.** Each description sits in a fenced block, and the
 count is of that block's exact contents, newlines included, counted as Unicode code points —
@@ -37,32 +37,43 @@ silently discards a player's saved game and their whole saved-playlist library. 
 carries the `<title>` and `<meta description>` a crawler reads — it is clean): every hit except the
 one below is a comment or an identifier, never a rendered string.
 
-### The audit's one unresolved hit — the listing is blocked on it
+### The audit's one hit — RESOLVED 2026-09-19 by relabelling
 
-`SUGGESTED_PLAYLISTS[0]` in `src/components/LandingScreen.tsx` is
-`{ id: '34cIJlWIX9TEoA8bpI2UBu', label: 'Hitster', blurb: 'Mixed hits' }`.
+`SUGGESTED_PLAYLISTS[0]` in `src/components/LandingScreen.tsx` read
+`{ id: '34cIJlWIX9TEoA8bpI2UBu', label: 'Hitster', blurb: 'Mixed hits' }`, and it is now
+`{ id: '34cIJlWIX9TEoA8bpI2UBu', label: 'Jitster official', blurb: 'Mixed hits' }`. **The id did not
+change** — the same playlist, a different label.
 
-What it actually is: an entry in a `readonly` data array of ready-to-try playlists, rendered as the
-visible text of a `SuggestionButton` in the "Or try one of these" grid on the playlist picker. It is
-a readable rendering of that Spotify playlist's own title — the file's own header says the labels
-are renderings rather than quotations, which is what makes relabelling permitted rather than a
+What it is: an entry in a `readonly` data array of ready-to-try playlists, rendered as the visible
+text of a `SuggestionButton` in the "Or try one of these" grid on the playlist picker. It was a
+readable rendering of that Spotify playlist's own title — the file's own header says the labels are
+renderings rather than quotations, which is what made relabelling permitted rather than a
 falsification. It is **not** in `src/game/copy.ts`, because it is data about a third-party playlist
 rather than a sentence the app says.
 
-Why it matters here: it is a button in front of every player, on the screen every player passes
-through, and therefore in **any screenshot of the picker**.
+Why it mattered: it is a button in front of every player, on the screen every player passes through,
+and therefore in **any screenshot of the picker**.
 
-**This is an open decision and it is not this file's to make.** The plan's Open Questions leave it
-explicitly undecided and its Out of Scope says so again: relabel the suggestion, or replace it with
-a different playlist. Both touch a data list that every landing-screen test renders. No code was
-changed while writing this listing.
+**The decision (`plan.play-store-todo.md` decision 5): relabel, do not replace.** Replacing the
+playlist would have thrown away a verified, hand-picked mixed-hits deck to solve a naming problem.
+Two facts recorded on the day it was taken, both read live from the embed payload by `entity.uri`
+**and** `entity.name` as the array's own rule 1 requires:
 
-Consequences to hold until it is decided:
+- The playlist's **real Spotify title is "Hitser"** — one _t_, a typo in the source. So the app's own
+  label was the only place the registered mark ever existed; nothing was being quoted.
+- Its **owner is `arich97`** (`entity.subtitle`; `authors` is `null` at playlist level, as the embed
+  payload always has been), **confirmed by the developer as their own account** — which is what makes
+  the word "official" a claim this project is entitled to make.
 
-- **Any screenshot showing the playlist picker is blocked.** The welcome screen is not — nothing in
-  `COPY.welcome` uses the word, so the first required screenshot (below) can be taken today.
-- The listing text below never uses the word, so it needs no revision whichever way the decision
-  goes.
+Consequences, now that it is decided:
+
+- **Screenshots of the picker are unblocked** as soon as the relabel is deployed. The welcome screen
+  was never blocked — nothing in `COPY.welcome` uses the word.
+- The listing text below never used the word and needed no revision.
+- `src/components/LandingScreen.test.tsx` carries a guard asserting the mark appears in no `label`
+  and no `blurb` of any row, case-insensitively, so a future addition to the array cannot reintroduce
+  it silently. The relabel itself is invisible to the rest of the suite by design: eleven existing
+  sites read `SUGGESTED_PLAYLISTS[0]!.label` symbolically and no test holds the literal.
 
 ### Two more places the word appears, neither of them listing copy
 
