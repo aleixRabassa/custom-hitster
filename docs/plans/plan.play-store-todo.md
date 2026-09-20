@@ -270,21 +270,29 @@ hands it needs.
         `twa-manifest.json`, which is the one file that must be tracked._
         before any keystore existed and have never been exercised.
 
-- [ ] **Step 6 `[agent]` reads, `[you type it]` decides — Check the target SDK.** Absorbs plan 1
-      step 8, with the 2026-09-19 finding that changes how it is done.
-  - [ ] `[agent]` Read `targetSdkVersion` from what Bubblewrap 1.25.0 actually emitted, and read
+- [x] **Step 6 `[agent]` reads, `[you type it]` decides — Check the target SDK.** Absorbs plan 1
+      step 8, with the 2026-09-19 finding that changes how it is done. _Done 2026-09-21: the
+      requirement is 36 and Bubblewrap emitted 36, so nothing was changed._
+  - [x] `[agent]` Read `targetSdkVersion` from what Bubblewrap 1.25.0 actually emitted, and read
         Play's current minimum for new apps from the Console's policy page **on the day** — the plan
         was written before the August 2026 advance.
-        _→ **Half done 2026-09-20.** Bubblewrap 1.25.0 emitted `targetSdkVersion 36` with
-        `compileSdkVersion 36` and `minSdkVersion 21` — the newest API level there is, so no bump is
-        plausible. **Play's own minimum is still unread**, and deliberately so: it is a Console page,
-        and this step forbids a remembered number. Read it, then tick._
-  - [ ] If a bump is needed, express it in **`android/twa-manifest.json`**, never in
+        _→ **Done 2026-09-21.** Bubblewrap 1.25.0 emitted `targetSdkVersion 36` with
+        `compileSdkVersion 36` and `minSdkVersion 21`. Play requires **API 36 for new apps from 31
+        August 2026** — the same number, and the newest level there is. **Read from
+        `developer.android.com/google/play/requirements/target-sdk`, not from the Console**: the
+        policy pages this step names are per app, and the app does not exist until step 9. Fetched on
+        the day rather than remembered, which is what the rule is about; if the Console contradicts it
+        at step 9 or at the first upload, the Console wins. See `docs/agent_findings.md`
+        (2026-09-21)._
+  - [x] If a bump is needed, express it in **`android/twa-manifest.json`**, never in
         `android/app/build.gradle`: that file is regenerated from the manifest on every `bubblewrap
 update`, so a hand edit is silently discarded and the symptom is a Play upload rejected
         months later. Then run `bubblewrap update` to regenerate.
-  - [ ] `[agent]` Record the value, the requirement and the date in `docs/agent_findings.md`, and
-        tick plan 1's `docs/agent_findings.md` Documentation Update if step 2 left it.
+        _→ **Did not fire 2026-09-21** — the emitted value already meets the requirement. The rule is
+        unused, not retired; it is the one to remember at the next August advance._
+  - [x] `[agent]` Record the value, the requirement and the date in `docs/agent_findings.md`, and
+        tick plan 1's `docs/agent_findings.md` Documentation Update if step 2 left it. _Done
+        2026-09-21; plan 1's entry is ticked, its third clause being this reading._
 
 - [ ] **Step 7 `[you type it]` — First build, first install, URL bar expected. Gate M2a.** Absorbs
       plan 1 step 9 and plan 2 step 5's rows 1–6.

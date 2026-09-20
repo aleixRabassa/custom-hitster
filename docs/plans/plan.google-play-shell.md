@@ -274,7 +274,7 @@ Actions migration is recorded in Out of Scope rather than built speculatively.
         **Ticked from there 2026-09-20**; the `.gitignore` block was widened the same day to every path
         `bubblewrap update` regenerates._
 
-- [ ] **Step 8 — Check the target SDK.** Read `targetSdkVersion` in the generated Gradle files and
+- [x] **Step 8 — Check the target SDK.** Read `targetSdkVersion` in the generated Gradle files and
       compare it against Play's current minimum for new apps, which advances every August. Bump it
       if Bubblewrap's default is behind. Record the value and the date checked. **This plan was
       written before the August 2026 advance and is being executed after it**, so do not carry over
@@ -484,10 +484,11 @@ the contract and be explicit that the middle is untestable here.
       string; the storage shared with Chrome; a re-run of the lock-screen audio check inside the
       shell; and a note on the existing back-press table that its rows now have a build to run on.
       Add the shared-storage behaviour to §8 as a documented property rather than a limitation.
-- [ ] `docs/agent_findings.md` — dated entries for step 4's three findings, for whether
+- [x] `docs/agent_findings.md` — dated entries for step 4's three findings, for whether
       `bubblewrap update` regenerates the Gradle project from a committed `twa-manifest.json` alone
       (this decides whether the generated project must be tracked), and for the Play target-SDK
-      minimum on the day it was checked.
+      minimum on the day it was checked. _All three done: the first two 2026-09-20, the target-SDK
+      minimum 2026-09-21._
 - [x] `docs/plans/plan.md` — an entry under Post-Phase-8 naming both plans and their status. _Done
       2026-09-19; update its status line when this plan reaches closed testing and again at
       production._

@@ -4451,3 +4451,33 @@ Not a defect, left for the developer: `navigationColor`, `navigationDividerColor
 luminance step that made the logo's pure-black backdrop read as a pasted square at 192px, and the
 remedy would be the same — raise the floor to `#0A0A0A`. Whether it is visible at the navigation bar
 is a judgement to make on the device at step 7, not from a colour value.
+
+## 2026-09-21 — Play's target API minimum read: 36 for new apps, which is exactly what Bubblewrap emitted
+
+Closes the half of step 6 that 2026-09-20 left open, and it closes it **without** the Console page
+the step names — for a reason worth recording, because the same obstacle will recur at every step
+written as "read it in the Console".
+
+**The requirement.** From **31 August 2026**, a new app (and any update) must target **Android 16,
+API level 36**, or higher. An app already on the store must target **API 35** to stay available to
+new users. The exceptions are all form factors this app is not: Wear OS and Automotive at 35, TV and
+XR at 34. An extension to **1 November 2026** can be requested from the Console.
+
+**So no bump is needed and none is possible.** Bubblewrap 1.25.0 emitted `targetSdkVersion 36` /
+`compileSdkVersion 36`, which is the requirement exactly and also the newest level there is. The
+step's conditional half — express a bump in `android/twa-manifest.json`, never in the regenerated
+`android/app/build.gradle` — did not fire, and the rule stands unused for the next August.
+
+**Where it was read, and why not the Console.** The app does not exist in the Console yet — that is
+step 9 — and the policy pages the step means are **per app**, so there is nothing to open. The
+account-level "Policy center" (`Centro de políticas` in Spanish) reports the status of apps you have,
+not the table of requirements. `support.google.com/googleplay/android-developer/answer/11926878`
+answered a fetch with a `302` to Google's captcha interstitial, so the value comes from
+**`developer.android.com/google/play/requirements/target-sdk`**, which is the canonical page the
+Console's own help links to and the one Google updates each August.
+
+**The step's "do not carry over a remembered number" rule was honoured** — this was fetched today,
+not recalled — but note what is now on record and what is not: the requirement is read from Google's
+developer site, and the Console has still never been opened on this subject. If the Console shows a
+different number at step 9 or at the first upload, **the Console wins** and this entry is the thing
+to correct.
