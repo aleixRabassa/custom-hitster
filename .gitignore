@@ -51,6 +51,41 @@ Thumbs.db
 # the one file in that tree that MUST stay tracked -- it is what makes a release
 # reproducible -- so nothing here may widen to `android/`.
 android/build/
-android/app/build/
 android/.gradle/
 local.properties
+
+# EVERYTHING BUBBLEWRAP REGENERATES, LISTED ONE PATH AT A TIME (2026-09-20, the day
+# `bubblewrap init` first ran). These are `DELETE_PROJECT_FILE_LIST`: `bubblewrap
+# update` DELETES each of them outright and rebuilds it from `twa-manifest.json` plus
+# re-fetched icons, so tracking any of them would be committing output -- and worse,
+# would invite a hand-edit that the next `update` silently discards. That is the trap
+# behind `targetSdkVersion`: it lives in `android/app/build.gradle`, which is on this
+# list, so a bump belongs in `twa-manifest.json` and nowhere else.
+#
+# `android/app/` supersedes the `android/app/build/` line that used to be above.
+android/app/
+android/gradle/
+android/gradlew
+android/gradlew.bat
+android/settings.gradle
+android/build.gradle
+android/gradle.properties
+android/store_icon.png
+
+# `manifest-checksum.txt` is a SHA of `twa-manifest.json`, written by `init` and
+# `update`, and read by `build` to decide whether the generated tree is stale.
+#
+# IGNORED, AND THE REASONING INVERTS THE OBVIOUS ONE -- read this before "fixing" it.
+# `bubblewrap build` prompts "would you like to regenerate your project?" when the file
+# is ABSENT, which reads like a warning worth silencing by tracking it. But every file
+# that checksum certifies is ignored above, so a fresh clone has `twa-manifest.json`
+# and nothing else. Tracked, the checksum would MATCH on that clone, `build` would skip
+# the regeneration prompt, and the build would then fail on a missing `gradlew`. Absent,
+# the prompt fires and regenerates exactly what the clone is missing -- so the prompt is
+# the recovery path, not a defect. Verified by reading `@bubblewrap/cli`'s
+# `dist/lib/cmds/build.js` (2026-09-20), not inferred.
+android/manifest-checksum.txt
+
+# Build artefacts. Signed, large, and reproducible from a tag plus the keystore.
+*.aab
+*.apk

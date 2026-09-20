@@ -4374,3 +4374,80 @@ it is worth having written down before the row is marked passed.
 **Consequence for sequencing:** the critical path is now identity verification, and it is already
 running. Steps 4–7 (init the shell, keystore, target SDK, first build with the URL bar expected) need
 no account and no Console, so they should proceed immediately rather than waiting on the mail.
+
+## 2026-09-20 — `bubblewrap init` run: one silent defect, one inverted heuristic, and the checksum file identified
+
+Step 4 of `plan.play-store-todo.md`. `android/` now exists. Five things worth keeping, the first of
+which is a defect the plan could not have anticipated because it assumed a prompt that does not exist.
+
+### `enableNotifications` defaults to TRUE and is never prompted for
+
+Both the plan and `docs/development.md` §9 said to "decline notification delegation" at the `init`
+prompts. **Bubblewrap 1.25.0 never asks.** The field is written as `true` by default, and the
+generated `android/app/src/main/AndroidManifest.xml` then carries
+`<uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>` plus a `DelegationService`
+and a set of `ic_notification_icon` drawables. An Android 13+ user would be asked to allow
+notifications for an app that sends none, and `public/privacy.html` — which the Data safety form at
+step 14 is filled from — enumerates what leaves the device and mentions no notifications at all.
+
+Fixed by setting `"enableNotifications": false` in `android/twa-manifest.json` and regenerating;
+`POST_NOTIFICATIONS` is gone from the regenerated manifest, verified by grep. The durable guard is
+`should decline notification delegation` in the new `src/pwa/twa-manifest.test.ts`. **Re-check the
+field after every future `init` or `update`** — nothing prompts for it, so only the test will say.
+
+Two other prompts also never appeared, both correctly defaulted: **shortcuts** (only offered when the
+web manifest declares a `shortcuts` section, and ours does not) and the **Custom Tabs fallback**.
+
+### `bubblewrap update --skipVersionUpgrade` is the non-interactive form
+
+`update` prompts for a version name when `appVersionName` and the previous `appVersionCode` disagree
+(`dist/lib/cmds/shared.js`), and bumps the code otherwise. With `--skipVersionUpgrade` there is no
+prompt on any path and the first upload stays at version code 1, which is why it is the form to use
+for a regeneration that is fixing configuration rather than shipping a release. Read from the CLI
+source, then run: it completed non-interactively and left `twa-manifest.json` byte-identical.
+
+### `android/manifest-checksum.txt` — identified, and the plan's rule for it inverts here
+
+The open question asked for its name and whether `build` reads it. It is a **SHA-1 of
+`twa-manifest.json`** (not of the web manifest), written by `init` and `update`. `bubblewrap build`
+reads it in `dist/lib/cmds/build.js`: **absent**, it prompts "would you like to regenerate your
+project?"; **present but stale**, it prompts to update.
+
+The plan said "if `build` warns when it is absent, track it". It does warn — and tracking it is still
+wrong, because **every file that checksum certifies is ignored**. On a fresh clone (which has
+`twa-manifest.json` and nothing else of `android/`) a tracked, matching checksum would make `build`
+_skip_ the regeneration prompt and then fail on a missing `gradlew`. Absent, the prompt fires and
+rebuilds exactly what the clone lacks. **So the prompt is the recovery path, not a warning to
+silence**, and the file is ignored. The reasoning is written into the `.gitignore` block itself,
+because that is where someone would go to "fix" it.
+
+Consequence worth knowing at step 7, and it differs by machine. **On this one** the regeneration
+above rewrote the checksum, so the first `bubblewrap build` finds it matching and does **not** prompt.
+**On any fresh clone** the file is absent by design — it is ignored — so the first `build` there
+prompts "would you like to regenerate your project?", and the right answer is **yes**: that prompt is
+what rebuilds the `app/` and `gradlew` the clone does not have. A later hand-edit of
+`twa-manifest.json` makes it prompt on either machine, and the answer is yes there too.
+
+### `signingKey.path` was written as an absolute Windows path
+
+`init` recorded `C:\repos\custom-hitster\android\android.keystore` in a file that **is tracked**.
+Changed to `./android.keystore`. The path is passed verbatim to `jarsigner`/`apksigner` with no
+`path.resolve` anywhere in the CLI, and the build's own input and output file names are plain
+relative names — so the working directory is the project directory, and the relative form resolves.
+**The constraint that comes with it: always build from inside `android/`** (`cd android &&
+bubblewrap build`), never `bubblewrap build --directory android` from the repo root. Survived the
+regeneration unchanged. It is empirically confirmed at step 7 either way: a wrong keystore path fails
+the build loudly, before anything is published.
+
+### Target SDK, and one open cosmetic question
+
+Bubblewrap emitted `targetSdkVersion 36`, `compileSdkVersion 36`, `minSdkVersion 21` — the newest API
+level available, so no bump is plausible. **Play's own minimum for new apps is still owed** and must
+be read from the Console policy page on the day (step 6); it is not recorded here because it was not
+read, and a remembered number is exactly what that step forbids.
+
+Not a defect, left for the developer: `navigationColor`, `navigationDividerColor` and the three
+`*Dark` colour fields all default to **`#000000`**, while the page is `#0a0a0a`. It is the same 4%
+luminance step that made the logo's pure-black backdrop read as a pasted square at 192px, and the
+remedy would be the same — raise the floor to `#0A0A0A`. Whether it is visible at the navigation bar
+is a judgement to make on the device at step 7, not from a colour value.

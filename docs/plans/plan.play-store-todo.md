@@ -227,8 +227,14 @@ hands it needs.
         pre-existing at `HEAD` with the work stashed; widened finding in `docs/agent_findings.md`), and
         the per-file Prettier check needed the same CRLF handling the 2026-09-19 entry describes._
 
-- [ ] **Step 4 `[you type it]` then `[agent]` — Generate the shell.** Absorbs plan 1 step 6 in full.
-  - [ ] `[you type it]` `mkdir android`, then `! cd android && bubblewrap init
+- [x] **Step 4 `[you type it]` then `[agent]` — Generate the shell.** Absorbs plan 1 step 6 in full.
+      _→ **DONE 2026-09-20.** `android/` exists. The init prompts were answered as written above,
+      with two departures from what this plan expected: there is **no notification-delegation
+      prompt** in Bubblewrap 1.25.0 (the field defaults to `true` and had to be fixed by hand — see
+      the sub-item below and `docs/agent_findings.md`), and no shortcuts prompt either, the web
+      manifest declaring no `shortcuts` section. Regenerated non-interactively with
+      `bubblewrap update --skipVersionUpgrade`, so the first upload is still version code 1._
+  - [x] `[you type it]` `mkdir android`, then `! cd android && bubblewrap init
 --manifest=https://playlistjitster.vercel.app/manifest.webmanifest`. At the prompts: **type the
         application id `aleixrabassa.playlistjitster` over the proposed `app.vercel.playlistjitster`**;
         keep the manifest's name and short name, `standalone`, the page colour for theme and
@@ -236,24 +242,32 @@ hands it needs.
         **any/default** option (the manifest deliberately declares none and a test pins the absence);
         **decline** notification delegation, Play Billing and the geolocation permission; keep the
         default Custom Tabs fallback; leave shortcuts empty.
-  - [ ] `[agent]` Confirm `android/twa-manifest.json` matches the deployed manifest field for field,
+  - [x] `[agent]` Confirm `android/twa-manifest.json` matches the deployed manifest field for field,
         then write the cross-pin tests (Unit Tests, batch A) so the confirmation survives the next
         `bubblewrap update`.
-  - [ ] `[agent]` Extend `.gitignore`'s Android block, below the `.env` family as before: the
+  - [x] `[agent]` Extend `.gitignore`'s Android block, below the `.env` family as before: the
         `DELETE_PROJECT_FILE_LIST` paths that `bubblewrap update` regenerates (`android/app/`,
         `android/gradle/`, `android/settings.gradle`, `android/build.gradle`, `android/gradle.properties`,
         `android/gradlew`, `android/gradlew.bat`, `android/store_icon.png`), plus `*.aab` and `*.apk`.
         **Decide the manifest checksum file** that `updateProject` writes beside the manifest: read its
         name from the generated tree and whether `bubblewrap build` reads it; if `build` warns when it
         is absent, track it; otherwise ignore it. Record the decision.
-  - [ ] `[agent]` Note in `docs/development.md` §9 what the shell opens on: `start_url` `/` is the
+  - [x] `[agent]` Note in `docs/development.md` §9 what the shell opens on: `start_url` `/` is the
         welcome screen on every cold launch, by the 2026-09-18 decision.
 
-- [ ] **Step 5 `[you type it]` — Generate and protect the signing key.** Absorbs plan 1 step 7.
-  - [ ] Create the upload keystore where `bubblewrap init` asks, outside the repo or inside `android/`
+- [x] **Step 5 `[you type it]` — Generate and protect the signing key.** Absorbs plan 1 step 7.
+      _→ **DONE 2026-09-20**, in the same sitting as step 4: `bubblewrap init` creates the keystore
+      itself, so the two steps are one interactive run. `android/android.keystore`, alias `android`,
+      passwords in the password manager. **`signingKey.path` was written as an absolute Windows path
+      into the TRACKED manifest and was changed to `./android.keystore`** — which is why every build
+      must run from inside `android/`. The off-repo backup is the developer's to make._
+  - [x] Create the upload keystore where `bubblewrap init` asks, outside the repo or inside `android/`
         and ignored by the `*.keystore` / `*.jks` rules already in `.gitignore`. Passwords into the
         password manager; **never into a shell, this plan or a chat**. Back the file up.
-  - [ ] Confirm `git status` shows no keystore before the next commit — the ignore rules were written
+  - [x] Confirm `git status` shows no keystore before the next commit — the ignore rules were written
+        _→ Verified 2026-09-20: `git check-ignore -v` attributes `android/android.keystore` to
+        `.gitignore:47` (`*.keystore`), and the only untracked path left under `android/` is
+        `twa-manifest.json`, which is the one file that must be tracked._
         before any keystore existed and have never been exercised.
 
 - [ ] **Step 6 `[agent]` reads, `[you type it]` decides — Check the target SDK.** Absorbs plan 1
@@ -261,6 +275,10 @@ hands it needs.
   - [ ] `[agent]` Read `targetSdkVersion` from what Bubblewrap 1.25.0 actually emitted, and read
         Play's current minimum for new apps from the Console's policy page **on the day** — the plan
         was written before the August 2026 advance.
+        _→ **Half done 2026-09-20.** Bubblewrap 1.25.0 emitted `targetSdkVersion 36` with
+        `compileSdkVersion 36` and `minSdkVersion 21` — the newest API level there is, so no bump is
+        plausible. **Play's own minimum is still unread**, and deliberately so: it is a Console page,
+        and this step forbids a remembered number. Read it, then tick._
   - [ ] If a bump is needed, express it in **`android/twa-manifest.json`**, never in
         `android/app/build.gradle`: that file is regenerated from the manifest on every `bubblewrap
 update`, so a hand edit is silently discarded and the symptom is a Play upload rejected
@@ -391,22 +409,27 @@ people learn to skip (plan 1 decision 17).
       `SUGGESTED_PLAYLISTS[0]!.label` symbolically at eleven sites and no test holds the literal, so
       the rename is invisible to the suite by design. Stated so nobody adds one.
 
-**Batch A — after `bubblewrap init` (step 4), new `src/pwa/twa-manifest.test.ts`:**
+**Batch A — after `bubblewrap init` (step 4), new `src/pwa/twa-manifest.test.ts`. WRITTEN 2026-09-20,
+six tests, all green.** Two notes for whoever reads them next: the short name is `launcherName` in
+Bubblewrap's schema, not `shortName`; and the colours are compared **case-insensitively**, because
+`init` echoed `#0A0A0A` back where `manifest.ts` holds `#0a0a0a`. `should not lock the orientation`
+asserts the value is not one of the six locking ones rather than that it equals `default`, so a
+future `any` stays green while a lock fails — the reason is in the test's own comment.
 
-- [ ] `should bind the shell to the pinned production host` — `host` in `android/twa-manifest.json`
+- [x] `should bind the shell to the pinned production host` — `host` in `android/twa-manifest.json`
       equals `playlistjitster.vercel.app`; a per-deployment URL or the old alias here is a URL bar with
       a green build.
-- [ ] `should start at the root, like the web manifest` — `startUrl` is `/`, matching
+- [x] `should start at the root, like the web manifest` — `startUrl` is `/`, matching
       `manifest.start_url`.
-- [ ] `should carry the same name, short name and colours as the web manifest` — `name`, `shortName`
+- [x] `should carry the same name, short name and colours as the web manifest` — `name`, `shortName`
       equal `manifest.name` / `manifest.short_name`; `themeColor` and `backgroundColor` equal
       `PAGE_COLOR`. The `PAGE_COLOR` / `--color-page` house shape, one level further out: three files
       now hold the page colour and none can derive it from another.
-- [ ] `should not lock the orientation` — the prompt at step 4 is exactly the pressure that would;
+- [x] `should not lock the orientation` — the prompt at step 4 is exactly the pressure that would;
       `manifest.test.ts` pins the web manifest's absence and cannot see this file.
-- [ ] `should decline notification delegation` — `enableNotifications` is `false`; the privacy page
+- [x] `should decline notification delegation` — `enableNotifications` is `false`; the privacy page
       promises it and the listing would otherwise show an unexplained permission.
-- [ ] `should name the committed package id` — `packageId` equals `aleixrabassa.playlistjitster`, the
+- [x] `should name the committed package id` — `packageId` equals `aleixrabassa.playlistjitster`, the
       same literal `assetlinks.test.ts` pins, so the two halves of the cross-pin exist even before the
       step-11 test joins them.
 
@@ -415,7 +438,11 @@ people learn to skip (plan 1 decision 17).
 - [ ] `should list two colon-separated SHA-256 fingerprints` — count and format, deferred from plan 1
       step 4. One fingerprint is a valid file that produces a URL bar on half the installs.
 - [ ] `should agree with android/twa-manifest.json about the package id` — the cross-file pin,
-      deferred from plan 1 step 4; the file it needed did not exist until step 4 here.
+      deferred from plan 1 step 4; the file it needed did not exist until step 4 here. **It exists as
+      of 2026-09-20 and this test is still deliberately unwritten**: it needs no fingerprint and could
+      land today, but batch B lands together at step 11, and splitting it would leave the batch's own
+      rule ("written the moment its input exists") looking satisfied while the fingerprint half stayed
+      red. Both halves of the package id are pinned meanwhile, one per file.
 
 **What none of these can prove:** that Android's verifier accepted the statement, that the URL bar is
 gone, that the back gesture reaches the webview as `popstate`, or that the listing is compliant. Those
@@ -512,8 +539,14 @@ are steps 7, 12, 15 and 17 — a device and a Console.
       physical Android 13+ device was obtained, so no row rests on an emulator verdict. An emulator
       remains permissible only for screenshots (`docs/store/listing.md` §4). Re-open only if the
       device becomes unavailable before step 12.
-- [ ] What is the name and role of the checksum file `bubblewrap update` writes beside
-      `twa-manifest.json` — read at step 4, not guessed.
+- [x] What is the name and role of the checksum file `bubblewrap update` writes beside
+      `twa-manifest.json` — read at step 4, not guessed. **Answered 2026-09-20 by reading
+      `@bubblewrap/cli`'s `dist/lib/cmds/build.js`: `android/manifest-checksum.txt`, a SHA-1 of
+      `twa-manifest.json` itself** (not of the web manifest). `build` prompts to regenerate when it is
+      absent and to update when it is stale. **Ignored, not tracked — and that inverts this plan's own
+      rule**, because everything the checksum certifies is ignored too: on a fresh clone a tracked
+      matching checksum would suppress the regeneration prompt and the build would then fail on a
+      missing `gradlew`. Full reasoning in the `.gitignore` block and in `docs/agent_findings.md`.
 - [x] Who owns playlist `34cIJlWIX9TEoA8bpI2UBu`? If it is not the developer's, does "official" still
       hold? Read from the embed payload at step 3. **Answered 2026-09-19: `arich97`, confirmed by the
       developer as their own account**, so "official" holds and decision 5 shipped unchanged. The

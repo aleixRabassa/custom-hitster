@@ -227,9 +227,9 @@ Actions migration is recorded in Out of Scope rather than built speculatively.
         `docs/development.md` with the release process (step 18), because the next release will be
         run against whatever the machine has then.
 
-- [ ] **Step 6 — Generate the shell.** Run `bubblewrap init` against the deployed manifest URL from
+- [x] **Step 6 — Generate the shell.** Run `bubblewrap init` against the deployed manifest URL from
       step 1, inside `android/`.
-  - [ ] Choose the **application id** carefully. It is reverse-DNS, it is permanent after first
+  - [x] Choose the **application id** carefully. It is reverse-DNS, it is permanent after first
         publish, and it is the one string in this plan that genuinely cannot be changed later. **Do
         not accept Bubblewrap's default.** It derives one from the origin's host reversed, which for
         the candidate origin puts the app under `app.vercel.…` — a namespace the developer does not
@@ -241,25 +241,28 @@ Actions migration is recorded in Out of Scope rather than built speculatively.
         prompt exactly; Bubblewrap's proposed `app.vercel.playlistjitster` is the thing to overwrite.
         The same string goes into `public/.well-known/assetlinks.json` (step 4) and is what the
         step 12 cross-pin test compares against `twa-manifest.json`.
-  - [ ] At the prompts: keep the manifest's name and short name, standalone display, the page colour
+  - [x] At the prompts: keep the manifest's name and short name, standalone display, the page colour
         for both theme and background, the 512 icon as the splash source, the any/default
         orientation from step 2, and **decline notification delegation** — the app has no push and
         requesting the permission would be an unexplained permission on the listing. Also decline
         **Play Billing** and the **geolocation** permission when asked, keep the default
         **Custom Tabs fallback** (it is what a device without a TWA-capable browser gets), and leave
         the shortcuts list empty — the manifest declares none.
-  - [ ] Confirm the resulting `twa-manifest.json` matches the deployed manifest field for field.
-  - [ ] Note what the shell will open on: `start_url` is `/`, and since 2026-09-18 that is the
+  - [x] Confirm the resulting `twa-manifest.json` matches the deployed manifest field for field.
+  - [x] Note what the shell will open on: `start_url` is `/`, and since 2026-09-18 that is the
         **welcome screen**, on every cold launch, by a recorded decision (no "seen it" flag). That is
         correct and needs no packaging change — but it is what testers and reviewers will see first,
         so the listing's first screenshot should be it (step 13).
-        _→ Frozen; tracked in [`plan.play-store-todo.md`](plan.play-store-todo.md) step 4. Do not execute from here._
+        _→ Frozen; tracked in [`plan.play-store-todo.md`](plan.play-store-todo.md) step 4. Do not execute from here.
+        **Ticked from there 2026-09-20**, with one correction this plan could not have known: Bubblewrap
+        1.25.0 has **no notification-delegation prompt**, and the field defaults to `true` — it was fixed
+        by hand in `twa-manifest.json` and is now pinned by a test._
 
-- [ ] **Step 7 — Generate and protect the signing key.**
-  - [ ] Create the upload keystore outside the repository, or inside it and ignored — never
+- [x] **Step 7 — Generate and protect the signing key.**
+  - [x] Create the upload keystore outside the repository, or inside it and ignored — never
         tracked. Store the passwords in a password manager, not in the repo and not in a shell
         history.
-  - [ ] Note the accurate recovery position, because the folklore overstates it: with **Play App
+  - [x] Note the accurate recovery position, because the folklore overstates it: with **Play App
         Signing** enabled, Google holds the app signing key and a lost _upload_ key can be reset
         through Play Console support. Losing the keystore is therefore a serious inconvenience and a
         support round-trip, not the end of the app's update path. Back it up anyway.
@@ -267,7 +270,9 @@ Actions migration is recorded in Out of Scope rather than built speculatively.
         `android/.gradle/`, and `local.properties`. Append the block **below** the existing `.env`
         family and introduce no new `.env*` pattern — that file's negation-last rule is load-bearing
         and has already been broken once by a CLI.
-        _→ Frozen; tracked in [`plan.play-store-todo.md`](plan.play-store-todo.md) step 5. Do not execute from here._
+        _→ Frozen; tracked in [`plan.play-store-todo.md`](plan.play-store-todo.md) step 5. Do not execute from here.
+        **Ticked from there 2026-09-20**; the `.gitignore` block was widened the same day to every path
+        `bubblewrap update` regenerates._
 
 - [ ] **Step 8 — Check the target SDK.** Read `targetSdkVersion` in the generated Gradle files and
       compare it against Play's current minimum for new apps, which advances every August. Bump it
