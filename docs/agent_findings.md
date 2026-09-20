@@ -4344,3 +4344,33 @@ The isolated file green **10 of 10** consecutive runs, then the full suite green
 (867/867, 58–64 s each, `environment` 482–536 s) — after eight consecutive red full runs before the
 change on the same day. A quieter machine than the red runs, which is why the budget probes above
 exist: the green runs alone could not distinguish "budgets applied" from "drain plus idle machine".
+
+## 2026-09-20 — Play account and device: both of step 1's long waits are running, and the emulator question is moot
+
+`plan.play-store-todo.md` step 1 asked for two things that cost calendar time and for the decision
+that follows from them. All three are now answerable.
+
+**Play developer account: registered 2026-09-20, fee paid, identity verification SUBMITTED the same
+day and pending.** That date is the one to measure the wait from — it is what step 9 (create the
+Console app) blocks on, and therefore what steps 10–12 and gate M2 block on transitively. Nothing
+between here and step 8 needs it, so the local shell path (steps 4–7) runs in parallel by design.
+
+**Device: a physical Android 13-or-newer phone, obtained 2026-09-20.** This closes the open question
+"which rows may an emulator satisfy" as **moot rather than answered** — the question existed only for
+the case where no physical device was available, and the plan's own caution was that an
+emulator-only verdict is doubtful on exactly two rows (lock-screen audio, and Android 13+ predictive
+back, row 7) with predictive back being the one whose remedy would live in `android/`. With real
+hardware at 13+, **every row in `docs/development.md` §5 is satisfiable on the real target**, and the
+closed-testing AAB (final after gate M2, step 12) will not rest on an emulator verdict for anything.
+An emulator stays permissible only where `docs/store/listing.md` §4 already allowed it: screenshots.
+
+**What is still unrecorded about the device, deliberately:** the model and the exact Android release.
+Neither was read from the hardware, and guessing either into this file would be the sort of claim the
+repo's rules exist to prevent. Capture both at step 7, when `adb` is in play anyway and the answer
+comes from the device rather than from memory — `C:\Android\sdk\platform-tools\adb.exe shell getprop
+ro.build.version.release` and `... ro.product.model`. Row 7's precondition is the release number, so
+it is worth having written down before the row is marked passed.
+
+**Consequence for sequencing:** the critical path is now identity verification, and it is already
+running. Steps 4–7 (init the shell, keystore, target SDK, first build with the URL bar expected) need
+no account and no Console, so they should proceed immediately rather than waiting on the mail.

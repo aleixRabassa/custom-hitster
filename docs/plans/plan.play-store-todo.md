@@ -149,20 +149,27 @@ hands it needs.
 
 ## Implementation Steps
 
-- [ ] **Step 1 `[Console]` `[you type it]` — Day 0: start both long waits before anything else.**
+- [x] **Step 1 `[Console]` `[you type it]` — Day 0: start both long waits before anything else.**
       Nothing until step 10 needs the account and nothing until step 7 needs the phone, but both take
       calendar time that no later step can shorten.
-  - [ ] `[Console]` Register the personal Play developer account, pay the one-time 25 USD fee, and
+  - [x] `[Console]` Register the personal Play developer account, pay the one-time 25 USD fee, and
         **start identity verification** (absorbs plan 1 step 10, first half). It can take days;
         creating the app itself is step 9 and waits on it. Record the date started.
-  - [ ] `[you type it]` **Obtain an Android device** — no step in either old plan does this. Plan 1
+  - [x] `[you type it]` **Obtain an Android device** — no step in either old plan does this. Plan 1
         step 9 says "a real device"; `docs/store/listing.md` §4 allows an emulator for screenshots
         only. Decide which rows an emulator may satisfy and write the decision down: an emulator is
         fine for launch, deal, flip, both PDF downloads and the App Link; it is **doubtful** for the
         lock-screen audio row and for Android 13+ predictive back, and predictive back is the one row
         whose remedy lives in `android/`, so the closed-testing AAB should not be final on an
         emulator-only verdict. Android 13 or newer is required for row 7 either way.
-  - [ ] `[agent]` Record the two start dates and the device decision in `docs/agent_findings.md`.
+  - [x] `[agent]` Record the two start dates and the device decision in `docs/agent_findings.md`.
+        _→ **DONE 2026-09-20.** Account registered and fee paid 2026-09-20; identity verification
+        **submitted the same day and pending** — that is the date the wait is measured from, and it is
+        the only thing gating steps 9–12. Device: a **physical Android 13+ phone**, so the emulator
+        question below is moot rather than answered and every §5 row is satisfiable on the real
+        target. Model and exact release deliberately NOT recorded — read them off the device at step 7
+        (`adb shell getprop ro.build.version.release` / `ro.product.model`), since row 7's
+        precondition is that number. Full entry in `docs/agent_findings.md`._
 
 - [x] **Step 2 `[agent]` — Close plan 1's three deploy-dependent sub-items from the measurements
       above.** They were unticked because there was no deploy in the session that built them; commit
@@ -500,8 +507,11 @@ are steps 7, 12, 15 and 17 — a device and a Console.
       the one that verifies what testers install — so the benefit is a few days on the device path at
       the cost of a deliberately half-right deployed file. Recorded as a question, not a step; decide
       only if identity verification stalls.
-- [ ] Which rows may an emulator satisfy, if no physical device is available at step 1? The doubtful
-      two are the lock-screen audio row and predictive back (decision 14).
+- [x] Which rows may an emulator satisfy, if no physical device is available at step 1? The doubtful
+      two are the lock-screen audio row and predictive back (decision 14). **Moot 2026-09-20** — a
+      physical Android 13+ device was obtained, so no row rests on an emulator verdict. An emulator
+      remains permissible only for screenshots (`docs/store/listing.md` §4). Re-open only if the
+      device becomes unavailable before step 12.
 - [ ] What is the name and role of the checksum file `bubblewrap update` writes beside
       `twa-manifest.json` — read at step 4, not guessed.
 - [x] Who owns playlist `34cIJlWIX9TEoA8bpI2UBu`? If it is not the developer's, does "official" still
