@@ -5,7 +5,8 @@ future release edits a reviewed, versioned file instead of rewriting it from mem
 (`plan.google-play-shell.md`, decision 15). Nothing in this file is shipped by the app: it is
 documentation, so it is outside the `src/game/copy.ts` rule — but **it must not contradict
 `COPY.*`**. Where a line below describes a screen, it was checked against the real string in
-`src/game/copy.ts` on 2026-09-19.
+`src/game/copy.ts` on 2026-09-21 (re-verified: every claim in §3's source table, plus the
+Alternate B tagline quote in §2, which had drifted from the live string).
 
 **Status: step 13 is NOT done.** This file is the copy half only — the graphics, the screenshots and
 the Console itself are still outstanding. **The trademark question that used to block it is
@@ -78,8 +79,9 @@ Consequences, now that it is decided:
 
 ### Two more places the word appears, neither of them listing copy
 
-- **`README.md` links to the board game by name** ("a playable digital [Hitster](…) deck") and says
-  printed cards are "sized to match shop-bought Hitster cards". That is fine for a repository — it
+- **`README.md` links to the board game by name** ("a playable digital [Hitster](…) deck"). Its second
+  use — printed cards "sized to match shop-bought Hitster cards" — went with the 2026-09-21 card
+  geometry, which dropped the 65 mm size. The remaining link is fine for a repository — it
   is describing what the project is modelled on, to developers — and it is **not** fine in anything
   pasted into the Console. Do not copy a sentence from the README into the listing.
 - **`public/privacy.html` names the two storage keys**, so the word appears on the page the
@@ -112,15 +114,14 @@ Turn any Spotify playlist into a card game: guess each song's release year.
 Paste a Spotify playlist, deal a deck of cards, and guess the year of each song.
 ```
 
-### Alternate B — 63 characters
+### Alternate B — 61 characters
 
 ```text
-The music timeline game, built from your own Spotify playlists.
+The music timeline game, now from your own Spotify playlists.
 ```
 
-Alternate B is a near-echo of `COPY.welcome.tagline` ("The music timeline game, from your own
-Spotify playlists."), which is the one line a player reads first — worth preferring if the listing
-and the app should say the same thing on arrival. The recommendation is the first because it names
+Alternate B is `COPY.welcome.tagline` character for character — the one line a player reads first —
+so it is worth preferring if the listing and the app should say the same thing on arrival. The recommendation is the first because it names
 the verb ("guess the year") that the tagline leaves implicit, and the store's short description is
 read next to twenty others.
 
@@ -128,7 +129,7 @@ read next to twenty others.
 
 ## 3. Full description — 4000 character limit
 
-**2150 characters** of the 4000 allowed.
+**2194 characters** of the 4000 allowed (recounted 2026-09-21, after the 49 mm / 16-per-sheet edit).
 
 ```text
 Playlist Jitster turns any public Spotify playlist into a music timeline card game.

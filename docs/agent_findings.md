@@ -4855,7 +4855,7 @@ in both axes: baseline 619.1732 against a card spanning 559.7638..698.5827 is th
 
 **The one thing NOT to copy from it.** The template is not a per-sheet duplex interleave — it is
 eight front pages followed by two back pages. The deck export's `planSheets` interleaves front sheet
-*n* with back sheet *n* because each of its cards has a QR on one face and an answer on the other,
+_n_ with back sheet _n_ because each of its cards has a QR on one face and an answer on the other,
 which the year cards do not. Matching the template's page ORDER would pair every printed card with
 the wrong answer. Size and position were the request; the pagination was not.
 
@@ -4873,7 +4873,7 @@ was written. All five are load-bearing and none is obvious from the public docs.
    variant never sees the presence custom — it sees the component's own `custom` prop.
 2. **Worse, the first-paint inline style sees no custom at all.** framer-motion's
    `motion/utils/use-visual-state.mjs` → `makeLatestValues` calls `resolveVariantFromProps(props,
-   list[i])` with the custom argument omitted entirely. A dynamic `initial` would therefore resolve
+list[i])` with the custom argument omitted entirely. A dynamic `initial` would therefore resolve
    its default branch for the first painted frame and only jump to the right one once the visual
    element mounted and re-resolved (`VisualElement.mjs:516` does pass `presenceContext?.custom`).
    **That is why the entrance is driven by a plain `movement` prop on `Card` while the exit keeps
@@ -4913,3 +4913,26 @@ false` branch) — in jsdom no exit ever finishes, so stepping 1→2→1 never r
 `initial` never applies. `CardStack.test.tsx` steps back two cards to get a real mount. In a browser
 that same branch is a real 250 ms window, and it is harmless: a step back inside it re-enters the
 leaving card, which lands at `x: 0` either way.
+
+## 2026-09-21 — A type scale on a `<label>` sizes the `<input>` inside it, because preflight sets `font: inherit`
+
+Matching `LandingScreen`'s component sizes to `WelcomeScreen`'s meant enlarging the playlist inputs
+(`px-3 py-2 → px-4 py-3`). The first attempt left the row's `<label className="... text-sm">` alone
+and the box stayed small-typed: **Tailwind's preflight gives every form control `font: inherit`**, so
+a `text-sm` anywhere up the tree is the input's font size too — a `<label>` wrapper is not a
+text-only element the way it reads. The fix is to move the scale onto the caption `<span>`, which is
+the label's only other child, so nothing else changes. Worth knowing generally: in this repo a size
+class on a wrapper around a control is a size class on the control.
+
+Two more things from the same pass, both recorded because they are invisible locally:
+
+- **The logo's top edge is exactly `<main>`'s top padding on both the welcome screen and the
+  picker**, because the picker's Back button is `absolute` and the welcome screen has nothing above
+  its hero. So "the logo at the same height on both screens" reduces to one class matching one class
+  (`pt-8`), which is why it is asserted at both ends rather than once. There is no layout in jsdom to
+  check the real thing against.
+- **`git status` showed `MM src/game/copy.ts`** while none of the sessions in the transcript history
+  had written to it: the unstaged hunk (`welcome.tagline` gaining the word "now") was **hand-edited by
+  the developer**, and the Play-listing session that ran afterwards read the live value and aligned
+  `docs/store/listing.md`'s Alternate B to it. Checked before touching either — an odd-reading string
+  in the copy surface is not automatically a slip by a previous session.

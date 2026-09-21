@@ -152,6 +152,29 @@ describe('LandingScreen', () => {
     expect(container.querySelector('main')?.className).toContain('gap-8');
   });
 
+  it('should start its column at the same top padding as the other screen, so the logo does not jump', () => {
+    // ===================================================================
+    //  THE LOGO'S HEIGHT IS THIS ONE CLASS, AND IT IS SHARED WITH
+    //  `WelcomeScreen` (2026-09-21).
+    //
+    //  The Back button is out of flow on the picker and there is nothing
+    //  above the hero on the welcome screen, so on BOTH the hero is the
+    //  first in-flow child and the logo's top edge is exactly `<main>`'s
+    //  top padding. The same 192px logo therefore sits at the same height
+    //  on both screens if and only if this number matches -- it did not,
+    //  `pt-6` against `pt-8`, and the 8px jump on the one press between
+    //  them is what the developer asked to have removed.
+    //
+    //  jsdom computes no layout, so the class is the whole of what is
+    //  observable. The pair is asserted at BOTH ends, as `Footer`'s
+    //  `relative`/`pb-20` contract is: one assertion alone would let the
+    //  other screen drift away from it silently.
+    // ===================================================================
+    const { container } = renderLanding();
+
+    expect(container.querySelector('main')?.className).toContain('pt-8');
+  });
+
   it('should render the logo as the level-1 heading, named after the app', () => {
     // ===================================================================
     //  THE HEADING IS AN IMAGE NOW (2026-08-12), AND THE `alt` IS THE HALF

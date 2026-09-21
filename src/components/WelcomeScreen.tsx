@@ -172,6 +172,11 @@ export function WelcomeScreen({ onStart }: WelcomeScreenProps) {
       bottom-8`, and 80px of band puts 32px above the line and 32px below it. See `Footer.tsx`;
       `WelcomeScreen.test.tsx` asserts both.
 
+      `pt-8` IS SHARED WITH `LandingScreen` (2026-09-21). The hero is the first in-flow child on
+      both screens, so the logo's top edge IS this padding -- the picker was `pt-6`, and the same
+      192px logo jumped 8px on the one press between the two. The two numbers are ONE number now,
+      pinned at both ends in the screens' own tests.
+
       No `justify-center`, for the reason `LandingScreen` gives: this column outgrows a phone's
       viewport (a hero, three steps and a second section), so there is no free space to centre in,
       and a viewport-sized hero would put a screenful of nothing between the button and the steps.
@@ -205,9 +210,14 @@ export function WelcomeScreen({ onStart }: WelcomeScreenProps) {
 
         {/*
           The big button. `text-on-accent`, not `text-white`, for the contrast reason the picker's
-          Start records (white on the accent measured 3.67:1). Bigger than every other primary action
-          in the app -- `py-4 text-lg` -- because it is the only thing this screen asks the player to
-          do; the download below is deliberately the outlined secondary shape.
+          Start records (white on the accent measured 3.67:1). `px-6 py-4 text-lg font-semibold`,
+          because it is the only thing this screen asks the player to do; the download below is
+          deliberately the outlined secondary shape.
+
+          IT IS NO LONGER THE ONLY BUTTON THIS SIZE (2026-09-21). This paragraph used to say
+          "bigger than every other primary action in the app", and the picker's Start now carries
+          the same six classes -- asked for so the two screens read as one app. The pair is
+          documented on `LandingScreen`'s own Start, which is the one that moved.
         */}
         <button
           type="button"

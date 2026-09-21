@@ -112,6 +112,29 @@ describe('WelcomeScreen', () => {
     expect(container.querySelector('footer')?.textContent).toBe(COPYRIGHT_NOTICE);
   });
 
+  it('should start its column at the same top padding as the other screen, so the logo does not jump', () => {
+    // ===================================================================
+    //  THE LOGO'S HEIGHT IS THIS ONE CLASS, AND IT IS SHARED WITH
+    //  `LandingScreen` (2026-09-21).
+    //
+    //  The Back button is out of flow on the picker and there is nothing
+    //  above the hero on the welcome screen, so on BOTH the hero is the
+    //  first in-flow child and the logo's top edge is exactly `<main>`'s
+    //  top padding. The same 192px logo therefore sits at the same height
+    //  on both screens if and only if this number matches -- it did not,
+    //  `pt-6` against `pt-8`, and the 8px jump on the one press between
+    //  them is what the developer asked to have removed.
+    //
+    //  jsdom computes no layout, so the class is the whole of what is
+    //  observable. The pair is asserted at BOTH ends, as `Footer`'s
+    //  `relative`/`pb-20` contract is: one assertion alone would let the
+    //  other screen drift away from it silently.
+    // ===================================================================
+    const { container } = renderWelcome();
+
+    expect(container.querySelector('main')?.className).toContain('pt-8');
+  });
+
   it('should position the decorative card itself, because the ring utility does not', () => {
     // `card-ring` paints an `absolute` pseudo-element and deliberately declares no `position`
     // (`src/index.css` has the cascade reasoning). Every other call site is `absolute inset-0`; this

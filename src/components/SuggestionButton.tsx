@@ -91,7 +91,14 @@ export function SuggestionButton({
       */
       aria-pressed={isSelected}
       className={[
-        'flex h-full w-full touch-target items-baseline justify-between gap-3 rounded-lg border px-3 py-2 text-left',
+        /*
+          `p-4` and `text-sm`, matching `WelcomeScreen`'s step cards (2026-09-21): the developer's
+          note was that the picker's components read a size smaller than the front door's, and
+          these are the pair that sit in the same slot -- a grid of bordered cards under a
+          `text-sm text-fg-secondary` heading. Only the padding and the type scale moved; the
+          press, the two border strings and the tick are untouched.
+        */
+        'flex h-full w-full touch-target items-baseline justify-between gap-3 rounded-lg border p-4 text-left',
         /*
           `select-none` and the iOS callout suppression are what make a 500ms hold a GESTURE
           rather than a text selection: without them the browser's own "you are selecting text"
@@ -117,7 +124,7 @@ export function SuggestionButton({
         'focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)',
       ].join(' ')}
     >
-      <span className="flex min-w-0 items-baseline gap-1.5 text-xs text-fg-secondary">
+      <span className="flex min-w-0 items-baseline gap-1.5 text-sm text-fg-secondary">
         {/*
           NOT decoration, despite being `aria-hidden`. WCAG 1.4.1 forbids colour as the only
           thing distinguishing a state, and a changed border colour is exactly that -- so the
@@ -132,7 +139,7 @@ export function SuggestionButton({
         {label}
       </span>
       {/* Genre/era only. Never a track, an artist or a year -- see the header block. */}
-      <span className="text-xs text-fg-muted">{blurb}</span>
+      <span className="text-sm text-fg-muted">{blurb}</span>
     </button>
   );
 }

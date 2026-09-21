@@ -419,12 +419,20 @@ export function LandingScreen({
        own natural height and the sections are separated by this column's `gap-8`
        like every other pair -- one standard margin, the same at every viewport.
 
-       `pt-6` here rather than `py-6` on the hero: the top padding belongs to the
+       `pt-8` here rather than `py-8` on the hero: the top padding belongs to the
        page, and leaving it on the hero would add to the `gap-8` below it and make
        the hero's two neighbours unequal.
+
+       IT IS `pt-8` AND NOT `pt-6` BECAUSE `WelcomeScreen` IS (2026-09-21). The
+       Back button is out of flow on both screens, so the hero is the first
+       in-flow child and the logo's top edge IS this padding -- which made the
+       same 192px logo sit 8px higher here than on the front door, and the two
+       screens visibly jump on the one press between them. The developer asked
+       for the logo at exactly the same height on both, so this number and
+       `WelcomeScreen`'s are ONE number: change one and change the other.
       =============================================================================
     */
-    <main className="relative flex min-h-dvh flex-col items-center gap-8 bg-page px-6 pt-6 pb-20 text-fg">
+    <main className="relative flex min-h-dvh flex-col items-center gap-8 bg-page px-6 pt-8 pb-20 text-fg">
       {/*
         ===========================================================================
          THE WAY BACK TO THE FRONT DOOR (2026-09-18).
@@ -435,12 +443,15 @@ export function LandingScreen({
          Top-left corner, where a back control is expected to be, and
          ghost-styled so it does not compete with Start.
 
-         OUT OF FLOW -- `absolute top-6 left-6`, anchored to `<main>`'s
-         `relative`, on the padding edges `pt-6` / `px-6` already draw. It
+         OUT OF FLOW -- `absolute top-8 left-6`, anchored to `<main>`'s
+         `relative`, on the padding edges `pt-8` / `px-6` already draw. It
          shipped first as `self-start` in the column, and that put ~76px of
          nothing above the logo: a `touch-target` row is 44px tall and the
          column's `gap-8` added 32px more before the hero. Out of flow, the
-         hero sits at the same 24px it had before the button existed. It stays
+         hero sits exactly on the column's own top padding, which is where it
+         sat before the button existed -- that padding is 32px as of
+         2026-09-21 and was 24px when this was written; the point is that the
+         button costs the hero NOTHING, not the number. It stays
          the FIRST DOM child so the tab order still reaches it first. Known
          cost: on a 320px viewport the button's right padding grazes the logo's
          top-left corner (the text clears it); a "three widths" row in
@@ -465,7 +476,7 @@ export function LandingScreen({
         type="button"
         onClick={onBack}
         disabled={isLoading}
-        className="touch-target absolute top-6 left-6 flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-fg-secondary hover:text-fg focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)"
+        className="touch-target absolute top-8 left-6 flex items-center gap-2 rounded-lg px-4 py-2 text-sm text-fg-secondary hover:text-fg focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)"
       >
         <span aria-hidden="true">←</span>
         {COPY.landing.backToWelcome}
@@ -574,14 +585,16 @@ export function LandingScreen({
           */
             <div key={row.id} className="flex flex-col gap-1">
               <div className="flex items-end gap-2">
-                <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm">
+                <label className="flex min-w-0 flex-1 flex-col gap-1">
                   {/*
                   The first row keeps Phase 6's wording; later rows are numbered, so every input on
                   the screen has a UNIQUE accessible name. Five boxes all called "Playlist link"
                   are five boxes a screen-reader user cannot tell apart, and one query in the tests
                   would match all of them.
                 */}
-                  <span className="text-fg-secondary">{COPY.landing.playlistLinkLabel(index)}</span>
+                  <span className="text-sm text-fg-secondary">
+                    {COPY.landing.playlistLinkLabel(index)}
+                  </span>
                   {/*
                   ===============================================================
                    NO `aria-label` ON THESE INPUTS, AND ADDING ONE BACK IS A
@@ -640,7 +653,7 @@ export function LandingScreen({
                     spellCheck={false}
                     inputMode="url"
                     disabled={isLoading}
-                    className="rounded-lg border border-border-strong bg-surface px-3 py-2 text-fg placeholder:text-fg-muted focus-visible:focus-ring disabled:opacity-(--opacity-disabled)"
+                    className="rounded-lg border border-border-strong bg-surface px-4 py-3 text-fg placeholder:text-fg-muted focus-visible:focus-ring disabled:opacity-(--opacity-disabled)"
                   />
                 </label>
 
@@ -702,7 +715,7 @@ export function LandingScreen({
            into a column that otherwise has exactly one -- the full-width inputs -- and
            left it floating in its own slot between the rows and Start, belonging to
            neither. It now occupies the same slot shape as a playlist row (`w-full`,
-           the input's own `rounded-lg` / `px-3` / `py-2`) with a DASHED border, so it
+           the input's own `rounded-lg` / `px-4` / `py-3`) with a DASHED border, so it
            reads as the next box the player can create, which is what pressing it does.
 
            The visible sentence is what lets the `aria-label` go: the accessible name
@@ -725,7 +738,7 @@ export function LandingScreen({
                 setRows((current) => [...current, ...makeRows([''])]);
               }}
               disabled={isLoading}
-              className="touch-target flex w-full items-center gap-2 rounded-lg border border-dashed border-border px-3 py-2 text-sm text-fg-secondary hover:border-border-strong hover:bg-surface hover:text-fg focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)"
+              className="touch-target flex w-full items-center gap-2 rounded-lg border border-dashed border-border px-4 py-3 text-fg-secondary hover:border-border-strong hover:bg-surface hover:text-fg focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)"
             >
               <span aria-hidden="true">+</span>
               {COPY.landing.addRow}
@@ -750,10 +763,19 @@ export function LandingScreen({
             /*
             `text-on-accent` rather than `text-white`, and that is a contrast fix rather than a
             rename: white on `--color-accent` measured 3.67:1, a 1.4.3 failure on the app's
-            primary action at 16px. The background is unchanged; only the label darkens, to
-            5.40:1 at rest and 8.03:1 on hover.
+            primary action at 16px -- and at the 18px it is now, which is the LARGE-text
+            threshold and so a 3:1 floor rather than 4.5:1: the fix is not made redundant by the
+            size, it is simply further clear. The background is unchanged; only the label
+            darkens, to 5.40:1 at rest and 8.03:1 on hover.
+
+            IT IS `WelcomeScreen`'S BIG BUTTON, TO THE CLASS (2026-09-21). `px-6 py-4 text-lg
+            font-semibold`, asked for so the picker and the front door read as one app rather
+            than as two -- the front door's own reason for the size applies here unchanged: this
+            is the one thing the screen asks the player to do. What is NOT copied from it is the
+            disabled pair below: that button is never disabled and this one is, for the whole of
+            a request.
           */
-            className="touch-target rounded-lg bg-accent px-4 py-2 font-medium text-on-accent hover:bg-accent-hover focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)"
+            className="touch-target rounded-lg bg-accent px-6 py-4 text-lg font-semibold text-on-accent hover:bg-accent-hover focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)"
           >
             {isLoading ? COPY.landing.starting : COPY.landing.start}
           </button>
@@ -827,7 +849,7 @@ export function LandingScreen({
                     submitPlaylistIds(saved.ids);
                   }}
                   disabled={isLoading}
-                  className="flex flex-1 touch-target items-baseline gap-3 rounded-lg border border-border bg-surface px-3 py-2 text-left hover:border-border-strong focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)"
+                  className="flex flex-1 touch-target items-baseline gap-3 rounded-lg border border-border bg-surface px-4 py-3 text-left hover:border-border-strong focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)"
                 >
                   {/*
                     The playlist's own title, and NOTHING beside it. Never a track, an artist or a
@@ -839,7 +861,7 @@ export function LandingScreen({
                     which matters because the remove control beside it names the same playlist --
                     a badge here made every row's two buttons match one query.
                   */}
-                  <span className="text-sm">{saved.name}</span>
+                  <span>{saved.name}</span>
                 </button>
 
                 <button

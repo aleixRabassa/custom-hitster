@@ -109,7 +109,7 @@ export const COPY = {
   welcome: {
     /** The `alt` of the logo, which is this screen's `<h1>` name too -- never empty. */
     logoAlt: APP_NAME,
-    tagline: 'The music timeline game, from your own Spotify playlists.',
+    tagline: 'The music timeline game, now from your own Spotify playlists.',
     /** The big button. Distinct from `landing.start` so no screen ever has two buttons called "Start". */
     enter: 'Start playing',
     howItWorksHeading: 'How it works',

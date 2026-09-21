@@ -118,6 +118,29 @@ And **the decorative card is the first `card-ring` caller that is not `absolute 
 pins all four. The download link is the app's **second `<a>`**, with `focus-visible:focus-ring` and
 `touch-target` applied by hand as the footer's was, and no `target="_blank"`.
 
+**THE PICKER IS SIZED FROM THE FRONT DOOR AS OF 2026-09-21, AND THE TWO `pt-8`s ARE ONE NUMBER.** The
+developer's report was that `LandingScreen`'s components read slightly smaller than `WelcomeScreen`'s,
+and that the logo must sit at **exactly** the same height on both. The height half is the load-bearing
+half: the Back button is out of flow and there is nothing above the hero on the welcome screen, so on
+BOTH screens the hero is the first in-flow child and **the logo's top edge IS `<main>`'s top padding** —
+`pt-6` against `pt-8` was an 8px jump on the one press between them. It is now `pt-8` on both, **pinned
+at each end** by a test of its own, the same two-ended shape as `Footer`'s `relative`/`pb-20` contract
+and for the same reason: one assertion alone lets the other screen drift away silently, and jsdom
+computes no layout, so the class name is the whole of what is observable. The size half is four
+class changes, all of them _toward_ the front door and none of them inventing a new scale: Start is
+`WelcomeScreen`'s big button to the class (`px-6 py-4 text-lg font-semibold`) **minus its disabled
+pair**, which that button does not need and this one does; the inputs, the "+" row and the saved-library
+rows go `px-3 py-2 → px-4 py-3`; and `SuggestionButton` becomes `p-4 text-sm`, matching the "How it
+works" step cards it sits in the same slot as. Three traps. **The `text-sm` had to move OFF the
+`<label>` and ONTO its caption `<span>`** — Tailwind's preflight gives an `<input>` `font: inherit`, so
+a type scale on the wrapper sizes the BOX's text too, which is the one thing the enlargement was for.
+**The Back button widened with everything else (`px-3 → px-4`)**, and `LandingScreen`'s own header
+records that at 320px it already grazed the logo's top-left corner — 8px closer now, and a row in
+[`docs/development.md`](./docs/development.md) §5. And **the `<main>` gaps were deliberately NOT
+unified**: the picker keeps `gap-8` (pinned by a test, with its own reasoning about the void between
+Start and the suggestions) where the front door has `gap-10`. The ask was the size of the components,
+not the spacing between them, and the logo's height does not depend on a gap.
+
 **THE DECK'S PRINTED CARD IS 48.9722 mm IN A 4 × 4 GRID AS OF 2026-09-21, AND THAT REVERSES THE
 2026-08-06 "65 mm = the real Hitster card" DECISION — narrowing it back is the edit to refuse.** The
 developer asked for one thing: a card exported from a deck must be the same size, in the same place
