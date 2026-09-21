@@ -34,12 +34,23 @@
  *  TWO TESTS ARE DELIBERATELY ABSENT, AND THEIR ABSENCE IS THE DESIGN.
  *  `should list two colon-separated SHA-256 fingerprints` and
  *  `should agree with android/twa-manifest.json about the package id` belong
- *  to STEP 12 of the plan, not to step 4. Today the fingerprint list is
- *  empty on purpose -- no keystore exists yet, and the upload key and the
- *  Play app-signing key are both generated later -- and `android/` does not
- *  exist at all. Written now, both would be red for eight steps, and a test
- *  that is red for eight steps is a test people learn to skip rather than
- *  trust. Add them when the fingerprints land, not before.
+ *  to STEP 11 of the plan, not to step 4. Written at step 4 both would have
+ *  been red for eight steps -- no keystore existed and `android/` did not
+ *  either -- and a test that is red for eight steps is a test people learn
+ *  to skip rather than trust.
+ *
+ *  THEY ARE STILL ABSENT ON 2026-09-21, AND THE REASON HAS CHANGED, WHICH IS
+ *  WORTH KNOWING BEFORE ADDING ONE. The list is no longer empty: it carries
+ *  the UPLOAD key, added ahead of schedule so the first sideloaded install
+ *  would stop showing a URL bar. It does NOT yet carry Play's app-signing
+ *  key, which does not exist until the Console does. So a count test
+ *  asserting TWO would be red right now for a file that is deliberately
+ *  half-complete, and a count test asserting ONE would go red at step 11 on
+ *  the correct change -- which is the worse of the two, because it teaches
+ *  that completing the file is a regression. Add the count test when the
+ *  second fingerprint lands, and assert two. The cross-file package-id pin
+ *  has no such problem and could be written today; it is held with its pair
+ *  only so step 11 adds them together.
  * ===========================================================================
  */
 
@@ -121,10 +132,12 @@ describe('the digital asset links statement', () => {
     // ===================================================================
     expect(target?.package_name).toBe(PACKAGE_ID);
 
-    // The fingerprint list is EMPTY ON PURPOSE until step 12, so its LENGTH is not asserted
-    // here -- that is the step-12 test. What is asserted is that the key is present and is
-    // an array: Android rejects a statement missing the field, and the empty-array
-    // placeholder is what makes step 12 a value change rather than a structural one.
+    // The LENGTH is deliberately not asserted -- see this file's header. The list held zero
+    // fingerprints until 2026-09-21, holds one (the upload key) now, and holds two once Play's
+    // app-signing key is read at step 11; a length assertion would be wrong at two of those
+    // three moments. What is asserted is that the key is present and is an array, because
+    // Android rejects a statement missing the field entirely -- which is what keeps every
+    // fingerprint change a VALUE change rather than a structural one.
     expect(Array.isArray(target?.sha256_cert_fingerprints)).toBe(true);
   });
 

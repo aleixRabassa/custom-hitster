@@ -4,7 +4,9 @@
     "target": {
       "namespace": "android_app",
       "package_name": "aleixrabassa.playlistjitster",
-      "sha256_cert_fingerprints": []
+      "sha256_cert_fingerprints": [
+        "BA:A4:32:03:3C:D9:B4:AC:07:FE:7D:03:88:23:E5:69:42:1B:BC:80:99:2D:F9:1D:FA:9A:D2:92:96:D2:21:75"
+      ]
     }
   }
 ]

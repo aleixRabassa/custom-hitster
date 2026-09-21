@@ -83,14 +83,14 @@ the three deferred fetch checks are closed (end of step 3); **M2** the verified 
 
 ### Requires from plan.google-play-shell
 
-| Output                                                       | Description                                                                                                                                                                   |
-| ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| The pinned origin `https://playlistjitster.vercel.app`       | Measured live; the old `custom-hitster.vercel.app` 307-redirects to it. Baked into the shell at step 4 and never changed after (decision 4 below closes the domain question). |
-| `src/pwa/manifest.ts` with `id`, `lang`, `dir`, `categories` | What `bubblewrap init` reads over the network at step 4.                                                                                                                      |
-| `public/privacy.html`, deployed                              | The listing's privacy-policy URL (step 14) and the enumeration the Data safety form is filled from.                                                                           |
-| `public/.well-known/assetlinks.json`, deployed, empty list   | Filled with both fingerprints at step 11; its shape tests already exist in `src/pwa/assetlinks.test.ts`.                                                                      |
-| The toolchain (`bubblewrap doctor` passing)                  | Bubblewrap 1.25.0, OpenJDK 17.0.10, build-tools 36.1.0, platform-tools 37.0.1 — versions and the two install traps in `docs/development.md` §9.                               |
-| The application id `aleixrabassa.playlistjitster`            | Already in `assetlinks.json`; typed at the init prompt at step 4; cross-pinned by the step-11 test.                                                                           |
+| Output                                                       | Description                                                                                                                                                                                                                                                                                             |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The pinned origin `https://playlistjitster.vercel.app`       | Measured live; the old `custom-hitster.vercel.app` 307-redirects to it. Baked into the shell at step 4 and never changed after (decision 4 below closes the domain question).                                                                                                                           |
+| `src/pwa/manifest.ts` with `id`, `lang`, `dir`, `categories` | What `bubblewrap init` reads over the network at step 4.                                                                                                                                                                                                                                                |
+| `public/privacy.html`, deployed                              | The listing's privacy-policy URL (step 14) and the enumeration the Data safety form is filled from.                                                                                                                                                                                                     |
+| `public/.well-known/assetlinks.json`, deployed               | Empty when this plan was written; carries the **upload key** since 2026-09-21, out of order, per the decided open question. Play's app-signing key joins it at step 11 — an addition, never a replacement. Shape tests in `src/pwa/assetlinks.test.ts`; the count test is still deliberately unwritten. |
+| The toolchain (`bubblewrap doctor` passing)                  | Bubblewrap 1.25.0, OpenJDK 17.0.10, build-tools 36.1.0, platform-tools 37.0.1 — versions and the two install traps in `docs/development.md` §9.                                                                                                                                                         |
+| The application id `aleixrabassa.playlistjitster`            | Already in `assetlinks.json`; typed at the init prompt at step 4; cross-pinned by the step-11 test.                                                                                                                                                                                                     |
 
 ### Requires from plan.google-play-back-button
 
@@ -329,12 +329,19 @@ update`, so a hand edit is silently discarded and the symptom is a Play upload r
 
 - [ ] **Step 11 `[you type it]` then `[agent]` — Complete the asset links and redeploy.** Absorbs the
       first half of plan 1 step 12.
-  - [ ] `[you type it]` `bubblewrap fingerprint add <sha256>` for each of the two, then `bubblewrap
+  - [x] `[you type it]` `bubblewrap fingerprint add <sha256>` for each of the two, then `bubblewrap
 fingerprint generateAssetLinks`, so `twa-manifest.json` is the record of which fingerprints a
-        release carried.
+        release carried. _→ **Run for the UPLOAD key on 2026-09-21** (named `upload`), out of order, per
+        the decided open question. `generateAssetLinks` runs implicitly inside `fingerprint add` and
+        writes `android/assetlinks.json`, which is now git-ignored: `twa-manifest.json`'s `fingerprints`
+        array is the record and that file is output. **Play's fingerprint is still owed** — re-run `add`
+        for it after step 10, which is what completes this sub-item._
   - [ ] `[agent]` Copy the generated statement into `public/.well-known/assetlinks.json` — never
         hand-edit two files — then write the two tests deferred from plan 1 step 4 (Unit Tests, batch
-        B), run the four checks, commit, push.
+        B), run the four checks, commit, push. _→ **Copy and deploy done 2026-09-21 for the one
+        fingerprint.** The two tests are deliberately NOT written yet and the reason changed: a count
+        test asserting two is red today, and one asserting one goes red at the correct step-11 change.
+        Write them when Play's fingerprint lands. Reasoning in `assetlinks.test.ts`'s header._
   - [ ] `[agent]` After the deploy, wait at least **600 seconds** (the checker's cache), then fetch
         the Google checker URL from the Overview and confirm the statement list parses with two
         certificates. `adb shell pm verify-app-links --re-verify aleixrabassa.playlistjitster` forces
@@ -535,13 +542,21 @@ are steps 7, 12, 15 and 17 — a device and a Console.
 
 ## Open Questions
 
-- [ ] **Can the upload key's fingerprint be read locally (`keytool -list -v`) and deployed alone, so
-      the verified install (step 12) can be reached before the Console exists?** Technically the
-      upload key is what verifies local installs. Against it: plan 1 decision 7 calls a one-fingerprint
-      file "the classic mistake", the batch-B count test would pin it red, and the app-signing key is
-      the one that verifies what testers install — so the benefit is a few days on the device path at
-      the cost of a deliberately half-right deployed file. Recorded as a question, not a step; decide
-      only if identity verification stalls.
+- [x] **Can the upload key's fingerprint be read locally and deployed alone, so the verified install
+      (step 12) can be reached before the Console exists?** **Decided YES on 2026-09-21, and not by the
+      trigger this question named.** The gate written here was "decide only if identity verification
+      stalls"; what actually happened is that step 7's install put the URL bar on a working app in front
+      of the developer, who asked for it gone. That is the person the gate was waiting on, so the ask
+      overrides it. Three corrections to the reasoning above, now that it has been run. The source is
+      **not** `keytool -list -v` but `apksigner verify --print-certs` on the built APK — the certificate
+      the phone actually installed, rather than a keystore entry believed to be the one that signed it.
+      The **batch-B count test does not pin it red**, because that test was never written: it is still
+      `[ ]` below, so the argument was hypothetical. And the real cost is narrower than "a deliberately
+      half-right deployed file" — it is one stale sentence in `AGENTS.md` and one in
+      `docs/architecture.md` §3, both rewritten in the same commit. **What the decision does NOT change:
+      plan 1 decision 7's "one fingerprint is the classic mistake" stays true**, because it is about the
+      build testers install. Step 11 therefore **adds** Play's fingerprint beside this one and never
+      replaces it.
 - [x] Which rows may an emulator satisfy, if no physical device is available at step 1? The doubtful
       two are the lock-screen audio row and predictive back (decision 14). **Moot 2026-09-20** — a
       physical Android 13+ device was obtained, so no row rests on an emulator verdict. An emulator

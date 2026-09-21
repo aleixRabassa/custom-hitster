@@ -4481,3 +4481,56 @@ not recalled — but note what is now on record and what is not: the requirement
 developer site, and the Console has still never been opened on this subject. If the Console shows a
 different number at step 9 or at the first upload, **the Console wins** and this entry is the thing
 to correct.
+
+---
+
+## 2026-09-21 — The first sideloaded install worked, and the URL bar was removed ahead of schedule with the upload key alone
+
+Three things happened in one session: step 7's build turned out to have already been run, the APK
+installed and played, and the developer asked for the Chrome URL bar to go — which decided an open
+question the plan had parked for a trigger that never came.
+
+**The install path, because `adb` never entered it.** `adb devices` listed nothing and
+`Get-PnpDevice` showed no Android device on USB at all — not an unauthorised one, not a driver
+problem, nothing enumerated — which is the signature of a charge-only cable. The APK was transferred
+to the phone and opened from the file manager instead. **`adb` is not needed before step 12**, where
+`pm get-app-links` is the instrument; it is worth knowing that the whole of step 7 runs without it.
+
+**"El paquete no es válido" was the transport, not the build.** A first sideload attempt was refused
+with that message. Verified locally before touching anything:
+`apksigner verify --verbose --print-certs` reports the APK verifies under v1, v2 **and** v3 schemes,
+one signer, `CN=Aleix Rabassa`, RSA 2048. The file in `android/` was never the problem. Re-sending it
+installed it. **The lesson is the diagnostic order**: verify the artefact at source before debugging
+the device, because "invalid package" names the file and means the copy.
+
+**The fingerprint's source is `apksigner`, not `keytool`.** The open question proposed
+`keytool -list -v` on the keystore. `apksigner verify --print-certs` is strictly better and was free
+here — it prints the certificate **on the APK the phone installed**, rather than a keystore entry
+believed to be the one that signed it. Value:
+`BA:A4:32:03:3C:D9:B4:AC:07:FE:7D:03:88:23:E5:69:42:1B:BC:80:99:2D:F9:1D:FA:9A:D2:92:96:D2:21:75`.
+
+**What was deployed and what is still owed.** `bubblewrap fingerprint add <sha256> --name=upload`
+writes the value into `android/twa-manifest.json`'s `fingerprints` array — the record — and
+**implicitly runs `generateAssetLinks`**, which drops `android/assetlinks.json` beside the config.
+That file is git-ignored as of today: it is output, and a statement with two homes is exactly the
+disagreement a URL bar reports. The generated statement was copied to
+`public/.well-known/assetlinks.json` and Prettier-formatted. **Play's app-signing fingerprint is
+still missing and that is now the single reason the file is incomplete** — it verifies every local
+sideload and nothing a tester installs from the store, so step 11 **adds** Google's beside it and
+never replaces it.
+
+**Two arguments in the open question did not survive contact.** It said the batch-B count test
+"would pin it red" — that test has never been written, so the objection was hypothetical. And it
+framed the cost as "a deliberately half-right deployed file"; the concrete cost turned out to be two
+stale prose sentences (`AGENTS.md`, `docs/architecture.md` §3) and two stale comments in
+`src/pwa/assetlinks.test.ts`, all rewritten in the same commit as the fingerprint.
+
+**The count test is still unwritten, and the reason inverted.** Before today it would have been red
+because the list was empty. Now a test asserting **two** is red against a deliberately half-complete
+file, and a test asserting **one** would go red at step 11 on the correct change — which is worse,
+because it teaches that finishing the file is a regression. Write it when Play's fingerprint lands,
+asserting two.
+
+**Not yet verified**: that the bar actually disappears. That needs the deploy, Google's ten-minute
+`maxAge` to expire, and a **reinstall** — Chrome caches TWA verification per install, so a relaunch
+alone can keep showing the bar and read as a failure that is not one.

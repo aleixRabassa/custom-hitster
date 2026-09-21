@@ -87,5 +87,19 @@ android/store_icon.png
 android/manifest-checksum.txt
 
 # Build artefacts. Signed, large, and reproducible from a tag plus the keystore.
+#
+# `bubblewrap build` leaves FOUR files in `android/`, not two: the bundle, the signed
+# APK, the intermediate `app-release-unsigned-aligned.apk`, and a `.idsig`. The last is
+# apksigner's APK Signature Scheme **v4** signature -- a detached file Android reads for
+# incremental installs -- and it needs its own line because `*.apk` does not match a name
+# ending in `.idsig`. Found 2026-09-21, by the first real build leaving it untracked.
 *.aab
 *.apk
+*.idsig
+
+# `bubblewrap fingerprint add|generateAssetLinks` writes `android/assetlinks.json`
+# beside the config. It is a COPY of what ships at `public/.well-known/assetlinks.json`,
+# generated from `twa-manifest.json`'s `fingerprints` array -- so the array is the record
+# and this file is output. Tracking it would give the statement two homes that can
+# disagree, which is exactly the failure a URL bar reports. Added 2026-09-21.
+android/assetlinks.json

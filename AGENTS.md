@@ -371,10 +371,16 @@ widen it to `.*` and the file comes back as `index.html` with a **200**, which t
 statement at all and the installed app grows an address bar — **a URL bar on a green build**, the single
 failure this plan is shaped to prevent. `assetlinks.test.ts` pins that character class, and a string
 assertion is the honest ceiling there (re-implementing path-to-regexp in a test would be worse than no
-test). And **the fingerprint list is `[]` ON PURPOSE** until step 12, which fills it with **two**
-SHA-256 fingerprints — Play's app signing key _and_ the upload key. Do not read the emptiness as a bug
-and do not guess a value into it: an incomplete list is **a valid file that produces a URL bar**, and one
-fingerprint is the classic version of that mistake. Fuller reasoning in
+test). And **the fingerprint list holds exactly ONE fingerprint as of 2026-09-21, which is not the
+finished state and is not a bug either** — it is the **upload key**, read off the built APK with
+`apksigner verify --print-certs` and deployed ahead of the plan's own schedule because the developer
+asked for the URL bar to go on the first sideloaded install; that press decided plan 3's open question,
+which had parked the move for a stall that never came. **It verifies every LOCAL sideload and nothing a
+tester installs**, because Play re-signs with its own app signing key. So step 11 **ADDS** Google's
+fingerprint beside this one and **never replaces it**: a one-fingerprint file is **a valid file that
+produces a URL bar** on exactly the installs that come from the store, which is the classic version of
+the mistake and is now half-committed on purpose. Do not guess a value into it, and do not read the
+single entry as finished. Fuller reasoning in
 [`docs/architecture.md`](./docs/architecture.md) §3; the device checks are rows in
 [`docs/development.md`](./docs/development.md) §5, **all of them Pending**.
 

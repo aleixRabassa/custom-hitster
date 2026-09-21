@@ -1068,13 +1068,26 @@ pinned across the top of every screen and no error message anywhere. That bar is
 difference between a store app and a bookmark, and nothing announces it. The file therefore carries
 **two** fingerprints, the Play app-signing key and the upload key: either alone is a _valid file_
 that verifies for half the installs and shows the bar on the other half — Google's app signing key
-covers what users install from the store, the upload key covers what the developer sideloads. As of
-today the list is **empty on purpose**, and that is deliberate sequencing rather than an unfinished
-edit: the plan deploys the placeholder and proves its path reachable _before_ any keystore exists,
-so "is the file reachable and un-rewritten" is debugged separately from "are the fingerprints
-right" — two questions that otherwise present as the same vague symptom. The list is filled at the
-plan's step 12, which is also when the fingerprint-count test and the package-id cross-pin against
-`android/twa-manifest.json` are written.
+covers what users install from the store, the upload key covers what the developer sideloads.
+
+**The list was empty until 2026-09-21 and now carries one of the two — the upload key — and the
+half-step is the interesting part.** The emptiness was never a placeholder left lying around: it was
+sequencing, deploying the statement and proving its path reachable _before_ any keystore existed, so
+"is the file reachable and un-rewritten" could be debugged separately from "are the fingerprints
+right", two questions that otherwise present as the same vague symptom. That separation paid off —
+the empty file's `ERROR_CODE_MALFORMED_CONTENT` from Google's checker is what proved the fetch path
+on 2026-09-19. The upload key was then added alone, out of the plan's order, because the first
+sideloaded install showed the bar and the developer asked for it gone; the plan had parked exactly
+this trade as an open question, to be taken only if Play identity verification stalled, and the ask
+overrode the gate. **The cost is precisely stated**: the deployed file is now correct for sideloads
+and incomplete for the store, so between here and the first tester install the repo holds a file
+that verifies half the world. Google's fingerprint joins it at the plan's step 11 — **an addition,
+never a replacement** — and the fingerprint-count test and the package-id cross-pin against
+`android/twa-manifest.json` are written then, because a count test asserting two would be red until
+the Console exists. **`android/twa-manifest.json`'s `fingerprints` array is the record**, and
+`public/.well-known/assetlinks.json` is generated from it by `bubblewrap fingerprint
+generateAssetLinks` and copied across; the intermediate `android/assetlinks.json` is git-ignored so
+the statement cannot acquire two homes that disagree.
 
 **Bubblewrap is the toolchain, and the two rejections are the architecturally interesting part.**
 Bubblewrap reads the deployed `manifest.webmanifest` over the network and generates the Gradle
