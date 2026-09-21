@@ -4534,3 +4534,30 @@ asserting two.
 **Not yet verified**: that the bar actually disappears. That needs the deploy, Google's ten-minute
 `maxAge` to expire, and a **reinstall** — Chrome caches TWA verification per install, so a relaunch
 alone can keep showing the bar and read as a failure that is not one.
+
+---
+
+## 2026-09-21 — The asset-links deploy landed, and two cache windows were mismeasured
+
+Both were read off live responses after the fingerprint commit deployed, and each would have been
+read as a failed deploy by someone waiting the documented time.
+
+**Vercel's edge served the OLD statement on the bare URL for ~41 minutes after the deploy.** A fetch
+of `https://playlistjitster.vercel.app/.well-known/assetlinks.json` came back `X-Vercel-Cache: HIT`,
+`Age: 2454`, 223 bytes, empty fingerprint list — while the same path with a `?cb=<epoch>` tail came
+back `MISS`, 336 bytes, the new statement. Same deploy, two answers, and **the bare URL is the one
+the Android verifier asks for**. The bare URL refreshed on its own shortly after. The practical rule:
+when checking a redeployed statement, fetch it **both** ways — a cache-busted fetch tells you whether
+the deploy happened, and only the bare fetch tells you what the verifier will see. Confirming with
+the query string alone would have declared success over a stale file.
+
+**Google's checker caches a VALID statement for 3600 s, not 600.** The `maxAge: 600s` recorded on
+2026-09-19 belonged to the `ERROR_CODE_MALFORMED_CONTENT` response for the empty list; the successful
+response measured today carries `maxAge: 3599.998301537s`. The plan's step 11 said "wait at least 600
+seconds" on the strength of the error figure and has been corrected to 3600. This matters exactly
+once more, at step 11 proper: after Play's fingerprint is added, the checker can keep serving today's
+**one**-fingerprint statement for a full hour, which looks identical to a deploy that did not take.
+
+**Where verification stands.** The checker now returns the statement with the upload key and no
+error. The URL bar has **not** been observed gone — that needs an uninstall and a clean reinstall on
+the phone, because Chrome caches TWA verification per install.

@@ -342,9 +342,12 @@ fingerprint generateAssetLinks`, so `twa-manifest.json` is the record of which f
         fingerprint.** The two tests are deliberately NOT written yet and the reason changed: a count
         test asserting two is red today, and one asserting one goes red at the correct step-11 change.
         Write them when Play's fingerprint lands. Reasoning in `assetlinks.test.ts`'s header._
-  - [ ] `[agent]` After the deploy, wait at least **600 seconds** (the checker's cache), then fetch
-        the Google checker URL from the Overview and confirm the statement list parses with two
-        certificates. `adb shell pm verify-app-links --re-verify aleixrabassa.playlistjitster` forces
+  - [ ] `[agent]` After the deploy, wait out the checker's cache — **3600 seconds, not the 600 this
+        plan was written with** (measured 2026-09-21: the `maxAge` on a VALID statement is
+        `3599.998s`, where the `ERROR_CODE_MALFORMED_CONTENT` response measured on 2026-09-19 carried
+        `600s`; the short window belonged to the error, and reading it as the general figure is the
+        mistake this sentence now prevents). Then fetch the Google checker URL from the Overview and
+        confirm the statement list parses with two certificates. `adb shell pm verify-app-links --re-verify aleixrabassa.playlistjitster` forces
         the device's own fresh attempt.
 
 - [ ] **Step 12 `[you type it]` — Prove verification. Gate M2, and the AAB is final after it.**
