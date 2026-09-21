@@ -57,6 +57,13 @@ Spotify, not from us. Scanning the QR code plays the full song.
 **The app needs an internet connection to start a new game.** A game already in progress keeps
 working offline, minus the audio and minus looking up new years.
 
+**Pressing back during a game makes the app look like it is closing, and then it does not.** You may
+see the screen shrink away as if you were going to the home screen, before the "leave the game?"
+question appears instead. Nothing is going wrong: that shrinking is Android previewing where the
+back gesture would normally take you, and the game is catching the press to ask you first. Your deck
+is not lost. We know about it and have chosen to leave it as it is. Tell us if it bothers you enough
+to change that — but it is not a bug report.
+
 ---
 
 ## Things that are NOT expected — please do report these

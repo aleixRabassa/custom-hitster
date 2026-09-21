@@ -4738,3 +4738,34 @@ file `bubblewrap update` regenerates, which is the trap already documented for `
 is final, and it still is: `android/app-release-bundle.aab` is built and **not uploaded**. A shell
 change costs a rebuild today and a whole new release after step 16. Step 9 (create the Console app) is
 unaffected either way and can proceed now.
+
+---
+
+## 2026-09-21 — Row 7 decided: accepted as cosmetic, which closes step 7 and makes the built AAB final
+
+The developer chose option 1 the same day the row failed. **Predictive back's preview animation stays
+as it is**, and the reasoning is that the alternatives buy nothing: the one-attribute opt-out is
+likely inert because the animated activity is Chrome's rather than this shell's, Bubblewrap exposes no
+field for it, and applying it anyway would mean a hand-edit to a file `bubblewrap update` regenerates
+— a fragile edit traded for an effect the analysis says will not occur. The confirmation dialog still
+appears, the deck survives, and nothing is lost but a first impression.
+
+**Three consequences, and the third is the one with a deadline attached.**
+
+It is now written into `docs/store/tester-notes.md` under "Things that are expected", in the plain
+language that file is written in. That is what makes accepting it different from ignoring it: twelve
+people are about to press back during a game, and the ones who do not know will file it. The note also
+invites them to say if it bothers them, which keeps the decision reversible on evidence rather than
+closing it.
+
+**Row 7 does not re-run at step 12**, unlike rows 1–6. Play's signature changes the certificate the
+verifier compares, not the back animation, so a second observation would cost a device pass and tell
+us nothing new. This is the one row in either table whose re-run is deliberately cancelled.
+
+**Step 7 closes, and with it the window this row existed to protect.** The row was scheduled before
+the closed-testing AAB is final precisely so a shell-side remedy could still be cheap; the decision
+not to make one means `android/app-release-bundle.aab`, built 2026-09-21, is **final and uploadable as
+it stands**. Step 10 uses that artefact. Gate M2a is reached — with the caveat already recorded that
+M2a's own wording ("the URL bar is present") was overtaken when the fingerprint deployed early, so the
+milestone is passed in both directions on one build and step 12 still owes the same evidence against
+the Play-signed one.

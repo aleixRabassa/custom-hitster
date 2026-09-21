@@ -294,10 +294,9 @@ update`, so a hand edit is silently discarded and the symptom is a Play upload r
         tick plan 1's `docs/agent_findings.md` Documentation Update if step 2 left it. _Done
         2026-09-21; plan 1's entry is ticked, its third clause being this reading._
 
-- [ ] **Step 7 `[you type it]` — First build, first install, URL bar expected. Gate M2a.** Absorbs
-      plan 1 step 9 and plan 2 step 5's rows 1–6. **Every sub-item below is done as of 2026-09-21 and
-      the box is deliberately still open, on ONE thing: back-press row 7 (predictive back) has not been
-      observed on the phone.** _→ **It has now, and it FAILED (2026-09-21).** Pressing back during a
+- [x] **Step 7 `[you type it]` — First build, first install, URL bar expected. Gate M2a.** Absorbs
+      plan 1 step 9 and plan 2 step 5's rows 1–6. **CLOSED 2026-09-21.** The last thing holding it open
+      was back-press row 7 (predictive back), which was observed and then decided: _→ **It has now, and it FAILED (2026-09-21).** Pressing back during a
       game shows the app shrinking and minimising before the confirmation appears. This entry said for
       a few hours that the shell-side risk was retired, reasoning that the generated manifest leaves
       `android:enableOnBackInvokedCallback` unset and that the attribute is an opt-OUT; the clauses are
@@ -305,9 +304,12 @@ update`, so a hand edit is silently discarded and the symptom is a Play upload r
       the decision is the developer's, because the obvious remedy looks inert: the web content is
       rendered by a **Chrome** activity declared in Chrome's manifest, so an attribute on this app's
       `<application>` governs only `LauncherActivity`. Options and their costs are in
-      `docs/agent_findings.md` (2026-09-21). **Timing matters here and nowhere else in the plan**: this
-      row exists to run before the closed-testing AAB is final, and it still is — the bundle is built
-      but unuploaded, so a shell change is free today and a new release after step 16._ **Note the gate moved**: M2a was written as "the URL bar is present",
+      `docs/agent_findings.md` (2026-09-21). **Decided the same day: option 1, ACCEPT as cosmetic, no
+      fix** — the confirmation still appears and the deck is intact, while the alternative was a
+      hand-edit to a regenerated file that the analysis says would not work. The timing window this row
+      exists to protect closed with it: the AAB built at this step is **final and uploadable as it
+      stands**, and step 10 uses it. Written into `docs/store/tester-notes.md` under "expected", since
+      a tester who does not know will file it._ **Note the gate moved**: M2a was written as "the URL bar is present",
       and the bar has already been seen AND seen gone here, because the upload key's fingerprint was
       deployed early (see the decided open question). The unverified-shell milestone is therefore
       passed in both directions on one build; what step 12 still owes is the same evidence on the
