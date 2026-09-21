@@ -443,10 +443,18 @@
   --duration-flip-reduced: 1ms;
 
   /*
-   * The committed card's exit. Named here for Phase 8, but the value is applied
-   * in JS -- `Card.tsx` hands it to Motion's `exit` transition, which takes
-   * seconds and cannot read a CSS variable. `Card.tsx` carries the constant and
-   * points back at this token; the two must be changed together.
+   * The deck's SHORT move: the card being stepped away from settling back under
+   * the one returning over it, and a dragged step back finishing the journey the
+   * thumb already made most of. Named here for Phase 8, but the value is applied
+   * in JS -- `Card.tsx` hands it to Motion, which takes seconds and cannot read a
+   * CSS variable. `Card.tsx` carries the constant and points back at this token;
+   * the two must be changed together.
+   *
+   * IT IS NO LONGER EVERY EXIT (2026-09-22). A card crossing the whole screen --
+   * the forward throw, and the keyboard's step back -- takes `TRAVEL_DURATION_S`
+   * instead, which is ~781ms and is DERIVED (this duration, the commit threshold
+   * and the reference card width), so it deliberately has no token of its own:
+   * a literal here would be a second copy of an arithmetic result, free to drift.
    */
   --duration-card-exit: 250ms;
 

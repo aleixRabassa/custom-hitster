@@ -235,6 +235,11 @@ const DRAG_ELASTIC = 0.35;
  * one is duplicated from `--duration-card-exit`: there is no import that carries a duration
  * across these three layers. Arriving and giving up should take the same time.
  *
+ * It is the SHORT duration, and that is the right one here: a cancelled peek retreats over
+ * whatever the finger pulled in, which is the same sort of distance a dragged step back has
+ * left to cover. `Card.tsx`'s `TRAVEL_DURATION_S` -- the one a card crossing the whole screen
+ * takes since 2026-09-22 -- would make giving up take ~781ms, three times the drag it undoes.
+ *
  * One caveat, documented rather than fixed: this is an IMPERATIVE `animate()`, so it does not
  * read `MotionConfig reducedMotion="user"` from `src/main.tsx` the way a declarative animation
  * does. A cancelled peek therefore still slides out under `prefers-reduced-motion: reduce`. It

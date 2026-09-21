@@ -5048,3 +5048,51 @@ sentence this bug was reasoned from. Measured in the same headless-Chrome run: a
 first child versus an in-flow `perspective: 1200px` second child, no z-index on either — **the in-flow
 card wins**. The entry has been left as written (the repo rule is to confirm before editing one);
 read it together with this.
+
+## 2026-09-22 — The two swipe animations were matched on DURATION, which is why they did not match
+
+**Report.** "Iguala la velocidad de la animacion de swipe right con la de swipe left. La de swipe
+left es mas lenta y es la correcta."
+
+**Why they differed although both ran for 250 ms.** Equal time over unequal distance is unequal
+speed, and the two journeys are not the same length:
+
+| release                            | distance left to cover                                                      | duration | rate           |
+| ---------------------------------- | --------------------------------------------------------------------------- | -------- | -------------- |
+| left swipe at the commit threshold | 288 − 96 = **192px** (the finger already dragged the first 96)              | 0.25 s   | **768 px/s**   |
+| right swipe                        | ~566px of `EXIT_DISTANCE_PX` (the card rests at `DRAG_ELASTIC × 96` ≈ 34px) | 0.25 s   | **~2260 px/s** |
+
+So the deal read as a flick and the undo as a glide, ~3x apart, from one shared constant. The left
+swipe's slowness is an **accident of `entranceFromProgress`** — it shortened the distance and left
+the duration alone — and the developer liked the accident.
+
+**What was derived, and from where.** The left gesture has no single speed (a release further in
+covers even less ground in the same 250 ms, so it is slower still), but it has one well-defined,
+already-documented point: the release at `SWIPE_COMMIT_DISTANCE_PX` on the 288px reference card.
+That is the **fastest** the left swipe ever goes, which makes it the conservative end of "match it".
+
+```
+TRAVEL_SPEED_PX_PER_S = (REFERENCE_CARD_WIDTH_PX - SWIPE_COMMIT_DISTANCE_PX) / EXIT_DURATION_S  // 768
+TRAVEL_DURATION_S     = EXIT_DISTANCE_PX / TRAVEL_SPEED_PX_PER_S                                // ~0.781
+```
+
+Nothing is written down: move the threshold, the reference width or the short duration and the
+animation follows. **The cost is ~3x the old wall clock on every advance** — stated up front, and
+the single lever if it reads as slow motion on a device is the speed.
+
+**The pairing that is easy to miss.** `TRAVEL_DURATION_S` governs **both** full-distance journeys —
+the forward exit _and_ the keyboard's backward entrance, which starts at the same 600px because
+there is no thumb to continue from. Slow the throw alone and ArrowLeft becomes the fastest thing on
+the screen at 2400 px/s: the same mismatch the change exists to remove, mirrored. The branch is the
+one `entranceX` already makes (`entranceFromProgress === undefined`).
+
+**What deliberately kept `EXIT_DURATION_S`:** the backward exit's settle to x = 0, the **dragged**
+backward entrance, and the copied `PEEK_RETURN_DURATION_S` in `useCardGestures`. The dragged
+entrance is the reference the speed is measured from — changing it moves the target rather than one
+animation. The constant is therefore no longer "the exit duration"; it is the SHORT duration, for
+moves that finish a journey a finger already made most of.
+
+**Not pinned by any test, in either direction.** Nothing in the suite asserted `0.25` and nothing
+asserts `0.781`: a duration is a number handed to Motion, and jsdom runs no animation. `--duration-card-exit`
+in `src/index.css` still names the short one and now says so; the derived one deliberately has **no
+token**, because a literal there would be a second copy of an arithmetic result, free to drift.

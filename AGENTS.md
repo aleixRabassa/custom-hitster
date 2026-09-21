@@ -246,9 +246,32 @@ off-screen**: motion-dom passes `{ type: false }` for positional keys, so `x` ju
 
 The gesture has been felt by **no thumb**, and the reduced-motion jump has not been seen in a
 browser: the manual rows are in [`docs/development.md`](./docs/development.md) §5. The z-order during
-the 250 ms overlap is the one thing here that HAS been measured rather than reasoned — in headless
+the overlap is the one thing here that HAS been measured rather than reasoned — in headless
 Chrome, against a four-element reduction of the deck, both before and after the fix. See
 [`docs/agent_findings.md`](./docs/agent_findings.md) (2026-09-21).
+
+**AND THE TWO ANIMATIONS NOW RUN AT ONE SPEED RATHER THAN FOR ONE DURATION (2026-09-22), WHICH IS
+WHY `EXIT_DURATION_S` IS NO LONGER "THE EXIT DURATION".** The developer's report: _"iguala la
+velocidad de la animacion de swipe right con la de swipe left. la de swipe left es mas lenta y es la
+correcta."_ Both ran for 250 ms, and that is precisely why they did not match — **equal TIME over
+unequal DISTANCE is unequal SPEED.** A left swipe released at the commit threshold has ~192px left
+to cover (the finger already dragged the first 96px of one 288px card); a right swipe has the whole
+600px. Same quarter-second, ~3x the rate. So the left swipe's rate became the specification:
+`TRAVEL_SPEED_PX_PER_S` is `(REFERENCE_CARD_WIDTH_PX - SWIPE_COMMIT_DISTANCE_PX) / EXIT_DURATION_S`
+= **768 px/s**, and `TRAVEL_DURATION_S` is `EXIT_DISTANCE_PX` at that rate = **~781ms**. Four things.
+**Nothing is written down — every figure is arithmetic over constants that already existed**, so
+moving the threshold or the reference width moves the animation, and the lever if it reads as slow
+motion on a device is the SPEED, not the duration. **`TRAVEL_DURATION_S` governs BOTH full-distance
+journeys**: the forward exit and the KEYBOARD's backward entrance, which starts at the same 600px —
+slow the throw alone and ArrowLeft becomes the fastest thing on screen, the same mismatch mirrored.
+**`EXIT_DURATION_S` keeps its three short callers** — the backward exit's settle, the DRAGGED
+backward entrance, and the copied `PEEK_RETURN_DURATION_S` — and the dragged entrance is the
+reference, so changing it moves the target rather than just one animation. And **a left swipe
+released further in is still slower than the threshold case**, because its shorter distance still
+spends `EXIT_DURATION_S`; equalising that too would mean rewriting the animation the developer asked
+to keep, so the threshold — the fastest the left swipe ever goes — is the conservative end of the
+request. The cost is **~3x the old wall clock on every advance**, stated rather than discovered, and
+felt by no thumb: row 9 in [`docs/development.md`](./docs/development.md) §5.
 
 **AND LATER ON 2026-09-21 THE STEP BACK STOPPED BEING AN ANIMATION THE RELEASE PLAYS AND BECAME ONE
 THE FINGER PERFORMS — the current card no longer moves left AT ALL, and the thing that tracks the
@@ -278,7 +301,7 @@ would force a layout on every frame of the drag. **THE HANDOFF IS THE PART THAT 
 at commit the hook reports `onPrevious(fromProgress)`, `CardStack` records it against the presence
 key the returned-to card is ABOUT to render under, and `Card` spends it as `initial.x` — a percentage
 of the card's own width, so it lands on exactly the pixels the peek was occupying. Drop it and the
-card the player dragged a third of the way home jumps back off-screen and re-runs the 250 ms, which
+card the player dragged a third of the way home jumps back off-screen and re-runs the entrance, which
 is the seam the whole feature exists to remove. The record is **keyed, and spent in the same
 render-phase guard that latches the movement** -- cleared on the first card change that is not the
 one it names. Letting it merely go stale is NOT enough and that was a real bug: the presence key is

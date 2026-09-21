@@ -67,6 +67,7 @@ import type { Ref } from 'react';
 import { CardHiddenSide } from './CardHiddenSide';
 import { CardRevealSide } from './CardRevealSide';
 import type { CardGestureProps } from '../hooks/useCardGestures';
+import { SWIPE_COMMIT_DISTANCE_PX } from '../game/gestures';
 import type { DeckMovement } from '../game/gestures';
 import type { Card as CardData } from '../../shared/types';
 
@@ -155,18 +156,93 @@ const BEHIND_INCOMING_Z_INDEX = -1;
 const ABOVE_INCOMING_Z_INDEX = 1;
 
 /**
- * How long that exit takes, in SECONDS -- Motion's unit, not CSS's.
+ * How long a SHORT move takes, in SECONDS -- Motion's unit, not CSS's.
+ *
+ * ===========================================================================
+ *  IT IS NO LONGER "THE EXIT DURATION". SINCE 2026-09-22 IT GOVERNS ONLY THE
+ *  MOVES THAT CONTINUE A FINGER, AND `TRAVEL_DURATION_S` GOVERNS THE REST.
+ *
+ *  Three callers: the backward exit's settle to x = 0, the DRAGGED backward
+ *  entrance (which starts wherever the thumb left the peek), and -- copied,
+ *  not imported -- `PEEK_RETURN_DURATION_S` in `useCardGestures`. All three
+ *  cover a short distance, because all three are finishing a journey the
+ *  finger already made most of.
+ *
+ *  THIS IS THE REFERENCE THE FORWARD FLIGHT IS NOW MEASURED AGAINST, so
+ *  changing it moves the target rather than just this animation. See
+ *  `TRAVEL_SPEED_PX_PER_S`.
+ * ===========================================================================
  *
  * The same value is named `--duration-card-exit: 250ms` in `src/index.css` so Phase 8 has one
  * place to look, but it cannot be READ from there: Motion's `transition.duration` is a number of
  * seconds handed to a JS animation, and a CSS custom property is a string resolved by the
  * browser at paint time. So the two are deliberately duplicated and must be changed together.
  *
- * Under `prefers-reduced-motion` this animation is not shortened -- `MotionConfig
+ * Under `prefers-reduced-motion` neither duration is shortened -- `MotionConfig
  * reducedMotion="user"` in `src/main.tsx` makes Motion animate opacity instead of the transform,
- * so the card fades over the same 250ms rather than flying 600px.
+ * so a card fades over its own duration rather than travelling.
  */
 const EXIT_DURATION_S = 0.25;
+
+/**
+ * The card's width on the reference phone, in CSS pixels. NOT a size the app applies.
+ *
+ * `--card-width` is a `clamp()` (240px to 384px), so there is no single width to derive from --
+ * but the speed below needs one fixed point, and this is the one the rest of the repo already
+ * measures against: a 360px viewport renders a 288px card once `<main>`'s `p-6` is paid. It
+ * appears in `previousCardProgress`'s reasoning, in `EXIT_DISTANCE_PX`'s, and in the peek's.
+ */
+const REFERENCE_CARD_WIDTH_PX = 288;
+
+/**
+ * How fast a card moves, in CSS pixels per second. DERIVED FROM THE LEFT SWIPE, WHICH IS THE ONE
+ * THE DEVELOPER CALLED CORRECT (2026-09-22).
+ *
+ * ===========================================================================
+ *  "IGUALA LA VELOCIDAD DE LA ANIMACION DE SWIPE RIGHT CON LA DE SWIPE LEFT.
+ *  LA DE SWIPE LEFT ES MAS LENTA Y ES LA CORRECTA."
+ *
+ *  Both animations ran for `EXIT_DURATION_S`, and that is exactly why they did
+ *  not match: equal TIME over unequal DISTANCE is unequal SPEED. A left swipe
+ *  released at the commit threshold has only the rest of one card-width left
+ *  to cover, because the finger already dragged the first 96px of it -- about
+ *  192px. A right swipe has the whole `EXIT_DISTANCE_PX` in front of it. Same
+ *  quarter-second, ~3x the rate, and the deal read as a flick where the undo
+ *  read as a glide.
+ *
+ *  So the left swipe's rate is the specification, and this is it, measured at
+ *  the one point in that gesture that is well defined and already written
+ *  down: the release at `SWIPE_COMMIT_DISTANCE_PX` on the reference card.
+ *  768 px/s, and nothing here is a preference -- move the threshold, the
+ *  reference width or the short duration and this follows.
+ *
+ *  Note what is NOT equalised: a left swipe released FURTHER in has less left
+ *  to cover and still spends `EXIT_DURATION_S` on it, so it is slower still.
+ *  Making that constant-speed too would mean deriving the dragged entrance's
+ *  duration from its own distance -- which would change the animation the
+ *  developer asked to keep. The threshold is the fastest the left swipe ever
+ *  goes, so matching it is the conservative end of the request.
+ * ===========================================================================
+ */
+const TRAVEL_SPEED_PX_PER_S =
+  (REFERENCE_CARD_WIDTH_PX - SWIPE_COMMIT_DISTANCE_PX) / EXIT_DURATION_S;
+
+/**
+ * How long a card takes to cross `EXIT_DISTANCE_PX`, in seconds. ~0.78s, and DERIVED.
+ *
+ * Both of the app's full-distance journeys, so that they cannot disagree: the forward exit (the
+ * card thrown off to the right) and the KEYBOARD's backward entrance, which starts at the same
+ * 600px because there is no thumb to continue from. A dragged backward entrance is deliberately
+ * not one of them -- it covers whatever the finger left, at `EXIT_DURATION_S`.
+ *
+ * That pairing is the point: slow the forward flight alone and ArrowLeft becomes the fastest
+ * thing on the screen, which is the same mismatch this change exists to remove, mirrored.
+ *
+ * It is roughly THREE TIMES the wall clock the forward exit used to have. That is not a side
+ * effect, it is the request -- but if it reads as slow motion on a device, the lever is
+ * `TRAVEL_SPEED_PX_PER_S` and nothing else.
+ */
+const TRAVEL_DURATION_S = EXIT_DISTANCE_PX / TRAVEL_SPEED_PX_PER_S;
 
 /**
  * The exit, as a DYNAMIC variant that reads `AnimatePresence`'s `custom` -- and it has to be.
@@ -255,7 +331,8 @@ export const CARD_VARIANTS = {
           // Above the card it uncovers, and `popLayout` does NOT give it that --
           // both cards are stacking contexts. See `ABOVE_INCOMING_Z_INDEX`.
           zIndex: ABOVE_INCOMING_Z_INDEX,
-          transition: { duration: EXIT_DURATION_S, zIndex: { type: false } },
+          // The full distance, so it travels at the left swipe's rate rather than 3x it.
+          transition: { duration: TRAVEL_DURATION_S, zIndex: { type: false } },
         },
 } satisfies Variants;
 
@@ -401,7 +478,7 @@ export function Card({
     Under `prefers-reduced-motion` the card does not crawl in and does not get stuck off-screen
     either: `MotionConfig reducedMotion="user"` makes motion-dom pass `{ type: false }` for
     positional keys, so `x` JUMPS from 600 to 0 on the first frame. Same treatment the exit gets
-    (see `EXIT_DURATION_S`), and it has to be checked in a browser -- jsdom has no media queries.
+    (see `TRAVEL_DURATION_S`), and it has to be checked in a browser -- jsdom has no media queries.
   */
   const entersFromOffscreen = movement === 'backward';
   /*
@@ -414,6 +491,20 @@ export function Card({
   */
   const entranceX =
     entranceFromProgress === undefined ? EXIT_DISTANCE_PX : `${(1 - entranceFromProgress) * 100}%`;
+  /*
+    And how long it spends doing it, branching on the SAME question for the same reason: the
+    duration has to match the distance or the two entrances travel at different rates.
+
+    A keyboard step back crosses the full `EXIT_DISTANCE_PX`, exactly as a dealt card does, so it
+    takes `TRAVEL_DURATION_S` -- the deal and its undo are then the same journey run in reverse on
+    both axes, distance and speed. A dragged one covers only what the thumb left and keeps
+    `EXIT_DURATION_S`, which is the animation the developer asked to keep and the one the rate
+    above is measured from.
+
+    A FORWARD entrance reads this too and it never matters: `initial` is undefined, so `x` starts
+    at 0, the target is 0, and Motion starts no animation to give a duration to.
+  */
+  const entranceDuration = entranceFromProgress === undefined ? TRAVEL_DURATION_S : EXIT_DURATION_S;
 
   return (
     /*
@@ -438,7 +529,7 @@ export function Card({
         competing with it.
       */
       initial={entersFromOffscreen ? { x: entranceX } : undefined}
-      animate={{ x: 0, transition: { duration: EXIT_DURATION_S } }}
+      animate={{ x: 0, transition: { duration: entranceDuration } }}
       // The movement comes from `AnimatePresence custom`, not from a prop -- see `CARD_VARIANTS`.
       variants={CARD_VARIANTS}
       exit="exit"
