@@ -4589,3 +4589,30 @@ whole of step 7 up to this point ran on a file-manager sideload, and the instrum
 `apksigner`, `curl` against the origin, and Google's checker. `adb` first becomes necessary at step
 12's `pm get-app-links`, which is the one check that reads the verifier's own verdict rather than
 inferring it from the absent bar.
+
+---
+
+## 2026-09-21 — The app plays end to end inside the TWA, and this is the first time the shell has been exercised as a game
+
+§5 TWA row 6, passed on the sideloaded build: a cold launch lands on the welcome screen, the button
+enters the picker, a suggested playlist deals a deck, a preview plays and a card flips. **Every other
+device row assumes this one**, so until today none of them was worth running.
+
+**Three things it incidentally confirms**, none of which had ever been observed outside jsdom and a
+desktop browser. The welcome screen really is what a cold launch shows — the 2026-09-18 decision not
+to persist a "seen it" flag, seen from the launcher rather than from a reload. The `/api/playlist`
+and `/api/year` path works from inside a TWA, which nothing had tried: the shell renders in Chrome's
+profile but the deployment is the same origin, so there was no reason to expect otherwise and also no
+evidence. And audio starts from a tap inside the activity, which is the autoplay-policy question that
+only a real launcher can answer.
+
+**Scope, same as row 1.** Rows 1 and 6 are the two that run on both builds. This is the sideloaded
+half; the Play-signed build is a different signing key and its half is owed at step 12. Both rows are
+marked `Half passed 2026-09-21` rather than passed, and the distinction is not pedantry — a TWA that
+fails verification still plays perfectly, so "it works" is exactly the observation that does not
+transfer.
+
+**Still outstanding in step 7**: rows 2 (both PDF downloads, the static one on the second launch), 4
+(storage shared with Chrome, both directions) and 5 (lock-screen audio), plus the back-press rows
+1-6 and an attempt at 7. Row 3 (a shared deck link opens the app with its query string intact) was
+scheduled for step 12 and became runnable today, for the same reason row 1 did.

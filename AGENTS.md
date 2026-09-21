@@ -382,9 +382,10 @@ produces a URL bar** on exactly the installs that come from the store, which is 
 the mistake and is now half-committed on purpose. Do not guess a value into it, and do not read the
 single entry as finished. Fuller reasoning in
 [`docs/architecture.md`](./docs/architecture.md) §3; the device checks are rows in
-[`docs/development.md`](./docs/development.md) §5, where **row 1 is half passed as of 2026-09-21** —
-the bar was seen and then seen gone on one sideloaded build, either side of this deploy — and
-**every other row is Pending**.
+[`docs/development.md`](./docs/development.md) §5, where **rows 1 and 6 are half passed as of
+2026-09-21** — the bar was seen and then seen gone on one sideloaded build, either side of this
+deploy, and that build plays end to end — and **every other row is Pending**. Those two are the rows
+that run on BOTH builds, so "half passed" means the sideloaded half; the Play-signed half is owed.
 
 **`playlist-library.ts` rebuilds an entry field by field on the WRITE as well as on the read, and that is a leak rule.** `SavedPlaylist` is a structural interface and TypeScript's excess-property check does not fire for a spread, so `savePlaylist(storage, { ...somethingLarger })` type-checked and wrote every extra field into a store the **landing screen** reads — a pre-start surface. Caught by the module's own leak test. **Validating only on read is not enough when the store itself is the leak surface.**
 

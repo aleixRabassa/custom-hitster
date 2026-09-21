@@ -313,7 +313,10 @@ update`, so a hand edit is silently discarded and the symptom is a Play upload r
         downloads — the static one only on the **second** launch once `sw.js` controls the page;
         storage shared with Chrome in both directions; the lock-screen audio re-check; launch on the
         welcome screen, deal, play, flip). Row 1's first half (the URL bar is present) is observed
-        here.
+        here. _→ **Row 6 passed 2026-09-21** — the whole path, welcome screen through a flipped card,
+        on the sideloaded build. Row 1 got **both** halves here rather than one, because the upload
+        key's deploy landed between the two launches. Rows 2, 4 and 5 are still outstanding, and row 3
+        became runnable early for the same reason row 1 did._
   - [ ] Run plan 2's rows 1–6 ("The Android back press"); **attempt row 7** (predictive back) too. A
         row that fails here and passes at step 12 is itself a finding.
   - [ ] Mark each row's Status in `docs/development.md` and record anything that failed. `adb` is not
