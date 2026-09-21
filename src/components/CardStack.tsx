@@ -321,13 +321,18 @@ export function CardStack({
   return (
     /*
       `isolate` creates a stacking context so the back's `-z-10` stays behind the current card
-      without escaping to sit behind the screen's own background. Without it the back is a
-      positioned element and would paint OVER the in-flow card.
+      without escaping to sit behind the screen's own background. The `-z-10` itself is NOT what
+      keeps the back under the card at rest -- this element is the earlier sibling and the card
+      carries `perspective-distant`, so the card wins the tie on tree order at `auto` anyway. It
+      earns its place during an EXIT, where the outgoing card names a negative index of its own:
+      `-1` against `auto` would put this preload OVER the card the player is stepping away from.
 
-      That negative index is also what orders the three cards correctly during an exit: the back
-      paints below in-flow content, the INCOMING card is in flow, and the outgoing card has been
-      absolutised by `popLayout` and so paints above both. The card sliding away therefore
-      uncovers the card that is replacing it, not the preload behind it.
+      That negative index is therefore what keeps the preload under BOTH cards during an exit. What it
+      does NOT do is order the two cards against each other: every card's outer element carries
+      `perspective-distant`, so the incoming card is a stacking context too and being absolutised
+      by `popLayout` wins the outgoing card nothing -- it would lose the tie on tree order and
+      slide out from UNDER the card replacing it. Both exit branches therefore name a z-index of
+      their own; `ABOVE_INCOMING_Z_INDEX` in `Card.tsx` has the measurement.
 
       The size tokens are THE SAME PAIR `Card` uses, and that is the point of them: this wrapper
       and the card it holds carried `h-[28rem] w-72` separately until Phase 7, and the back is

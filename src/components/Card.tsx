@@ -99,12 +99,18 @@ const EXIT_DISTANCE_PX = 600;
  * ===========================================================================
  *  THIS NUMBER IS BOUNDED AT BOTH ENDS AND NEITHER BOUND IS ARBITRARY.
  *
- *  `mode="popLayout"` absolutises the outgoing card, and a positioned element
- *  paints ABOVE in-flow content -- which is exactly what the forward animation
- *  wants (the card flying away passes over the card it uncovers) and exactly
- *  wrong for the backward one, where the returning card has to land ON TOP.
- *  A negative z-index inside `CardStack`'s `isolate` puts the outgoing card
- *  back under in-flow content, which is where it belongs.
+ *  It must be NEGATIVE, and BE HONEST ABOUT WHY: not because `auto` would
+ *  break this branch, but because `auto` decides it somewhere else. The
+ *  incoming card is a stacking context and therefore paints in the same LAYER
+ *  as a positioned sibling -- see `ABOVE_INCOMING_Z_INDEX`, which is the same
+ *  fact seen from the other side. At `auto` the two tie and split on TREE
+ *  ORDER, and `AnimatePresence` splices the exiting child in FIRST
+ *  (`nextChildren.splice(i, 0, child)`), so the incoming card is the later
+ *  sibling and wins -- which on THIS branch happens to be what we want. So
+ *  `-1` averts no visible failure today; it makes the ordering hold BY
+ *  CONSTRUCTION rather than by framer-motion's splice order, which is not
+ *  this repo's to keep. The branch that DID depend on the tie and lost it is
+ *  the forward one, and that was the 2026-09-21 bug.
  *
  *  It must stay ABOVE the deck's preloaded back, which is `-z-10` on the same
  *  stacking context: go to -10 or lower and the card the player is stepping
@@ -112,6 +118,41 @@ const EXIT_DISTANCE_PX = 600;
  * ===========================================================================
  */
 const BEHIND_INCOMING_Z_INDEX = -1;
+
+/**
+ * Where the OUTGOING card sits while it flies off to the right.
+ *
+ * ===========================================================================
+ *  IT HAS TO BE SAID OUT LOUD, AND "`popLayout` ALREADY PUTS IT ON TOP" IS
+ *  THE FOLKLORE THAT MADE THIS A BUG (2026-09-21). MEASURED, NOT REASONED.
+ *
+ *  The developer's report: on release, a right-swiped card "se va al fondo
+ *  del mazo y sigue su movimiento a la derecha" -- it slides out from
+ *  UNDERNEATH the card that replaced it instead of over it.
+ *
+ *  The half-truth behind it is that a positioned element paints above in-flow
+ *  content. It does -- above in-flow content that is not itself a stacking
+ *  context. THE CARD'S OUTER ELEMENT CARRIES `perspective-distant`, and any
+ *  `perspective` other than `none` establishes a stacking context, which is
+ *  painted in the SAME step as positioned `z-index: 0`/`auto` elements, in
+ *  TREE ORDER. `AnimatePresence` splices the exiting child in BEFORE the
+ *  present one (`nextChildren.splice(i, 0, child)`), so the incoming card is
+ *  the later sibling and won every tie.
+ *
+ *  So both cards were effectively at 0 and the deal painted the wrong way
+ *  round. One step above the incoming card is all it takes, and it must stay
+ *  BELOW the peek's `z-10` in `CardStack` -- that card is parked and hidden
+ *  during a forward exit, but the ordering should hold by construction rather
+ *  than by someone else's `display: none`.
+ *
+ *  This was never about `zIndex: 0` being written down: `0` and `auto` land in
+ *  the same paint step, so the explicit value changed nothing either way. It
+ *  was latent for as long as the flip has had a perspective on that element.
+ *  Verified in headless Chrome against a reduction of these four elements --
+ *  see `docs/agent_findings.md` (2026-09-21).
+ * ===========================================================================
+ */
+const ABOVE_INCOMING_Z_INDEX = 1;
 
 /**
  * How long that exit takes, in SECONDS -- Motion's unit, not CSS's.
@@ -182,11 +223,9 @@ const EXIT_DURATION_S = 0.25;
  *
  *  What the backward branch below has to do is get the outgoing card OUT OF
  *  THE WAY WITHOUT MOVING IT: settle it back to x = 0 (it is wherever the drag
- *  left it) and drop it under the incoming card with `zIndex`. `popLayout`
- *  absolutises it, and a positioned element paints above in-flow content, so
- *  without the z-index the returning card would slide in UNDERNEATH the one it
- *  is supposed to be replacing -- the animation would run and look like
- *  nothing at all. See `BEHIND_INCOMING_Z_INDEX`.
+ *  left it) and drop it under the incoming card with `zIndex`. See
+ *  `BEHIND_INCOMING_Z_INDEX` -- and note that BOTH branches now name a z-index,
+ *  because neither ordering is one the layout gives away for free.
  *
  *  `zIndex` is set with `{ type: false }` rather than animated: its computed
  *  value is the string `auto`, which has no numeric origin to interpolate
@@ -213,8 +252,9 @@ export const CARD_VARIANTS = {
       : {
           x: EXIT_DISTANCE_PX,
           opacity: 0,
-          // Above the card it uncovers, which is what `popLayout` already gives it.
-          zIndex: 0,
+          // Above the card it uncovers, and `popLayout` does NOT give it that --
+          // both cards are stacking contexts. See `ABOVE_INCOMING_Z_INDEX`.
+          zIndex: ABOVE_INCOMING_Z_INDEX,
           transition: { duration: EXIT_DURATION_S, zIndex: { type: false } },
         },
 } satisfies Variants;
@@ -261,11 +301,13 @@ export interface CardProps {
    *  from below the screen" bug, and there was no error anywhere: `popLayout` was
    *  configured, documented, and doing nothing.
    *
-   *  Accepting the ref also restores the PAINT order the animation needs. Once
-   *  popped, the outgoing card is a positioned element and so paints in a later
-   *  layer than the in-flow card beneath it -- which is what makes the next card
-   *  appear BEHIND the one sliding away rather than over it. Explicit z-indexes
-   *  are not needed and would be the wrong fix.
+   *  Accepting the ref is about LAYOUT ONLY, and this block used to claim it
+   *  bought the paint order too -- "explicit z-indexes are not needed and would
+   *  be the wrong fix". That was wrong, and it is what the 2026-09-21 swipe
+   *  report came down to: the incoming card carries `perspective-distant` and
+   *  is therefore a stacking context, so being positioned wins the outgoing
+   *  card nothing. Both exit branches state a z-index -- see
+   *  `ABOVE_INCOMING_Z_INDEX`.
    *
    *  React 19 passes `ref` to function components as an ordinary prop, so no
    *  `forwardRef` is involved. `Card.test.tsx` pins that the ref reaches the

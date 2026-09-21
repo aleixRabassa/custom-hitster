@@ -220,22 +220,35 @@ and framer-motion's `makeLatestValues` resolves the first-paint inline style wit
 a function `initial` reading presence custom paints one frame at rest and then jumps. `CardStack`
 computes the movement once and hands the same value to both. **`initial={false}` does not block this**:
 `<PresenceChild initial={!isInitialRender.current || initial}>`, so it silences only the session's first
-card, which is the one that must not animate in. **The paint order is a `zIndex: -1` in the backward
-exit variant, and popLayout is why it is needed** — the outgoing card is `position: absolute`, so it
-would otherwise paint OVER the returning card; negative z-index puts it under in-flow content while
-keeping it above the `-z-10` preload inside `CardStack`'s `isolate`. It is set with
-`transition: { zIndex: { type: false } }` because the computed origin is the string `auto`. **The
-forward path is unchanged by construction, and the reason is Motion's own optimisation**: the entering
-card's `animate={{ x: 0 }}` resolves to `transform: none` (`buildTransform` emits `none` when every
-term is at its default) and this app never registers `MotionGlobalConfig.WillChange`, so a
-forward-entering card creates no stacking context and stays below the absolutised card flying off it.
-Add a `will-change` or a non-zero forward `initial` and that inverts, silently. And **under reduced
-motion the card does not strand off-screen**: motion-dom passes `{ type: false }` for positional keys,
-so `x` jumps 600 → 0.
+card, which is the one that must not animate in. **BOTH EXIT BRANCHES NAME A Z-INDEX, AND THE
+PARAGRAPH THAT USED TO STAND HERE SAID THE FORWARD ONE WAS FREE — IT WAS WRONG, AND THAT WAS THE
+2026-09-21 SWIPE BUG.** The old reasoning was that `popLayout` absolutises the outgoing card and a
+positioned element paints over in-flow content, so only the backward branch needed a `zIndex: -1`;
+the forward one was "unchanged by construction" because the entering card's `animate={{ x: 0 }}`
+resolves to `transform: none` and this app never registers `MotionGlobalConfig.WillChange`. Both of
+those facts are true and both are beside the point: **the card's outer element carries
+`perspective-distant`, and any `perspective` other than `none` establishes a stacking context** — so
+the incoming card is painted in the SAME step as a positioned `z-index: 0`/`auto` sibling, decided on
+TREE ORDER, and `AnimatePresence` splices the exiting child in BEFORE the present one
+(`nextChildren.splice(i, 0, child)`). The incoming card won every tie, and a right-swiped card slid
+out from UNDERNEATH its replacement: _"se va al fondo del mazo y sigue su movimiento a la derecha"_.
+The forward exit is now `ABOVE_INCOMING_Z_INDEX` (1) — **strictly above 0, and strictly below the
+peek's `z-10`** — and the backward one keeps `-1`, strictly below 0 and above the `-z-10` preload.
+**Be precise about which branch the tie was hurting**: at `auto` the incoming card wins, so the
+BACKWARD ordering was already falling the right way and `-1` only pins it against a splice order that
+is not this repo's to keep; the FORWARD one is the branch that needed the tie to go the other way and
+never got it. Neither may go back to a bare `0`. **This was
+never about writing `0` down**: `0` and `auto` land in the same paint step, so the explicit value
+that arrived with the backward branch changed nothing — the defect was latent for as long as the
+flip has had a perspective on that element. Both are set with `transition: { zIndex: { type: false } }`
+because the computed origin is the string `auto`. And **under reduced motion the card does not strand
+off-screen**: motion-dom passes `{ type: false }` for positional keys, so `x` jumps 600 → 0.
 
-The gesture has been felt by **no thumb**, and neither the z-order during the 250 ms overlap nor the
-reduced-motion jump has been seen in a browser: the manual rows are in
-[`docs/development.md`](./docs/development.md) §5.
+The gesture has been felt by **no thumb**, and the reduced-motion jump has not been seen in a
+browser: the manual rows are in [`docs/development.md`](./docs/development.md) §5. The z-order during
+the 250 ms overlap is the one thing here that HAS been measured rather than reasoned — in headless
+Chrome, against a four-element reduction of the deck, both before and after the fix. See
+[`docs/agent_findings.md`](./docs/agent_findings.md) (2026-09-21).
 
 **AND LATER ON 2026-09-21 THE STEP BACK STOPPED BEING AN ANIMATION THE RELEASE PLAYS AND BECAME ONE
 THE FINGER PERFORMS — the current card no longer moves left AT ALL, and the thing that tracks the

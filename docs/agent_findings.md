@@ -4981,3 +4981,70 @@ Two smaller ones from the same pass:
 - **Motion emits `transform: none`, not `translateX(0%)`,** once every transform term is at its
   default — so a test pinning the "dragged all the way home before releasing" entrance asserts
   `transform: none`. It is the correct end of the ramp, not a missing style.
+
+## 2026-09-21 — SOLVED: a right-swiped card slid out UNDER its replacement, and `perspective` is why
+
+**Report.** "Cuando el usuario suelta el press al hacer swipe right, la carta se va al fondo del mazo
+y sigue su movimiento a la derecha." The card the player threw was occluded by the card that replaced
+it for the whole 250 ms of the exit, reappearing only where it overhung the deck.
+
+**Root cause, and it is not the one the comments predicted.** `CardStack` uses
+`AnimatePresence mode="popLayout"`, which absolutises the outgoing card, and both `Card.tsx` and
+`CardStack.tsx` claimed that this alone put it on top: "a positioned element paints above in-flow
+content". True only when the in-flow content is not itself a stacking context — and **every card's
+outer element carries `perspective-distant` (`perspective: 1200px`), which establishes one**
+(CSS Transforms 2). A non-positioned stacking context is painted in the SAME step as positioned
+`z-index: 0`/`auto` elements, decided on **tree order**; framer-motion splices the exiting child in
+_before_ the present one (`nextChildren.splice(i, 0, child)` in `AnimatePresence/index.mjs`), so the
+incoming card was always the later sibling and always won.
+
+Three things this is **not**:
+
+- **Not a `d59ec84` regression.** That commit wrote `zIndex: 0` into the forward exit, but `0` and
+  `auto` land in the same paint step — the value changed nothing. The defect is as old as the
+  perspective on that element.
+- **Not a `transform` question.** `AGENTS.md` correctly noted that the entering card's
+  `animate={{ x: 0 }}` resolves to `transform: none` (motion-dom's `buildTransform` emits `none` when
+  every term is at its default) and that this app never registers `MotionGlobalConfig.WillChange`. Both
+  hold. `perspective` is a separate stacking-context trigger that the reasoning missed.
+- **Not a `popLayout` failure.** The ref is wired and the pop works; layout was never the problem.
+
+**Older than the device pass that "passed" it.** `perspective-distant` has been on that element since
+`eead1c0` (2026-08-05), so the defect was live on 2026-08-06 when the real-device pass recorded
+"gestures passed". Both records stand: that pass was checking which way a swipe sent the deck, and an
+occluded card is only visible where it overhangs the deck's own box — which on a phone is a sliver.
+The lesson is the same one the row wording now carries: "the swipe works" is not "the swipe looks
+right", and a manual row has to name what the eye is supposed to be on.
+
+**Measured, not reasoned.** jsdom paints nothing and the app cannot be dealt under `pnpm dev`, so the
+check was a four-element reduction — `relative isolate` parent, an `absolute; perspective: 1200px;
+translateX(120px)` first child, a static `perspective: 1200px` second child — probed with
+`elementFromPoint` inside the overlap and run in **headless Chrome** (`--headless=new --dump-dom`):
+
+| outgoing `z-index` | incoming `perspective` | on top |
+| ------------------ | ---------------------- | ------ |
+| `0`                | `1200px`               | IN     |
+| `1`                | `1200px`               | OUT    |
+| `0`                | `none`                 | OUT    |
+
+Row 3 is what isolates the trigger: drop the perspective and the folklore becomes true again.
+
+**Fix.** `ABOVE_INCOMING_Z_INDEX = 1` on the forward exit variant, sibling to the existing
+`BEHIND_INCOMING_Z_INDEX = -1`. It is bounded at both ends — strictly above 0 (the incoming card's
+effective index) and strictly below the previous-card peek's `z-10` in `CardStack`. Both exit branches
+now state a z-index; neither ordering is one the layout gives away for free. `Card.test.tsx` asserts
+the sign and the bound on both, which is the whole of what jsdom can hold.
+
+**The general lesson for this repo:** `perspective`, `opacity < 1`, `filter`, `will-change` and
+`transform` all create stacking contexts, and any of them on the _in-flow_ sibling silently cancels
+"positioned paints on top". A `z-index` written down is cheaper than the reasoning that says it is
+unnecessary.
+
+**Supersedes a general rule stated in the 2026-08-05 entry above** ("Absolutely positioned siblings
+paint over an in-flow sibling"). That entry's fix — `isolate` plus `-z-10` on the deck's back — is
+still correct and still needed, but the rule as written ("positioned elements paint in a later layer
+than non-positioned in-flow content, **regardless of DOM order**") is over-general and is the
+sentence this bug was reasoned from. Measured in the same headless-Chrome run: a `position:absolute`
+first child versus an in-flow `perspective: 1200px` second child, no z-index on either — **the in-flow
+card wins**. The entry has been left as written (the repo rule is to confirm before editing one);
+read it together with this.

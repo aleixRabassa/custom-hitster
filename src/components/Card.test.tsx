@@ -100,8 +100,12 @@ describe('Card', () => {
     //  returning card is the thing that moves, and all this one has to do
     //  is settle back to the deck's centre and get UNDER the card landing
     //  on top of it. That is why `x` is 0 and the z-index is negative --
-    //  `popLayout` absolutises the outgoing card, and a positioned element
-    //  would otherwise paint over the in-flow one.
+    //  `popLayout` absolutises the outgoing card, and at `auto` the two cards
+    //  are tied (both are stacking contexts) and split on tree order, which
+    //  the INCOMING card wins (`AnimatePresence` splices the exiting child in
+    //  first, so it is the earlier sibling). On this branch the tie already
+    //  falls the right way; `-1` only makes it hold by construction instead of
+    //  by someone else's splice order. See `BEHIND_INCOMING_Z_INDEX`.
     //
     //  That Motion reads `custom` into it, and what the eye then sees, are
     //  browser checks -- jsdom paints nothing.
@@ -122,23 +126,34 @@ describe('Card', () => {
     expect(none).toEqual(forward);
   });
 
-  it('should drop the outgoing card under the incoming one but above the deck preload', () => {
+  it('should order the outgoing card against the incoming one on both movements', () => {
     // ===================================================================
-    //  THE BOUND THAT MAKES THE BACKWARD ANIMATION VISIBLE AT ALL.
+    //  NEITHER ORDERING IS FREE, AND ASSUMING THE FORWARD ONE WAS IS THE
+    //  BUG THE DEVELOPER REPORTED ON 2026-09-21.
     //
-    //  `CardStack` renders the next card's hidden face at `-z-10` inside
-    //  an `isolate`. The outgoing card has to sit BELOW the returning card
-    //  (so the return is seen) and ABOVE that preload (so the player does
-    //  not watch the card they are leaving sink behind a copy of itself).
+    //  Every card's outer element carries `perspective-distant`, and a
+    //  perspective establishes a stacking context -- so the INCOMING card
+    //  paints in the same step as the positioned outgoing one, and wins on
+    //  tree order (`AnimatePresence` splices the exiting child in first).
+    //  A right-swiped card therefore slid out from UNDERNEATH its
+    //  replacement. So forward must be strictly ABOVE 0, not merely
+    //  positioned.
+    //
+    //  Backward is the mirror: strictly BELOW 0 so the returning card is
+    //  seen landing on top, and above `CardStack`'s `-z-10` preload so the
+    //  card being left does not sink behind a copy of itself.
+    //
     //  Both ends are arithmetic a test can hold; which one the eye sees is
     //  a browser check.
     // ===================================================================
     const backward = CARD_VARIANTS.exit('backward');
+    const forward = CARD_VARIANTS.exit('forward');
 
     expect(backward.zIndex).toBeLessThan(0);
     expect(backward.zIndex).toBeGreaterThan(-10);
-    // A deal keeps the card on top, which is what `popLayout` already gives a positioned element.
-    expect(CARD_VARIANTS.exit('forward').zIndex).toBe(0);
+    // Above the incoming card, and below the previous-card peek's `z-10` in `CardStack`.
+    expect(forward.zIndex).toBeGreaterThan(0);
+    expect(forward.zIndex).toBeLessThan(10);
   });
 
   it('should bring a card back from off-screen only when the deck stepped back', () => {
