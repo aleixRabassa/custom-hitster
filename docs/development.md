@@ -672,8 +672,10 @@ asset links not yet complete) and its **step 12** build (both certificate finger
 is the build testers and the store get). Row 1 and row 6 run on both. Everything else runs on step 12.
 
 **A THIRD state appeared on 2026-09-21 and row 1 was answered from it, so read the row's Status with
-this in mind.** The upload key's fingerprint was deployed alone, ahead of the plan's order, so the
-**locally sideloaded step-7 build** showed the bar before the deploy and lost it after — same APK,
+this in mind.** Note the numbering first, because two plans count differently and the same APK has two
+names: the locally installed build is **plan 1's step 9 and plan 3's step 7** — one build, and plan 3
+is the executable file. The upload key's fingerprint was deployed alone, ahead of the plan's order, so
+that **sideloaded build** showed the bar before the deploy and lost it after — same APK,
 same signing key, only the deployed statement changed. That is a cleaner experiment than the plan
 designed, because the build is held constant. What it does **not** touch is the step-12 build: Play
 re-signs with its own app-signing key, so the certificate the verifier compares against is a

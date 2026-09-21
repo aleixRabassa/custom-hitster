@@ -296,8 +296,12 @@ update`, so a hand edit is silently discarded and the symptom is a Play upload r
 
 - [ ] **Step 7 `[you type it]` — First build, first install, URL bar expected. Gate M2a.** Absorbs
       plan 1 step 9 and plan 2 step 5's rows 1–6.
-  - [ ] `! cd android && bubblewrap build`. Record where the AAB and the APK land (nothing in the repo
-        says), and confirm both are ignored.
+  - [x] `! cd android && bubblewrap build`. Record where the AAB and the APK land (nothing in the repo
+        says), and confirm both are ignored. _→ Run 2026-09-21. It leaves **FOUR** files in `android/`,
+        not two: `app-release-bundle.aab`, `app-release-signed.apk`, the intermediate
+        `app-release-unsigned-aligned.apk`, and `app-release-signed.apk.idsig` — apksigner's v4
+        signature, which needed its own ignore line because `*.apk` does not match it. All four are
+        confirmed ignored by `git check-ignore`; the reasoning is in `.gitignore`._
   - [x] Install the APK. **A URL bar across the top is the correct state** — asset links are not
         verified yet, and seeing it now is what makes its disappearance at step 12 evidence. _→ Done
         2026-09-21 by file-manager sideload, not `adb` (no device ever enumerated over USB). The bar
