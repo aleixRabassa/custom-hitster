@@ -562,4 +562,126 @@ describe('CardStack', () => {
     const inners = [...container.querySelectorAll('[data-testid="card-inner"]')];
     expect(inners).toEqual([before]);
   });
+
+  it('should render the previous card, parked out of the layout, from card 2 on', async () => {
+    // ===================================================================
+    //  THE CARD A LEFT DRAG PULLS IN (2026-09-21).
+    //
+    //  A step back is performed by the finger now rather than played on
+    //  release, so the card being returned to has to be IN THE DOCUMENT
+    //  before the gesture starts -- mounting it mid-drag would need a flag
+    //  set from the per-frame drag handler, which is the one thing
+    //  `useCardGestures` refuses to do.
+    //
+    //  It is therefore parked instead, and the parking has to be
+    //  `display: none`. `opacity: 0` and `visibility: hidden` both leave
+    //  the element LAID OUT, and this one sits a full card-width to the
+    //  right of the deck: the game would carry a permanent horizontal
+    //  scroll on a phone, for a card nobody has asked for.
+    // ===================================================================
+    const { container } = renderStack(fixtureDeck, 1);
+
+    const peek = container.querySelector('[data-testid="card-previous-peek"]') as HTMLElement;
+    expect(peek).not.toBeNull();
+
+    // Parked: one whole card-width out, and out of the layout while it is there.
+    await waitFor(() => {
+      expect(peek.style.display).toBe('none');
+    });
+    expect(peek.style.transform).toContain('translateX(100%)');
+
+    // It is the card BEFORE the current one, and it is that card's hidden face.
+    expect(peek.textContent).toBe('');
+    await waitFor(() => {
+      expect(peek.querySelector('img')).not.toBeNull();
+    });
+
+    /*
+      Both ids are pulled out and asserted DEFINED first. `toContain(fixtureDeck[0]?.id ?? '')`
+      is what this was, and `toContain('')` passes against any string at all -- so the whole
+      assertion would have evaporated the day the fixture deck changed shape, silently.
+    */
+    const previousCardId = fixtureDeck[0]?.id;
+    const currentCardId = fixtureDeck[1]?.id;
+    const peekSrc = peek.querySelector('img')?.getAttribute('src') ?? '';
+
+    expect(previousCardId).toBeDefined();
+    expect(currentCardId).toBeDefined();
+    expect(peekSrc).toContain(previousCardId);
+    // And not the card in play: the peek is the card BEHIND the player, never the one in front.
+    expect(peekSrc).not.toContain(currentCardId);
+  });
+
+  it('should render no previous card on card 1', () => {
+    // Nothing to step back to, so there is nothing to drag in -- and an empty rectangle sliding
+    // over the first card of a game would be worse than the gesture simply doing nothing.
+    const { container } = renderStack(fixtureDeck, 0);
+
+    expect(container.querySelectorAll('[data-testid="card-previous-peek"]')).toHaveLength(0);
+  });
+
+  it('should never render an answer on the previous card either', async () => {
+    // ===================================================================
+    //  THE SAME LEAK RULE AS THE BACK, AND IT IS NOT REDUNDANT.
+    //
+    //  This face is a card the player has already answered, so the obvious
+    //  reading is that it can show anything. It cannot: it is mounted on
+    //  top of a card that is still a mystery, one `isFlipped` bug or one
+    //  "reuse `Card` here so the flip is smoother" refactor away from
+    //  putting a year in the document beside an unflipped card. The rule
+    //  is that `CardStack` renders `CardHiddenSide` and nothing else --
+    //  this file does not import `CardRevealSide` and must not.
+    // ===================================================================
+    const { container } = renderStack([highConfidenceCard, lowConfidenceCard], 1);
+
+    const peek = container.querySelector('[data-testid="card-previous-peek"]');
+    expect(peek).not.toBeNull();
+
+    await waitFor(() => {
+      expect(peek?.querySelector('img')).not.toBeNull();
+    });
+
+    // `outerHTML`, not `textContent`: an `aria-label`, a `title` or a `data-*` leaks exactly as
+    // body text does, and only the markup catches those.
+    const peekHtml = peek?.outerHTML ?? '';
+    expect(peekHtml).not.toContain(highConfidenceCard.title);
+    expect(peekHtml).not.toContain(highConfidenceCard.artist);
+    expect(peekHtml).not.toContain(String(highConfidenceCard.year));
+    expect(peek?.querySelector('[data-testid="card-reveal-face"]')).toBeNull();
+    expect(peek?.querySelector('[role="status"]')).toBeNull();
+  });
+
+  it('should keep the previous card above the deck and out of the gesture', () => {
+    // ===================================================================
+    //  THREE CLASSES, AND EACH OF THEM IS A DIFFERENT BUG IF IT GOES.
+    //
+    //  `z-10`: the card being returned to has to land ON TOP of the one it
+    //  replaces. Underneath, the animation runs and looks like nothing at
+    //  all -- the same failure `BEHIND_INCOMING_Z_INDEX` in `Card.tsx`
+    //  prevents from the outgoing card's side. It is inside the wrapper's
+    //  own `isolate`, so it can reach nothing outside the deck.
+    //
+    //  `pointer-events-none`: the drag belongs to the card underneath. A
+    //  pointer-up landing here would be judged as a tap on nothing, and the
+    //  QR image could start a native image drag of its own.
+    //
+    //  `aria-hidden`: a screen reader would otherwise be handed a second
+    //  copy of the same generic QR `alt`, in the middle of a gesture.
+    // ===================================================================
+    const { container } = renderStack(fixtureDeck, 1);
+
+    const peek = container.querySelector('[data-testid="card-previous-peek"]') as HTMLElement;
+    const classes = peek.className.split(/\s+/);
+
+    expect(classes).toContain('z-10');
+    expect(classes).toContain('pointer-events-none');
+    expect(classes).toContain('absolute');
+    expect(classes).toContain('inset-0');
+    expect(peek.getAttribute('aria-hidden')).toBe('true');
+
+    // Last in DOM order, because source order is what puts a positioned element above the
+    // in-flow card. The assertion is the ordering, not the index: `z-10` alone would be one
+    // stacking-context change away from silently not being enough.
+    expect(peek.parentElement?.lastElementChild).toBe(peek);
+  });
 });

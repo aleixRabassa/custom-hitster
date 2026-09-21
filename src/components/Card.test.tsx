@@ -192,6 +192,85 @@ describe('Card', () => {
     }
   });
 
+  it('should continue a dragged step back from where the finger left it', () => {
+    // ===================================================================
+    //  THE HANDOFF (2026-09-21), AND THE SEAM IT CLOSES.
+    //
+    //  A left drag pulls the previous card in one-for-one with the thumb
+    //  (`CardStack`'s peek, driven by `previousCardProgress`). At the
+    //  instant of commit that element parks and THIS component mounts in
+    //  its place -- so if the entrance always started at
+    //  `EXIT_DISTANCE_PX`, the card the player had just dragged a third of
+    //  the way home would jump back off-screen and re-run the journey.
+    //  That jump is the whole defect, and it is invisible to every other
+    //  test in this file because jsdom paints nothing.
+    //
+    //  The units are the tell. A dragged entrance is a PERCENTAGE of the
+    //  card's own width, which is how it lands on exactly the pixels the
+    //  peek was occupying without either side knowing the card's clamped
+    //  width; the keyboard's is 600 CSS pixels. Getting that wrong is a
+    //  card that starts a percentage of the way through a 600px journey.
+    // ===================================================================
+    for (const [fromProgress, expected] of [
+      [0.25, '75%'],
+      [0.5, '50%'],
+      // Committed on VELOCITY alone with the pointer back at its origin -- a flick. The card
+      // starts from the peek's parked position, one card-width out, and NOT from 600.
+      [0, '100%'],
+    ] as const) {
+      const { container } = render(
+        <Card
+          card={highConfidenceCard}
+          isFlipped={false}
+          isYearPending={false}
+          onFlip={vi.fn()}
+          movement="backward"
+          entranceFromProgress={fromProgress}
+        />,
+      );
+      const returning = container.querySelector('[data-testid="card-inner"]')?.parentElement;
+
+      expect(returning?.getAttribute('style')).toContain(`translateX(${expected})`);
+      cleanup();
+    }
+
+    // Dragged the whole way home before letting go: Motion's `buildTransform` emits `none`
+    // rather than `translateX(0%)` once every term is at its default, so what this pins is that
+    // there is nothing left to animate -- which is the correct end of the same ramp.
+    const { container: arrived } = render(
+      <Card
+        card={highConfidenceCard}
+        isFlipped={false}
+        isYearPending={false}
+        onFlip={vi.fn()}
+        movement="backward"
+        entranceFromProgress={1}
+      />,
+    );
+
+    expect(
+      arrived.querySelector('[data-testid="card-inner"]')?.parentElement?.getAttribute('style'),
+    ).toContain('transform: none');
+    cleanup();
+
+    // ABSENT IS NOT ZERO: no `entranceFromProgress` means no finger was involved -- the
+    // keyboard's ArrowLeft -- and that card still comes the full distance a deal throws one,
+    // because there is nothing on screen for it to continue from.
+    const { container } = render(
+      <Card
+        card={highConfidenceCard}
+        isFlipped={false}
+        isYearPending={false}
+        onFlip={vi.fn()}
+        movement="backward"
+      />,
+    );
+
+    expect(
+      container.querySelector('[data-testid="card-inner"]')?.parentElement?.getAttribute('style'),
+    ).toContain(`translateX(${CARD_VARIANTS.exit('forward').x}px)`);
+  });
+
   it('should not mount the revealed side while unflipped', () => {
     // ===================================================================
     //  THE DOM-PRESENCE LEAK INVARIANT -- the single most important

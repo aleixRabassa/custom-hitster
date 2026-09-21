@@ -76,6 +76,20 @@ import type { Card as CardData } from '../../shared/types';
  * In CSS pixels, comfortably off-screen. One constant for both because the backward animation is
  * the forward one run in reverse: a card returns from exactly where it was thrown to, and two
  * numbers that drifted apart would make the undo travel a different distance from the deal.
+ *
+ * ===========================================================================
+ *  SINCE 2026-09-21 IT IS THE KEYBOARD'S DISTANCE ONLY, AND THAT IS NOT A
+ *  DEMOTION -- IT IS THE HALF OF THE ANIMATION NO FINGER EVER TOUCHES.
+ *
+ *  A DRAGGED step back continues the card the thumb was already pulling in, so
+ *  it starts from wherever the peek stopped: `entranceFromProgress`, spent as a
+ *  percentage of the card's own width. 600 would be the wrong number for it,
+ *  and measurably so -- a 360px phone renders a 288px card, so a card parked at
+ *  x = 600 sits 276px beyond the right edge of the viewport and the player
+ *  would see nothing at all move until they released. The peek parks one
+ *  card-width out instead; `previousCardProgress` in `gestures.ts` carries the
+ *  full reasoning.
+ * ===========================================================================
  */
 const EXIT_DISTANCE_PX = 600;
 
@@ -289,16 +303,54 @@ export interface CardProps {
    * speak of. Absent behaves as `forward`: mounted where it belongs, with nothing to animate.
    */
   movement?: DeckMovement;
+  /**
+   * How far the FINGER had already brought this card back in, 0..1, when it let go.
+   *
+   * ===========================================================================
+   *  THE DRAGGED STEP BACK DOES NOT START FROM OFF-SCREEN, AND THAT IS THE
+   *  WHOLE POINT OF THE PROP (2026-09-21).
+   *
+   *  A left drag now pulls the previous card in one-for-one with the finger --
+   *  `useCardGestures` owns that card as a `MotionValue`-driven peek, and
+   *  `CardStack` mounts THIS component in its place at the instant of commit.
+   *  If the entrance always began at `EXIT_DISTANCE_PX`, the card the player
+   *  had just dragged a third of the way home would jump back off-screen and
+   *  re-run the journey. The seam is the bug; this number closes it.
+   *
+   *  It is a FRACTION and it is spent as a PERCENTAGE, so it lands exactly
+   *  where the peek was: the peek is `absolute inset-0` on a wrapper sized from
+   *  `--card-width`, and this element is the same width, so `(1 - p) * 100%`
+   *  resolves to the same pixels on both. Nothing has to know the card's
+   *  clamped width -- see `PreviousCardStyle.x` in `useCardGestures`.
+   *
+   *  ABSENT IS NOT ZERO. Undefined means "no finger was involved", which is the
+   *  keyboard's ArrowLeft, and that one still comes the full `EXIT_DISTANCE_PX`
+   *  because there is nothing on screen for it to continue from. Zero means a
+   *  drag that committed on VELOCITY alone with the pointer back at its origin
+   *  -- a flick -- and that card correctly starts from the parked position, one
+   *  card-width out, rather than from 600.
+   * ===========================================================================
+   */
+  entranceFromProgress?: number;
 }
 
-export function Card({ card, isFlipped, isYearPending, gestureProps, movement, ref }: CardProps) {
+export function Card({
+  card,
+  isFlipped,
+  isYearPending,
+  gestureProps,
+  movement,
+  entranceFromProgress,
+  ref,
+}: CardProps) {
   /*
     The entrance, and it exists for ONE of the two movements.
 
     Forward deals a card into a slot the outgoing card is vacating -- it is already where it
     belongs, and animating it would be inventing motion the player did not ask for. Backward
-    UNDEALS: the card comes back from off the right edge, exactly as far away as a thrown card
-    goes, so the two halves of a step read as one action reversed.
+    UNDEALS: the card comes back from off the right edge, so the two halves of a step read as
+    one action reversed. From HOW FAR off the right edge is `entranceX` above -- the thumb's
+    own position when it let go, or a thrown card's 600px when there was no thumb.
 
     `AnimatePresence initial={false}` in `CardStack` does not disable this. Framer Motion renders
     `<PresenceChild initial={!isInitialRender.current || initial}>`, so the flag blocks only the
@@ -310,6 +362,16 @@ export function Card({ card, isFlipped, isYearPending, gestureProps, movement, r
     (see `EXIT_DURATION_S`), and it has to be checked in a browser -- jsdom has no media queries.
   */
   const entersFromOffscreen = movement === 'backward';
+  /*
+    Where it starts from, and the two cases are "a thumb was here" and "a key was pressed".
+
+    A dragged step back continues the peek the finger was already pulling (a percentage of the
+    card's own width, so the handoff is pixel-exact); a keyboard step back has nothing on screen
+    to continue from and comes the full 600px, which is where a dealt card goes. See
+    `entranceFromProgress`.
+  */
+  const entranceX =
+    entranceFromProgress === undefined ? EXIT_DISTANCE_PX : `${(1 - entranceFromProgress) * 100}%`;
 
   return (
     /*
@@ -333,7 +395,7 @@ export function Card({ card, isFlipped, isYearPending, gestureProps, movement, r
         right: 0}` is what snaps it back; this target agrees with that snap-back rather than
         competing with it.
       */
-      initial={entersFromOffscreen ? { x: EXIT_DISTANCE_PX } : undefined}
+      initial={entersFromOffscreen ? { x: entranceX } : undefined}
       animate={{ x: 0, transition: { duration: EXIT_DURATION_S } }}
       // The movement comes from `AnimatePresence custom`, not from a prop -- see `CARD_VARIANTS`.
       variants={CARD_VARIANTS}

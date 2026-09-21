@@ -205,8 +205,10 @@ ANIMATES is the INCOMING card, which is why one delta now feeds TWO Motion chann
 complaint was that left and right looked the same: both flew a card away and both simply had the next
 one already sitting there, because `AnimatePresence initial={false}` meant nothing ever animated IN.
 Forward is unchanged — the outgoing card flies to `+600` and uncovers the card beneath it. Backward is
-the reverse of that picture: **the card you are returning to comes back from off the RIGHT edge**,
-`x: 600 → 0`, and the card you are leaving settles to `x: 0` and drops UNDER it. Six things.
+the reverse of that picture: **the card you are returning to comes back from off the RIGHT edge**
+and the card you are leaving settles to `x: 0` and drops UNDER it. (The distance is `600 → 0` for a
+KEYBOARD step back; a dragged one starts wherever the thumb left it — see the finger block below,
+which supersedes the `x: 600 → 0` this sentence used to state flatly.) Six things.
 **`deckMovementFor` returns `'forward' | 'backward'`, not a `CommitDirection`**, and the rename is the
 point: nothing moves left any more, so `'left'` would have been a lie kept alive by a type.
 `CommitDirection` still exists and still belongs to `swipeDirection`/`swipeIntent`, which describe the
@@ -234,6 +236,55 @@ so `x` jumps 600 → 0.
 The gesture has been felt by **no thumb**, and neither the z-order during the 250 ms overlap nor the
 reduced-motion jump has been seen in a browser: the manual rows are in
 [`docs/development.md`](./docs/development.md) §5.
+
+**AND LATER ON 2026-09-21 THE STEP BACK STOPPED BEING AN ANIMATION THE RELEASE PLAYS AND BECAME ONE
+THE FINGER PERFORMS — the current card no longer moves left AT ALL, and the thing that tracks the
+thumb is the PREVIOUS card.** Two instructions, both literal. First: the card on top of the deck
+"nunca pasara el limite izquierdo de su posicion inicial" — `dragElastic` was the scalar `0.35`,
+easing the card past its constraints in both directions, and is now
+`{ top: 0, right: 0.35, bottom: 0, left: 0 }` against the same `left: 0` constraint, so Motion clamps
+AT the constraint going left while rightward travel keeps every bit of its old give. Second: every
+pixel of leftward travel past that point moves the previous card in from the right instead, one for
+one, and the release only finishes the journey. Eight things. **The peek parks ONE CARD-WIDTH out,
+not at `EXIT_DISTANCE_PX`, and that number is measured rather than preferred**: a 360px phone renders
+a 288px card inside `<main>`'s `p-6`, so a card parked at `x: 600` has its left edge 276px beyond the
+right edge of the viewport — and the swipe commits at 96px, so the player would see nothing move at
+all before releasing. 600 survives as the KEYBOARD entrance, where there is no finger and nothing on
+screen to continue from. **`previousCardProgress(offsetX, cardWidth)` in `gestures.ts` is the whole
+mapping** and it lives there for the usual reason: jsdom cannot exercise a drag, so an inline
+division would be untested full stop. It reads Motion's POINTER offset, which is why a drag that goes
+100px right and then 150px left engages the previous card by 50px — the developer's "puede deslizar a
+la derecha y volver a dejarla en su posicion" falls out of it rather than being special-cased. **The
+peek's position and its `display` are BOTH `MotionValue`s off one source**, because the alternative
+to `display` is React state set from a per-frame drag handler, which is the one thing
+`useCardGestures` refuses. It must be `display` and not `opacity` or `visibility`: those two leave
+the element LAID OUT a card-width to the right of the deck, i.e. a permanent horizontal scroll on a
+phone. **The card's width is read ONCE per gesture** from `deckRef.current.offsetWidth` at drag
+start — `--card-width` is a `clamp()` so no constant could be right, and reading it per pointer move
+would force a layout on every frame of the drag. **THE HANDOFF IS THE PART THAT BREAKS SILENTLY**:
+at commit the hook reports `onPrevious(fromProgress)`, `CardStack` records it against the presence
+key the returned-to card is ABOUT to render under, and `Card` spends it as `initial.x` — a percentage
+of the card's own width, so it lands on exactly the pixels the peek was occupying. Drop it and the
+card the player dragged a third of the way home jumps back off-screen and re-runs the 250 ms, which
+is the seam the whole feature exists to remove. The record is **keyed, and spent in the same
+render-phase guard that latches the movement** -- cleared on the first card change that is not the
+one it names. Letting it merely go stale is NOT enough and that was a real bug: the presence key is
+the same string every time the deck is on that card, so drag back to card 4, ArrowRight, ArrowLeft
+would have brought card 4 in from the thumb's position two moves ago. An effect would be the
+`set-state-in-effect` this repo's lint rejects, and nothing in jsdom can reach the sequence. **The peek is the LAST child
+of the stack and carries `z-10`**, because the returning card has to land ON TOP — underneath, the
+animation runs and looks like nothing at all, the same failure `BEHIND_INCOMING_Z_INDEX` prevents
+from the outgoing card's side. It renders `CardHiddenSide` and the leak audit covers it exactly as it
+covers the back. And **a `useTransform` output updates on Motion's frame loop, not inside the `.set()`
+that invalidated it** (measured) — so a test against one needs `waitFor`. It is **not** a frame of lag
+in the browser: `preRender` runs after `update` in the same frame and before `render`, and
+`useCombineMotionValues` also recomputes synchronously during any React render, so the peek tracks the
+finger and is already parked on the render a commit triggers. **`useCardGestures`
+has tests for the first time** (`src/hooks/useCardGestures.test.ts`), and they assert CONFIGURATION
+and callback payloads only — never a simulated drag, which would test the double. **Nothing here has
+been felt by a thumb either**: rows 13–15 in [`docs/development.md`](./docs/development.md) §5,
+including the one known rough edge — the cancelled peek's slide-out is an imperative `animate()`, so
+it does not read `MotionConfig reducedMotion="user"` and still slides under `reduce`.
 
 **A DECK IS 1..5 PLAYLISTS AND BOTH PLANS ARE BUILT — plan 1 on 2026-08-07, plan 2 with it.** This
 paragraph claimed until 2026-08-12 that plan 2 was unbuilt and that `App.tsx`, `DeckActions.tsx` and

@@ -25,6 +25,7 @@ import {
   deckMovementFor,
   exceedsLongPressMovement,
   isTap,
+  previousCardProgress,
   shouldCommitSwipe,
   swipeDirection,
   swipeIntent,
@@ -308,5 +309,64 @@ describe('the long press', () => {
     expect(exceedsLongPressMovement({ deltaX: 0, deltaY: -(LONG_PRESS_MAX_MOVEMENT_PX + 1) })).toBe(
       true,
     );
+  });
+});
+
+describe('previousCardProgress', () => {
+  // The card is the fluid one: 288px is `--card-width` at the phone size the thresholds were
+  // chosen against. Every case below is written against it so the numbers stay readable.
+  const CARD_WIDTH = 288;
+
+  it('should leave the previous card parked until the drag goes left', () => {
+    // ===================================================================
+    //  RIGHTWARD TRAVEL IS NOT A STEP BACK, AND THE BOUNDARY IS AT ZERO.
+    //
+    //  An advance and a step back begin with the same pointer-down, and
+    //  the previous card must not so much as twitch during the one that
+    //  throws the current card away -- it is a card the player has already
+    //  answered, sliding in over the one they are still guessing at.
+    // ===================================================================
+    expect(previousCardProgress(0, CARD_WIDTH)).toBe(0);
+    expect(previousCardProgress(1, CARD_WIDTH)).toBe(0);
+    expect(previousCardProgress(SWIPE_COMMIT_DISTANCE_PX, CARD_WIDTH)).toBe(0);
+  });
+
+  it('should follow the finger one for one, in card widths', () => {
+    // Half a card of leftward drag is half a card of travel. This is the whole feature: the
+    // player performs the animation rather than triggering it.
+    expect(previousCardProgress(-CARD_WIDTH / 2, CARD_WIDTH)).toBeCloseTo(0.5);
+    expect(previousCardProgress(-CARD_WIDTH / 4, CARD_WIDTH)).toBeCloseTo(0.25);
+
+    // And at the commit threshold the card is a third of the way home -- which is the number
+    // that matters, because it is the position the entrance has to continue from.
+    expect(previousCardProgress(-SWIPE_COMMIT_DISTANCE_PX, CARD_WIDTH)).toBeCloseTo(1 / 3);
+  });
+
+  it('should clamp at one card width however far the drag goes', () => {
+    // A long drag parks the card home rather than pulling it past the deck and off the left.
+    expect(previousCardProgress(-CARD_WIDTH, CARD_WIDTH)).toBe(1);
+    expect(previousCardProgress(-CARD_WIDTH * 3, CARD_WIDTH)).toBe(1);
+  });
+
+  it('should measure from the drag origin, not from the card', () => {
+    // ===================================================================
+    //  "PUEDE DESLIZAR A LA DERECHA Y VOLVER A DEJARLA EN SU POSICION
+    //  DESLIZANDO A LA IZQUIERDA SIN SOLTAR EL PRESS" -- the developer's
+    //  own wording, and this is where it is decided.
+    //
+    //  Motion's `offset` is the POINTER's distance from where the drag
+    //  began, so a drag that goes 100px right and then 150px left reads
+    //  -50 and engages the previous card by 50px. The current card has
+    //  meanwhile travelled right and come back to rest against its `left:
+    //  0` constraint, so the two halves of the gesture agree.
+    // ===================================================================
+    expect(previousCardProgress(-50, CARD_WIDTH)).toBeCloseTo(50 / CARD_WIDTH);
+  });
+
+  it('should return no travel for a card that has not been measured', () => {
+    // The width comes from `offsetWidth`, and jsdom reports 0 for every element in the app.
+    // Dividing by it would be `Infinity`, which is a `translateX` no browser can resolve.
+    expect(previousCardProgress(-100, 0)).toBe(0);
+    expect(previousCardProgress(-100, -1)).toBe(0);
   });
 });

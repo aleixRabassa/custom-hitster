@@ -10,8 +10,10 @@
  *
  * `useCardAudio` explains the reasoning in full; the short version is that a single element
  * makes "a track never bleeds into the next card and never doubles up" structurally
- * impossible rather than a rule to enforce. `CardStack` renders 3 cards at once, which is
- * exactly the window where per-card elements would overlap and play together.
+ * impossible rather than a rule to enforce. `CardStack` renders up to 4 cards at once -- the card
+ * in play, the next card's preloaded back, the previous card parked for a left drag, and an
+ * outgoing card mid-exit -- which is exactly the window where per-card elements would overlap
+ * and play together.
  *
  * ## ONE stop rule, and the second one was DELETED on purpose (2026-08-06)
  *

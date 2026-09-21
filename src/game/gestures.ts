@@ -366,3 +366,54 @@ export function isTap({ deltaX, deltaY, elapsedMs, didDrag }: PointerSequence): 
     elapsedMs <= TAP_MAX_DURATION_MS
   );
 }
+
+/**
+ * How far the PREVIOUS card has been pulled back onto the screen by a drag, as a fraction of a
+ * card width: `0` parked one card-width off to the right, `1` fully back in the deck's slot.
+ *
+ * ===========================================================================
+ *  THE STEP BACK IS DRIVEN BY THE FINGER AS OF 2026-09-21, AND THIS IS THE
+ *  WHOLE OF THE MAPPING. READ THIS BEFORE CHANGING THE DENOMINATOR.
+ *
+ *  Until now a left drag moved the CURRENT card left and, on release, played a
+ *  250ms animation that brought the previous card in. So the thing the finger
+ *  touched and the thing that moved were different objects, and the animation
+ *  the player had just "performed" only started once they let go.
+ *
+ *  The current card no longer travels left at all (`dragElastic.left` is 0
+ *  against a `left: 0` constraint -- see `useCardGestures`), and every pixel of
+ *  leftward travel past the card's resting position is spent HERE instead: the
+ *  previous card follows the finger ONE FOR ONE, and the release only finishes
+ *  whatever is left of the journey.
+ *
+ *  ## Why the card's width and not the viewport's, and not a constant
+ *
+ *  The previous card parks with its LEFT edge on the current card's RIGHT edge
+ *  -- the carousel position -- so one card-width of drag brings it exactly home
+ *  and the mapping is 1:1 in CSS pixels by construction. `EXIT_DISTANCE_PX`
+ *  (600) is the wrong parking spot for a dragged step back and that is a
+ *  measured claim, not a preference: a 360px phone renders a 288px card at
+ *  `p-6`, so a card parked at x = 600 has its left edge 276px beyond the right
+ *  edge of the viewport -- and the swipe commits at 96px. The player would see
+ *  NOTHING move until they released, which is exactly the feedback this change
+ *  exists to add. 600 survives as the KEYBOARD step back's entrance, where
+ *  there is no finger to track and "the deal played in reverse" still holds.
+ *
+ *  ## Total, clamped, and signed on purpose
+ *
+ *  `offsetX` is Motion's pointer offset, so it is signed and it is measured
+ *  from where the drag STARTED, not from the card's resting position. A drag
+ *  that goes right 100px and then back left 150px is at -50 and therefore 50px
+ *  in -- which is the behaviour the request asks for in so many words ("puede
+ *  deslizar a la derecha y volver a dejarla en su posicion"). Rightward travel
+ *  (`offsetX >= 0`) is 0: the previous card is not involved in an advance.
+ *
+ *  A non-positive `cardWidth` returns 0 rather than dividing. The width is
+ *  measured from the DOM, and jsdom reports 0 for everything.
+ * ===========================================================================
+ */
+export function previousCardProgress(offsetX: number, cardWidth: number): number {
+  if (offsetX >= 0 || cardWidth <= 0) return 0;
+
+  return Math.min(1, -offsetX / cardWidth);
+}

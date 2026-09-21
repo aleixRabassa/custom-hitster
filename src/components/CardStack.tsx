@@ -2,9 +2,21 @@
  * The deck as the player sees it: the current card, draggable, directly over the next card --
  * which is the same size, exactly behind, and therefore invisible until the top card moves.
  *
- * Owns three things and nothing else -- WHEN a card leaves (presence and keying), HOW THE DECK
- * MOVED (the index delta, handed to both animation channels -- see `DeckMovementLatch`), and the
- * gesture wiring it needs. How a card looks and how its own element moves stay in `Card`.
+ * Owns four things and nothing else -- WHEN a card leaves (presence and keying), HOW THE DECK
+ * MOVED (the index delta, handed to both animation channels -- see `DeckMovementLatch`), WHERE A
+ * DRAGGED STEP BACK GOT TO (`dragEntrance`, the handoff between the peek and the real card), and
+ * the gesture wiring all of that needs. How a card looks and how its own element moves stay in
+ * `Card`.
+ *
+ * ===========================================================================
+ *  IT RENDERS THREE CARD FACES FROM CARD 2 ON, NOT TWO (2026-09-21).
+ *
+ *  The current card, the NEXT card's hidden face behind it (the preload, see
+ *  below), and -- new -- the PREVIOUS card's hidden face parked one card-width
+ *  off to the right, which a left drag pulls in one for one with the finger.
+ *  All three are `CardHiddenSide` except the card in play, so the leak rule is
+ *  unchanged and `CardStack.test.tsx` audits both extra faces the same way.
+ * ===========================================================================
  *
  * ===========================================================================
  *  THE BACK IS THE NEXT CARD'S HIDDEN FACE, AND THAT REVERSES WHAT THIS FILE
@@ -49,8 +61,8 @@
  * ===========================================================================
  */
 
-import { AnimatePresence } from 'motion/react';
-import { useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
+import { useCallback, useState } from 'react';
 
 import { Card } from './Card';
 import { CardHiddenSide } from './CardHiddenSide';
@@ -185,10 +197,75 @@ export function CardStack({
   onPrevious,
   isEnabled,
 }: CardStackProps) {
-  const { gestureProps } = useCardGestures({
+  /**
+   * The card a left drag pulls in, or `undefined` on card 1.
+   *
+   * Rendered UNCONDITIONALLY when it exists, and kept off the screen by `display: none` rather
+   * than by a conditional -- mounting it mid-gesture is what a conditional would mean, and the
+   * flag that decided it would have to be set from the per-frame drag handler. See
+   * `PreviousCardStyle.display`.
+   *
+   * It is a card the player has already played, so there is nothing here to leak: it renders
+   * `CardHiddenSide` for the same reason the back does, and the same test covers both. Its QR is
+   * normally a cache hit (it was generated when this card was the current one, and again as the
+   * back behind it), with one exception worth knowing: after a `RESUME` mid-deck nothing has
+   * rendered it this page, so the first drag back can catch the placeholder. Off-screen, and one
+   * `toDataURL()` later it is warm for the rest of the session.
+   */
+  const previousCard = deck[currentIndex - 1];
+
+  /**
+   * The presence key that card will render under once a step back lands, or `null` on card 1.
+   *
+   * Computed here rather than inside `handlePrevious` so the callback can depend on a STRING
+   * instead of on `deck`. `YEAR_RESOLVED` hands this component a new `deck` array on every
+   * resolved year, and a `deck` dependency would rebuild `handlePrevious`, `gestureProps` and
+   * all six handlers on each one -- dozens of times over a cold 50-track crawl, while the
+   * player is dragging. The key only changes when the previous card actually changes, which is
+   * the thing the handoff is keyed on anyway (`PREVIOUS` is exactly `currentIndex - 1` over the
+   * same deck -- see `gameReducer`).
+   */
+  const previousPresenceKey = previousCard
+    ? cardPresenceKey(deck, currentIndex - 1, previousCard)
+    : null;
+
+  /**
+   * What a committed drag left behind: which card it was, and how far the finger got.
+   *
+   * Keyed on the PRESENCE KEY the returned-to card will render under, and cleared in the same
+   * render-phase guard that latches the movement below -- on the first card change that is not
+   * the one it was recorded for. Letting it merely go stale is NOT enough: the key is the same
+   * string every time the deck is on that card, so a later ArrowLeft back onto it would inherit
+   * a thumb position from a drag two moves ago. The guard is the sanctioned shape for this
+   * (adjust state during render when the props disagree); an effect would be the
+   * `set-state-in-effect` this repo's lint rejects.
+   */
+  const [dragEntrance, setDragEntrance] = useState<{ key: string; fromProgress: number } | null>(
+    null,
+  );
+
+  /*
+    The handoff's other end. `useCardGestures` reports how far it had pulled the previous card
+    in; this records it against the key that card is ABOUT to be rendered under, and then lets
+    the step back happen exactly as it always did. `onPrevious` upward stays a bare `() => void`,
+    so nothing outside the deck learns that a gesture has a position.
+  */
+  const handlePrevious = useCallback(
+    (fromProgress: number) => {
+      if (previousPresenceKey !== null) {
+        setDragEntrance({ key: previousPresenceKey, fromProgress });
+      }
+
+      onPrevious();
+    },
+    [onPrevious, previousPresenceKey],
+  );
+
+  const { gestureProps, deckRef, previousCardStyle } = useCardGestures({
     onFlip,
     onNext,
-    onPrevious,
+    onPrevious: handlePrevious,
+    hasPrevious: previousPresenceKey !== null,
     isEnabled,
   });
 
@@ -210,6 +287,22 @@ export function CardStack({
   if (presenceKey !== null && (presenceKey !== lastMove.key || currentIndex !== lastMove.index)) {
     // Guarded, so React re-renders once with the new value before committing rather than looping.
     setLastMove({ key: presenceKey, index: currentIndex, movement: deckMovement });
+
+    /*
+      And the drag's recorded entrance is spent HERE, on the first card change that is not the
+      one it was recorded for.
+
+      Letting it simply go stale is not enough, and the reason is a sequence a session actually
+      produces: drag back from card 5 to card 4, press ArrowRight to 5, press ArrowLeft to 4.
+      The presence key is the same string both times -- same id, same occurrence -- so the
+      KEYBOARD step back would mount at the thumb's old position instead of coming the full
+      distance. The card would appear a third of the way in and barely move.
+
+      The commit's own render is not affected: it arrives with the key the entry names, so the
+      condition below is false and the entry survives exactly the one render that needs it.
+      Reachable only through a real drag, so nothing in jsdom can catch it going wrong again.
+    */
+    if (dragEntrance !== null && dragEntrance.key !== presenceKey) setDragEntrance(null);
   }
 
   /**
@@ -241,7 +334,15 @@ export function CardStack({
       `absolute inset-0` on this element -- so the two literals had to agree or it would not line
       up with the card, with nothing enforcing it. `CardStack.test.tsx` asserts the classes match.
     */
-    <div className="relative isolate h-(--card-height) w-(--card-width)">
+    <div
+      /*
+        The ref is the 1:1 drag mapping's only input from the DOM: `useCardGestures` reads this
+        element's `offsetWidth` once per gesture, because `--card-width` is a `clamp()` and no
+        constant in JS could be right at every viewport. See `UseCardGesturesResult.deckRef`.
+      */
+      ref={deckRef}
+      className="relative isolate h-(--card-height) w-(--card-width)"
+    >
       {nextCard ? (
         <div
           data-testid="card-back"
@@ -349,8 +450,53 @@ export function CardStack({
           onFlip={onFlip}
           gestureProps={gestureProps}
           movement={deckMovement}
+          entranceFromProgress={
+            dragEntrance?.key === presenceKey ? dragEntrance.fromProgress : undefined
+          }
         />
       </AnimatePresence>
+
+      {/*
+        ===========================================================================
+         THE CARD A LEFT DRAG PULLS IN, AND IT IS THE LAST CHILD ON PURPOSE.
+
+         A step back is now performed by the finger rather than played on
+         release (2026-09-21): the current card is pinned at its resting
+         position (`dragElastic.left` is 0) and every pixel of leftward travel
+         moves THIS element instead, one for one, from one card-width out to
+         home. On release the real `Card` mounts in its place and finishes
+         whatever is left -- see `handlePrevious` above.
+
+         Last in DOM order because it has to land ON TOP. The current card is in
+         flow and this one is positioned, so source order is what puts it above;
+         `z-10` says so out loud, inside the wrapper's own `isolate` so it can
+         reach nothing outside the deck. Being above is the entire illusion --
+         underneath it, the animation runs and looks like nothing at all, which
+         is the same failure `BEHIND_INCOMING_Z_INDEX` in `Card.tsx` exists to
+         prevent from the other side.
+
+         `card-ring` full and NOT `card-ring-quiet`: unlike the back, this face
+         is never covered by the card in front of it, so there are no two blooms
+         to composite. It is a card arriving at the front of the deck and has to
+         look like one.
+
+         `pointer-events-none` because the drag belongs to the card underneath.
+         A pointer-up landing on this element instead would be judged as a tap
+         on nothing, and the QR image inside could start a native image drag.
+         `aria-hidden` for the reason the back carries it: a screen reader would
+         otherwise get a second copy of the same generic QR `alt`, mid-gesture.
+        ===========================================================================
+      */}
+      {previousCard ? (
+        <motion.div
+          data-testid="card-previous-peek"
+          aria-hidden="true"
+          style={previousCardStyle}
+          className="card-ring pointer-events-none absolute inset-0 z-10 overflow-hidden rounded-card bg-surface"
+        >
+          <CardHiddenSide card={previousCard} />
+        </motion.div>
+      ) : null}
     </div>
   );
 }

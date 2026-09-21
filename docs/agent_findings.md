@@ -4936,3 +4936,48 @@ Two more things from the same pass, both recorded because they are invisible loc
   the developer**, and the Play-listing session that ran afterwards read the live value and aligned
   `docs/store/listing.md`'s Alternate B to it. Checked before touching either — an odd-reading string
   in the copy surface is not automatically a slip by a previous session.
+
+## 2026-09-21 — A finger-driven step back: three things that decide whether it is visible at all
+
+The developer asked for the left swipe to stop moving the current card and start moving the
+**previous** one, one for one with the thumb, with the release only finishing the journey. Three
+findings from building it, all of them invisible to `pnpm test`:
+
+- **`EXIT_DISTANCE_PX` (600) is the wrong parking spot for a card the finger drags in, and the
+  number says so.** A 360px viewport renders a 288px card inside `<main>`'s `p-6`, so the card
+  spans x = 36..324 — and a peek parked at `x: 600` has its **left edge 276px past the right edge
+  of the viewport**. The swipe commits at 96px, so the player would release before the card had
+  entered the screen at all: the feature would be unobservable on the device it is for, with every
+  test passing. The peek parks **one card-width out** instead (its left edge on the current card's
+  right edge), which also makes the mapping 1:1 in CSS pixels by construction. 600 survives as the
+  **keyboard** step back's entrance, where there is no finger and nothing on screen to continue
+  from.
+- **A `useTransform` output updates on Motion's frame loop, not synchronously inside the `.set()`
+  that invalidated it.** Measured: after `peekProgress.set(0.5)`, reading the derived `display`
+  motion value in the same tick still returns the old `'none'`; after one `setTimeout(0)` it is
+  `'block'`. So a test against a derived value needs `waitFor`. **It is NOT a frame of lag in the
+  browser, and an earlier version of this entry said it was** — `useCombineMotionValues`
+  subscribes with `frame.preRender(updateValue, false, true)`, and Motion's frame steps run
+  `read → resolveKeyframes → preUpdate → update → preRender → render`: the pan session writes the
+  source value in `update`, the derived value recomputes in `preRender`, and the DOM is written in
+  `render`, all in one frame. The same function also calls `updateValue()` **synchronously during
+  render**, which is what makes the value already correct on the React render a commit triggers.
+  The deferral is observable only where nothing renders and no frame runs between the `.set()` and
+  the read — which is to say, in a test.
+- **`MotionValue` is invariant in its type parameter**, so `useTransform(v, (p) => p > 0 ? 'block'
+: 'none')` infers `MotionValue<'block' | 'none'>` and does **not** assign to a
+  `MotionValue<string>` field. The fix is a return annotation on the transform callback
+  (`(progress): string =>`), not a widened interface — the error is four levels deep in
+  `PassiveEffect` and reads like a Motion bug.
+
+Two smaller ones from the same pass:
+
+- **`display` is the only one of the three hiding mechanisms that works here.** `opacity: 0` and
+  `visibility: hidden` both leave the element laid out, and this element sits a full card-width to
+  the right of the deck — the game would carry a permanent horizontal scroll on a phone for a card
+  nobody has asked for. That is also why the peek's visibility is a `MotionValue` rather than a
+  conditional render: a conditional needs React state, and the only place to set it is the
+  per-frame drag handler.
+- **Motion emits `transform: none`, not `translateX(0%)`,** once every transform term is at its
+  default — so a test pinning the "dragged all the way home before releasing" entrance asserts
+  `transform: none`. It is the correct end of the ramp, not a missing style.

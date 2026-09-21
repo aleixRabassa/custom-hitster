@@ -159,7 +159,7 @@ export const SUGGESTED_PLAYLISTS: readonly { id: string; label: string; blurb: s
   { id: '6xrNthbRvaWedC81pc78xo', label: 'Openings Català', blurb: 'Anime openings in Catalan' },
   {
     id: '3iANnuxueS6wustAWPbCgW',
-    label: 'Disney: las 100 mejores canciones',
+    label: 'Disney: las 100 mejores',
     blurb: 'Disney soundtracks',
   },
   { id: '5y50Cn8dw3C25s2mwnCWQJ', label: 'Mejores BSO del cine', blurb: 'Film and TV scores' },
