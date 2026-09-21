@@ -4561,3 +4561,31 @@ once more, at step 11 proper: after Play's fingerprint is added, the checker can
 **Where verification stands.** The checker now returns the statement with the upload key and no
 error. The URL bar has **not** been observed gone — that needs an uninstall and a clean reinstall on
 the phone, because Chrome caches TWA verification per install.
+
+---
+
+## 2026-09-21 — The URL bar is gone, and the experiment that removed it is better than the one the plan designed
+
+A clean reinstall of the **same** sideloaded APK, after the upload key's statement deployed, launches
+with no Chrome address bar. Before the deploy the same APK showed one. **The build, the signing key
+and the package id were all held constant; only the deployed statement changed** — which is a
+stronger attribution than the plan's own design, where the before came from a step-9 build and the
+after from a differently-built step-12 one. Everything in the chain is now confirmed end to end: the
+statement is reachable and un-rewritten, its content type is right, Google's checker parses it, and
+Android's verifier accepted it.
+
+**What this does NOT establish, and the distinction is the whole reason the file is still
+incomplete.** Play re-signs uploads with its own app-signing key, so the certificate a tester's
+install presents is **not** the one just verified. Today's evidence says nothing about that build.
+`docs/development.md` §5 TWA row 1 is marked half passed and re-runs in full at step 12.
+
+**The reinstall was necessary, not cautious.** Chrome caches TWA verification per install; a
+relaunch of the already-installed app is not a test of a redeployed statement. This is worth
+remembering at step 11, where the same reflex will be to relaunch and conclude the second fingerprint
+did not take.
+
+**Method note.** `adb` was never available in any of this — no device ever enumerated over USB. The
+whole of step 7 up to this point ran on a file-manager sideload, and the instruments were
+`apksigner`, `curl` against the origin, and Google's checker. `adb` first becomes necessary at step
+12's `pm get-app-links`, which is the one check that reads the verifier's own verdict rather than
+inferring it from the absent bar.

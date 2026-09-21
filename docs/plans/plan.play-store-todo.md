@@ -298,8 +298,13 @@ update`, so a hand edit is silently discarded and the symptom is a Play upload r
       plan 1 step 9 and plan 2 step 5's rows 1–6.
   - [ ] `! cd android && bubblewrap build`. Record where the AAB and the APK land (nothing in the repo
         says), and confirm both are ignored.
-  - [ ] Install the APK. **A URL bar across the top is the correct state** — asset links are not
-        verified yet, and seeing it now is what makes its disappearance at step 12 evidence.
+  - [x] Install the APK. **A URL bar across the top is the correct state** — asset links are not
+        verified yet, and seeing it now is what makes its disappearance at step 12 evidence. _→ Done
+        2026-09-21 by file-manager sideload, not `adb` (no device ever enumerated over USB). The bar
+        was present exactly as predicted; the developer then asked for it gone, which decided the
+        open question below, and a clean reinstall after the upload key's deploy launched without it.
+        **That is the before/after banked on ONE build** — see `docs/development.md` §5 TWA row 1,
+        which re-runs against the Play-signed build at step 12._
   - [ ] Run `docs/development.md` §5 "The Trusted Web Activity shell" rows 2, 4, 5 and 6 (both PDF
         downloads — the static one only on the **second** launch once `sw.js` controls the page;
         storage shared with Chrome in both directions; the lock-screen audio re-check; launch on the
