@@ -4769,3 +4769,45 @@ it stands**. Step 10 uses that artefact. Gate M2a is reached — with the caveat
 M2a's own wording ("the URL bar is present") was overtaken when the fingerprint deployed early, so the
 milestone is passed in both directions on one build and step 12 still owes the same evidence against
 the Play-signed one.
+
+---
+
+## 2026-09-21 — The app is paid (€1.00), and the order this was decided in is what saves the package id
+
+Developer's decision, reversing "Free" in the plan, `listing.md` §5 and plan 1 before it. The number
+is the least interesting part.
+
+**Google allows paid → free and refuses free → paid.** Verbatim from
+`support.google.com/googleplay/android-developer/answer/6334373`, fetched today: "Once your app has
+been offered for free, the app can't be changed to paid. If you want to charge for the app, you need
+to create a new app with a new package name and set a price." So the irreversible answer was **Free**,
+and it would have been irreversible in the one currency this project cannot spend —
+`aleixrabassa.playlistjitster`, `manifest.id` and `start_url` are permanent after first publish, and a
+new package name discards all three plus the asset-links statement built on them. **Deciding this
+before step 9 rather than after is worth more than the decision itself**; a week later it would have
+been a rebuild of the store identity.
+
+**It creates a new calendar wait, which is why it became its own step 9a rather than a note.** Google's
+sequence is "set up a payments profile → review the price ranges → enter a price". A payments profile
+is a merchant account: bank details, tax residency, its own verification. **The original plan never
+needed one**, so step 1 — whose entire purpose was starting long waits on day 0 — did not start it.
+It does not gate app creation, so step 9 runs in parallel, but it gates the App pricing page and
+therefore any release that charges.
+
+**Two numbers are deliberately NOT in this repo.** Whether €1.00 clears Play's EUR minimum was not
+sourced and is not guessed; and what €1.00 nets after Play's service fee, and whether the €1 is
+VAT-inclusive because Google is merchant of record in Spain, was not verified. Both are read off the
+payments profile at step 9a. Writing a remembered number here is exactly the mistake the target-SDK
+entry avoided on 2026-09-21.
+
+**A new question with a deadline at step 16: how do twelve testers get a paid app without paying?**
+Play's license testing is the candidate and is configured per account rather than per track. Until it
+is settled, `docs/store/tester-notes.md`'s "How to join" is knowingly stale — it says "install it as
+you would any other app" and mentions no price — and now carries a visible internal note saying so,
+to be deleted when step 16 rewrites it.
+
+**One concern was raised and the developer reaffirmed the decision, so it is recorded rather than
+re-argued.** The same game is free and public at `https://playlistjitster.vercel.app`, an origin this
+plan pins as permanent; a €1 listing is compared against that by reviewers, and a paid thin wrapper of
+a free site sits closer to Play's minimum-functionality scrutiny than a free one does. No product
+change was made or proposed in response — that was not asked for.

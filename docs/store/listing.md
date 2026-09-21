@@ -222,10 +222,27 @@ From `plan.google-play-shell.md` steps 10 and 14.
 | App name           | Playlist Jitster                                                  |
 | Default language   | English (`manifest.lang` is `en`, `dir` is `ltr`)                 |
 | Category           | Games, with a music/trivia subcategory                            |
-| Price              | Free                                                              |
+| Price              | **Paid — €1.00, one-time** (changed 2026-09-21; see below)        |
 | Ads                | None                                                              |
 | Target audience    | Not primarily child-directed, to stay outside the Families policy |
 | Privacy policy URL | `https://playlistjitster.vercel.app/privacy.html`                 |
+
+**The app is PAID as of 2026-09-21, and the ORDER of that decision is the part that matters.** Google
+allows paid → free and **refuses free → paid**: an app that has ever been offered free can only be
+charged for by creating a new app **with a new package name**, which would throw away
+`aleixrabassa.playlistjitster` and every permanent identity built on it. So choosing paid now is the
+reversible direction and choosing free would have been the one-way door. Read from
+`support.google.com/googleplay/android-developer/answer/6334373`, 2026-09-21.
+
+Three things that follow, none of them about the number. **A payments profile is a PREREQUISITE** —
+Google's own steps are "set up a payments profile, review the price ranges, then enter a price" — and
+it is a merchant account with bank and tax details and its own verification cycle, so it is a calendar
+wait of the same kind as identity verification and wants starting immediately. **The €1.00 must be
+checked against Play's price-range list for EUR** rather than assumed; the minimum was not sourced here
+and is deliberately not guessed. And **what €1.00 nets is not €1.00**: Play's service fee applies, and
+whether Google is the merchant of record for Spanish VAT — which decides whether the €1 is
+VAT-inclusive — was **not verified** and should be read off the payments profile rather than from this
+file.
 
 The privacy policy URL is `<origin>/privacy.html`, and the origin is the one pinned by step 1:
 `https://playlistjitster.vercel.app`. The file is `public/privacy.html`, static, reaching the

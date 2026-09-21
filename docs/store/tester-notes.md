@@ -25,6 +25,12 @@ kind.
 2. Follow the link on that page to Google Play.
 3. Install **Playlist Jitster** as you would any other app.
 
+> **Note for whoever sends the invitations — not for testers, and to be replaced before this file is
+> shared.** The app became **paid (€1.00)** on 2026-09-21, and step 3 above is written as if it were
+> free. Testers must not be asked to pay to test. Settle the mechanism that waives it (Play's license
+> testing is the candidate) at the plan's step 16, then rewrite step 3 and delete this note. Leaving
+> it as it stands sends twelve people to a price they were not warned about.
+
 If Play says the app is not available, give it a few hours: a new test build takes a while to reach
 every account, and there is nothing to fix at your end.
 
