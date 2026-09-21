@@ -354,6 +354,16 @@ update`, so a hand edit is silently discarded and the symptom is a Play upload r
 - [ ] **Step 9 `[Console]` — Create the Play Console app.** Absorbs plan 1 step 10, second half;
       waits on step 1's identity verification. Name "Playlist Jitster", default language English,
       Games category with a music/trivia subcategory, free, not primarily child-directed.
+      **UNBLOCKED 2026-09-21** — identity verification and every profile check completed, five days
+      inside the wait started 2026-09-20. Values are `docs/store/listing.md` §5; three notes on which
+      of them are hard to undo. **Free is the one that does not go back**: a free app cannot be made
+      paid after publishing, and nothing in this project wants money, so the answer is Free and the
+      point is to answer it deliberately rather than notice it later. **The package id is NOT typed
+      here** — the Console binds `aleixrabassa.playlistjitster` from the first uploaded bundle at step
+      10, which is where the permanence rule in `AGENTS.md` actually bites; there is no field to get
+      wrong at creation. And **"App or game" answers Game**, which is what makes the Games category
+      reachable at all. Category and subcategory are editable afterwards; name and default language
+      are too.
 
 - [ ] **Step 10 `[Console]` — Upload to internal testing and read BOTH fingerprints.** Absorbs plan 1
       step 11. Upload the step-7 AAB to the internal track; on the app-signing page copy **two**

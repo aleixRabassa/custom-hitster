@@ -4658,3 +4658,33 @@ Settings → System → Developer options → **Predictive back animations**.
 key. Play re-signs, so the store build presents a different certificate; rows 1 and 6 run on both
 builds by design and the rest re-run at step 12. A TWA that fails verification still plays perfectly,
 which is exactly why "it all works" is the observation that does not transfer.
+
+---
+
+## 2026-09-21 — Identity verification cleared, and the whole Console half of the plan unblocked at once
+
+Registered and submitted 2026-09-20, **verified 2026-09-21** along with every other profile check —
+one day, against a wait the plan budgeted days for and deliberately started on day 0 for that reason.
+Step 1's gamble paid: nothing between steps 2 and 8 needed the account, so the local shell path ran
+in parallel and is finished.
+
+**What this releases is not one step but the rest of the critical path.** Step 9 (create the app), 10
+(upload to internal testing and read both fingerprints), 11 (publish the second fingerprint) and 12
+(gate M2) were all blocked transitively on this, and each is a prerequisite of the next. Steps 13–17
+follow behind them.
+
+**The AAB does not need rebuilding.** Step 10 uploads the one step 7 already produced,
+`android/app-release-bundle.aab` from 2026-09-21. Nothing about the shell changed after it was built,
+and rebuilding would produce a differently-signed artefact for no reason.
+
+**Two things to carry into step 10 that are easy to get wrong there rather than here.** The Console
+binds the package id `aleixrabassa.playlistjitster` from the **first uploaded bundle**, not from any
+field at app creation — so `AGENTS.md`'s permanence rule bites at step 10, and there is nothing to
+type wrong at step 9. And the app-signing page then shows **two** SHA-256 fingerprints; the upload key
+is already deployed (see today's earlier entry), so step 11 adds **Google's app-signing key** beside
+it. Taking only one is the mistake that presents as a URL bar on exactly half the installs.
+
+**Still open going in**, all in `docs/store/listing.md` §5 and the plan's Open Questions, none of them
+blocking app creation: whether the content-rating questionnaire's user-generated-content question
+applies to arbitrary track titles, whether Vercel's access-log IP retention must be declared in Data
+safety, and where the twelve testers come from.
