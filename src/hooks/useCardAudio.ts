@@ -159,6 +159,19 @@ export function useCardAudio(previewUrl: string | undefined): UseCardAudioResult
    *  than one that waits to be asked, and the autoplay grant from the original tap
    *  is long gone by then anyway.
    *
+   *  THE "CONTINUES RATHER THAN RESTARTING" HALF IS FALSE INSIDE THE ANDROID TWA,
+   *  MEASURED 2026-09-21, AND IS AN ACCEPTED DEVIATION RATHER THAN A BUG TO FIX.
+   *  The silence half holds. But unlocking the phone and pressing Play restarts the
+   *  preview from 0:00 on a real device in the installed shell. Nothing here changed
+   *  and nothing here is wrong: `pause()` preserves `currentTime`, which is why the
+   *  claim was true when it was written and is still true in a desktop browser. The
+   *  reading is that Chrome releases the media resource for a backgrounded TWA
+   *  activity, so the later `play()` re-fetches from the start -- UNVERIFIED, and not
+   *  reproducible anywhere local. The developer was shown the behaviour and judged it
+   *  acceptable, asking for no change, so DO NOT "fix" this without asking: a seek-back
+   *  to the remembered position would be new behaviour bought against an accepted one.
+   *  §5's lock-screen row carries the same note.
+   *
    *  `visibilitychange` rather than `blur`/`pagehide`: `blur` fires when focus
    *  merely leaves the window (a devtools click would pause the game), and
    *  `pagehide` is about unloading. `document.hidden` is exactly "not on screen".

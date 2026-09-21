@@ -4616,3 +4616,45 @@ transfer.
 (storage shared with Chrome, both directions) and 5 (lock-screen audio), plus the back-press rows
 1-6 and an attempt at 7. Row 3 (a shared deck link opens the app with its query string intact) was
 scheduled for step 12 and became runnable today, for the same reason row 1 did.
+
+---
+
+## 2026-09-21 — Step 7's device pass: eleven rows answered, one accepted deviation, one worry retired
+
+Run on the sideloaded, upload-key-verified build. **Rows 1, 2, 3, 4 and 6 of the TWA table passed**,
+as did **back-press rows 1–6**. Three of those are worth more than a tick.
+
+**Row 2 counted only because the static PDF was pressed on a LATER launch.** On a first launch the
+service worker is not answering anything, so the `.pdf` denylist — the whole reason the row exists —
+is not exercised. Both files landed and opened.
+
+**Row 3 ran two steps early and for free.** It was scheduled for step 12 because it needs App Link
+verification; the upload key's deploy delivered that. The link opened the app rather than Chrome and
+the deck dealt, so the query string survived the hand-off — the failure mode here is a bare `/` and a
+welcome screen with no error at all.
+
+**Row 5 half passed, and the other half is a DEVIATION THE DEVELOPER ACCEPTED.** Locking produced
+silence, as designed. Unlocking and pressing Play **restarted the preview from 0:00** rather than
+continuing. This contradicts `useCardAudio`'s own documented contract — it calls `element.pause()`,
+which preserves `currentTime`, and the comment says so. Nothing in the hook changed and nothing in it
+is wrong; the reading is that **Chrome releases the media resource for a backgrounded TWA activity**,
+so the later `play()` re-fetches from the start. **That mechanism is unverified** and is not
+reproducible in any local environment. Shown the behaviour, the developer judged it acceptable and
+asked for no fix. It is therefore recorded as accepted, in §5 and in the hook's own comment, with an
+explicit "do not fix without asking" — a seek-back to the remembered position would be **new**
+behaviour traded against an accepted one.
+
+**Row 7 (predictive back) was not run, but the thing that made it risky is retired.** The row was
+written around the possibility that the generated shell keeps the legacy back behaviour, in which
+case the fix would live in `android/` and a shell already published would need a new release. Read
+today from `developer.android.com/guide/navigation/custom-back/predictive-back-gesture`: predictive
+back is **enabled by default**, and `android:enableOnBackInvokedCallback` is an opt-**out**. The
+generated `AndroidManifest.xml` sets it nowhere, so the default applies and **no `android/` change is
+indicated**. What is left is only how to observe the animation, which depends on the OS: Android 15+
+shows it automatically (the developer option was removed), while Android 13 and 14 keep it behind
+Settings → System → Developer options → **Predictive back animations**.
+
+**What this pass is worth, stated precisely.** Every row here ran on a build signed with the UPLOAD
+key. Play re-signs, so the store build presents a different certificate; rows 1 and 6 run on both
+builds by design and the rest re-run at step 12. A TWA that fails verification still plays perfectly,
+which is exactly why "it all works" is the observation that does not transfer.

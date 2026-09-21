@@ -295,7 +295,16 @@ update`, so a hand edit is silently discarded and the symptom is a Play upload r
         2026-09-21; plan 1's entry is ticked, its third clause being this reading._
 
 - [ ] **Step 7 `[you type it]` — First build, first install, URL bar expected. Gate M2a.** Absorbs
-      plan 1 step 9 and plan 2 step 5's rows 1–6.
+      plan 1 step 9 and plan 2 step 5's rows 1–6. **Every sub-item below is done as of 2026-09-21 and
+      the box is deliberately still open, on ONE thing: back-press row 7 (predictive back) has not been
+      observed on the phone.** Its shell-side risk is retired — the generated manifest leaves
+      `android:enableOnBackInvokedCallback` unset and that attribute is an opt-OUT, so no `android/`
+      change is indicated — which means what remains is an observation, not work. Tick this box when
+      that observation is made. **Note the gate moved**: M2a was written as "the URL bar is present",
+      and the bar has already been seen AND seen gone here, because the upload key's fingerprint was
+      deployed early (see the decided open question). The unverified-shell milestone is therefore
+      passed in both directions on one build; what step 12 still owes is the same evidence on the
+      **Play-signed** build, whose certificate is a different one.
   - [x] `! cd android && bubblewrap build`. Record where the AAB and the APK land (nothing in the repo
         says), and confirm both are ignored. _→ Run 2026-09-21. It leaves **FOUR** files in `android/`,
         not two: `app-release-bundle.aab`, `app-release-signed.apk`, the intermediate
@@ -313,14 +322,26 @@ update`, so a hand edit is silently discarded and the symptom is a Play upload r
         downloads — the static one only on the **second** launch once `sw.js` controls the page;
         storage shared with Chrome in both directions; the lock-screen audio re-check; launch on the
         welcome screen, deal, play, flip). Row 1's first half (the URL bar is present) is observed
-        here. _→ **Row 6 passed 2026-09-21** — the whole path, welcome screen through a flipped card,
-        on the sideloaded build. Row 1 got **both** halves here rather than one, because the upload
-        key's deploy landed between the two launches. Rows 2, 4 and 5 are still outstanding, and row 3
-        became runnable early for the same reason row 1 did._
-  - [ ] Run plan 2's rows 1–6 ("The Android back press"); **attempt row 7** (predictive back) too. A
-        row that fails here and passes at step 12 is itself a finding.
-  - [ ] Mark each row's Status in `docs/development.md` and record anything that failed. `adb` is not
-        on the PATH: `C:\Android\sdk\platform-tools\adb.exe`.
+        here. _→ **Done 2026-09-21.** Rows 2, 4 and 6 passed, and row 1 got **both** halves here
+        rather than one, because the upload key's deploy landed between the two launches. **Row 3 ran
+        two steps early** and passed, for the same reason. **Row 5 half passed**: silence while locked,
+        but Play restarts the preview from 0:00 instead of continuing — shown to the developer, judged
+        acceptable, **no fix wanted**. Recorded as an accepted deviation in `docs/development.md` §5 and
+        in `useCardAudio`'s own comment, with a do-not-fix-without-asking note._
+  - [x] Run plan 2's rows 1–6 ("The Android back press"); **attempt row 7** (predictive back) too. A
+        row that fails here and passes at step 12 is itself a finding. _→ **Rows 1–6 passed
+        2026-09-21**, including row 5's one-press close, which is the stray-entry failure the cleanup's
+        call order exists to prevent. **Row 7 was not observed, and the risk behind it is retired**: the
+        generated manifest sets no `android:enableOnBackInvokedCallback`, which is an opt-OUT, so
+        predictive back is on by default and **no `android/` change is indicated** — the one outcome
+        that could have sent this back to plan 1. Observing the animation needs Android 15+ (automatic)
+        or the developer option on 13/14._
+  - [x] Mark each row's Status in `docs/development.md` and record anything that failed. `adb` is not
+        on the PATH: `C:\Android\sdk\platform-tools\adb.exe`. _→ Done 2026-09-21. `adb` was never
+        used: no device enumerated over USB at all, so the install was a file-manager sideload and the
+        instruments were `apksigner`, `curl` and Google's checker. It first becomes necessary at step
+        12's `pm get-app-links`, which is the only check that reads the verifier's own verdict rather
+        than inferring it from an absent bar._
 
 - [x] **Step 8 `[agent]` — Write the tester notes.** Plan 1 step 9 and its decision 19 say the
       shared-storage behaviour "goes in the tester notes"; nothing ever produced them. Create
