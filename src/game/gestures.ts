@@ -52,12 +52,18 @@
  */
 
 /**
- * Which way a committed swipe went -- and, since 2026-09-19, which way the deck MOVED.
+ * Which way a committed swipe went. THE GESTURE'S OWN VOCABULARY, AND NOTHING ELSE'S.
  *
- * Until 2026-09-18 both directions ADVANCED (Phase 5, decision 2) and this only picked the exit
- * animation. It now picks the ACTION, through `swipeIntent` below. The exit animation no longer
- * reads the swipe at all: it reads `exitDirectionFor` on the index delta, so a thrown card still
- * flies out the way it was thrown (right → next → right) and a keyboard advance flies the same way.
+ * Until 2026-09-18 both directions ADVANCED (Phase 5, decision 2) and this also picked the exit
+ * animation. It picked the ACTION from 2026-09-18, through `swipeIntent` below, and as of
+ * 2026-09-21 it picks NOTHING ELSE: the animation reads `deckMovementFor` on the index delta,
+ * whose vocabulary is `forward`/`backward` rather than `left`/`right`.
+ *
+ * The two were one word for two things only for as long as a step back was an advance MIRRORED.
+ * They stopped being one thing the moment a step back became the advance PLAYED IN REVERSE
+ * (2026-09-21): a backward step now moves nothing left -- it brings the previous card back IN
+ * from the right, the way it left. Keeping this type out of the animation is what stops the old
+ * reading creeping back in as `direction === 'left' ? -x : x`.
  */
 export type CommitDirection = 'left' | 'right';
 
@@ -89,10 +95,24 @@ export function swipeIntent(direction: CommitDirection): SwipeIntent {
 }
 
 /**
- * Which way the outgoing card leaves, given where the deck WAS and where it now IS.
+ * Which way the DECK moved between two renders -- the animation's vocabulary, not the gesture's.
+ *
+ * Deliberately not `CommitDirection`. A `forward` move throws a card off to the right; a
+ * `backward` move brings one back in from the right. Both happen on the right-hand side of the
+ * screen, so `left`/`right` cannot name them, and the word that separates them is what the card
+ * DOES: deal, or undeal. See `deckMovementFor` for why the distinction is worth a second type.
+ */
+export type DeckMovement = 'forward' | 'backward';
+
+/**
+ * Which ANIMATION the deck plays, given where it WAS and where it now IS.
+ *
+ * `forward` deals: the outgoing card flies off to the right and uncovers the card beneath it.
+ * `backward` undeals: the card being returned to slides back IN from off the right edge, over a
+ * current card that stays where it is. See `CARD_VARIANTS` in `src/components/Card.tsx`.
  *
  * ===========================================================================
- *  THE EXIT IS DERIVED FROM THE INDEX DELTA, NEVER FROM THE GESTURE (2026-09-19).
+ *  IT IS DERIVED FROM THE INDEX DELTA, NEVER FROM THE GESTURE (2026-09-19).
  *
  *  Until then the direction was hook state set by the last drag and defaulting
  *  to `left`. That was fine while both directions advanced. Once left meant
@@ -102,16 +122,32 @@ export function swipeIntent(direction: CommitDirection): SwipeIntent {
  *  back, and a declined PREVIOUS on card 1 latched `left` for whatever came next.
  *
  *  Reading the delta makes drag and keyboard agree by construction: a right
- *  throw calls `onNext`, the index rises, and this says `right` -- the same
+ *  throw calls `onNext`, the index rises, and this says `forward` -- the same
  *  thing the throw said. There is nothing to keep in step.
  *
- *  Total, and equal indices resolve to `right`: the one way a card leaves with
+ *  Total, and equal indices resolve to `forward`: the one way a card leaves with
  *  the index unchanged is a yearless CURRENT card being dropped and replaced in
  *  place by the next one, which is the deck moving on, not stepping back.
  * ===========================================================================
+ *
+ * ===========================================================================
+ *  IT RETURNS A MOVEMENT, NOT A DIRECTION, AND THAT IS THE 2026-09-21 CHANGE.
+ *
+ *  It was `exitDirectionFor`, returning `CommitDirection` -- and while both
+ *  animations were one card flying off the screen, `left`/`right` said
+ *  everything there was to say. The developer's complaint was precisely that
+ *  the two READ THE SAME: a card left, a card was simply there, and only the
+ *  side it flew off told you which had happened.
+ *
+ *  A backward step is now the advance run BACKWARDS, so the two animations no
+ *  longer share a shape: one is an exit, the other is an ENTRANCE. `left` has
+ *  no meaning for an entrance arriving from the right, and a function returning
+ *  `'left'` for it is an invitation to write `direction === 'left' ? -600 : 600`
+ *  again. The vocabulary is the guard rail.
+ * ===========================================================================
  */
-export function exitDirectionFor(previousIndex: number, nextIndex: number): CommitDirection {
-  return nextIndex < previousIndex ? 'left' : 'right';
+export function deckMovementFor(previousIndex: number, nextIndex: number): DeckMovement {
+  return nextIndex < previousIndex ? 'backward' : 'forward';
 }
 
 /**
@@ -274,7 +310,7 @@ export function shouldCommitSwipe({ offsetX, velocityX }: DragEnd): boolean {
 /**
  * Which way a committed drag went, for `swipeIntent` to turn into an action.
  *
- * It chose the exit animation until 2026-09-19; that is now `exitDirectionFor` over the index
+ * It chose the exit animation until 2026-09-19; that is now `deckMovementFor` over the index
  * delta, so this function's only reader is the hook deciding between `onNext` and `onPrevious`.
  *
  * Offset decides, and velocity is the tiebreak for the flick case: a fast flick can be

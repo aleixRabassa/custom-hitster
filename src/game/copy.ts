@@ -56,6 +56,19 @@
  *   `src/game/pdf-text.ts` handles that -- nothing here reaches jsPDF unsanitised.
  */
 
+/*
+  THE ONE IMPORT IN THIS FILE, AND IT IS HERE SO A SENTENCE CANNOT LIE ABOUT THE PAPER.
+
+  `sheetSummary` tells the player how many cards come off one A4 sheet. That number is not copy --
+  it is `pdf-sheet.ts`'s grid, and until 2026-09-21 it was written into the sentence by hand as
+  "12 cards each". When the grid moved to the year-cards template's 4 x 4 the string stayed behind,
+  and nothing failed: the count is a plain number inside a template literal, invisible to the
+  typecheck and to every test that asserts against `COPY.*`. Importing the constant is what makes
+  the next grid change reach the sentence on its own. The words around it stay free, which is the
+  whole point of this module.
+*/
+import { CARDS_PER_SHEET } from './pdf-sheet';
+
 /** The app's name, as the accessible name of the landing logo and in the install prompt. */
 export const APP_NAME = 'Playlist Jitster';
 
@@ -243,7 +256,7 @@ export const COPY = {
     print: 'Print as PDF cards',
     printing: (completed: number, total: number) => `Building PDF… ${completed}/${total}`,
     sheetSummary: (sheets: number) =>
-      `${sheets === 1 ? '1 A4 sheet' : `${sheets} A4 sheets`}, 12 cards each — print double-sided on the long edge`,
+      `${sheets === 1 ? '1 A4 sheet' : `${sheets} A4 sheets`}, ${CARDS_PER_SHEET} cards each — print double-sided on the long edge`,
     printWaitsForYears: (pendingCount: number) =>
       `${pendingCount === 1 ? '1 card is' : `${pendingCount} cards are`} still looking up a year — printing waits for them all`,
     waitingHeading: 'Waiting for the last years…',

@@ -483,7 +483,7 @@ export function DeckActions({
         Two different sentences, because there are two different things worth knowing before the
         press.
 
-        RESOLVED: the sheet count and the duplex setting. Nine sheets is a thing to know before
+        RESOLVED: the sheet count and the duplex setting. Seven sheets for a 100-card deck is a thing to know before
         committing paper, and the binding edge is the one instruction that decides whether the sheet
         is usable at all -- `pdf-sheet.ts` mirrors the columns for LONG-edge binding, and short-edge
         would invert the correction, so it is named here rather than guessed at in code.

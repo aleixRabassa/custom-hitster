@@ -118,6 +118,44 @@ And **the decorative card is the first `card-ring` caller that is not `absolute 
 pins all four. The download link is the app's **second `<a>`**, with `focus-visible:focus-ring` and
 `touch-target` applied by hand as the footer's was, and no `target="_blank"`.
 
+**THE DECK'S PRINTED CARD IS 48.9722 mm IN A 4 × 4 GRID AS OF 2026-09-21, AND THAT REVERSES THE
+2026-08-06 "65 mm = the real Hitster card" DECISION — narrowing it back is the edit to refuse.** The
+developer asked for one thing: a card exported from a deck must be the same size, in the same place
+on the page, as a card in the welcome screen's own `public/year-cards-1970-2033.pdf`. Two card sizes
+on one table is the failure — a year card and a song card that do not stack — and the app ships both,
+so matching a boxed game nobody in this flow owns was the weaker of the two targets. It is also the
+only one this repo can CHECK: the template is a committed file that can be measured, where 65 mm was
+a remembered number. **Every figure was read out of the template's content streams**, not guessed:
+`n 20 559.7638 138.8189 138.8189 re S` is its first slot, so the card is 138.8189 pt = **48.9722 mm**,
+the four column origins are 20 / 158.8189 / 297.6378 / 436.4567 pt and the four row origins
+559.7638 / 420.9449 / 282.126 / 143.3071 pt (PDF measures from the BOTTOM) — centred on both axes.
+The decode procedure is in [`docs/agent_findings.md`](./docs/agent_findings.md) (2026-09-21) and the
+one trap is that the streams are **ASCII85 then Flate**, so `zlib.decompress` alone fails with
+`incorrect header check`. Eight things to know. **`CARD_SIZE_MM` is DERIVED, never written down** —
+`(PAGE_WIDTH_MM - 2 * SHEET_MARGIN_X_MM) / GRID_COLUMNS` off the template's flat 20 pt margin, so the
+card cannot disagree with the margin it sits inside; `MARGIN_X_MM` comes back out at that same
+7.0556 mm, which is what makes the derivation consistent rather than circular. **The duplex mirror
+and `planSheets`' interleaving did NOT change**: the mirror still works because the grid is still
+centred, and `xFront + xBack === PAGE_WIDTH_MM - CARD_SIZE_MM` is still what the test asserts rather
+than four literal positions. **The template is NOT a per-sheet duplex interleave** — its ten pages are
+eight year fronts then two pages of a repeated decorative back — and copying that page ORDER would
+pair every printed card with the wrong answer; size and position were the request, pagination was
+not. **`backLayout()` is new and it exists because the back's type was the real bug**: `drawBack` held
+`+28`, `+40`, `-12` and `* 5 + 2` as 65 mm literals, and on a 49 mm card the artist baseline lands
+past the cut — so every millimetre moved into `pdf-sheet.ts` as the hook's header had always claimed
+it was. The year now copies the template exactly (**Helvetica-BOLD 28 pt, baseline 10 pt below the
+card's centre**); title and artist scale by `TYPE_SCALE`. **The gaps are 1.7 and 0.9 title
+line-heights and they are not round numbers**: the binding constraint is that the artist's CAP height
+clears the last title line's DESCENDER, a collision a "fits inside the card" test passes straight
+through — it is 0.70 mm at these values, with 2.24 mm of slack to the cut, and both are asserted.
+And **`CARD_PADDING_MM` scaled with the card rather than staying at 6 mm**, because 6 mm on a 49 mm
+card is 12.3% a side where it was 9.2%: the code would have shrunk 30% while the card shrank 25%.
+**One user-facing string reaches into the geometry**: `COPY.deckActions.sheetSummary` imports
+`CARDS_PER_SHEET`, the only import in `copy.ts`, because "12 cards each" was a hand-written number
+that nothing — not the typecheck, not a test asserting against `COPY.*` — could have caught going
+stale. **Nothing about any of this has been printed.** The cut, the duplex alignment and a scan at the
+new 39.93 mm symbol are rows in [`docs/development.md`](./docs/development.md) §5.
+
 **A LEFT SWIPE STEPS BACK ONE CARD AS OF 2026-09-18, A RIGHT SWIPE STILL ADVANCES, AND THE DECK IS NO
 LONGER ONE-DIRECTIONAL — every sentence in `src/`, `README.md` and the top-level `docs/` that said it was
 has been updated, so if you find one there, it is stale; `docs/plans/` records what was decided at the
@@ -135,13 +173,43 @@ resets it**: `isFlipped` describes the current card and nothing remembers which 
 revealed, so carrying it over could hand a year to a player who never flipped that card; coming back to
 one they did reveal costs a tap, which is the cheaper error. **Audio stops on a left swipe for free**,
 because `GameScreen`'s stop rule is keyed on card id, not on direction — do not add a second stop. The
-exit animation is DERIVED FROM THE INDEX DELTA as of 2026-09-19 (`exitDirectionFor` in `gestures.ts`,
-latched in `CardStack` and handed to `AnimatePresence custom`, read by `CARD_VARIANTS.exit` in
-`Card.tsx`) — so a thrown card still flies out the way it was thrown, and the KEYBOARD NOW MATCHES:
-ArrowRight flies right, ArrowLeft flies left, where before every keyboard advance flew left because the
-direction was hook state only a drag ever set. It goes through `custom` because an exiting child animates
-with the props of its last render, and a keyboard advance changes the index and removes the card in the
-same render. The gesture has been felt by **no thumb**: the manual rows are in
+animation is DERIVED FROM THE INDEX DELTA as of 2026-09-19 (`deckMovementFor` in `gestures.ts`,
+latched in `CardStack`) — which drag and keyboard both move, where before the direction was hook state
+only a drag ever set, so every keyboard advance flew the "back" way.
+
+**AND AS OF 2026-09-21 A STEP BACK PLAYS THE DEAL IN REVERSE RATHER THAN MIRRORING IT — the thing that
+ANIMATES is the INCOMING card, which is why one delta now feeds TWO Motion channels.** The developer's
+complaint was that left and right looked the same: both flew a card away and both simply had the next
+one already sitting there, because `AnimatePresence initial={false}` meant nothing ever animated IN.
+Forward is unchanged — the outgoing card flies to `+600` and uncovers the card beneath it. Backward is
+the reverse of that picture: **the card you are returning to comes back from off the RIGHT edge**,
+`x: 600 → 0`, and the card you are leaving settles to `x: 0` and drops UNDER it. Six things.
+**`deckMovementFor` returns `'forward' | 'backward'`, not a `CommitDirection`**, and the rename is the
+point: nothing moves left any more, so `'left'` would have been a lie kept alive by a type.
+`CommitDirection` still exists and still belongs to `swipeDirection`/`swipeIntent`, which describe the
+THUMB rather than the deck. **The exit reads `AnimatePresence custom` and the entrance reads a PLAIN PROP, and neither can
+use the other's channel.** Exit must use `custom` because an exiting child animates with the props of
+its last render and a keyboard advance changes the index and removes the card in the same render. Entry
+must NOT: motion-dom hands `presenceContext.custom` to variant resolution only when `type === "exit"`,
+and framer-motion's `makeLatestValues` resolves the first-paint inline style with no custom at all — so
+a function `initial` reading presence custom paints one frame at rest and then jumps. `CardStack`
+computes the movement once and hands the same value to both. **`initial={false}` does not block this**:
+`<PresenceChild initial={!isInitialRender.current || initial}>`, so it silences only the session's first
+card, which is the one that must not animate in. **The paint order is a `zIndex: -1` in the backward
+exit variant, and popLayout is why it is needed** — the outgoing card is `position: absolute`, so it
+would otherwise paint OVER the returning card; negative z-index puts it under in-flow content while
+keeping it above the `-z-10` preload inside `CardStack`'s `isolate`. It is set with
+`transition: { zIndex: { type: false } }` because the computed origin is the string `auto`. **The
+forward path is unchanged by construction, and the reason is Motion's own optimisation**: the entering
+card's `animate={{ x: 0 }}` resolves to `transform: none` (`buildTransform` emits `none` when every
+term is at its default) and this app never registers `MotionGlobalConfig.WillChange`, so a
+forward-entering card creates no stacking context and stays below the absolutised card flying off it.
+Add a `will-change` or a non-zero forward `initial` and that inverts, silently. And **under reduced
+motion the card does not strand off-screen**: motion-dom passes `{ type: false }` for positional keys,
+so `x` jumps 600 → 0.
+
+The gesture has been felt by **no thumb**, and neither the z-order during the 250 ms overlap nor the
+reduced-motion jump has been seen in a browser: the manual rows are in
 [`docs/development.md`](./docs/development.md) §5.
 
 **A DECK IS 1..5 PLAYLISTS AND BOTH PLANS ARE BUILT — plan 1 on 2026-08-07, plan 2 with it.** This
@@ -590,7 +658,8 @@ Renamed: `index.html`'s `<title>`, `manifest.name`/`short_name`, `LandingScreen`
 heading, and `pdfFileName`'s prefix (`hitster-*.pdf` → `jitster-*.pdf`, because a downloads list is
 user-visible). **Never rename:** `hitster:session:v1` and `hitster:library:v1` (a renamed key is not
 read, so it silently discards a saved game and a curated library); every "Hitster" that means the
-BOARD GAME (`pdf-sheet.ts`'s 65 mm card, `reducer.ts` and `messages.ts` on dropping a yearless card,
+BOARD GAME (`pdf-sheet.ts`'s header, which since 2026-09-21 explains why the board game's 65 mm card
+size was DROPPED, `reducer.ts` and `messages.ts` on dropping a yearless card,
 `CardRevealSide`, README's "shop-bought Hitster cards") — renaming those corrupts the reasoning; and
 `custom-hitster` as the package/repo name, in `MUSICBRAINZ_USER_AGENT`, in `api/hello`'s message and in
 the `https://hitster.example` test origins. **The PWA ARTWORK was NOT unaffected, and this line used to

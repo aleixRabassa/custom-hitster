@@ -19,9 +19,9 @@
  *  Nothing in here is state at all. Until 2026-09-19 the exit direction was
  *  (`useState`, set at commit, read by the card's exit animation) -- and it
  *  was set ONLY by a drag, so a keyboard advance flew every card out the
- *  "back" way once left meant PREVIOUS. The exit now reads the index delta in
- *  `CardStack` (`exitDirectionFor`), which drag and keyboard both move, so
- *  this hook has nothing to say about how a card leaves.
+ *  "back" way once left meant PREVIOUS. The animation now reads the index
+ *  delta in `CardStack` (`deckMovementFor`), which drag and keyboard both
+ *  move, so this hook has nothing to say about how a card arrives or leaves.
  * ===========================================================================
  */
 
@@ -151,10 +151,12 @@ export function useCardGestures({
       // keyed on card id, so it covers a swipe in EITHER direction for free. Verified rather than
       // duplicated -- two owners of one stop rule is how one of them quietly stops being called.
       //
-      // And no exit direction recorded here either: the card leaves the way the DECK moves,
-      // which `CardStack` derives from the index (`exitDirectionFor`). A right throw calls
-      // `onNext`, the index rises, the card flies right -- the same answer, with nothing to keep
-      // in step and nothing for a keyboard advance to miss.
+      // And no animation direction recorded here either: the deal is played FORWARD or in
+      // REVERSE according to how the DECK moved, which `CardStack` derives from the index
+      // (`deckMovementFor`). A right throw calls `onNext`, the index rises, and the card flies
+      // out right; a left throw calls `onPrevious`, the index falls, and the card being returned
+      // to flies back IN from the right. Nothing to keep in step, and nothing for a keyboard
+      // advance to miss.
       //
       // Which way is which is `swipeIntent`'s decision, not this file's -- see `gestures.ts`.
       if (swipeIntent(swipeDirection(drag)) === 'next') onNext();

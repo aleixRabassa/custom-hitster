@@ -404,7 +404,7 @@ describe('CardStack', () => {
 
   it('should tell AnimatePresence which way the deck moved', () => {
     // ===================================================================
-    //  THE EXIT DIRECTION IS THE INDEX DELTA, ROUTED THROUGH `custom`
+    //  THE MOVEMENT IS THE INDEX DELTA, ROUTED THROUGH `custom`
     //  (2026-09-19). It was gesture-hook state set only by a drag, so once
     //  a left swipe meant PREVIOUS every keyboard advance flew the card out
     //  the "back" way, and an ArrowLeft after a right swipe flew it out the
@@ -415,31 +415,92 @@ describe('CardStack', () => {
     //  cannot see which way the card flies, so the assertion is on the
     //  value handed to `AnimatePresence`, which is where Motion reads it
     //  from for the child it is removing.
+    //
+    //  The values are `forward`/`backward` rather than `right`/`left` since
+    //  2026-09-21: a step back no longer moves anything left, it brings the
+    //  previous card back in from the right. See `deckMovementFor`.
     // ===================================================================
     const { rerender } = renderStack(fixtureDeck, 1);
 
     rerender(stackElement(fixtureDeck, 2));
-    expect(lastPresenceCustom()).toBe('right');
+    expect(lastPresenceCustom()).toBe('forward');
 
     rerender(stackElement(fixtureDeck, 1));
-    expect(lastPresenceCustom()).toBe('left');
+    expect(lastPresenceCustom()).toBe('backward');
 
     // Two steps at once still has a sign.
     rerender(stackElement(fixtureDeck, 3));
-    expect(lastPresenceCustom()).toBe('right');
+    expect(lastPresenceCustom()).toBe('forward');
   });
 
-  it('should keep the direction across renders that move no card', () => {
+  it('should hand the same movement to the returning card that it hands to the exit', () => {
+    // ===================================================================
+    //  THE TWO CHANNELS, AND WHY BOTH HAVE TO EXIST (2026-09-21).
+    //
+    //  `AnimatePresence custom` reaches ONLY the child being removed, so
+    //  it can carry the exit and nothing else. The card ARRIVING needs the
+    //  same fact to know whether to fly in from off-screen, and it gets it
+    //  as a plain prop -- which is correct for it, because it is mounted by
+    //  the very render that decides the movement. See `Card`'s `movement`.
+    //
+    //  The failure this guards is half an animation: feed the two channels
+    //  from different expressions and a step back either slides a card in
+    //  over nothing, or moves nothing at all while the old card sits there.
+    //  So the assertion is that ONE card mounts off-screen on a step back,
+    //  at the same distance a dealt card is thrown, and none does on a deal.
+    // ===================================================================
+    const offscreenCards = (container: HTMLElement) =>
+      [...container.querySelectorAll('[data-testid="card-inner"]')].filter((inner) =>
+        inner.parentElement?.getAttribute('style')?.includes('translateX(600px)'),
+      );
+
+    const { container, rerender } = renderStack(fixtureDeck, 2);
+    expect(offscreenCards(container)).toHaveLength(0);
+
+    // A deal deals: the incoming card is already in the slot the outgoing one is vacating, so
+    // nothing in the stack is parked off-screen waiting to fly in.
+    rerender(stackElement(fixtureDeck, 3));
+    expect(lastPresenceCustom()).toBe('forward');
+    expect(offscreenCards(container)).toHaveLength(0);
+
+    // Back two, so the card arriving is one that is not already on screen -- see below.
+    rerender(stackElement(fixtureDeck, 1));
+    expect(lastPresenceCustom()).toBe('backward');
+    expect(offscreenCards(container)).toHaveLength(1);
+  });
+
+  /*
+    ===========================================================================
+     TWO ENVIRONMENT FACTS SHAPE THE TEST ABOVE, AND BOTH BIT WHILE WRITING IT.
+
+     1. Nothing here drives Motion's animation loop, so a card that mounted at
+        600px is still at 600px in its inline style on the next render. The deal
+        is therefore checked BEFORE the step back: the other order reads the
+        previous step's frozen frame rather than the new card's entrance.
+
+     2. `AnimatePresence` RE-ENTERS a child whose exit has not finished instead
+        of mounting a new one (framer-motion's `ExitAnimationFeature` handles
+        `isPresent && prevIsPresent === false`), and in jsdom no exit ever
+        finishes. So stepping 1 -> 2 -> 1 never remounts card 1 and `initial` is
+        never applied -- the assertion read 0 and the code was right. Stepping
+        back TWO cards lands on one the stack has not rendered, which is a real
+        mount. In a browser the difference is 250ms of exit; a step back inside
+        that window re-enters the card that was leaving, which lands it at x = 0
+        either way. That is correct behaviour and is not what this test is for.
+    ===========================================================================
+  */
+
+  it('should keep the movement across renders that move no card', () => {
     // A flip, a resolved year, a re-render for any reason: the outgoing card may still be in
     // flight, and Motion keeps its running exit either way -- but the value the stack hands over
     // must not flip back to a default underneath it. The latch holds until the next card leaves.
     const { rerender } = renderStack(fixtureDeck, 2);
 
     rerender(stackElement(fixtureDeck, 1));
-    expect(lastPresenceCustom()).toBe('left');
+    expect(lastPresenceCustom()).toBe('backward');
 
     rerender(stackElement(fixtureDeck, 1));
-    expect(lastPresenceCustom()).toBe('left');
+    expect(lastPresenceCustom()).toBe('backward');
   });
 
   it('should fly a current card dropped in place the advance way, even after a step back', () => {
@@ -449,7 +510,7 @@ describe('CardStack', () => {
     //
     //  1. A yearless card dropped from BEHIND the player lowers the index
     //     under the SAME card -- no exit. An index-only latch would record
-    //     `left` here and hand it to the next card that does leave.
+    //     `backward` here and hand it to the next card that does leave.
     //  2. The CURRENT card dropped yearless changes the key with the index
     //     UNCHANGED -- an exit with no delta. The deck moved on under the
     //     player, so it must fly the advance way, whatever the last step was.
@@ -457,22 +518,22 @@ describe('CardStack', () => {
     const deck = [highConfidenceCard, noYearCard, lowConfidenceCard, duplicateIdCardA];
 
     const { rerender } = renderStack(deck, 3);
-    // A genuine step back first, so the latch really holds `left` going in.
+    // A genuine step back first, so the latch really holds `backward` going in.
     rerender(stackElement(deck, 2));
-    expect(lastPresenceCustom()).toBe('left');
+    expect(lastPresenceCustom()).toBe('backward');
 
     // (1) `noYearCard` leaves from behind: same card, index 2 -> 1, no exit. The element identity
     // that proves "no exit" is pinned by the two drop-from-behind tests above; what matters here
     // is that the latch did NOT move -- the index fell, and the value is still what it was.
     const afterDropBehind = [highConfidenceCard, lowConfidenceCard, duplicateIdCardA];
     rerender(stackElement(afterDropBehind, 1));
-    expect(lastPresenceCustom()).toBe('left');
+    expect(lastPresenceCustom()).toBe('backward');
 
     // (2) The current card leaves in place: `duplicateIdCardA` takes index 1. An index-only
-    // latch would say `left` here (the last index change was downward); the key-tracked one
+    // latch would say `backward` here (the last index change was downward); the key-tracked one
     // compares 1 with 1 and says the deck moved on.
     rerender(stackElement([highConfidenceCard, duplicateIdCardA], 1));
-    expect(lastPresenceCustom()).toBe('right');
+    expect(lastPresenceCustom()).toBe('forward');
   });
 
   it('should keep the same element when a duplicated card is dropped from behind the player', () => {

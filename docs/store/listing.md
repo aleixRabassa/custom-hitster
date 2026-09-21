@@ -26,8 +26,9 @@ hand-count, and do not trust a count that was not re-run.
 most visible surface this project has. This is a rule, not a preference: a string that reaches the
 Console carrying it is a defect to fix before upload, whatever it was quoting.
 
-**The internal uses of the word stay, and renaming them is the mistake.** The 65 mm card geometry in
-`src/game/pdf-sheet.ts`, the dropped-card reasoning in `src/game/reducer.ts` and
+**The internal uses of the word stay, and renaming them is the mistake.** The board-game reasoning
+behind the card geometry in `src/game/pdf-sheet.ts` (which since 2026-09-21 explains why the 65 mm
+shop-bought size was DROPPED), the dropped-card reasoning in `src/game/reducer.ts` and
 `src/game/messages.ts`, `src/components/CardRevealSide.tsx`, the `hitster:session:v1` and
 `hitster:library:v1` storage keys, `useBackNavigation.ts`'s `customHitsterBackEntry` history-state
 key, and the `custom-hitster` package/repo name. Every one of those is either a comment explaining
@@ -144,7 +145,7 @@ Spotify reports the date of the album edition you happen to be listening to, whi
 
 PLAY ON PAPER TOO
 • A printable PDF of year cards, 1970 to 2033, ready before you have chosen a playlist. Print them, cut them out, and lay the timeline along the table.
-• Any deck can be exported as printable cards: 65 mm squares, 12 to an A4 sheet, QR codes on the fronts and years on the backs. Print double-sided on the long edge.
+• Any deck can be exported as printable cards: 49 mm squares, 16 to an A4 sheet, QR codes on the fronts and years on the backs — the same size as the printable year cards. Print double-sided on the long edge.
 
 SHARE A DECK, OR KEEP IT
 Copy a share link and whoever opens it gets the same playlist in the same shuffled order — the years are looked up again, so the deck can differ slightly. Keep the playlists you like in your own list on the start screen, one tap from dealing them again.
@@ -166,7 +167,7 @@ Not affiliated with Spotify or MusicBrainz.
 | Scan for the full song, Play for a preview | `COPY.welcome.steps.play.body` and `COPY.game.scanCaption` — the QR is the **full song**    |
 | Tap to flip, swipe right/left              | `COPY.welcome.steps.guess.body`                                                             |
 | "the years are looked up again…"           | `COPY.deckActions.shareCaption` — never promises the same deck                              |
-| 65 mm squares, 12 per A4, long-edge duplex | `COPY.deckActions.sheetSummary` and `src/game/pdf-sheet.ts`                                 |
+| 49 mm squares, 16 per A4, long-edge duplex | `COPY.deckActions.sheetSummary` and `src/game/pdf-sheet.ts` (`CARD_SIZE_MM` = 48.9722)      |
 | Year cards 1970–2033                       | `COPY.welcome.printDetail` + `public/year-cards-1970-2033.pdf`                              |
 | Offline behaviour                          | `README.md` "Install it on your phone"; `runtimeCaching` is empty on purpose                |
 | No accounts / ads / analytics              | `public/privacy.html`                                                                       |

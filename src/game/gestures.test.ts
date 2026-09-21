@@ -22,8 +22,8 @@ import {
   TAP_MAX_DURATION_MS,
   TAP_MAX_MOVEMENT_X_PX,
   TAP_MAX_MOVEMENT_Y_PX,
+  deckMovementFor,
   exceedsLongPressMovement,
-  exitDirectionFor,
   isTap,
   shouldCommitSwipe,
   swipeDirection,
@@ -128,38 +128,67 @@ describe('swipeIntent', () => {
   });
 });
 
-describe('exitDirectionFor', () => {
-  it('should fly the card right when the deck advanced and left when it stepped back', () => {
+describe('deckMovementFor', () => {
+  it('should deal when the deck advanced and undeal when it stepped back', () => {
     // ===================================================================
-    //  THE EXIT READS THE INDEX DELTA, NOT THE GESTURE (2026-09-19). The
-    //  direction used to be hook state set only by a drag, so a keyboard
-    //  advance flew every card out the "back" way once left meant PREVIOUS.
-    //  jsdom cannot see which way a card flies, so the sign lives here.
+    //  THE ANIMATION READS THE INDEX DELTA, NOT THE GESTURE (2026-09-19).
+    //  The direction used to be hook state set only by a drag, so a
+    //  keyboard advance flew every card out the "back" way once left meant
+    //  PREVIOUS. jsdom paints nothing, so the mapping lives here.
     // ===================================================================
-    expect(exitDirectionFor(3, 4)).toBe('right');
-    expect(exitDirectionFor(4, 3)).toBe('left');
+    expect(deckMovementFor(3, 4)).toBe('forward');
+    expect(deckMovementFor(4, 3)).toBe('backward');
     // Any distance, not just one: a resumed or clamped index still has a sign.
-    expect(exitDirectionFor(0, 7)).toBe('right');
-    expect(exitDirectionFor(7, 0)).toBe('left');
+    expect(deckMovementFor(0, 7)).toBe('forward');
+    expect(deckMovementFor(7, 0)).toBe('backward');
   });
 
   it('should treat an unchanged index as the deck moving on', () => {
     // The one way a card leaves with the index unchanged is the CURRENT card being dropped
     // yearless and replaced in place by the next one. That is the deck advancing under the
-    // player, not stepping back, so it flies the advance way -- and the function stays total.
-    expect(exitDirectionFor(2, 2)).toBe('right');
+    // player, not stepping back, so it deals -- and the function stays total.
+    expect(deckMovementFor(2, 2)).toBe('forward');
   });
 
-  it('should agree with a thrown card about which way it leaves', () => {
-    // Drag and keyboard meet here: a right throw is `next`, `next` raises the index, and the
-    // raised index says `right` -- the same answer the throw gave. A left throw likewise.
+  it('should agree with a thrown card about what the deck did', () => {
+    // ===================================================================
+    //  DRAG AND KEYBOARD MEET HERE, and this is the pairing that used to
+    //  be an identity and deliberately is not one any more (2026-09-21).
+    //
+    //  It read `expect(exitDirectionFor(1, 2)).toBe(thrownRight)` -- the
+    //  same `'right'` on both sides -- because a step back was an advance
+    //  mirrored, so one word covered the gesture and the animation. A step
+    //  back is now the advance REVERSED and the two vocabularies have come
+    //  apart on purpose (see `CommitDirection` and `DeckMovement`). What
+    //  is still worth pinning is that they AGREE about which event
+    //  happened, so the assertion is a mapping rather than an equality.
+    // ===================================================================
     const thrownRight = swipeDirection({ offsetX: 120, velocityX: 800 });
     const thrownLeft = swipeDirection({ offsetX: -120, velocityX: -800 });
 
     expect(swipeIntent(thrownRight)).toBe('next');
-    expect(exitDirectionFor(1, 2)).toBe(thrownRight);
+    expect(deckMovementFor(1, 2)).toBe('forward');
     expect(swipeIntent(thrownLeft)).toBe('previous');
-    expect(exitDirectionFor(2, 1)).toBe(thrownLeft);
+    expect(deckMovementFor(2, 1)).toBe('backward');
+  });
+
+  it('should never describe a step back as a movement to the left', () => {
+    // ===================================================================
+    //  THE GUARD ON THE 2026-09-21 CHANGE, and the one assertion here that
+    //  is about a TYPE rather than a value.
+    //
+    //  A backward step brings the previous card back IN from the right --
+    //  nothing moves left any more. `exitDirectionFor` returning `'left'`
+    //  for it is exactly the reading that produced two animations that
+    //  looked identical, so the vocabularies are kept disjoint: no value
+    //  this function returns may also be a `CommitDirection`.
+    // ===================================================================
+    const movements = [deckMovementFor(2, 1), deckMovementFor(1, 2), deckMovementFor(1, 1)];
+
+    for (const movement of movements) {
+      expect(['forward', 'backward']).toContain(movement);
+      expect(['left', 'right']).not.toContain(movement);
+    }
   });
 });
 

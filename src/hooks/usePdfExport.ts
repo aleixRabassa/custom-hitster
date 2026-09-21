@@ -37,6 +37,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
   CARD_SIZE_MM,
+  MAX_ARTIST_LINES,
+  MAX_TITLE_LINES,
+  backLayout,
   planSheets,
   qrBox,
   selectPrintableCards,
@@ -81,13 +84,10 @@ const IDLE: PdfExportState = { status: 'idle', completed: 0, total: 0, excludedC
 /** The print palette. Three greys, and the QR's field stays paper-white. See the header block. */
 const INK = { text: 20, muted: 110, rule: 170 } as const;
 
-/** Type sizes in points, for a 65 mm card. The year is the largest thing on the face, as on screen. */
-const TYPE = { year: 34, title: 11, artist: 9 } as const;
-
 /**
  * The QR bitmap's edge in pixels.
  *
- * Printed at 53 mm, 512 px is about 245 dpi -- comfortably scannable, and small enough that a
+ * Printed at 39.93 mm, 512 px is about 326 dpi -- comfortably scannable, and small enough that a
  * 100-card document stays a few megabytes. The number of MODULES is what governs scannability, and
  * that comes from the URL's length and the `M` error-correction level, not from this.
  */
@@ -239,41 +239,61 @@ function drawFront(doc: Doc, placement: CardPlacement, dataUrl: string): void {
 /**
  * The answer side: the year large, then the title and the artist.
  *
- * Vertically centred by hand rather than by a layout engine, because a PDF has none. The year sits
- * above the middle and the text below it, which is the same arrangement as `CardRevealSide`.
+ * ===========================================================================
+ *  NOT ONE MILLIMETRE IS DECIDED HERE, AND UNTIL 2026-09-21 SIX OF THEM WERE.
+ *
+ *  This function used to carry `placement.yMm + 28`, `+ 40`, `CARD_SIZE_MM - 12`,
+ *  `title.length * 5 + 2` and a `TYPE` table of 34/11/9 pt -- all tuned against a
+ *  65 mm card and all written as ABSOLUTE offsets. When the card shrank to the
+ *  year-cards template's 48.97 mm, the artist's baseline landed past the bottom
+ *  edge and onto the card below. The header of this file already claimed every
+ *  millimetre lived in `pdf-sheet.ts`; `backLayout` is what made that true, and
+ *  it is where the worst-case fit is tested.
+ * ===========================================================================
+ *
+ * The year is drawn in Helvetica-BOLD at the template's own 28 pt, centred on the card exactly as
+ * the template centres its own -- see `YEAR_POINT_SIZE`. The font is put back to `normal` for the
+ * title and the artist, because jsPDF's font state is per document and not per call.
  */
 function drawBack(doc: Doc, placement: CardPlacement, card: Card | undefined): void {
   if (!card || typeof card.year !== 'number') return;
 
-  const centreX = placement.xMm + CARD_SIZE_MM / 2;
-  const textWidth = CARD_SIZE_MM - 12;
+  const layout = backLayout(placement);
 
   doc.setTextColor(INK.text);
-  doc.setFontSize(TYPE.year);
-  doc.text(String(card.year), centreX, placement.yMm + 28, { align: 'center' });
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(layout.yearPointSize);
+  doc.text(String(card.year), layout.centreXMm, layout.yearBaselineMm, { align: 'center' });
+  doc.setFont('helvetica', 'normal');
 
-  doc.setFontSize(TYPE.title);
+  doc.setFontSize(layout.titlePointSize);
   // `splitTextToSize` wraps to the card's width. A long title is a real case -- "(feat. …)" and
   // "- Remastered 2011" both survive into `Card.title` -- and unwrapped text would run onto the
   // next card.
-  const title = doc.splitTextToSize(sanitizeForPdf(card.title), textWidth).slice(0, 3);
-  doc.text(title, centreX, placement.yMm + 40, { align: 'center' });
+  const title = doc
+    .splitTextToSize(sanitizeForPdf(card.title), layout.textWidthMm)
+    .slice(0, MAX_TITLE_LINES);
+  doc.text(title, layout.centreXMm, layout.titleBaselineMm, { align: 'center' });
 
-  doc.setFontSize(TYPE.artist);
+  doc.setFontSize(layout.artistPointSize);
   doc.setTextColor(INK.muted);
   /*
     The artist string is drawn VERBATIM apart from the encoding fix. `shared/artists.ts` documents
     why splitting it is forbidden for display: the separators Spotify joins with also occur inside
     real artist names, so "Earth, Wind & Fire" would become three artists.
   */
-  const artist = doc.splitTextToSize(sanitizeForPdf(card.artist), textWidth).slice(0, 2);
-  doc.text(artist, centreX, placement.yMm + 40 + title.length * 5 + 2, { align: 'center' });
+  const artist = doc
+    .splitTextToSize(sanitizeForPdf(card.artist), layout.textWidthMm)
+    .slice(0, MAX_ARTIST_LINES);
+  const artistBaseline =
+    layout.titleBaselineMm + (title.length - 1) * layout.titleLineHeightMm + layout.artistGapMm;
+  doc.text(artist, layout.centreXMm, artistBaseline, { align: 'center' });
 }
 
 /**
  * How many sheets of paper a deck needs.
  *
- * The end screen says this BEFORE the export runs, because 100 cards is nine sheets printed
+ * The end screen says this BEFORE the export runs, because 100 cards is seven sheets printed
  * double-sided and that is a thing to know before pressing a button. Composed from the two pure
  * functions rather than reimplemented.
  */

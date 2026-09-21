@@ -4811,3 +4811,105 @@ re-argued.** The same game is free and public at `https://playlistjitster.vercel
 plan pins as permanent; a €1 listing is compared against that by reviewers, and a paid thin wrapper of
 a free site sits closer to Play's minimum-functionality scrutiny than a free one does. No product
 change was made or proposed in response — that was not asked for.
+
+## 2026-09-21 — How to read the year-cards template's geometry, and what it actually is
+
+The developer asked for the deck's printable PDF to use the same card size and position as
+`public/year-cards-1970-2033.pdf`. The template is a developer-supplied binary with no generator
+script in this repo (`grep -rniE "reportlab|year-cards|year_cards"` finds only prose), so its
+numbers had to be read out of the file. The procedure, recorded because the next person to touch
+`pdf-sheet.ts` will need it and because getting it wrong is a wasted ream:
+
+```python
+import re, zlib, base64
+data = open('public/year-cards-1970-2033.pdf','rb').read()
+def stream(objnum):                      # content streams are ASCII85 + Flate, in that order
+    m = re.search(rb'\n%d 0 obj\n(.*?)stream\r?\n' % objnum, data, re.S)
+    hdr, s = m.group(1), m.end()
+    raw = data[s:data.find(b'endstream', s)].strip(b'\r\n')
+    if b'ASCII85Decode' in hdr: raw = base64.a85decode(raw, adobe=True)
+    if b'FlateDecode'  in hdr: raw = zlib.decompress(raw)
+    return raw
+```
+
+`zlib.decompress` alone fails with `incorrect header check` — **the ASCII85 layer has to come off
+first**, and `/Filter [ /ASCII85Decode /FlateDecode ]` is in the stream dictionary saying so. That
+one-line trap is why this is written down.
+
+**What the file is.** `%PDF-1.3`, produced by ReportLab and re-saved by PDFsharp 6.2.4 (the XMP in
+the last object names both, which is why an earlier note in `AGENTS.md` calls it a PDFsharp file and
+`architecture.md` calls it ReportLab — both are half right). MediaBox `0 0 595.2756 841.8898`, i.e.
+exactly A4. **Ten pages, not twenty** as `architecture.md` §3 said: page objects `4..11` carry the
+year cards and `13, 14` carry a repeated decorative back XObject
+(`/FormXob.ded6de700d43b284586ed35b52eb9b90`, drawn once per slot). 8 × 16 = 128 = 64 years × 2
+copies, 1970 through 2033.
+
+**The grid, identical on every page.** First slot: `n 20 559.7638 138.8189 138.8189 re S`. Column x
+origins `20, 158.8189, 297.6378, 436.4567`; row y origins (PDF is bottom-up) `559.7638, 420.9449,
+282.126, 143.3071`. So **4 × 4 = 16 slots**, a **138.8189 pt = 48.9722 mm square**, side margins
+20 pt = 7.0556 mm and top/bottom margins 143.3071 pt = 50.5556 mm — centred on both axes, which is
+what lets `pdf-sheet.ts` keep deriving its margins and keep the duplex-mirror identity
+`xFront + xBack === PAGE_WIDTH_MM - CARD_SIZE_MM`. The year is `/F2 28 Tf` (Helvetica-Bold) centred
+in both axes: baseline 619.1732 against a card spanning 559.7638..698.5827 is the card centre less
+~10 pt, and the x origin is exactly half the string's width left of centre.
+
+**The one thing NOT to copy from it.** The template is not a per-sheet duplex interleave — it is
+eight front pages followed by two back pages. The deck export's `planSheets` interleaves front sheet
+*n* with back sheet *n* because each of its cards has a QR on one face and an answer on the other,
+which the year cards do not. Matching the template's page ORDER would pair every printed card with
+the wrong answer. Size and position were the request; the pagination was not.
+
+## 2026-09-21 — Motion's `custom` reaches EXIT only, and four more facts that decided the reverse-step animation
+
+Making a step back play the deal in reverse — the returning card slides in from off the right edge
+instead of the current one being thrown to the left — meant animating an INCOMING child for the first
+time in this app. Five things were traced in `motion@12.43.0`/`framer-motion@12.43.0` before any code
+was written. All five are load-bearing and none is obvious from the public docs.
+
+1. **`<AnimatePresence custom>` feeds the exit variant and nothing else.** motion-dom's
+   `render/utils/animation-state.mjs` resolves each active type with
+   `type === "exit" ? visualElement.presenceContext?.custom : undefined`, and
+   `resolveVariantFromProps` then falls back to `props.custom`. So an `initial`/`animate` function
+   variant never sees the presence custom — it sees the component's own `custom` prop.
+2. **Worse, the first-paint inline style sees no custom at all.** framer-motion's
+   `motion/utils/use-visual-state.mjs` → `makeLatestValues` calls `resolveVariantFromProps(props,
+   list[i])` with the custom argument omitted entirely. A dynamic `initial` would therefore resolve
+   its default branch for the first painted frame and only jump to the right one once the visual
+   element mounted and re-resolved (`VisualElement.mjs:516` does pass `presenceContext?.custom`).
+   **That is why the entrance is driven by a plain `movement` prop on `Card` while the exit keeps
+   reading `custom`** — two channels for one value, fed from the same latch in `CardStack`.
+3. **`AnimatePresence initial={false}` blocks only the FIRST render.** It renders
+   `<PresenceChild initial={!isInitialRender.current || initial}>`, so every later entering child
+   animates normally. The prop still does its one job — the session's first card does not fly in —
+   and it did not have to be removed to add an entrance.
+4. **Reduced motion JUMPS, it does not skip.** `animation/interfaces/visual-element-target.mjs`
+   passes `{ type: false }` instead of the transition when `shouldReduceMotion && positionalKeys.has(key)`.
+   So a card that mounts at `x: 600` under `prefers-reduced-motion` lands at 0 on the first frame
+   rather than being stranded off-screen — which was the one way this feature could have broken an
+   accessibility preference outright.
+5. **`x: 0` renders `transform: none`, and this app never auto-sets `will-change`.**
+   `render/html/utils/build-transform.mjs` emits the literal `none` when every transform term is at
+   its default, and `addValueToWillChange` is a no-op unless `MotionGlobalConfig.WillChange` has been
+   registered — which nothing in `framer-motion`'s or `motion`'s entry points does. **Both facts are
+   what keep the FORWARD animation byte-identical to before.** The forward-entering card gets an
+   `animate={{ x: 0 }}` it did not have, but it stays a non-positioned, non-transformed, no-stacking-
+   context box, so the `popLayout`-absolutised card flying off it still paints on top (CSS painting
+   step 8 over step 4). Give that card a `will-change: transform`, a non-zero forward `initial`, or a
+   `position` class, and it is promoted to a stacking context — at which point DOM order decides and
+   the outgoing card slides out from BEHIND the new one. Silently, with every test green.
+
+The backward exit's `zIndex: -1` follows from the same painting rules: the outgoing card is
+`position: absolute` (that is what `popLayout` does) and would otherwise cover the returning card, so
+it is pushed to painting step 3, which is still above the deck's `-z-10` preload inside `CardStack`'s
+`isolate`. It is applied with `transition: { zIndex: { type: false } }` because the computed origin
+is the string `auto`, which is not a number to animate from.
+
+**What no local check can reach.** jsdom computes no layout and no stacking context, and nothing
+drives Motion's animation loop there, so two further behaviours were discovered only by reading:
+a card that mounted at 600 px is still at 600 px on the next render (so the entrance has to be
+asserted before the step back, not after), and `AnimatePresence` **re-enters** a child whose exit has
+not finished rather than remounting it (`ExitAnimationFeature`, the `isPresent && prevIsPresent ===
+false` branch) — in jsdom no exit ever finishes, so stepping 1→2→1 never remounts card 1 and
+`initial` never applies. `CardStack.test.tsx` steps back two cards to get a real mount. In a browser
+that same branch is a real 250 ms window, and it is harmless: a step back inside it re-enters the
+leaving card, which lands at `x: 0` either way.

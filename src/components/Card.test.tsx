@@ -83,34 +83,113 @@ describe('Card', () => {
     expect(ref.current).toBe(outer);
   });
 
-  it('should fly out the way the deck moved, read from the presence custom value', () => {
+  it('should deal a card out to the right and undeal one without moving it', () => {
     // ===================================================================
-    //  THE HALF OF THE EXIT DIRECTION THAT IS TESTABLE (2026-09-19).
+    //  THE HALF OF THE EXIT THAT IS TESTABLE (2026-09-19, rewritten
+    //  2026-09-21 when the two movements stopped being mirror images).
     //
     //  An exiting child animates with the props of its LAST render before
     //  removal, and a keyboard advance changes the index and removes the
-    //  card in the same render -- so a direction passed as a plain prop
-    //  never reaches the outgoing card. The exit is therefore a dynamic
-    //  variant reading `AnimatePresence custom`, which Motion carries to
-    //  the child on the very render that removes it.
+    //  card in the same render -- so a movement passed as a plain prop
+    //  never reaches it. The exit is therefore a dynamic variant reading
+    //  `AnimatePresence custom`, which Motion carries to the child on the
+    //  very render that removes it.
     //
-    //  What is pinned is the RESOLVER: left is a negative x, right is a
-    //  positive one, and no direction at all (a `Card` outside any
-    //  `AnimatePresence`, as every render in this file is) still resolves.
-    //  That Motion reads `custom` into it, and which way the eye sees the
-    //  card go, are browser checks -- jsdom paints nothing.
+    //  What is pinned is the RESOLVER. `forward` throws the card off to
+    //  the right and fades it. `backward` does NOT throw it anywhere: the
+    //  returning card is the thing that moves, and all this one has to do
+    //  is settle back to the deck's centre and get UNDER the card landing
+    //  on top of it. That is why `x` is 0 and the z-index is negative --
+    //  `popLayout` absolutises the outgoing card, and a positioned element
+    //  would otherwise paint over the in-flow one.
+    //
+    //  That Motion reads `custom` into it, and what the eye then sees, are
+    //  browser checks -- jsdom paints nothing.
     // ===================================================================
-    const left = CARD_VARIANTS.exit('left');
-    const right = CARD_VARIANTS.exit('right');
+    const forward = CARD_VARIANTS.exit('forward');
+    const backward = CARD_VARIANTS.exit('backward');
     const none = CARD_VARIANTS.exit(undefined);
 
-    expect(left.x).toBeLessThan(0);
-    expect(right.x).toBeGreaterThan(0);
-    expect(none.x).toBe(right.x);
-    // Same distance either way, and the card fades as it goes.
-    expect(Math.abs(left.x)).toBe(right.x);
-    expect(left.opacity).toBe(0);
-    expect(right.opacity).toBe(0);
+    expect(forward.x).toBeGreaterThan(0);
+    expect(forward.opacity).toBe(0);
+
+    // It stays put and stays visible: the entrance covers it, so fading it would show through.
+    expect(backward.x).toBe(0);
+    expect(backward.opacity).toBe(1);
+
+    // No movement at all (a `Card` outside any `AnimatePresence`, as every render in this file
+    // is) still resolves, and resolves to the deal.
+    expect(none).toEqual(forward);
+  });
+
+  it('should drop the outgoing card under the incoming one but above the deck preload', () => {
+    // ===================================================================
+    //  THE BOUND THAT MAKES THE BACKWARD ANIMATION VISIBLE AT ALL.
+    //
+    //  `CardStack` renders the next card's hidden face at `-z-10` inside
+    //  an `isolate`. The outgoing card has to sit BELOW the returning card
+    //  (so the return is seen) and ABOVE that preload (so the player does
+    //  not watch the card they are leaving sink behind a copy of itself).
+    //  Both ends are arithmetic a test can hold; which one the eye sees is
+    //  a browser check.
+    // ===================================================================
+    const backward = CARD_VARIANTS.exit('backward');
+
+    expect(backward.zIndex).toBeLessThan(0);
+    expect(backward.zIndex).toBeGreaterThan(-10);
+    // A deal keeps the card on top, which is what `popLayout` already gives a positioned element.
+    expect(CARD_VARIANTS.exit('forward').zIndex).toBe(0);
+  });
+
+  it('should bring a card back from off-screen only when the deck stepped back', () => {
+    // ===================================================================
+    //  THE ENTRANCE, AND WHY IT IS A PLAIN PROP (2026-09-21).
+    //
+    //  `custom` reaches only the child being REMOVED -- motion-dom
+    //  resolves it for `type === "exit"` and nothing else, and the
+    //  first-paint inline style is built with no custom at all. The
+    //  incoming card is mounted by the render that decides the movement,
+    //  so a prop is both available and correct for it. Getting this wrong
+    //  is not a crash: it is one frame of the card at rest before it jumps
+    //  off-screen to fly back in.
+    //
+    //  jsdom cannot see the animation, so what is pinned is the START
+    //  POSITION Motion writes into the element's inline style, and that it
+    //  is the same distance the deal throws a card.
+    // ===================================================================
+    const { container: back } = render(
+      <Card
+        card={highConfidenceCard}
+        isFlipped={false}
+        isYearPending={false}
+        onFlip={vi.fn()}
+        movement="backward"
+      />,
+    );
+    const returning = back.querySelector('[data-testid="card-inner"]')?.parentElement;
+    expect(returning?.getAttribute('style')).toContain(
+      `translateX(${CARD_VARIANTS.exit('forward').x}px)`,
+    );
+
+    cleanup();
+
+    // Forward, and no movement at all, both mount the card where it belongs: a dealt card is
+    // already in the slot the outgoing one is vacating, and animating it in would be motion the
+    // player never asked for.
+    for (const movement of ['forward', undefined] as const) {
+      const { container } = render(
+        <Card
+          card={highConfidenceCard}
+          isFlipped={false}
+          isYearPending={false}
+          onFlip={vi.fn()}
+          movement={movement}
+        />,
+      );
+      const dealt = container.querySelector('[data-testid="card-inner"]')?.parentElement;
+      expect(dealt?.getAttribute('style') ?? '').not.toContain('translateX');
+      cleanup();
+    }
   });
 
   it('should not mount the revealed side while unflipped', () => {

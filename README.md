@@ -62,7 +62,7 @@ The end screen offers three things beyond "play again", and each has one caveat 
 
 **Save it.** _Save this playlist_ adds it to **Your playlists** on the start screen, above the suggestions, where one click deals it again. Saving is deliberately explicit — the start screen is not a log of every URL anyone pasted. Only the playlist's id, name and the date are stored, in your own browser; up to twenty, most recent first, each removable.
 
-**Print it.** _Print as PDF cards_ builds a real physical deck: **65 mm square cards, 12 to an A4 sheet**, QR codes on the fronts and years on the backs, sized to match shop-bought Hitster cards.
+**Print it.** _Print as PDF cards_ builds a real physical deck: **49 mm square cards, 16 to an A4 sheet**, QR codes on the fronts and years on the backs — the same size and grid as the printable year cards on the welcome screen, so the two stack in one hand.
 
 > **Print double-sided on the LONG edge.** The back sheet's columns are mirrored to compensate for exactly that, and a printer set to short-edge binding will pair every card with the wrong answer. The app cannot read your printer's settings, so this is the one instruction it cannot enforce.
 
@@ -70,7 +70,7 @@ Cards whose year has not arrived yet are left out and counted, never listed. Tit
 
 **Or skip the screen entirely.** The welcome screen — the first thing a fresh visit shows, before the playlist picker — offers _Print your cards_: a ready-made PDF of year cards from 1970 to 2033 to print, cut out and lay along a table. It is a static file, so it downloads even before any playlist is chosen. The playlist picker has a Back button at the top left that returns to the welcome screen, so the cards are one press away from wherever you are choosing a playlist.
 
-**Mid-game, a right swipe deals the next card and a left swipe goes back one** (ArrowRight and ArrowLeft on a keyboard). Going back never ends the game and never wraps round: on the first card a left swipe simply snaps back. The card you return to arrives face down again.
+**Mid-game, a right swipe deals the next card and a left swipe goes back one** (ArrowRight and ArrowLeft on a keyboard). Going back never ends the game and never wraps round: on the first card a left swipe simply snaps back. The card you return to arrives face down again, sliding back in from the right — a step back plays the deal in reverse rather than mirroring it.
 
 ---
 

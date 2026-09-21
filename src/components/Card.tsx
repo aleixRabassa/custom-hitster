@@ -67,11 +67,37 @@ import type { Ref } from 'react';
 import { CardHiddenSide } from './CardHiddenSide';
 import { CardRevealSide } from './CardRevealSide';
 import type { CardGestureProps } from '../hooks/useCardGestures';
-import type { CommitDirection } from '../game/gestures';
+import type { DeckMovement } from '../game/gestures';
 import type { Card as CardData } from '../../shared/types';
 
-/** How far a committed card travels as it leaves, in CSS pixels. Comfortably off-screen. */
+/**
+ * How far a card travels as it leaves -- and, since 2026-09-21, how far away it COMES BACK FROM.
+ *
+ * In CSS pixels, comfortably off-screen. One constant for both because the backward animation is
+ * the forward one run in reverse: a card returns from exactly where it was thrown to, and two
+ * numbers that drifted apart would make the undo travel a different distance from the deal.
+ */
 const EXIT_DISTANCE_PX = 600;
+
+/**
+ * Where the OUTGOING card sits while a returning card slides in over it.
+ *
+ * ===========================================================================
+ *  THIS NUMBER IS BOUNDED AT BOTH ENDS AND NEITHER BOUND IS ARBITRARY.
+ *
+ *  `mode="popLayout"` absolutises the outgoing card, and a positioned element
+ *  paints ABOVE in-flow content -- which is exactly what the forward animation
+ *  wants (the card flying away passes over the card it uncovers) and exactly
+ *  wrong for the backward one, where the returning card has to land ON TOP.
+ *  A negative z-index inside `CardStack`'s `isolate` puts the outgoing card
+ *  back under in-flow content, which is where it belongs.
+ *
+ *  It must stay ABOVE the deck's preloaded back, which is `-z-10` on the same
+ *  stacking context: go to -10 or lower and the card the player is stepping
+ *  away from would sink behind the preload of itself.
+ * ===========================================================================
+ */
+const BEHIND_INCOMING_Z_INDEX = -1;
 
 /**
  * How long that exit takes, in SECONDS -- Motion's unit, not CSS's.
@@ -104,25 +130,79 @@ const EXIT_DURATION_S = 0.25;
  *  `custom` is Motion's answer: the presence context carries it to the child
  *  being removed on the very render that removes it, and the exit type resolves
  *  its target through `presenceContext.custom` rather than through the child's
- *  own props. So `CardStack` computes the direction from the index delta
- *  (`exitDirectionFor`) and hands it to `<AnimatePresence custom>`, and this
+ *  own props. So `CardStack` computes the movement from the index delta
+ *  (`deckMovementFor`) and hands it to `<AnimatePresence custom>`, and this
  *  function reads it. Motion also refuses to re-resolve an exit that is already
  *  running, so a year landing mid-flight cannot redirect the card.
  *
+ *  THE ENTRANCE BELOW IS THE OPPOSITE CASE and takes the opposite route -- see
+ *  `movement` in `CardProps`. `custom` reaches ONLY the exit resolution
+ *  (motion-dom's `animation-state.mjs` passes `presenceContext.custom` when
+ *  `type === "exit"` and `undefined` otherwise), and the first-paint inline
+ *  style is built by `use-visual-state.mjs` with no custom at all -- so an
+ *  `initial` written as a dynamic variant would paint one frame in the WRONG
+ *  branch. The incoming card is rendered fresh on the render that brings it in,
+ *  so a plain prop is both available and correct for it.
+ *
  *  The typed route is `variants` + `exit="exit"`: the `exit` prop's type does
  *  not admit a function, `Variant` does. Exported for `Card.test.tsx`, which
- *  can pin the sign of `x` and nothing more -- jsdom paints nothing.
+ *  can pin the resolved targets and nothing more -- jsdom paints nothing.
+ * ===========================================================================
+ *
+ * ===========================================================================
+ *  THE TWO MOVEMENTS ARE NO LONGER MIRROR IMAGES (2026-09-21). READ THIS
+ *  BEFORE COLLAPSING THEM BACK INTO ONE SIGNED `x`.
+ *
+ *  They were: `forward` threw the card to +600, `backward` threw it to -600.
+ *  Both therefore looked like the SAME event -- a card leaves, another is
+ *  simply there -- and only the side of the screen it left by told you which
+ *  had happened. That is the defect the developer reported: "la animacion de
+ *  carta anterior tiene la misma animacion que la de siguiente".
+ *
+ *  A step back is now the deal PLAYED IN REVERSE. Forward is unchanged: the
+ *  card flies off to the right, over the card it uncovers. Backward does not
+ *  throw anything -- the card being returned to comes back IN from off the
+ *  right edge, the way it left, and lands on top of a current card that simply
+ *  stays put. So this variant handles only HALF of the backward animation. The
+ *  visible half is the entrance, and it is an `initial`, not an `exit`.
+ *
+ *  What the backward branch below has to do is get the outgoing card OUT OF
+ *  THE WAY WITHOUT MOVING IT: settle it back to x = 0 (it is wherever the drag
+ *  left it) and drop it under the incoming card with `zIndex`. `popLayout`
+ *  absolutises it, and a positioned element paints above in-flow content, so
+ *  without the z-index the returning card would slide in UNDERNEATH the one it
+ *  is supposed to be replacing -- the animation would run and look like
+ *  nothing at all. See `BEHIND_INCOMING_Z_INDEX`.
+ *
+ *  `zIndex` is set with `{ type: false }` rather than animated: its computed
+ *  value is the string `auto`, which has no numeric origin to interpolate
+ *  from. Motion's `animateMotionValue` short-circuits a `type: false`
+ *  transition to the final keyframe without reading the origin, which is
+ *  exactly the write we want. It is spelled out on BOTH branches so the two
+ *  resolve to the same shape -- a union with a missing key is a property
+ *  access the tests cannot make.
  * ===========================================================================
  *
  * Total over `undefined`: a `Card` rendered outside any `AnimatePresence` (every `Card.test.tsx`
- * render) has no `custom`, and it must not throw for it. Right is the advance direction.
+ * render) has no `custom`, and it must not throw for it. Forward is the deal, and the default.
  */
 export const CARD_VARIANTS = {
-  exit: (direction: CommitDirection | undefined) => ({
-    x: direction === 'left' ? -EXIT_DISTANCE_PX : EXIT_DISTANCE_PX,
-    opacity: 0,
-    transition: { duration: EXIT_DURATION_S },
-  }),
+  exit: (movement: DeckMovement | undefined) =>
+    movement === 'backward'
+      ? {
+          // Settles back to the deck's centre from wherever the drag left it, and goes under.
+          x: 0,
+          opacity: 1,
+          zIndex: BEHIND_INCOMING_Z_INDEX,
+          transition: { duration: EXIT_DURATION_S, zIndex: { type: false } },
+        }
+      : {
+          x: EXIT_DISTANCE_PX,
+          opacity: 0,
+          // Above the card it uncovers, which is what `popLayout` already gives it.
+          zIndex: 0,
+          transition: { duration: EXIT_DURATION_S, zIndex: { type: false } },
+        },
 } satisfies Variants;
 
 export interface CardProps {
@@ -181,9 +261,56 @@ export interface CardProps {
    * ===========================================================================
    */
   ref?: Ref<HTMLDivElement>;
+  /**
+   * Which way the deck moved to put this card here -- the ENTRANCE half of the animation.
+   *
+   * ===========================================================================
+   *  A PLAIN PROP, DELIBERATELY, WHERE THE EXIT IS `AnimatePresence custom`.
+   *  THE ASYMMETRY IS CORRECT AND IT IS NOT AN OVERSIGHT (2026-09-21).
+   *
+   *  The two channels answer two different questions. An EXITING card is being
+   *  removed on the render that decides the movement, so it can only ever read
+   *  a prop from BEFORE that decision -- hence `custom`, which Motion routes
+   *  through the presence context to the child it is removing. An INCOMING
+   *  card is mounted BY that same render, so its props are already the fresh
+   *  ones, and `custom` is the channel that does NOT reach it: motion-dom
+   *  resolves `presenceContext.custom` only for `type === "exit"`, and the
+   *  first-paint inline style comes from framer-motion's `makeLatestValues`,
+   *  which resolves `initial` with no custom whatsoever. An `initial` written
+   *  as a dynamic variant would therefore paint its first frame at x = 0 and
+   *  only then jump to 600 -- a flash of the card at rest before it flies out
+   *  to come back in.
+   *
+   *  `CardStack` hands the same latched value to both channels, so they cannot
+   *  disagree.
+   * ===========================================================================
+   *
+   * Optional, because a `Card` outside a deck (every `Card.test.tsx` render) has no movement to
+   * speak of. Absent behaves as `forward`: mounted where it belongs, with nothing to animate.
+   */
+  movement?: DeckMovement;
 }
 
-export function Card({ card, isFlipped, isYearPending, gestureProps, ref }: CardProps) {
+export function Card({ card, isFlipped, isYearPending, gestureProps, movement, ref }: CardProps) {
+  /*
+    The entrance, and it exists for ONE of the two movements.
+
+    Forward deals a card into a slot the outgoing card is vacating -- it is already where it
+    belongs, and animating it would be inventing motion the player did not ask for. Backward
+    UNDEALS: the card comes back from off the right edge, exactly as far away as a thrown card
+    goes, so the two halves of a step read as one action reversed.
+
+    `AnimatePresence initial={false}` in `CardStack` does not disable this. Framer Motion renders
+    `<PresenceChild initial={!isInitialRender.current || initial}>`, so the flag blocks only the
+    session's FIRST card -- which is the one that must not animate in, because nothing dealt it.
+
+    Under `prefers-reduced-motion` the card does not crawl in and does not get stuck off-screen
+    either: `MotionConfig reducedMotion="user"` makes motion-dom pass `{ type: false }` for
+    positional keys, so `x` JUMPS from 600 to 0 on the first frame. Same treatment the exit gets
+    (see `EXIT_DURATION_S`), and it has to be checked in a browser -- jsdom has no media queries.
+  */
+  const entersFromOffscreen = movement === 'backward';
+
   return (
     /*
       `touch-none` is `touch-action: none`, and on a touch device it is the difference between
@@ -197,7 +324,18 @@ export function Card({ card, isFlipped, isYearPending, gestureProps, ref }: Card
       ref={ref}
       className="perspective-distant h-(--card-height) w-(--card-width) touch-none"
       {...gestureProps}
-      // The direction comes from `AnimatePresence custom`, not from a prop -- see `CARD_VARIANTS`.
+      /*
+        `initial` is a plain object and `animate` is a constant target, both by design.
+
+        Motion compares RESOLVED VALUES, not object identity, so `animate` re-resolving to the
+        same `x: 0` on every render starts no animation -- which is what keeps this clear of the
+        drag. The drag writes the `x` motion value directly and `dragConstraints: {left: 0,
+        right: 0}` is what snaps it back; this target agrees with that snap-back rather than
+        competing with it.
+      */
+      initial={entersFromOffscreen ? { x: EXIT_DISTANCE_PX } : undefined}
+      animate={{ x: 0, transition: { duration: EXIT_DURATION_S } }}
+      // The movement comes from `AnimatePresence custom`, not from a prop -- see `CARD_VARIANTS`.
       variants={CARD_VARIANTS}
       exit="exit"
     >

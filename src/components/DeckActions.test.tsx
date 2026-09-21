@@ -318,7 +318,7 @@ describe('DeckActions', () => {
 
   describe('the printable export', () => {
     it('should say how many sheets and which duplex setting before the press', () => {
-      // Nine sheets is a thing to know BEFORE committing paper, and long-edge is the setting the
+      // The sheet count is a thing to know BEFORE committing paper, and long-edge is the setting the
       // column mirror in `pdf-sheet.ts` assumes -- short-edge would invert the correction, so the
       // instruction is on screen rather than guessed at in code.
       const { container, props } = renderActions();
