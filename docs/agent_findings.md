@@ -4688,3 +4688,53 @@ it. Taking only one is the mistake that presents as a URL bar on exactly half th
 blocking app creation: whether the content-rating questionnaire's user-generated-content question
 applies to arbitrary track titles, whether Vercel's access-log IP retention must be declared in Data
 safety, and where the twelve testers come from.
+
+---
+
+## 2026-09-21 — Back-press row 7 FAILED, and the inference that said it could not is the more useful half
+
+Reported by the developer on the Android 15+ device: pressing back during a game shows **the app
+shrinking and minimising** before the exit confirmation appears. That is exactly the disagreement
+`plan.google-play-back-button.md` wrote row 7 to catch — the OS previewing the app leaving while the
+web app is in fact handling the press.
+
+**An entry made hours earlier said the shell-side risk was retired. It was wrong, and the way it was
+wrong is worth more than the result.** The reasoning: the generated `AndroidManifest.xml` sets no
+`android:enableOnBackInvokedCallback`; that attribute is an opt-**out**; therefore the shell is on the
+modern predictive-back path and nothing in `android/` needs changing. Every clause is true, sourced
+from Android's own documentation fetched the same day, and the conclusion still does not follow —
+being _on_ the predictive-back path is what makes the system animate, and the system animating is the
+defect. **A correct premise chain reasoned to the opposite of what the device shows.** The row existed
+because nobody could check this locally, and it earned its place.
+
+**The obvious remedy looks inert, which is the second finding.** `android:enableOnBackInvokedCallback="false"`
+on `<application>` is the one-attribute opt-out — but the generated manifest declares only
+`LauncherActivity`, `FocusActivity`, `WebViewFallbackActivity` and the delegation service. **The
+activity rendering the web content belongs to Chrome**: a TWA launches it into this app's task, while
+it is declared in Chrome's manifest and runs in Chrome's process. An attribute on this
+`<application>` therefore governs the launcher shell, not the activity Android is animating. This is
+**reasoned, not measured** — confirming which activity is resumed needs `adb shell dumpsys activity
+activities`, and no device has ever enumerated over USB on this machine.
+
+**Bubblewrap offers no lever regardless.** `@bubblewrap/cli` 1.25.0 contains no
+`enableOnBackInvokedCallback` anywhere — not as a `twa-manifest.json` field, not in
+`@bubblewrap/core`'s `template_project` manifest. So even the inert edit would be a hand-edit to a
+file `bubblewrap update` regenerates, which is the trap already documented for `targetSdkVersion`.
+
+**The decision is the developer's, and the options are:**
+
+1. **Accept it as cosmetic.** The confirmation still appears, the deck is intact, nothing is lost —
+   the row's own wording is "looks broken even though nothing is wrong". Cost: the first-time
+   impression on the gesture Android users make most often. Same shape as row 5's accepted deviation.
+2. **Try the opt-out anyway.** Cheap to attempt, likely inert for the reason above, and if it works it
+   needs a post-`bubblewrap update` checklist entry in `docs/development.md` §9 plus a test that greps
+   the generated manifest — a test that fails after every regeneration until the edit is reapplied,
+   which is the honest shape for a hand-edit that must survive.
+3. **Register a real `OnBackInvokedCallback` in the shell.** Out of scope for this plan: Java in a
+   generated project, no test surface, and it would duplicate the web app's decision in a second
+   language — and it is unclear it can even see a press Chrome's activity is handling.
+
+**Timing, which is load-bearing exactly here.** The row exists to run _before_ the closed-testing AAB
+is final, and it still is: `android/app-release-bundle.aab` is built and **not uploaded**. A shell
+change costs a rebuild today and a whole new release after step 16. Step 9 (create the Console app) is
+unaffected either way and can proceed now.
