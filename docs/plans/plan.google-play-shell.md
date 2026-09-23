@@ -438,7 +438,8 @@ eight steps is a test people learn to skip.
       upload-key/app-signing-key pair in `src/pwa/assetlinks.test.ts`, asserting the count and the
       fingerprint format. One fingerprint is a valid file that produces a URL bar, which is the
       failure this catches.
-- [ ] `should agree with android/twa-manifest.json about the package id` — **step 12.** Covers the
+- [x] `should agree with android/twa-manifest.json about the package id` — **step 12.** _→ Written
+      2026-09-23, tracked in `plan.play-store-todo.md`._ Covers the
       cross-file pin in `src/pwa/assetlinks.test.ts`. Two files hold the same string, neither can
       derive it from the other, and a mismatch fails silently on a device: the same situation as
       `PAGE_COLOR` and `--color-page`, handled the same way.

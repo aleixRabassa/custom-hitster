@@ -93,10 +93,10 @@ Consequences, now that it is decided:
   comment in a crawler directive rather than anything a player or a reviewer is shown. Noted for
   completeness; not listing copy, and not changed here.
 
-### Still open, and not answered here
+### The name itself — RESOLVED 2026-09-23
 
-Whether the listing name "Playlist Jitster" itself needs more distance from the mark
-(`plan.google-play-shell.md`, Open Questions). Recorded, not resolved.
+Whether the listing name "Playlist Jitster" needs more distance from the mark was an open question
+carried from `plan.google-play-shell.md`. **Decided by the developer: no.** The name ships as it is.
 
 ---
 
@@ -265,9 +265,9 @@ and the form must account for:
 - MusicBrainz being contacted **server-side**, so it does not see the player at all.
 
 **Fill the form from `public/privacy.html`, which is the enumeration** — it was written from the
-source in this same session and is the reviewed list. Do not re-derive it from memory. Still open in
-the plan: whether Vercel's access-log IP retention must be declared, or falls under the
-security-and-fraud exemption.
+source in this same session and is the reviewed list. Do not re-derive it from memory. **And declare
+Vercel's access-log IP retention** — decided 2026-09-23 by the developer, the conservative answer to
+whether it falls under the security-and-fraud exemption instead.
 
 ### Content rating questionnaire
 
@@ -275,4 +275,6 @@ The **user-generated-content question needs thought before it is answered**. The
 arbitrary track titles and artist names from a playlist the player chooses, so it displays text the
 developer neither wrote nor controls — while having no accounts, no submission, no sharing between
 users and no moderation surface. It is not obviously a "yes" and not obviously a "no", and answering
-it carelessly is how a rating gets re-issued. The plan carries it as an Open Question.
+it carelessly is how a rating gets re-issued. **Decided 2026-09-23 by the developer: answer NO.** The
+player picks the playlist and nothing one player enters ever reaches another; the suggested playlists
+are curated in the source and raise no concern either.

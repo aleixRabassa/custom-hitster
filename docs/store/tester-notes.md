@@ -27,9 +27,13 @@ kind.
 
 > **Note for whoever sends the invitations — not for testers, and to be replaced before this file is
 > shared.** The app became **paid (€1.00)** on 2026-09-21, and step 3 above is written as if it were
-> free. Testers must not be asked to pay to test. Settle the mechanism that waives it (Play's license
-> testing is the candidate) at the plan's step 16, then rewrite step 3 and delete this note. Leaving
-> it as it stands sends twelve people to a price they were not warned about.
+> free. Testers must not be asked to pay to test — and on the CLOSED track they would be: Google's
+> help says closed and open testers "must purchase paid apps" (only internal testers install free),
+> and license testing covers in-app purchases, not the app's price. **The candidate is a promo code
+> per tester** (Monetize → Promo codes, up to 500 a quarter); whether one redeems before a production
+> release is NOT verified. Once it is, rewrite step 3 as "redeem the code you were sent in the Play
+> Store (profile picture → Payments & subscriptions → Redeem gift code; check the wording on a real phone), then install", send each tester their code,
+> and delete this note. If codes do not work, say plainly that the €1 is reimbursed.
 
 If Play says the app is not available, give it a few hours: a new test build takes a while to reach
 every account, and there is nothing to fix at your end.

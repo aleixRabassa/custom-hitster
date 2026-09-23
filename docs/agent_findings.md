@@ -5096,3 +5096,35 @@ moves that finish a journey a finger already made most of.
 asserts `0.781`: a duration is a number handed to Motion, and jsdom runs no animation. `--duration-card-exit`
 in `src/index.css` still names the short one and now says so; the derived one deliberately has **no
 token**, because a literal there would be a second copy of an arithmetic result, free to drift.
+
+## 2026-09-23 — A paid app's CLOSED testers pay, and five Play open questions were decided
+
+**The fact that matters most**, read from Google's help (`support.google.com/googleplay/android-developer/answer/9845334`):
+internal testers "can install your internal test version for free", but "testers must purchase paid apps when
+participating in open or closed tests". The closed track is the one the twelve-testers-for-fourteen-days rule
+counts, so making the app paid (2026-09-21) means **every tester would be charged €1** unless something waives it.
+**License testing does not**: it covers in-app purchases, not the app's own price — the plan had named it as the
+candidate, and it was the wrong one.
+
+**The candidate now is promo codes.** Paid apps may issue up to 500 per quarter (`answer/6321495`); unused codes
+lapse at the quarter's end. **They are one-time codes Play generates, one per tester** — a custom
+code string (a single shared "RABAFREE") is available for subscriptions only, so it was ruled out the same day.
+**Unverified: whether a code redeems for an app that is only on a closed track**, before
+any production release. The help page is silent on it and a community thread could not be read. Check in the Console
+(Monetize → Promo codes) once the app exists; the fallback is reimbursing each tester. The pending note in
+`docs/store/tester-notes.md` says so.
+
+**Decided by the developer, same day**, recorded in `plan.play-store-todo.md`'s Open Questions and in
+`docs/store/listing.md`:
+
+- The content-rating user-generated-content question is answered **No** — the player picks the playlist, nothing one
+  player enters reaches another, and the suggested playlists are curated.
+- Vercel's access-log IP retention **is declared** in Data safety.
+- The name "Playlist Jitster" needs **no** more distance from the Hitster mark.
+- What €1 nets after fees and VAT: closed as not relevant.
+- Testers: recommended a Console email list for a known group, a Google Group only for strangers or churn, and
+  recruiting ~15 so one drop-out does not leave the fourteen-day count short. Not yet decided.
+
+**Also landed:** `assetlinks.test.ts` gained the cross-file package-id pin and a fingerprint format/equality test
+against `android/twa-manifest.json`. The **count of two** is still unwritten, because it would be red until Play's
+key exists.

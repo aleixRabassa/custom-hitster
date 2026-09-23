@@ -53,7 +53,7 @@ const repoRoot = join(here, '..', '..');
  * The application id, DECIDED 2026-09-19 and permanent after the first publish. The same
  * literal is pinned in `assetlinks.test.ts`, deliberately duplicated rather than shared:
  * two independent copies are what make a drift between the two files visible. The
- * cross-file assertion that joins them is batch B, at step 11.
+ * cross-file assertion that joins them lives in `assetlinks.test.ts` (2026-09-23).
  */
 const PACKAGE_ID = 'aleixrabassa.playlistjitster';
 

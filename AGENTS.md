@@ -525,8 +525,10 @@ build error, no install failure and no warning anywhere. That is exactly why `id
 `start_url` (a deep link, a `?utm_source=` tail) would have moved the store identity as a **side
 effect**. It is pinned by **`should keep id equal to start_url`** in `src/pwa/manifest.test.ts`, and the
 package id by **`should target the android_app namespace and the committed package id`** in
-`src/pwa/assetlinks.test.ts` — half a pin until step 12 adds the cross-file half against
-`android/twa-manifest.json`, which is the only thing that can catch the two copies drifting apart.
+`src/pwa/assetlinks.test.ts`, and joined across files by **`should agree with android/twa-manifest.json
+about the package id`** beside it (2026-09-23) — the only thing that can catch the two copies drifting
+apart. The same file now also pins every fingerprint's format and that the deployed list equals
+`twa-manifest.json`'s; only the **count of two** waits for Play's key at step 11.
 **`id` resolves against the ORIGIN**, so the origin sits inside the app's identity: the last rule below is
 the same fact seen from the other end — so moving to a custom domain later is a rebuilt shell and a new
 asset-links deployment for the TWA, a SECOND install identity for every browser PWA install, and never a

@@ -327,7 +327,7 @@ update`, so a hand edit is silently discarded and the symptom is a Play upload r
         open question below, and a clean reinstall after the upload key's deploy launched without it.
         **That is the before/after banked on ONE build** — see `docs/development.md` §5 TWA row 1,
         which re-runs against the Play-signed build at step 12._
-  - [ ] Run `docs/development.md` §5 "The Trusted Web Activity shell" rows 2, 4, 5 and 6 (both PDF
+  - [x] Run `docs/development.md` §5 "The Trusted Web Activity shell" rows 2, 4, 5 and 6 (both PDF
         downloads — the static one only on the **second** launch once `sw.js` controls the page;
         storage shared with Chrome in both directions; the lock-screen audio re-check; launch on the
         welcome screen, deal, play, flip). Row 1's first half (the URL bar is present) is observed
@@ -340,11 +340,13 @@ update`, so a hand edit is silently discarded and the symptom is a Play upload r
   - [x] Run plan 2's rows 1–6 ("The Android back press"); **attempt row 7** (predictive back) too. A
         row that fails here and passes at step 12 is itself a finding. _→ **Rows 1–6 passed
         2026-09-21**, including row 5's one-press close, which is the stray-entry failure the cleanup's
-        call order exists to prevent. **Row 7 was not observed, and the risk behind it is retired**: the
-        generated manifest sets no `android:enableOnBackInvokedCallback`, which is an opt-OUT, so
-        predictive back is on by default and **no `android/` change is indicated** — the one outcome
-        that could have sent this back to plan 1. Observing the animation needs Android 15+ (automatic)
-        or the developer option on 13/14._
+        call order exists to prevent. **Row 7 was then observed the same day, and it FAILED**: back during a
+        game shows the app shrinking and minimising before the confirmation appears. An earlier
+        version of this note called the risk retired, because the generated manifest sets no
+        `android:enableOnBackInvokedCallback`; that inference was wrong (see the step header and
+        `docs/agent_findings.md`, 2026-09-21). **Decided: accepted as cosmetic, no fix** — the
+        confirmation still appears and the deck is intact — and written into
+        `docs/store/tester-notes.md` as expected behaviour._
   - [x] Mark each row's Status in `docs/development.md` and record anything that failed. `adb` is not
         on the PATH: `C:\Android\sdk\platform-tools\adb.exe`. _→ Done 2026-09-21. `adb` was never
         used: no device enumerated over USB at all, so the install was a file-manager sideload and the
@@ -449,7 +451,8 @@ fingerprint generateAssetLinks`, so `twa-manifest.json` is the record of which f
       Upstash cache is server-side storage; Spotify receives the player's IP for preview audio only,
       and only after Play is pressed — not for the embed, which is fetched server-side); content
       rating including the user-generated-content question (the app renders arbitrary track titles
-      from a player-chosen playlist); ads none; not child-directed; privacy policy URL
+      from a player-chosen playlist — **answer NO**, decided 2026-09-23, see Open Questions); ads none;
+      **declare Vercel's access-log IP retention** (decided 2026-09-23); not child-directed; privacy policy URL
       `https://playlistjitster.vercel.app/privacy.html`.
 
 - [ ] **Step 15 `[Console]` — Read the pre-launch report.** Absorbs plan 1 step 15. It is the first
@@ -522,12 +525,21 @@ future `any` stays green while a lock fails — the reason is in the test's own 
 
 - [ ] `should list two colon-separated SHA-256 fingerprints` — count and format, deferred from plan 1
       step 4. One fingerprint is a valid file that produces a URL bar on half the installs.
-- [ ] `should agree with android/twa-manifest.json about the package id` — the cross-file pin,
+      _→ **The FORMAT half landed 2026-09-23** as `should list only well-formed fingerprints, and
+  exactly the ones the shell records`: every entry is a 32-pair uppercase SHA-256, the list is
+      non-empty, and it is the same set as `android/twa-manifest.json`'s `fingerprints` — true at one
+      fingerprint and at two. **The count of two is still deliberately unwritten**: it is red until
+      Play's fingerprint lands at step 11, and it is added then beside the format test, which does
+      not change._
+- [x] `should agree with android/twa-manifest.json about the package id` — the cross-file pin,
       deferred from plan 1 step 4; the file it needed did not exist until step 4 here. **It exists as
       of 2026-09-20 and this test is still deliberately unwritten**: it needs no fingerprint and could
       land today, but batch B lands together at step 11, and splitting it would leave the batch's own
       rule ("written the moment its input exists") looking satisfied while the fingerprint half stayed
       red. Both halves of the package id are pinned meanwhile, one per file.
+      _→ **Written 2026-09-23** at the developer's request, ahead of the batch: it compares the two
+      files directly rather than each against the literal. The batch rule gave way because only the
+      count assertion is actually gated on step 11._
 
 **What none of these can prove:** that Android's verifier accepted the statement, that the URL bar is
 gone, that the back gesture reaches the webview as `popstate`, or that the listing is compliant. Those
@@ -561,7 +573,10 @@ are steps 7, 12, 15 and 17 — a device and a Console.
       `DELETE_PROJECT_FILE_LIST` ignores (step 4); the target-SDK value and Play's minimum on the day
       (step 6); the two back-gesture decisions and any row that behaved differently between the
       URL-bar and verified builds (step 12); what the pre-launch report found (step 15).
-      _→ The step-2 and step-3 entries were appended 2026-09-19. Steps 4, 6, 12 and 15 still owed._
+      _→ The step-2 and step-3 entries were appended 2026-09-19; step 4's (the checksum file and
+      the ignores, 2026-09-19 and 2026-09-20) and step 6's (target SDK 36 against Play's minimum of
+      36, 2026-09-21) exist too — this note said they were owed after they were written. **Steps 12
+      and 15 are still owed**, and both need a device or the Console._
 - [ ] `docs/store/listing.md` — §1 rewritten after the relabel (step 3); the assets checklist ticked
       as the graphics and screenshots are made (step 13).
       _→ §1 rewritten 2026-09-19: the blocked status, the unresolved-hit section and the blocked-
@@ -646,24 +661,48 @@ are steps 7, 12, 15 and 17 — a device and a Console.
       developer as their own account**, so "official" holds and decision 5 shipped unchanged. The
       owner is in `entity.subtitle`, not in `authors` (which is `null` at playlist level, as it always
       has been) — worth knowing for the next time something needs a playlist's owner.
-- [ ] **How do the twelve testers get the app without paying €1?** New 2026-09-21 with decision 16 and
+- [ ] **How do the twelve testers get the app without paying €1?** _→ **Partly answered
+      2026-09-23, and the answer is worse than this question assumed.** Google's own help page
+      (`answer/9845334`): internal testers "can install your internal test version for free", but
+      "testers must purchase paid apps when participating in open or closed tests" — and the closed
+      track is the one that counts toward production access. License testing covers in-app
+      purchases, not the app's own price. **The candidate is promo codes**: paid apps may issue up to
+      500 per quarter (`answer/6321495`), a tester redeems one in the Play Store and gets the app
+      free. They are **one-time codes Play generates, one per tester**; a custom shared code string is
+      subscriptions-only, so a single "RABAFREE" is not possible. **What is NOT verified is whether a code redeems for an app that is only on a closed
+      track**, before any production release — the help page does not say. Check it in the Console
+      (Monetize → Promo codes) once the app exists at step 9. The fallback is to reimburse each
+      tester the €1 by hand. Still blocks rewriting step 3 of `docs/store/tester-notes.md`._
+      Original question: New 2026-09-21 with decision 16 and
       unanswerable before it. A closed-testing track of a paid app shows testers the price unless they
       are on a mechanism that waives it — Play's license testing is the candidate, and it is configured
       per account rather than per track. It is not blocking until step 16, but it **changes
       `docs/store/tester-notes.md`**, whose "How to join" currently says "install it as you would any
       other app" and says nothing about a price; that line is knowingly stale until this is answered.
-- [ ] **What does €1.00 net, and is the €1 VAT-inclusive in Spain?** Deliberately not asserted anywhere
+- [x] **What does €1.00 net, and is the €1 VAT-inclusive in Spain?** _→ **Closed 2026-09-23 by the
+      developer as not relevant** to the plan; step 9a still reads the figures off the payments
+      profile, but nothing waits on them._ Deliberately not asserted anywhere
       in this repo. Play's service fee applies, and whether Google acts as merchant of record for
       Spanish VAT was not verified. Read both off the payments profile at step 9a rather than from a
       doc written from memory.
-- [ ] Does the content-rating questionnaire's user-generated-content question apply to arbitrary
-      track titles from a player-chosen playlist? (Carried from plan 1.)
-- [ ] Must Vercel's access-log IP retention be declared in the Data safety form, or does it fall under
-      the security-and-fraud exemption? (Carried from plan 1.)
-- [ ] Does the listing name need more distance from the Hitster mark than "Playlist Jitster" already
-      provides? (Carried from plan 1.)
+- [x] Does the content-rating questionnaire's user-generated-content question apply to arbitrary
+      track titles from a player-chosen playlist? (Carried from plan 1.) _→ **No, decided 2026-09-23
+      by the developer.** The player picks the playlist; nothing a player enters reaches another
+      player, there is no submission surface and no accounts. The suggested playlists are curated in
+      the source and raise no content concern either._
+- [x] Must Vercel's access-log IP retention be declared in the Data safety form, or does it fall under
+      the security-and-fraud exemption? (Carried from plan 1.) _→ **Declare it, decided 2026-09-23
+      by the developer** — the conservative answer, and recorded in `docs/store/listing.md` §5._
+- [x] Does the listing name need more distance from the Hitster mark than "Playlist Jitster" already
+      provides? (Carried from plan 1.) _→ **No, decided 2026-09-23 by the developer.**_
 - [ ] Where do the twelve testers come from, and by which distribution mechanism (email list or Google
       Group)? Decide before step 16 so the fourteen-day clock is not lost to opt-in churn.
+      _→ **Recommended 2026-09-23, not yet decided**: a Console **email list** for a known group
+      (up to 2,000 addresses per list), each being the Google account the tester's Play Store is
+      signed in to; a **Google Group** (`name@googlegroups.com`, pasted in place of the addresses)
+      only if testers are recruited from strangers or churn, because members then join and leave
+      without a Console edit. Recruit ~15, not 12: the count is of testers opted in continuously for
+      fourteen days, and one drop-out restarts nothing but can leave the count short._
 
 ---
 

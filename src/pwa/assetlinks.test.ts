@@ -1,6 +1,6 @@
 /**
- * A `node` test — this repo's default environment (`toolchain.md` §5). It reads three files
- * from disk as text and parses two of them; there is no DOM, no build and no Android
+ * A `node` test — this repo's default environment (`toolchain.md` §5). It reads four files
+ * from disk as text and parses three of them; there is no DOM, no build and no Android
  * toolchain involved, and there is deliberately no per-file environment docblock. (As in
  * `src/pwa/manifest.test.ts` and `src/index.css.test.ts`, this header refers to that tag
  * descriptively and never writes it out: Vitest scans a file's leading comment for it and
@@ -31,26 +31,23 @@
  *  `index.html` with a 200, which is the failure mode that looks most like
  *  success.
  *
- *  TWO TESTS ARE DELIBERATELY ABSENT, AND THEIR ABSENCE IS THE DESIGN.
- *  `should list two colon-separated SHA-256 fingerprints` and
- *  `should agree with android/twa-manifest.json about the package id` belong
- *  to STEP 11 of the plan, not to step 4. Written at step 4 both would have
- *  been red for eight steps -- no keystore existed and `android/` did not
- *  either -- and a test that is red for eight steps is a test people learn
- *  to skip rather than trust.
+ *  ONE ASSERTION IS STILL DELIBERATELY ABSENT: THE COUNT OF TWO.
+ *  The list carries the UPLOAD key, added ahead of schedule on 2026-09-21
+ *  so the first sideloaded install would stop showing a URL bar. It does NOT
+ *  yet carry Play's app-signing key, which does not exist until the Console
+ *  does. So a count test asserting TWO would be red right now for a file
+ *  that is deliberately half-complete, and a count test asserting ONE would
+ *  go red at step 11 on the correct change -- which is the worse of the two,
+ *  because it teaches that completing the file is a regression. Add
+ *  `should list two colon-separated SHA-256 fingerprints` when the second
+ *  fingerprint lands, and assert two.
  *
- *  THEY ARE STILL ABSENT ON 2026-09-21, AND THE REASON HAS CHANGED, WHICH IS
- *  WORTH KNOWING BEFORE ADDING ONE. The list is no longer empty: it carries
- *  the UPLOAD key, added ahead of schedule so the first sideloaded install
- *  would stop showing a URL bar. It does NOT yet carry Play's app-signing
- *  key, which does not exist until the Console does. So a count test
- *  asserting TWO would be red right now for a file that is deliberately
- *  half-complete, and a count test asserting ONE would go red at step 11 on
- *  the correct change -- which is the worse of the two, because it teaches
- *  that completing the file is a regression. Add the count test when the
- *  second fingerprint lands, and assert two. The cross-file package-id pin
- *  has no such problem and could be written today; it is held with its pair
- *  only so step 11 adds them together.
+ *  WHAT LANDED ON 2026-09-23 INSTEAD is everything in batch B that does not
+ *  depend on the count: the cross-file package-id pin, and a fingerprint
+ *  test that checks the FORMAT of every entry and that the list is the same
+ *  set `android/twa-manifest.json` records. Both are true at one fingerprint
+ *  and stay true at two, so neither has to change at step 11 -- only the
+ *  count assertion is added then.
  * ===========================================================================
  */
 
@@ -96,6 +93,21 @@ function readStatements(): AssetLinkStatement[] {
   return parsed as AssetLinkStatement[];
 }
 
+/**
+ * The two fields of `android/twa-manifest.json` this file compares against. The rest of that
+ * file is `twa-manifest.test.ts`'s business.
+ */
+interface TwaManifestIdentity {
+  packageId?: unknown;
+  fingerprints?: { value?: unknown }[];
+}
+
+function readTwaManifest(): TwaManifestIdentity {
+  const raw = readFileSync(join(repoRoot, 'android', 'twa-manifest.json'), 'utf8');
+
+  return JSON.parse(raw) as TwaManifestIdentity;
+}
+
 describe('the digital asset links statement', () => {
   it('should be valid JSON containing exactly one delegate_permission statement', () => {
     const statements = readStatements();
@@ -127,8 +139,9 @@ describe('the digital asset links statement', () => {
     //  them fails ONLY on a device, ONLY after an install, and looks exactly
     //  like an app that works -- with an address bar.
     //
-    //  This half of the pin exists now; the cross-file half is the step-12
-    //  test named in this file's header.
+    //  This half pins the literal; the cross-file half, which compares the
+    //  two files directly, is `should agree with android/twa-manifest.json
+    //  about the package id` below.
     // ===================================================================
     expect(target?.package_name).toBe(PACKAGE_ID);
 
@@ -139,6 +152,39 @@ describe('the digital asset links statement', () => {
     // Android rejects a statement missing the field entirely -- which is what keeps every
     // fingerprint change a VALUE change rather than a structural one.
     expect(Array.isArray(target?.sha256_cert_fingerprints)).toBe(true);
+  });
+
+  it('should agree with android/twa-manifest.json about the package id', () => {
+    // Compared FILE TO FILE, not each against `PACKAGE_ID`: the test above and
+    // `twa-manifest.test.ts` already pin the literal once per file, and this is the assertion
+    // that still fails if someone updates both of those in step with ONE file and not the other.
+    expect(readStatements()[0]?.target?.package_name).toBe(readTwaManifest().packageId);
+  });
+
+  it('should list only well-formed fingerprints, and exactly the ones the shell records', () => {
+    // NOT the count test -- see this file's header. Every assertion here holds at one
+    // fingerprint and at two, so step 11 adds the count beside it rather than rewriting it.
+    const fingerprints = readStatements()[0]?.target?.sha256_cert_fingerprints;
+
+    expect(Array.isArray(fingerprints)).toBe(true);
+    const listed = fingerprints as unknown[];
+
+    // Empty is what Google's checker reports as MALFORMED_CONTENT (agent_findings, 2026-09-19),
+    // so a list that loses its last entry is a URL bar on every install, not merely on half.
+    expect(listed.length).toBeGreaterThan(0);
+
+    // A SHA-256 is 32 bytes: uppercase hex pairs joined by colons, which is the form both
+    // `apksigner` and the Console print. A SHA-1 (20 pairs) is the classic paste from the
+    // wrong line of the same output, and it parses as a perfectly good string.
+    for (const fingerprint of listed) {
+      expect(fingerprint).toMatch(/^([0-9A-F]{2}:){31}[0-9A-F]{2}$/);
+    }
+
+    // "Never hand-edit two files": `bubblewrap fingerprint add` writes `twa-manifest.json`, and
+    // the deployed statement is copied from what it generates. Compared as sorted lists, because
+    // neither tool promises an order and an order difference is not a drift.
+    const recorded = (readTwaManifest().fingerprints ?? []).map((entry) => entry.value);
+    expect([...listed].sort()).toEqual([...recorded].sort());
   });
 
   it('should ship a non-empty privacy policy page', () => {
