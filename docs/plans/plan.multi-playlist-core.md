@@ -124,9 +124,9 @@ had to know which of two overlapping fields to read, forever.
   - [x] Guard the degenerate cases explicitly: an empty outcome list, and every playlist loading but
         the merged deck being empty. The second one must return the existing `empty-playlist` code,
         because `START` on an empty deck is what the reducer's own comment says nothing above it owns.
-  - [x] Export `deckLabel(playlists)`: the first playlist's name for one playlist, and `"<first> +N
-    more"` beyond that. Pure over the array, so the HUD, the end screen, the PDF filename and the
-        library row all read one function and cannot disagree. Document that it is playlist-level data
+  - [x] Export `deckLabel(playlists)`: the first playlist's name for one playlist, and
+        `"<first> +N more"` beyond that. Pure over the array, so the HUD, the end screen, the PDF
+        filename and the library row all read one function and cannot disagree. Document that it is playlist-level data
         only — the same class of string the suggestion buttons already render.
 
 - [x] **Step 2 — Widen `GameState` and the `START` action in `src/game/types.ts`.** Replace
@@ -208,14 +208,14 @@ had to know which of two overlapping fields to read, forever.
   - [x] Keep the header block's leak rule verbatim and extend it: an entry is now up to five ids and
         one label, still playlist-level only, still read on a pre-start surface.
 
-- [x] **Step 7 — Update the `start` signature in `src/game/use-game-session.ts`.** `start(cards,
-    playlists, seed?)` forwarding to `START`. Nothing else in the hook changes: the resolver already
-      takes the deck rather than the playlist, so a 500-card crawl needs no new code — only the
-      documentation in step 8's note about how long it runs.
+- [x] **Step 7 — Update the `start` signature in `src/game/use-game-session.ts`.**
+      `start(cards, playlists, seed?)` forwarding to `START`. Nothing else in the hook changes: the
+      resolver already takes the deck rather than the playlist, so a 500-card crawl needs no new code —
+      only the documentation in step 8's note about how long it runs.
 
-- [x] **Step 8 — Run the four checks and record the decisions.** `pnpm typecheck && pnpm lint && pnpm
-    test && pnpm build`, all four green, before this plan is considered done — plan 2 starts from a
-      clean tree.
+- [x] **Step 8 — Run the four checks and record the decisions.**
+      `pnpm typecheck && pnpm lint && pnpm test && pnpm build`, all four green, before this plan is
+      considered done — plan 2 starts from a clean tree.
   - [x] Grep for `state.playlist` and `.playlist?.` across `src/` and confirm every remaining hit is
         in plan 2's files, so plan 2's scope is known rather than discovered.
 

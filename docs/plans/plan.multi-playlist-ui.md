@@ -174,8 +174,9 @@ buttons already fill.
         passes it to `request`. **Leave the address bar alone** — no `pushState`, no `replaceState` — and
         **do not add an "already submitted" ref**: both rules are load-bearing and both are documented
         in that effect's header block. It stays a single effect with the same two stable dependencies.
-  - [x] `handleSavePlaylist` writes `{ ids: state.playlists.map(…id), name: deckLabel(state.playlists),
-    savedAt: … }`. `isPlaylistSaved` compares `savedDeckKey` of the live deck against the saved
+  - [x] `handleSavePlaylist` writes
+        `{ ids: state.playlists.map(…id), name: deckLabel(state.playlists), savedAt: … }`.
+        `isPlaylistSaved` compares `savedDeckKey` of the live deck against the saved
         entries' keys, so a partially-overlapping set is correctly **not** "saved".
   - [x] `handleRemoveSaved(key)` takes the deck key.
   - [x] `handleRestart` reads `state.playlists`. It still restarts from `state.deck` rather than from a
@@ -201,9 +202,9 @@ buttons already fill.
         player cannot act on — and the count is what every other notice in this app reports.
 
 - [x] **Step 5 — Carry the ids through the deck actions.**
-  - [x] `DeckActions` takes `playlistIds: readonly string[]` and calls `buildDeckLink(shareOrigin,
-    playlistIds, seed)` **inside the handler**, unchanged. The build-at-click rule is documented and
-        still load-bearing: a restart deals a fresh seed.
+  - [x] `DeckActions` takes `playlistIds: readonly string[]` and calls
+        `buildDeckLink(shareOrigin, playlistIds, seed)` **inside the handler**, unchanged. The
+        build-at-click rule is documented and still load-bearing: a restart deals a fresh seed.
   - [x] The share caption pluralises: "Same playlists, same shuffle …" beyond one playlist. It must
         still **never** say "the same deck" — and it now has a third reason, since a playlist that has
         gone private since the link was made is dropped with a notice.
@@ -219,8 +220,9 @@ buttons already fill.
         test asserts no track, artist or year reaches it, and that test does not change.
   - [x] The second button still says "Home", and the assertion that "New playlist" is absent stays.
 
-- [x] **Step 7 — Update the tests below, then run the four checks.** `pnpm typecheck && pnpm lint &&
-    pnpm test && pnpm build`, all four green. **Run 2026-08-07: all four green, 45 files / 706 tests.**
+- [x] **Step 7 — Update the tests below, then run the four checks.**
+      `pnpm typecheck && pnpm lint && pnpm test && pnpm build`, all four green. **Run 2026-08-07: all
+      four green, 45 files / 706 tests.**
   - [x] Every DOM test file keeps its `afterEach(cleanup)` — Testing Library does not auto-clean here —
         and every file that renders a card keeps `clearQrCache()` in its `beforeEach`.
   - [x] Measure and record: the bundle delta on the initial path (the landing screen gains rows and the
