@@ -5201,3 +5201,9 @@ committed store outputs are `visual-assets/assets/{graphics,play-phone,social}`;
 stays ignored. Consequence to know: **a fresh clone has no master**, so the icon set and the store
 graphics cannot be regenerated from the repo alone — which fits the new AGENTS.md rule that visual
 assets are regenerated only when the developer asks.
+
+## 2026-09-24 — The logo master is tracked again
+
+Reverses the "no longer tracked" half of the entry above, at the developer's request:
+`visual-assets/logo-master/logo.png` is committed again and its `.gitignore` line is gone, so a fresh clone
+has the master. `visual-assets/assets/play-tablet-chromebook/` stays ignored.

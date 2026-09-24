@@ -982,7 +982,7 @@ Four decisions carry the design:
 by the developer on 2026-08-12 and replacing the pre-`5e178f6` artwork the set was generated from
 until then. Every shipped image is derived from it, which is what keeps the browser tab, the home
 screen and the landing screen's `<h1>` one identity; the 2026-08-06 finding records what happens when
-they drift. **The master lives in `visual-assets/logo-master/` (git-ignored since 2026-09-24 — a fresh clone does not have it), not in `public/`, and that placement is load-bearing**:
+they drift. **The master lives in `visual-assets/logo-master/` (tracked), not in `public/`, and that placement is load-bearing**:
 everything in `public/` is copied into `dist/` _and precached by the service worker_, so a 1.2 MB
 master there would be downloaded by every install — it is the same file, at the same size, that cost
 6.2 s of LCP as a favicon. Keeping it in the repo at all is the other half: the previous source
