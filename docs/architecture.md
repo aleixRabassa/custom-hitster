@@ -948,7 +948,7 @@ vite.config.ts             VitePWA(...) — workbox options and the update strat
 public/pwa-*.png           192, 512 and a separate 512 maskable
 public/apple-touch-icon.png  180. iOS ignores the manifest's icons entirely
 public/logo.webp           384. The favicon AND the landing screen's <h1>, at 192px
-docs/assets/logo.png       The 1254 master every one of the above derives
+visual-assets/logo-master/logo.png       The 1254 master every one of the above derives
                            from. In docs/ because public/ ships and precaches
 ```
 
@@ -978,11 +978,11 @@ Four decisions carry the design:
 - **`devOptions` is absent**, so neither `pnpm dev` nor `npx vercel dev` registers a worker. A service
   worker in development is a caching-bug generator, and this repo's dev story (§5) is delicate enough.
 
-**The icon set comes from `docs/assets/logo.png`** — a 1254 × 1254 neon card-stack whose wordmark reads "PLAYLIST JITSTER", supplied
+**The icon set comes from `visual-assets/logo-master/logo.png`** — a 1254 × 1254 neon card-stack whose wordmark reads "PLAYLIST JITSTER", supplied
 by the developer on 2026-08-12 and replacing the pre-`5e178f6` artwork the set was generated from
 until then. Every shipped image is derived from it, which is what keeps the browser tab, the home
 screen and the landing screen's `<h1>` one identity; the 2026-08-06 finding records what happens when
-they drift. **The master lives in `docs/`, not in `public/`, and that placement is load-bearing**:
+they drift. **The master lives in `visual-assets/logo-master/` (git-ignored since 2026-09-24 — a fresh clone does not have it), not in `public/`, and that placement is load-bearing**:
 everything in `public/` is copied into `dist/` _and precached by the service worker_, so a 1.2 MB
 master there would be downloaded by every install — it is the same file, at the same size, that cost
 6.2 s of LCP as a favicon. Keeping it in the repo at all is the other half: the previous source

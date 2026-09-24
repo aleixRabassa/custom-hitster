@@ -75,6 +75,10 @@ import { COPY } from '../game/copy';
 import { MAX_DECK_PLAYLISTS } from '../game/deck-merge';
 import { playlistErrorMessage } from '../game/messages';
 import { savedDeckKey } from '../game/playlist-library';
+import {
+  JITSTER_OFFICIAL_PLAYLIST_ID,
+  PLAYLIST_NAME_OVERRIDES,
+} from '../game/playlist-display-name';
 import { planSelectionToggle, selectedPlaylistIds } from '../game/playlist-selection';
 import { isSpotifyShortLink, parsePlaylistUrl, spotifyPlaylistUrl } from '../../shared/spotify-url';
 import type { StartFailureCode } from '../game/messages';
@@ -140,11 +144,13 @@ function rowErrorId(rowId: string): string {
  * punctuation and the occasional typo -- and the blurbs are genre/era names. **The first row is the
  * one exception, and it is labelled for the APP rather than for its Spotify title (2026-09-19):**
  * its real title is "Hitser", and rendering that readably produced "Hitster", which is a registered
- * mark the Google Play listing may not carry (`docs/store/listing.md` §1). So it reads
+ * mark the Google Play listing may not carry (`visual-assets/listing.md` §1). So it reads
  * "Jitster official" -- a label this app chose, verified as owned by the developer's own account at
  * the time of the change. The rule the other rows follow is unchanged; this row is a deliberate
  * departure from it with a reason that is not about readability. Nothing in either field names
- * a track or a year, which is what keeps this pre-Start section leak-free. A single-artist row is
+ * a track or a year, which is what keeps this pre-Start section leak-free. **Its label now lives in
+ * `src/game/playlist-display-name.ts` (2026-09-24)**, because the HUD, the end screen and the saved
+ * library must show it too -- until then the dealt deck read "Hitser" everywhere past the picker. A single-artist row is
  * allowed: it tells the player every card shares an artist, and the game is guessing the YEAR, which
  * an artist gives nothing away about. Naming a track or a year would still be a leak.
  *
@@ -153,7 +159,11 @@ function rowErrorId(rowId: string): string {
  * disagree.
  */
 export const SUGGESTED_PLAYLISTS: readonly { id: string; label: string; blurb: string }[] = [
-  { id: '34cIJlWIX9TEoA8bpI2UBu', label: 'Jitster official', blurb: 'Mixed hits' },
+  {
+    id: JITSTER_OFFICIAL_PLAYLIST_ID,
+    label: PLAYLIST_NAME_OVERRIDES[JITSTER_OFFICIAL_PLAYLIST_ID]!,
+    blurb: 'Mixed hits',
+  },
   { id: '0Bq6Ofk5drHQKzevbnPzW2', label: 'Trap Argentino Prime', blurb: 'Argentine trap' },
   { id: '4wZA7zbfDuTi9yqZy8WY4y', label: 'Hits Catalans', blurb: 'Catalan hits' },
   { id: '6xrNthbRvaWedC81pc78xo', label: 'Openings Català', blurb: 'Anime openings in Catalan' },
@@ -525,7 +535,7 @@ export function LandingScreen({
              384 when the display size grew, rather than upscaling a 240. Never
              swap this for one of the `pwa-*.png` icons: they are the same
              artwork at 512px and 68 kB, on the one screen every visitor pays
-             for -- and the full 1254px master is in `docs/assets/`,
+             for -- and the full 1254px master is in `visual-assets/logo-master/`,
              deliberately outside `public/`, because everything in `public/`
              ships AND is precached.
 

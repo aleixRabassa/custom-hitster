@@ -475,7 +475,7 @@ describe('LandingScreen', () => {
       ===================================================================
        A TRADEMARK GUARD OVER DATA, NOT AN ASSERTION ABOUT WORDING.
 
-       "Hitster" is a registered board-game mark. `docs/store/listing.md`
+       "Hitster" is a registered board-game mark. `visual-assets/listing.md`
        §1 forbids it in anything that reaches the Google Play Console --
        listing copy, metadata, and any SCREENSHOT. The picker is the screen
        every player passes through, so a label here lands in a screenshot
@@ -499,8 +499,10 @@ describe('LandingScreen', () => {
       ===================================================================
     */
     for (const playlist of SUGGESTED_PLAYLISTS) {
-      expect(playlist.label).not.toMatch(/hitster/i);
-      expect(playlist.blurb).not.toMatch(/hitster/i);
+      // `hitst?er` since 2026-09-24: it also catches "Hitser", the first row's real Spotify title,
+      // which is one letter from the mark and is the realistic way it would come back.
+      expect(playlist.label).not.toMatch(/hitst?er/i);
+      expect(playlist.blurb).not.toMatch(/hitst?er/i);
     }
   });
 

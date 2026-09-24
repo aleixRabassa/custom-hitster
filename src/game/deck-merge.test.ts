@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest';
 import { COPY } from './copy';
 import { MAX_DECK_PLAYLISTS, deckLabel, mergePlaylists } from './deck-merge';
 import type { PlaylistOutcome } from './playlist-client';
+import { JITSTER_OFFICIAL_PLAYLIST_ID, PLAYLIST_NAME_OVERRIDES } from './playlist-display-name';
 import type { Card, PlaylistSummary } from '../../shared/types';
 
 function playlist(id: string, name = `Playlist ${id}`): PlaylistSummary {
@@ -174,6 +175,15 @@ describe('mergePlaylists', () => {
 });
 
 describe('deckLabel', () => {
+  it('should label an overridden playlist with the app label, never its Spotify title', () => {
+    // The first suggestion's Spotify title is "Hitser"; the HUD, the end screen, the PDF filename
+    // and a new library save all read this label, so this is where it must not come back.
+    const override = PLAYLIST_NAME_OVERRIDES[JITSTER_OFFICIAL_PLAYLIST_ID]!;
+    expect(deckLabel([playlist(JITSTER_OFFICIAL_PLAYLIST_ID, 'Hitser'), playlist('two')])).toBe(
+      COPY.deck.label(override, 1),
+    );
+  });
+
   it('should label a single playlist with its own name', () => {
     expect(deckLabel([playlist('one', 'Rock Classics')])).toBe('Rock Classics');
   });

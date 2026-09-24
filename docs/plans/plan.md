@@ -662,11 +662,11 @@ what makes the game's payoff audible at all.
       boxes tick only when the matching step in plan 3 does. Point `/plan-exec` at plan 3 and nothing
       else. **Its steps 2, 3 and 8 are done (2026-09-19)**: the deployed asset-links and privacy
       fetches are recorded, the first suggested playlist is relabelled `'Jitster official'` (gate M1),
-      and `docs/store/tester-notes.md` exists. Everything left needs a phone or the Play Console. The
+      and `visual-assets/tester-notes.md` exists. Everything left needs a phone or the Play Console. The
       order the first two were written in is not the order they were built in:
       [`plan.google-play-shell.md`](./plan.google-play-shell.md) (Bubblewrap shell in a new `android/`
       tree, `public/.well-known/assetlinks.json` with BOTH certificate fingerprints, `public/privacy.html`,
-      four manifest fields, the listing under `docs/store/`, and the store's closed-testing gate of
+      four manifest fields, the listing under `visual-assets/`, and the store's closed-testing gate of
       twelve testers for fourteen days — **steps 1-5 built 2026-09-19**: the origin, the four manifest
       fields, the privacy page, the placeholder asset-links file and the toolchain. Step 6 onward needs a
       device and a Play Console account, and `android/` does not exist yet) and

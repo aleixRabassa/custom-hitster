@@ -8,8 +8,8 @@ documentation, so it is outside the `src/game/copy.ts` rule — but **it must no
 `src/game/copy.ts` on 2026-09-21 (re-verified: every claim in §3's source table, plus the
 Alternate B tagline quote in §2, which had drifted from the live string).
 
-**Status: step 13 is NOT done.** This file is the copy half only — the graphics, the screenshots and
-the Console itself are still outstanding. **The trademark question that used to block it is
+**Status: step 13 is NOT done.** The copy is here and, since 2026-09-24, the graphics and screenshots
+are in `visual-assets/assets/` (§4a) — the Console upload itself is still outstanding. **The trademark question that used to block it is
 RESOLVED (2026-09-19)** and the picker is no longer off-limits to a screenshot; see §1.
 
 **How the character counts below were produced.** Each description sits in a fenced block, and the
@@ -45,6 +45,11 @@ one below is a comment or an identifier, never a rendered string.
 `{ id: '34cIJlWIX9TEoA8bpI2UBu', label: 'Hitster', blurb: 'Mixed hits' }`, and it is now
 `{ id: '34cIJlWIX9TEoA8bpI2UBu', label: 'Jitster official', blurb: 'Mixed hits' }`. **The id did not
 change** — the same playlist, a different label.
+
+**The relabel reaches the game screen too as of 2026-09-24.** It was found that day that the dealt
+deck's HUD rendered the real Spotify title "Hitser" through `deckLabel()`; `src/game/playlist-display-name.ts`
+now substitutes "Jitster official" on read, in the HUD, the end screen, the PDF filename and the saved
+library. A game-screen screenshot of that deck is therefore allowed from the next deploy onward.
 
 What it is: an entry in a `readonly` data array of ready-to-try playlists, rendered as the visible
 text of a `SuggestionButton` in the "Or try one of these" grid on the playlist picker. It was a
@@ -181,26 +186,38 @@ public embed endpoint anonymously and is not a Spotify product, and one sentence
 
 ---
 
-## 4. Assets — all outstanding, all manual
+## 4. Assets — produced 2026-09-24, upload outstanding
 
-Nothing here can be produced or checked by a command in this repo. **No check in this repo has ever
-opened an image**, so every item below ends with somebody looking at the result.
+No check in this repo opens an image, so every item below ended with somebody looking at the result —
+on 2026-09-24 that was the agent that made them, which opened the feature graphic, two of the four
+phone frames, one Chromebook capture and the X image at full size, and the rest only as Canva
+thumbnails. Two known blemishes: a stray dot after "deck." on phone frame 2 (baked into Canva's
+background), and the capture's square corners showing just inside the rounded frame on phone frame 4.
+**A human look at every file before upload is still owed.** The inventory and how each was made is §4a below.
 
-- [ ] **Feature graphic, 1024×500.** Must be **composed**, not cropped: the master is square. Build
-      it from **`docs/assets/logo.png`** (1254×1254, the 2026-08-12 artwork, wordmark reading
+- [x] **Feature graphic, 1024×500.** Done 2026-09-24 — `assets/graphics/feature-graphic-1024x500.png`,
+      RGB, no alpha. Must be **composed**, not cropped: the master is square. Build
+      it from **`visual-assets/logo-master/logo.png`** (1254×1254, the 2026-08-12 artwork, wordmark reading
       "PLAYLIST JITSTER") and **never from anything in `public/`** — everything in `public/` ships
       and is precached by the service worker, which is exactly why the 1.2 MB master is kept out of
       it. Raise the graphic's black floor to `--color-page` (#0a0a0a) as every other derivative
       does: the artwork's backdrop is pure black, the page is not, and a 4% luminance step across a
       straight edge reads as a pasted square.
-- [ ] **At least two phone screenshots, the welcome screen first.** A cold launch shows the welcome
+- [x] **At least two phone screenshots, the welcome screen first.** Done 2026-09-24 — four, in
+      `assets/play-phone/`, captured from the DEPLOYED app with Playwright at a 412×732 viewport ×2.625
+      (not a device or an emulator, which this item originally assumed). A cold launch shows the welcome
       screen every time — `start_url` is `/`, and since 2026-09-18 that is the front door on every
       launch, by a recorded decision with no "seen it" flag and none planned. A first screenshot of
       anything else would show a screen no new install opens on. Manual because it needs the app
       running on a device or an emulator at a real phone resolution.
-- [ ] **Second and later screenshots: pick from the game screen, the reveal and the end screen.**
-      Note the picker is currently unusable for a screenshot — see the trademark rule above.
-- [ ] **Check `public/pwa-512x512.png` against Play's current icon spec** (read the Console's own
+- [x] **Second and later screenshots: pick from the game screen, the reveal and the end screen.**
+      Done 2026-09-24 as picker → dealt card → revealed card (the end screen was not used). The
+      picker is usable since the 2026-09-19 relabel — **but a GAME screenshot of "Jitster official"
+      is not**: see §4a.
+- [ ] **Check `public/pwa-512x512.png` against Play's current icon spec** — **it is a PALETTE PNG
+      (PIL mode `P`), not the 32-bit PNG Play asks for**, found 2026-09-24. Upload
+      `assets/graphics/play-icon-512.png` instead (RGBA, regenerated from the master); the Console's
+      spec on the day is still the thing to read. (read the Console's own
       requirements on the day rather than from memory). Use the `purpose: 'any'` file, **not**
       `pwa-maskable-512x512.png` — that one is a separate file whose artwork is drawn at **72% of
       the canvas** with the rest as background, so a launcher can crop it to any shape; as a store
@@ -210,8 +227,43 @@ opened an image**, so every item below ends with somebody looking at the result.
       records the correction, and this file repeats it because the listing is where the icon
       actually gets uploaded. The icons read "PLAYLIST HITSTER" until the 2026-08-12 artwork
       replaced them and nobody had opened the image — since then every icon is a LANCZOS downscale
-      of `docs/assets/logo.png` reading "PLAYLIST JITSTER", so the artwork agrees with the listing
-      name by regeneration, which is a thing to confirm by eye rather than assume.
+      of `visual-assets/logo-master/logo.png` reading "PLAYLIST JITSTER", so the artwork agrees with the listing
+      name by regeneration, which is a thing to confirm by eye rather than assume. **Looked at
+      2026-09-24**: it reads "PLAYLIST JITSTER" and the card stack sits inside Play's rounded mask.
+
+### 4a. What is in `visual-assets/assets/`, and how it was made
+
+Only final outputs are committed; intermediates (raw phone captures, the floor-raised logo uploaded to
+Canva) stay out of the repo on purpose.
+
+| Folder                    | Contents                                                                                                                                                                    | Made with                                   |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| `graphics/`               | `feature-graphic-1024x500.png`, `play-icon-512.png` (RGBA)                                                                                                                  | Canva (graphic); PIL from the master (icon) |
+| `play-phone/`             | 4 × 1080×1920 JPEG, each a real capture framed under a headline                                                                                                             | Playwright capture → Canva frame            |
+| `play-tablet-chromebook/` | 6 raw captures each for `tablet-7in` (1200×1920), `tablet-10in` (1600×2560), `chromebook` (1920×1080). **Git-ignored** (2026-09-24): local only, regenerate with the script | Playwright, `visual-assets/screenshots.mjs` |
+| `social/`                 | Instagram 1080×1440, square 1080×1080, Story 1080×1920, X 1600×900, Facebook cover 1640×624                                                                                 | Canva                                       |
+
+The Canva sources are in the developer's Canva account: "Playlist Jitster Google Play feature graphic"
+(the 1024×500 resize, design `DAHWHEAD-d4`), "Playlist Jitster promotional Instagram Stories" (the four
+phone frames, `DAHWHEpIY6Y`) and "Playlist Jitster Instagram post" (all five social pages,
+`DAHWHN1IFec`). Edit there and re-export rather than editing the PNGs.
+
+Things to know before reusing any of them:
+
+- **The game shots use "Rock Party".** They were captured while the HUD still rendered the first
+  suggestion's real Spotify title, **"Hitser"** — one letter from the mark. Fixed in code the same day
+  (§1, `playlist-display-name.ts`), so "Jitster official" is safe to capture once that is deployed.
+  Renaming the playlist on Spotify (the developer owns it) remains worth doing, because the Spotify
+  app itself — which the QR codes open — still shows "Hitser".
+- **The reveal shots show real third-party track names** (The Strokes, KONGOS). The capture script
+  skips edition-suffixed titles and "Unconfirmed" years, so a screenshot never advertises a
+  low-confidence answer.
+- **The social pieces say "Now on Google Play"** — true only from the production rollout (plan 3 step
+  17). Do not post them before. None of the graphics says "free": the app is paid (§5).
+- **No graphic contains the word the trademark rule forbids** — every text string was written by hand
+  and the AI-generated layouts were checked for baked-in text. Two generated backgrounds DID carry
+  faint baked copies of their own headlines, which is why the feature graphic sits on a solid
+  `#0a0a0a` panel and page 1 of the phone set keeps its original subline.
 
 ---
 

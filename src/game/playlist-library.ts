@@ -38,7 +38,9 @@
  * ===========================================================================
  */
 
-import { MAX_DECK_PLAYLISTS } from './deck-merge';
+import { COPY } from './copy';
+import { MAX_DECK_PLAYLISTS, truncatePlaylistName } from './deck-merge';
+import { PLAYLIST_NAME_OVERRIDES } from './playlist-display-name';
 import type { StorageLike } from './persistence';
 
 /**
@@ -309,7 +311,22 @@ function validateEntry(value: unknown): SavedPlaylist | null {
   const validIds = validateIds(ids);
   if (!validIds) return null;
 
-  return { ids: validIds, name, savedAt };
+  return { ids: validIds, name: displayedEntryName(validIds, name), savedAt };
+}
+
+/**
+ * The stored name, unless the entry's FIRST playlist has an app-chosen label (2026-09-24).
+ *
+ * A saved name is a finished `deckLabel()` string, built from `ids[0]`'s title plus a "+N more"
+ * count -- so an entry saved before `playlist-display-name.ts` existed holds "Hitser +2 more" and
+ * nothing a read-time lookup could patch piecemeal. It is rebuilt from the same two parts instead,
+ * which is exact because `savePlaylist` stores the ids in deck order. Applied on READ so an old
+ * library heals without a migration; the stored payload is never rewritten.
+ */
+function displayedEntryName(ids: readonly string[], storedName: string): string {
+  const override = PLAYLIST_NAME_OVERRIDES[ids[0]!];
+  if (override === undefined) return storedName;
+  return COPY.deck.label(truncatePlaylistName(override), ids.length - 1);
 }
 
 /**

@@ -439,7 +439,7 @@ identically with the artist rule reverted. Same false-comfort shape as the pre-2
 
 **Two Phase 8 findings that read as bugs and are not, plus one that is:**
 
-- **The pre-`5e178f6` `public/logo.png` and the `logo.webp` that replaced it are DIFFERENT ARTWORK**, swapped in a single commit, which nothing recorded — Phase 7's note about replacing "a 1.26 MB PNG" is true about the bytes and silent about the picture. Resolved 2026-08-06 as **one identity everywhere**, then **re-resolved on 2026-08-12 against NEW developer-supplied artwork**: the master is now `docs/assets/logo.png` (1254×1254, wordmark reading "PLAYLIST JITSTER"), and `logo.webp` (**384×384, 12,892 bytes**) plus all four PWA icons are `LANCZOS` downscales of it. **The master is deliberately in `docs/`, never `public/`** — everything in `public/` ships _and_ is precached by the service worker, and a 1.2 MB master there is the same file, at the same size, that cost 6.2 s of LCP as a favicon. **Never restore a large icon to the favicon slot** — that rule is unchanged. Every derivative also has its **black floor raised to `--color-page` (#0a0a0a)**, because the artwork's backdrop is pure black and the page is not: the logo is rendered on the landing screen at 192px and a 4% luminance step across a straight edge reads as a pasted square.
+- **The pre-`5e178f6` `public/logo.png` and the `logo.webp` that replaced it are DIFFERENT ARTWORK**, swapped in a single commit, which nothing recorded — Phase 7's note about replacing "a 1.26 MB PNG" is true about the bytes and silent about the picture. Resolved 2026-08-06 as **one identity everywhere**, then **re-resolved on 2026-08-12 against NEW developer-supplied artwork**: the master is now `visual-assets/logo-master/logo.png` (1254×1254, wordmark reading "PLAYLIST JITSTER"), and `logo.webp` (**384×384, 12,892 bytes**) plus all four PWA icons are `LANCZOS` downscales of it. **The master is deliberately in `visual-assets/logo-master/`, never `public/` — and since 2026-09-24 it is GIT-IGNORED, local to the developer's machine by their decision, so a fresh clone has no master and cannot regenerate the icons (which, per the Conventions rule, happens only on request anyway)** — everything in `public/` ships _and_ is precached by the service worker, and a 1.2 MB master there is the same file, at the same size, that cost 6.2 s of LCP as a favicon. **Never restore a large icon to the favicon slot** — that rule is unchanged. Every derivative also has its **black floor raised to `--color-page` (#0a0a0a)**, because the artwork's backdrop is pure black and the page is not: the logo is rendered on the landing screen at 192px and a 4% luminance step across a straight edge reads as a pasted square.
 - **`--color-fg-year` is a separate token from `--color-ring-from` despite sharing its value**, and the year is **flat rather than the mockup's gradient**. `background-clip: text` needs `color: transparent`, so a gradient that fails to paint renders the year _invisible_ — the same silent shape as the unknown-colour-utility bug this repo already shipped — and a gradient has no single contrast ratio to record.
 - **The deck's two peeking backs do not render at all on a full-height card**, and this one is a real defect: centre-origin `scale()` lifts the bottom edge by 8.96px while `translateY` pushes it down 10px, so they peek by 1.04px and 2.08px and are inset on every other side. Pre-existing from Phase 5, measured 2026-08-06, **not fixed** — the remedy is a deck-feel decision. Consequence: `card-ring-dim` is currently inert at desktop card sizes.
 
@@ -483,7 +483,7 @@ PWA as a Trusted Web Activity, and its steps 1–5 landed on 2026-09-19 while st
 execute from** — the two old plans keep their reasoning and their history, and their unfinished boxes
 tick only when the step that owns them in plan 3 ticks. Plan 3's steps 2, 3 and 8 are built: the
 deployed asset-links and privacy fetches are recorded, the picker's first suggestion is relabelled
-(below), and `docs/store/tester-notes.md` exists. **What
+(below), and `visual-assets/tester-notes.md` exists. **What
 exists today**: `public/.well-known/assetlinks.json`, `public/privacy.html`, `src/pwa/assetlinks.test.ts`,
 four new manifest fields (`id`, `lang`, `dir`, `categories`) and an Android block in `.gitignore`. **What
 does not**: `android/`, any keystore, any certificate fingerprint, any Play Console app. The rules below
@@ -782,12 +782,17 @@ regeneration rather than by the absence of a wordmark. **No check in this repo h
 **THE BOUNDARY MOVED ONCE MORE, ON 2026-09-19, AND ONLY WHERE THE STORE FORCES IT:** the `'Hitster'`
 label on `SUGGESTED_PLAYLISTS[0]` is gone from the picker, relabelled **`'Jitster official'` with the
 id unchanged**, because a Google Play listing may not carry the registered mark and the picker is in
-every screenshot of it (`docs/store/listing.md` §1). It cost nothing in faithfulness: the playlist's
+every screenshot of it (`visual-assets/listing.md` §1). It cost nothing in faithfulness: the playlist's
 real Spotify title is **"Hitser"**, one _t_, so the mark existed only in this app's own tidied
 rendering of a typo — which is why `LandingScreen.tsx`'s "labels are readable renderings of Spotify's
 own titles" paragraph now carries a sentence saying the first row is labelled for the APP instead, and
 why `LandingScreen.test.tsx` guards every row's `label` and `blurb` against the mark case-insensitively
-(a guard over DATA, not over `COPY.*` wording — the array was never copy). **Nothing in the
+(a guard over DATA, not over `COPY.*` wording — the array was never copy). **The label now reaches
+past the picker (2026-09-24)**: `src/game/playlist-display-name.ts` maps that id to the app's label, and
+`deckLabel()`, the end screen's list and `loadLibrary` read through it — so the HUD, the PDF filename
+and saved-library rows no longer render the fetched "Hitser". It is applied ON READ, which is what
+heals sessions and library entries saved before it; a write-time rename would have left them. The
+`LandingScreen` row reads its label from that module, so picker and HUD cannot disagree. **Nothing in the
 never-rename list above moved**: the two storage keys, the package name and every internal "Hitster"
 that means the board game are untouched, and a store rule about visible text is not a reason to touch
 one of them.
@@ -854,6 +859,7 @@ something `plan.md` had already resolved, so read these before "fixing" the code
 
 **Conventions**
 
+- **NEVER regenerate the visual assets on your own initiative — only when the developer asks for it.** That covers everything under `visual-assets/` (the store screenshots, the feature graphic, the Play icon, the social graphics, the Canva designs behind them) and the icon set derived from the logo master. A code or copy change that makes a screenshot stale is a reason to _tell_ the developer, never a reason to re-run `screenshots.mjs`, re-export from Canva or rewrite an image. Rule set by the developer, 2026-09-24.
 - **pnpm only**, with exactly one recorded exception. Don't add `package-lock.json` or `yarn.lock`; keep `pnpm-lock.yaml` committed. The exception is `@bubblewrap/cli`, installed globally with `npm i -g` and never a project dependency — see the store-shell block above.
 - **`engines.node` is `24.x` and deliberately does not match local Node.** Don't "fix" it. The `Unsupported engine` install warning is expected.
 - **Prettier owns formatting.** No hand-formatting, no stylistic ESLint rules.

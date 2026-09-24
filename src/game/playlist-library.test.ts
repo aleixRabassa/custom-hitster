@@ -15,7 +15,9 @@ import {
   savePlaylist,
   savedDeckKey,
 } from './playlist-library';
+import { COPY } from './copy';
 import { MAX_DECK_PLAYLISTS } from './deck-merge';
+import { JITSTER_OFFICIAL_PLAYLIST_ID, PLAYLIST_NAME_OVERRIDES } from './playlist-display-name';
 import type { SavedPlaylist } from './playlist-library';
 import type { StorageLike } from './persistence';
 
@@ -245,6 +247,36 @@ describe('playlist-library', () => {
 // ===========================================================================
 
 describe('the multi-playlist library', () => {
+  it('should show an entry led by an overridden playlist under the app label, on read', () => {
+    // An entry saved before `playlist-display-name.ts` existed holds the finished Spotify-title
+    // label. It heals on READ -- rebuilt from the override plus the same "+N more" count -- and
+    // the stored payload is left exactly as it was.
+    const storage = memoryStorage();
+    savePlaylist(storage, {
+      ids: [JITSTER_OFFICIAL_PLAYLIST_ID, 'b', 'c'],
+      name: 'Hitser +2 more',
+      savedAt: 1_000,
+    });
+    const rawBefore = storage.map.get(LIBRARY_STORAGE_KEY);
+
+    expect(loadLibrary(storage)[0]?.name).toBe(
+      COPY.deck.label(PLAYLIST_NAME_OVERRIDES[JITSTER_OFFICIAL_PLAYLIST_ID]!, 2),
+    );
+    expect(storage.map.get(LIBRARY_STORAGE_KEY)).toBe(rawBefore);
+  });
+
+  it('should leave the stored name alone when the first playlist has no override', () => {
+    // Only `ids[0]` names the label, so an overridden playlist further down the deck changes nothing.
+    const storage = memoryStorage();
+    savePlaylist(storage, {
+      ids: ['a', JITSTER_OFFICIAL_PLAYLIST_ID],
+      name: 'Rock Classics +1 more',
+      savedAt: 1_000,
+    });
+
+    expect(loadLibrary(storage)[0]?.name).toBe('Rock Classics +1 more');
+  });
+
   it('should save an entry holding several ids', () => {
     const storage = memoryStorage();
 

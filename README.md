@@ -114,7 +114,7 @@ The release process — toolchain, build, upload and staged rollout — lives in
 the shell introduces are in that file's §5, under "The Trusted Web Activity shell". The plan behind it,
 including every step still outstanding, is
 [`docs/plans/plan.google-play-shell.md`](./docs/plans/plan.google-play-shell.md), and the store
-listing copy is kept under [`docs/store/`](./docs/store/) rather than only in the Play Console.
+listing copy is kept under [`visual-assets/`](./visual-assets/) rather than only in the Play Console.
 
 **The install line lands here when the listing does**, together with the store link.
 

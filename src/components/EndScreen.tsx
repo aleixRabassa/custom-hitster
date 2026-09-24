@@ -26,6 +26,7 @@ import { COPY } from '../game/copy';
 import { DeckActions } from './DeckActions';
 import { Footer } from './Footer';
 import { truncatePlaylistName } from '../game/deck-merge';
+import { playlistDisplayName } from '../game/playlist-display-name';
 import type { Card, PlaylistSummary } from '../../shared/types';
 
 export interface EndScreenProps {
@@ -141,7 +142,7 @@ export function EndScreen({
         {playlists.length < 2 ? null : (
           <ul className="flex flex-col gap-0.5 text-xs text-fg-muted">
             {playlists.map((playlist) => (
-              <li key={playlist.id}>{truncatePlaylistName(playlist.name)}</li>
+              <li key={playlist.id}>{truncatePlaylistName(playlistDisplayName(playlist))}</li>
             ))}
           </ul>
         )}

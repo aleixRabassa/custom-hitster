@@ -30,6 +30,7 @@
  */
 
 import { COPY } from './copy';
+import { playlistDisplayName } from './playlist-display-name';
 import type { PlaylistClientErrorCode, PlaylistOutcome } from './playlist-client';
 import type { Card, PlaylistSummary } from '../../shared/types';
 
@@ -217,6 +218,9 @@ export function truncatePlaylistName(name: string): string {
  *  count is what stands in for the rest, and it must never be cut off -- a label
  *  that lost its "+2 more" would claim the deck is one playlist. That is why the
  *  cap applies to the NAME rather than to the finished label.
+ *
+ *  THE NAME IS THE DISPLAY NAME, not the fetched title (2026-09-24): see
+ *  `playlist-display-name.ts` for why a playlist can be shown under the app's own label.
  * ===========================================================================
  *
  * Empty in for empty out, so a caller rendering an `idle` session gets `''` rather than a crash --
@@ -227,7 +231,7 @@ export function deckLabel(playlists: readonly PlaylistSummary[]): string {
   if (!first) return '';
 
   const others = playlists.length - 1;
-  const name = truncatePlaylistName(first.name);
+  const name = truncatePlaylistName(playlistDisplayName(first));
 
   return COPY.deck.label(name, others);
 }
