@@ -39,9 +39,10 @@ import { NoticeBanner } from './components/NoticeBanner';
 import { PreparingScreen } from './components/PreparingScreen';
 import { WelcomeScreen } from './components/WelcomeScreen';
 import { parseDeckLink } from './game/deck-link';
-import { deckLabel } from './game/deck-merge';
+import { deckBaseName, deckLabel } from './game/deck-merge';
 import { loadLibrary, removePlaylist, savePlaylist, savedDeckKey } from './game/playlist-library';
 import { useGameSession } from './game/use-game-session';
+import { useCopy } from './hooks/useLocale';
 import { usePlaylist } from './hooks/usePlaylist';
 import { spotifyPlaylistUrl } from '../shared/spotify-url';
 import type { MergedDeck } from './game/deck-merge';
@@ -147,6 +148,9 @@ function shareOrigin(): string {
 }
 
 export default function App({ storage, fetchImpl, search }: AppProps = {}) {
+  // The active language's copy. This container renders no sentence of its own; it reads the
+  // catalogue only to name the deck, because `deckLabel()` is pure and takes the `deck` block.
+  const copy = useCopy();
   const {
     state,
     currentCard,
@@ -480,8 +484,11 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
     setSavedPlaylists(
       savePlaylist(libraryStorage, {
         ids: state.playlists.map((playlist) => playlist.id),
-        // The label the whole deck is known by, so the library row cannot disagree with the HUD.
-        name: deckLabel(state.playlists),
+        // The BASE name, never the finished label (2026-09-28): the "+N more" count is copy, so a
+        // stored label would keep the language it was saved in. The row composes the label from
+        // this and the id count at render time -- the same two parts `deckLabel()` joins for the
+        // HUD, so the two still cannot disagree.
+        name: deckBaseName(state.playlists),
         // Stamped at the press. The library sorts on it, and it is never rendered as a date.
         savedAt: Date.now(),
       }),
@@ -556,17 +563,19 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
   /**
    * What the deck is called, and which playlists it came from.
    *
-   * ONE LABEL, EVERY SURFACE (decision 8). The HUD, the end screen's count line, the PDF filename
-   * and the saved-library row all read `deckLabel()`, so they cannot disagree about what this deck
-   * is -- and `GameScreen`, `Hud` and `PreparingScreen` keep taking one string, because the label
-   * IS that string. Pushing the array down to the HUD would buy nothing and would turn a truncation
-   * rule into a layout decision.
+   * ONE LABEL, EVERY SURFACE (decision 8). The HUD, the end screen's count line and the PDF
+   * filename read `deckLabel()`, and the saved-library row joins the same two parts
+   * (`deckBaseName()` and the id count) through the same `copy.deck.label`, so they cannot disagree
+   * about what this deck is -- and `GameScreen`, `Hud` and `PreparingScreen` keep taking one
+   * string, because the label IS that string. Pushing the array down to the HUD would buy nothing
+   * and would turn a truncation rule into a layout decision. In the ACTIVE language: `copy.deck`
+   * is passed in because `deck-merge.ts` is pure.
    *
    * Both are safe with an empty `state.playlists`: `deckLabel([])` is `''` and the id array is
    * empty. That is the case the dropped `playlist: null` sentinel used to cover, and it is why the
    * `?? ''` fallbacks these two replaced are gone.
    */
-  const playlistName = deckLabel(state.playlists);
+  const playlistName = deckLabel(state.playlists, copy.deck);
   const playlistIds = state.playlists.map((playlist) => playlist.id);
 
   /**

@@ -27,8 +27,8 @@
  *
  *  It is read on the LANDING SCREEN, which is a pre-start surface -- the one place
  *  in the app where a leak costs the whole game before it begins. Playlist-level
- *  data only, exactly as `PlaylistSummary` is. `name` is a playlist title -- now
- *  a `deckLabel()` over up to five of them, which is the same class of data the
+ *  data only, exactly as `PlaylistSummary` is. `name` is a playlist title -- the
+ *  deck's first playlist, truncated, which is the same class of data the
  *  suggested-playlist buttons already show -- and `ids` is up to five playlist
  *  ids. Neither can name a track, an artist or a year.
  *
@@ -38,7 +38,6 @@
  * ===========================================================================
  */
 
-import { COPY } from './copy';
 import { MAX_DECK_PLAYLISTS, truncatePlaylistName } from './deck-merge';
 import { PLAYLIST_NAME_OVERRIDES } from './playlist-display-name';
 import type { StorageLike } from './persistence';
@@ -96,7 +95,16 @@ export interface SavedPlaylist {
    * this array, not the array itself -- see that function for why it sorts.
    */
   ids: string[];
-  /** What to call the deck: `deckLabel()`'s output, as shown on the landing screen. */
+  /**
+   * The deck's BASE name: `deckBaseName()`, i.e. the first playlist's truncated display name with
+   * NO "+N more" count (2026-09-28).
+   *
+   * The count is copy, and copy depends on the active language, so a finished `deckLabel()` stored
+   * here would keep the language it was saved in -- an English "+2 more" on a Spanish screen,
+   * forever. The store holds only the language-free part; every consumer composes the label at
+   * RENDER time as `copy.deck.label(name, ids.length - 1)`. Entries saved before this carry the
+   * finished English label, which `displayedEntryName` strips on read.
+   */
   name: string;
   /** When it was saved, epoch milliseconds. Sorts the list; never rendered as a date. */
   savedAt: number;
@@ -315,18 +323,42 @@ function validateEntry(value: unknown): SavedPlaylist | null {
 }
 
 /**
- * The stored name, unless the entry's FIRST playlist has an app-chosen label (2026-09-24).
+ * The entry's BASE name -- the first playlist's truncated name, no count -- whatever was stored.
  *
- * A saved name is a finished `deckLabel()` string, built from `ids[0]`'s title plus a "+N more"
- * count -- so an entry saved before `playlist-display-name.ts` existed holds "Hitser +2 more" and
- * nothing a read-time lookup could patch piecemeal. It is rebuilt from the same two parts instead,
- * which is exact because `savePlaylist` stores the ids in deck order. Applied on READ so an old
- * library heals without a migration; the stored payload is never rewritten.
+ * Two repairs, both applied on READ so an old library heals without a migration; the stored
+ * payload is never rewritten and the version is not bumped.
+ *
+ * 1. AN APP-CHOSEN LABEL WINS (2026-09-24). If `ids[0]` has an override, the override is the
+ *    name, whatever the entry holds -- an entry saved before `playlist-display-name.ts` existed
+ *    reads "Hitser +2 more", and it is rebuilt from the override rather than patched. Exact,
+ *    because `savePlaylist` stores the ids in deck order.
+ * 2. A LEGACY FINISHED LABEL LOSES ITS COUNT (2026-09-28). Until then the store held
+ *    `deckLabel()`'s whole output, with an ENGLISH " +N more" baked in; the label is now composed
+ *    at render time in the active language, so that suffix would be shown twice, once in the
+ *    wrong language. It is stripped only when it is EXACTLY what `COPY.deck.label` (English, the
+ *    only language that existed) produced for this entry's id count -- a mismatched count means
+ *    the text is not that suffix, and a name is never guessed at. The one false positive is a
+ *    playlist genuinely titled "Foo +2 more" saved in a three-playlist deck, which reads "Foo".
  */
 function displayedEntryName(ids: readonly string[], storedName: string): string {
   const override = PLAYLIST_NAME_OVERRIDES[ids[0]!];
-  if (override === undefined) return storedName;
-  return COPY.deck.label(truncatePlaylistName(override), ids.length - 1);
+  if (override !== undefined) return truncatePlaylistName(override);
+
+  const others = ids.length - 1;
+  if (others === 0) return storedName;
+
+  const legacySuffix = legacyLabelSuffix(others);
+  return storedName.endsWith(legacySuffix) ? storedName.slice(0, -legacySuffix.length) : storedName;
+}
+
+/**
+ * The count suffix every pre-2026-09-28 multi-playlist entry was stored with: the English
+ * `COPY.deck.label`'s " +N more", frozen here as a literal because it describes bytes ALREADY IN
+ * STORAGE. Deriving it from `COPY.deck.label` would make a future rewording of the live English
+ * label silently stop recognising the old entries -- the copy is free to change; this is not copy.
+ */
+function legacyLabelSuffix(others: number): string {
+  return ` +${others} more`;
 }
 
 /**

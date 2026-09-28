@@ -13,12 +13,14 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { LandingScreen, SUGGESTED_PLAYLISTS } from './LandingScreen';
-import { COPY, COPYRIGHT_NOTICE } from '../game/copy';
+import { COPY, COPYRIGHT_NOTICE, type Copy } from '../game/copy';
 import { auditableText } from './__fixtures__/auditable-text';
 import { fixtureDeck } from './__fixtures__/cards';
 import { LONG_PRESS_DURATION_MS } from '../game/gestures';
 import { MAX_DECK_PLAYLISTS } from '../game/deck-merge';
+import { CATALOGUES } from '../game/i18n';
 import { PLAYLIST_ERROR_MESSAGES } from '../game/messages';
+import { LocaleContext } from '../hooks/useLocale';
 import { parsePlaylistUrl, spotifyPlaylistUrl } from '../../shared/spotify-url';
 
 const PLAYLIST_URL = 'https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M';
@@ -45,15 +47,25 @@ function renderLanding(props: Partial<Parameters<typeof LandingScreen>[0]> = {})
   return { ...rendered, onSubmit, onBack, onRemoveSaved };
 }
 
-/** Two saved decks: one of a single playlist, one of three. */
+/**
+ * Two saved decks: one of a single playlist, one of three.
+ *
+ * `name` is the BASE name the library stores (2026-09-28) -- no "+N more" -- so the row's visible
+ * label is `savedLabel(saved)`, composed the way the screen composes it.
+ */
 const SAVED = [
   { ids: ['2zmXlpkOMN92NlQaE2M62c'], name: 'Party Mix', savedAt: 2_000 },
   {
     ids: ['37i9dQZF1DX1HCSfq0nSal', '37i9dQZEVXbMDoHDwVN2tF', '37i9dQZF1DX0XUsuxWHRQd'],
-    name: 'Road Trip +2 more',
+    name: 'Road Trip',
     savedAt: 1_000,
   },
 ];
+
+/** The label a saved row shows: its base name plus the count, in the given language's copy. */
+function savedLabel(saved: (typeof SAVED)[number], copy: Copy = COPY): string {
+  return copy.deck.label(saved.name, saved.ids.length - 1);
+}
 
 /**
  * Query a suggestion button by its label.
@@ -502,7 +514,11 @@ describe('LandingScreen', () => {
       // `hitst?er` since 2026-09-24: it also catches "Hitser", the first row's real Spotify title,
       // which is one letter from the mark and is the realistic way it would come back.
       expect(playlist.label).not.toMatch(/hitst?er/i);
-      expect(playlist.blurb).not.toMatch(/hitst?er/i);
+      // In EVERY language (2026-09-28): the blurb is now a copy key, and a store listing is
+      // screenshotted in each language it ships in.
+      for (const { copy } of Object.values(CATALOGUES)) {
+        expect(copy.landing.suggestionBlurbs[playlist.blurbKey]).not.toMatch(/hitst?er/i);
+      }
     }
   });
 
@@ -928,11 +944,11 @@ describe('LandingScreen', () => {
       /*
         An entry is 1..5 playlists, and it is the whole deck the player chose to keep. Submitting
         only the first id would deal a deck that is not the one the row is named after -- and the
-        row's name ("Road Trip +2 more") is the label of all three.
+        row's label ("Road Trip" plus a count of two) is the label of all three.
       */
       const { onSubmit } = renderLanding({ savedPlaylists: SAVED });
 
-      fireEvent.click(screen.getByRole('button', { name: 'Road Trip +2 more' }));
+      fireEvent.click(screen.getByRole('button', { name: savedLabel(SAVED[1]!) }));
 
       expect(onSubmit).toHaveBeenCalledExactlyOnceWith([
         'https://open.spotify.com/playlist/37i9dQZF1DX1HCSfq0nSal',
@@ -976,7 +992,7 @@ describe('LandingScreen', () => {
       const { onRemoveSaved, onSubmit } = renderLanding({ savedPlaylists: SAVED });
 
       fireEvent.click(
-        screen.getByRole('button', { name: COPY.landing.removeSaved('Road Trip +2 more') }),
+        screen.getByRole('button', { name: COPY.landing.removeSaved(savedLabel(SAVED[1]!)) }),
       );
 
       // Sorted, which is what makes the same set saved in a different row order one favourite.
@@ -995,7 +1011,7 @@ describe('LandingScreen', () => {
 
       for (const saved of SAVED) {
         expect(
-          screen.getByRole('button', { name: COPY.landing.removeSaved(saved.name) }),
+          screen.getByRole('button', { name: COPY.landing.removeSaved(savedLabel(saved)) }),
         ).not.toBeNull();
       }
     });
@@ -1273,5 +1289,73 @@ describe('LandingScreen', () => {
       }
       expect(text).not.toMatch(/\b(19|20)\d{2}\b/);
     });
+  });
+});
+
+// ===========================================================================
+//  IN ANOTHER LANGUAGE (2026-09-28)
+//
+//  Every test above renders with no provider, which is English. These render
+//  inside a Spanish one and assert against THAT catalogue, so they hold whatever
+//  the translation says. The saved row is the case that matters: its count is
+//  composed at render time, so a deck saved in English reads in Spanish here.
+// ===========================================================================
+
+describe('LandingScreen in another language', () => {
+  afterEach(cleanup);
+
+  const { copy, errorMessages } = CATALOGUES.es;
+
+  function renderInSpanish(props: Partial<Parameters<typeof LandingScreen>[0]> = {}) {
+    return render(
+      <LocaleContext.Provider value={{ locale: 'es', ...CATALOGUES.es, setLocale: () => {} }}>
+        <LandingScreen
+          onSubmit={vi.fn()}
+          onBack={vi.fn()}
+          isLoading={false}
+          {...(props.errorCode ? { errorCode: props.errorCode } : {})}
+          savedPlaylists={props.savedPlaylists ?? []}
+          onRemoveSaved={vi.fn()}
+        />
+      </LocaleContext.Provider>,
+    );
+  }
+
+  it("should compose a saved deck's label in the active language", () => {
+    renderInSpanish({ savedPlaylists: SAVED });
+
+    for (const saved of SAVED) {
+      expect(screen.getByRole('button', { name: savedLabel(saved, copy) })).not.toBeNull();
+      expect(
+        screen.getByRole('button', { name: copy.landing.removeSaved(savedLabel(saved, copy)) }),
+      ).not.toBeNull();
+    }
+  });
+
+  it("should render each suggestion's blurb from the active catalogue", () => {
+    renderInSpanish();
+
+    for (const playlist of SUGGESTED_PLAYLISTS) {
+      expect(
+        screen.getAllByText(copy.landing.suggestionBlurbs[playlist.blurbKey]),
+      ).not.toHaveLength(0);
+    }
+  });
+
+  it("should render a start failure from the active language's error map", () => {
+    renderInSpanish({ errorCode: 'offline' });
+
+    expect(screen.getByRole('alert').textContent).toBe(errorMessages['offline']);
+  });
+
+  it("should render a row's error from the active language's error map", () => {
+    renderInSpanish();
+
+    fireEvent.change(screen.getByLabelText(copy.landing.playlistLinkLabel(0)), {
+      target: { value: 'https://music.apple.com/playlist/whatever' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: copy.landing.start }));
+
+    expect(screen.getByRole('alert').textContent).toBe(errorMessages['invalid-url']);
   });
 });

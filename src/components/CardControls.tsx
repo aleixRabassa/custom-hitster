@@ -67,7 +67,7 @@
 import type { ReactNode } from 'react';
 
 import type { CardAudioControls } from '../hooks/useCardAudio';
-import { COPY } from '../game/copy';
+import { useCopy } from '../hooks/useLocale';
 import { Spinner } from './Spinner';
 
 /**
@@ -261,6 +261,7 @@ export interface CardControlsProps {
 }
 
 export function CardControls({ audio, onExit, onKeepDeck }: CardControlsProps) {
+  const copy = useCopy();
   const { canPlay, isPlaying, isLoading, play, pause } = audio;
 
   return (
@@ -297,7 +298,7 @@ export function CardControls({ audio, onExit, onKeepDeck }: CardControlsProps) {
         <button
           type="button"
           onClick={onExit}
-          aria-label={COPY.controls.exit}
+          aria-label={copy.controls.exit}
           className={EXIT_BUTTON_CLASSES}
         >
           <ExitIcon />
@@ -321,7 +322,7 @@ export function CardControls({ audio, onExit, onKeepDeck }: CardControlsProps) {
           type="button"
           onClick={isPlaying ? pause : play}
           disabled={!canPlay}
-          aria-label={isPlaying ? COPY.controls.pause : COPY.controls.play}
+          aria-label={isPlaying ? copy.controls.pause : copy.controls.play}
           aria-busy={isLoading}
           className={AUDIO_BUTTON_CLASSES}
         >
@@ -349,7 +350,7 @@ export function CardControls({ audio, onExit, onKeepDeck }: CardControlsProps) {
         <button
           type="button"
           onClick={onKeepDeck}
-          aria-label={COPY.controls.keepDeck}
+          aria-label={copy.controls.keepDeck}
           className={AUDIO_BUTTON_CLASSES}
         >
           <KeepDeckIcon />
@@ -359,7 +360,7 @@ export function CardControls({ audio, onExit, onKeepDeck }: CardControlsProps) {
       {canPlay ? null : (
         // Generic on purpose: it says the preview is missing, never which track it is missing
         // for. The QR still works, so this is a note rather than an error.
-        <p className="text-xs text-fg-muted text-center">{COPY.controls.noPreview}</p>
+        <p className="text-xs text-fg-muted text-center">{copy.controls.noPreview}</p>
       )}
     </div>
   );

@@ -88,7 +88,7 @@ import { DeckActionsDialog } from './DeckActionsDialog';
 import { ExitConfirmDialog } from './ExitConfirmDialog';
 import { Footer } from './Footer';
 import { Hud } from './Hud';
-import { COPY } from '../game/copy';
+import { useCopy } from '../hooks/useLocale';
 import { useBackNavigation } from '../hooks/useBackNavigation';
 import { useCardAudio } from '../hooks/useCardAudio';
 import type { Card as CardData } from '../../shared/types';
@@ -210,6 +210,7 @@ export function GameScreen({
   pendingYearCount,
   notice,
 }: GameScreenProps) {
+  const copy = useCopy();
   const currentCard = deck[currentIndex];
   const audio = useCardAudio(currentCard?.previewUrl);
   const { audioRef, stop } = audio;
@@ -464,7 +465,7 @@ export function GameScreen({
           number anywhere. It is dimmer than the `text-fg` it carried on the card because it is no
           longer the only thing on a dark face: it sits under a glowing card on the page.
         */}
-        <p className="text-xs text-fg-muted">{COPY.game.scanCaption}</p>
+        <p className="text-xs text-fg-muted">{copy.game.scanCaption}</p>
       </div>
 
       {/*

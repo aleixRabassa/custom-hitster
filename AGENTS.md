@@ -179,6 +179,39 @@ that nothing — not the typecheck, not a test asserting against `COPY.*` — co
 stale. **Nothing about any of this has been printed.** The cut, the duplex alignment and a scan at the
 new 39.93 mm symbol are rows in [`docs/development.md`](./docs/development.md) §5.
 
+**THE APP SPEAKS ENGLISH, SPANISH AND CATALAN AS OF 2026-09-28, AND `COPY` IS STILL THE ENGLISH
+CATALOGUE — which is why no existing test changed.** `src/game/copy.ts` keeps `COPY` and now also
+exports `type Copy` (its keys and signatures with every literal widened to `string`); `copy.es.ts` and
+`copy.ca.ts` are `satisfies Copy`, and `messages.es.ts` / `messages.ca.ts` are `ErrorMessages`
+(`Record<StartFailureCode, string>`), so **a key or a failure code added in English and forgotten in a
+translation fails the typecheck**. `src/game/i18n.ts` is the one `Record<Locale, Catalogue>` table and
+`src/game/locale.ts` the pure decisions (`LOCALES`, `matchLocale` on the primary subtag, the stored
+choice under the NEW key `hitster:locale:v1`, validated on read). Components read the active catalogue
+through **`useCopy()` / `useLocale()`** (`src/hooks/useLocale.ts`), and **the context's default value
+is English** — a component rendered without a provider, i.e. in every existing test, gets exactly the
+`COPY` object the test asserts against. Pure modules take the slice they need as a parameter defaulting
+to English (`deckLabel(playlists, copy.deck)`, `pdfFileName(name, copy.pdf)`,
+`playlistErrorMessage(code, errorMessages)`). Six things. **`LocaleProvider` wraps `ErrorBoundary` in
+`main.tsx`, OUTSIDE it**, so the crash screen is translated — and so its storage read is guarded
+(`readLocalStorage()`): a throwing `localStorage` getter there would be a white page with no crash
+screen. **`ErrorBoundary` stays a class**; its fallback is a function component (`CrashScreen`) that
+calls the hook and receives only the two handlers. **`<html lang>` follows the locale** (an effect in
+the provider) because the reveal's live region is how a screen reader hears the year, and a Spanish
+sentence under `lang="en"` is pronounced as English; `index.html` still ships `lang="en"`, as does the
+manifest, which has one `lang` and names the default. **The footer, the app name and both file-name
+prefixes are NOT translated** (the developer's decision for the footer): the translations reference
+`COPY.footer`, `COPY.app` and `COPY.pdf` rather than restating them. **`SavedPlaylist.name` is now the
+BASE name** (the first playlist's truncated name, no "+N more"), because the count is copy and a stored
+label would keep the language it was saved in forever; `LandingScreen` composes the label at render,
+and a legacy entry ending in exactly ` +${n-1} more` is stripped on read against a FROZEN literal, not
+against `COPY.deck.label`, since it describes bytes already in storage. **The selector is on the
+welcome screen only, IN FLOW as its last section** (`LanguageSelector.tsx`, three `aria-pressed`
+buttons, each language named in itself with a matching `lang`), never in a top corner: at 320px the
+192px logo leaves ~40px beside it, and moving the logo breaks the `pt-8` equal-height contract with the
+picker. Share links and resumed sessions skip the welcome screen and rely on detection. **Nothing about
+the translations has been read by a native speaker**, and the screen-reader pronunciation is unverified:
+rows in [`docs/development.md`](./docs/development.md) §5.
+
 **A LEFT SWIPE STEPS BACK ONE CARD AS OF 2026-09-18, A RIGHT SWIPE STILL ADVANCES, AND THE DECK IS NO
 LONGER ONE-DIRECTIONAL — every sentence in `src/`, `README.md` and the top-level `docs/` that said it was
 has been updated, so if you find one there, it is stale; `docs/plans/` records what was decided at the
@@ -863,7 +896,7 @@ something `plan.md` had already resolved, so read these before "fixing" the code
 - **pnpm only**, with exactly one recorded exception. Don't add `package-lock.json` or `yarn.lock`; keep `pnpm-lock.yaml` committed. The exception is `@bubblewrap/cli`, installed globally with `npm i -g` and never a project dependency — see the store-shell block above.
 - **`engines.node` is `24.x` and deliberately does not match local Node.** Don't "fix" it. The `Unsupported engine` install warning is expected.
 - **Prettier owns formatting.** No hand-formatting, no stylistic ESLint rules.
-- **The copy surface is `src/game/copy.ts`, exactly as the design surface is the `@theme static` block.** A component renders `COPY.*` and a test asserts against `COPY.*`; a user-facing literal in either is the thing to catch in review, for the same reason a stray `bg-neutral-900` is — copy is reworded by changing one value, and a literal is invisible to that. Templated strings are functions so pluralisation cannot drift. `messages.ts` keeps the error map (its `Record<StartFailureCode, string>` exhaustiveness is the point); `index.html`, `src/pwa/manifest.ts` and `public/privacy.html` are outside the rule — none can import a runtime module — and copy `COPY.app.name` by hand.
+- **The copy surface is `src/game/copy.ts`, exactly as the design surface is the `@theme static` block.** A component renders `COPY.*` and a test asserts against `COPY.*`; a user-facing literal in either is the thing to catch in review, for the same reason a stray `bg-neutral-900` is — copy is reworded by changing one value, and a literal is invisible to that. Templated strings are functions so pluralisation cannot drift. **Since 2026-09-28 a component reads `copy` from `useCopy()` rather than importing `COPY`**, and a new English key must be translated in `copy.es.ts` and `copy.ca.ts` or the typecheck fails — tests keep asserting against `COPY.*`, or against `CATALOGUES[locale].copy.*` when they render inside a provider. `messages.ts` keeps the error map (its `Record<StartFailureCode, string>` exhaustiveness is the point); `index.html`, `src/pwa/manifest.ts` and `public/privacy.html` are outside the rule — none can import a runtime module — and copy `COPY.app.name` by hand.
 - **Tailwind v4 is CSS-first** — no `tailwind.config.js`. **The design surface is the `@theme static` block in `src/index.css`**, which is where a v3 reader would look for that config file: every colour, dimension, duration and interaction minimum in the app is named there. **A new component consumes tokens rather than inventing literals** — a colour written as `bg-neutral-900` instead of `bg-surface` is the thing to catch in review, because Phase 8 redesigns by changing token values and a stray literal is invisible to that. `focus-ring` and `touch-target` are `@utility` composites in the same file; every interactive element gets `focus-visible:focus-ring`.
 - **An unknown Tailwind colour utility is a SILENT no-op, and all four checks pass either way.** `text-text-muted` against a theme defining `--color-fg-muted` emits **no rule at all** — no warning, no build error. It shipped once: the only text on the card's hidden face lost its colour and rendered near-black on a near-black card while typecheck, lint, test and build stayed green. When adding or renaming a token, grep the built CSS (`dist/assets/*.css`) for the utility, and prefer a class-name assertion in the component's test — `CardHiddenSide.test.tsx` has one.
 - **`@theme static`, not bare `@theme`.** A plain `@theme` tree-shakes any token no generated utility references, which silently kills the ones consumed only through `h-(--card-height)`-style arbitrary values, through an `@utility`, or from inside the `prefers-reduced-motion` block.

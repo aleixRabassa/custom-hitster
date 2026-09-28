@@ -29,7 +29,7 @@
  * ===========================================================================
  */
 
-import { COPY } from './copy';
+import { COPY, type Copy } from './copy';
 import { playlistDisplayName } from './playlist-display-name';
 import type { PlaylistClientErrorCode, PlaylistOutcome } from './playlist-client';
 import type { Card, PlaylistSummary } from '../../shared/types';
@@ -185,12 +185,34 @@ export const MAX_PLAYLIST_NAME_CHARS = 20;
  *  hyphen -- so it cannot reach a filesystem, exactly as `+` cannot.
  * ===========================================================================
  */
-export function truncatePlaylistName(name: string): string {
+export function truncatePlaylistName(
+  name: string,
+  ellipsis: string = COPY.deck.nameEllipsis,
+): string {
   const trimmed = name.trim();
   if (trimmed.length <= MAX_PLAYLIST_NAME_CHARS) return trimmed;
 
   // `trimEnd` so a cut landing on a space does not render as "Rock Classics …".
-  return `${trimmed.slice(0, MAX_PLAYLIST_NAME_CHARS).trimEnd()}${COPY.deck.nameEllipsis}`;
+  return `${trimmed.slice(0, MAX_PLAYLIST_NAME_CHARS).trimEnd()}${ellipsis}`;
+}
+
+/**
+ * The language-free half of `deckLabel()`: the first playlist's display name, truncated, with no
+ * count. `''` for an empty list.
+ *
+ * It is what the saved library STORES (2026-09-28). The "+N more" count is copy and therefore
+ * depends on the active language, so a finished label written to `localStorage` would keep the
+ * language it was saved in forever; the name and the id count are all a row needs to compose the
+ * label again, in whatever language is on screen when it renders.
+ */
+export function deckBaseName(
+  playlists: readonly PlaylistSummary[],
+  ellipsis: string = COPY.deck.nameEllipsis,
+): string {
+  const first = playlists[0];
+  if (!first) return '';
+
+  return truncatePlaylistName(playlistDisplayName(first), ellipsis);
 }
 
 /**
@@ -199,8 +221,10 @@ export function truncatePlaylistName(name: string): string {
  * ===========================================================================
  *  ONE FUNCTION, FOUR SURFACES, SO THEY CANNOT DISAGREE (decision 6).
  *
- *  The HUD, the end screen's count line, the PDF filename and the saved-library
- *  row all read this. Short enough for the HUD -- which also truncates in CSS --
+ *  The HUD, the end screen's count line and the PDF filename read this, and the
+ *  saved-library row joins the SAME two parts at render time (`deckBaseName()`
+ *  and its id count, through the same `deck.label`) because only the base name
+ *  is stored. Short enough for the HUD -- which also truncates in CSS --
  *  and it still names a deck the player recognises, which "3 playlists"
  *  would not.
  *
@@ -225,13 +249,16 @@ export function truncatePlaylistName(name: string): string {
  *
  * Empty in for empty out, so a caller rendering an `idle` session gets `''` rather than a crash --
  * that is the case the dropped `playlist: null` sentinel used to cover.
+ *
+ * `deckCopy` is the ACTIVE language's `deck` block (2026-09-28): this module stays pure, so the
+ * container reads `useCopy()` and passes it in. It defaults to English, which is what every node
+ * test and every caller without a language to hand gets.
  */
-export function deckLabel(playlists: readonly PlaylistSummary[]): string {
-  const first = playlists[0];
-  if (!first) return '';
+export function deckLabel(
+  playlists: readonly PlaylistSummary[],
+  deckCopy: Copy['deck'] = COPY.deck,
+): string {
+  if (playlists.length === 0) return '';
 
-  const others = playlists.length - 1;
-  const name = truncatePlaylistName(playlistDisplayName(first));
-
-  return COPY.deck.label(name, others);
+  return deckCopy.label(deckBaseName(playlists, deckCopy.nameEllipsis), playlists.length - 1);
 }

@@ -42,6 +42,20 @@
  *     the value has one home to copy from.
  * ===========================================================================
  *
+ * ===========================================================================
+ *  THIS IS THE ENGLISH CATALOGUE, AND ENGLISH IS THE DEFAULT (2026-09-28).
+ *
+ *  `copy.es.ts` and `copy.ca.ts` are the Spanish and Catalan catalogues, both
+ *  typed `satisfies Copy`. Components read the ACTIVE one through `useCopy()`
+ *  (`src/hooks/useLocale.ts`), whose context default is this object -- which is
+ *  why every test that renders a component without a provider, and asserts
+ *  against `COPY.*`, keeps asserting against English with no change. Pure
+ *  modules that need copy take it as a parameter defaulting to this object.
+ *  The footer, the app name and the two file-name prefixes are the same in
+ *  every language, and the translations reuse these values rather than
+ *  restating them.
+ * ===========================================================================
+ *
  * ## Rules for editing
  *
  * - **A value that varies is a FUNCTION, not a template a caller assembles.** `cardsLeft(n)` owns
@@ -167,6 +181,37 @@ export const COPY = {
     savedHeading: 'Your playlists',
     removeSaved: (name: string) => `Remove ${name} from your playlists`,
     suggestionsHeading: 'Or try one of these',
+    /**
+     * The one-line genre/era blurb under each suggested playlist, keyed by a stable name rather
+     * than by Spotify id so a translation reads as copy. `SUGGESTED_PLAYLISTS` in
+     * `LandingScreen.tsx` names its row's key; the playlist LABELS stay there, because they are
+     * renderings of Spotify's own titles and are the same in every language.
+     */
+    suggestionBlurbs: {
+      mixedHits: 'Mixed hits',
+      argentineTrap: 'Argentine trap',
+      catalanHits: 'Catalan hits',
+      catalanAnimeOpenings: 'Anime openings in Catalan',
+      disney: 'Disney soundtracks',
+      filmScores: 'Film and TV scores',
+      edm: 'EDM',
+      rock: 'Rock',
+      reggaeton: 'Reggaeton',
+      latinElectro: 'Latin electro',
+      globalChart: 'Global chart',
+      spanishHits: 'Spanish hits',
+      hipHop: 'Hip-hop',
+    },
+  },
+
+  /**
+   * The language selector on the welcome screen (2026-09-28). Only the GROUP's accessible name is
+   * copy: each option is the language's own name in that language (`LANGUAGE_NAMES` in
+   * `locale.ts`), which is never translated -- a player stuck in the wrong language must still
+   * recognise their own.
+   */
+  language: {
+    label: 'Language',
   },
 
   preparing: {
@@ -314,11 +359,16 @@ export const COPY = {
     /**
      * A deck's label: the first playlist's (already truncated) name, plus a count of the rest.
      *
-     * ONLY THE NAME IS TRUNCATED, NEVER THE FINISHED LABEL -- a label that lost its "+2 more"
+     * ONLY THE NAME IS TRUNCATED, NEVER THE FINISHED LABEL -- a label that lost its "+2 playlists"
      * would claim the deck is one playlist.
+     *
+     * "+N playlists" in every language (developer decision, 2026-09-29): the word is the same
+     * anglicism in Spanish and Catalan, so the three catalogues agree on it.
      */
     label: (truncatedName: string, others: number) =>
-      others === 0 ? truncatedName : `${truncatedName} +${others} more`,
+      others === 0
+        ? truncatedName
+        : `${truncatedName} +${others} ${others === 1 ? 'playlist' : 'playlists'}`,
   },
 
   pdf: {
@@ -330,6 +380,24 @@ export const COPY = {
     fileName: (slug: string) => `jitster-${slug === '' ? 'deck' : slug}.pdf`,
   },
 } as const;
+
+/**
+ * The shape every language's catalogue must have: `COPY`'s keys and function signatures, with each
+ * string literal widened to `string`.
+ *
+ * `copy.es.ts` and `copy.ca.ts` declare themselves `satisfies Copy`, so a key added here and
+ * forgotten in a translation FAILS THE TYPECHECK -- the same exhaustiveness `messages.ts` gets
+ * from `Record<StartFailureCode, string>`, applied to the whole copy surface.
+ */
+type Widen<T> = T extends string
+  ? string
+  : T extends (...args: infer A) => infer R
+    ? (...args: A) => Widen<R>
+    : T extends object
+      ? { readonly [K in keyof T]: Widen<T[K]> }
+      : T;
+
+export type Copy = Widen<typeof COPY>;
 
 /**
  * The copyright line as one string.

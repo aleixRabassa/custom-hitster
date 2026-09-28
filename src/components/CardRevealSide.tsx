@@ -66,7 +66,7 @@
  * ===========================================================================
  */
 
-import { COPY } from '../game/copy';
+import { useCopy } from '../hooks/useLocale';
 import { Spinner } from './Spinner';
 import type { Card } from '../../shared/types';
 
@@ -106,6 +106,7 @@ export function CardRevealSide({ card, isYearPending }: CardRevealSideProps) {
 }
 
 function YearSlot({ card, isYearPending }: CardRevealSideProps) {
+  const copy = useCopy();
   // Pending is checked FIRST: `year` is `undefined` here, and every branch below would
   // otherwise have to special-case it.
   if (isYearPending) {
@@ -142,7 +143,7 @@ function YearSlot({ card, isYearPending }: CardRevealSideProps) {
         <div className="flex size-(--size-year-spinner) items-center justify-center">
           <Spinner sizeClassName="size-(--size-year-spinner)" />
         </div>
-        <p className="text-sm text-fg-secondary">{COPY.card.yearPending}</p>
+        <p className="text-sm text-fg-secondary">{copy.card.yearPending}</p>
       </div>
     );
   }
@@ -150,8 +151,8 @@ function YearSlot({ card, isYearPending }: CardRevealSideProps) {
   if (card.year === null || card.year === undefined) {
     return (
       <div className="flex flex-col items-center gap-2">
-        <p className="text-year-none font-bold text-fg-heading">{COPY.card.yearUnknown}</p>
-        <p className="text-sm text-warning">{COPY.card.yearUnknownDetail}</p>
+        <p className="text-year-none font-bold text-fg-heading">{copy.card.yearUnknown}</p>
+        <p className="text-sm text-warning">{copy.card.yearUnknownDetail}</p>
       </div>
     );
   }
@@ -172,7 +173,7 @@ function YearSlot({ card, isYearPending }: CardRevealSideProps) {
         token's own comment in `src/index.css` carries the full argument.
       */}
       <p className="text-year font-bold tracking-tight text-fg-year">{card.year}</p>
-      {isUnconfirmed ? <p className="text-sm text-warning">{COPY.card.yearUnconfirmed}</p> : null}
+      {isUnconfirmed ? <p className="text-sm text-warning">{copy.card.yearUnconfirmed}</p> : null}
     </div>
   );
 }

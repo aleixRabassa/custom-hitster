@@ -44,9 +44,10 @@
  * is why both are Pending rows in `docs/development.md` §5.
  */
 
-import { COPY } from '../game/copy';
 import { MAX_DECK_PLAYLISTS } from '../game/deck-merge';
+import { useCopy, useLocale } from '../hooks/useLocale';
 import { Footer } from './Footer';
+import { LanguageSelector } from './LanguageSelector';
 import type { ReactNode } from 'react';
 
 /**
@@ -166,6 +167,9 @@ function Step({
 }
 
 export function WelcomeScreen({ onStart }: WelcomeScreenProps) {
+  const copy = useCopy();
+  const { locale, setLocale } = useLocale();
+
   return (
     /*
       `relative pb-20` is `Footer`'s contract, the same on every host: the footer is `absolute
@@ -198,7 +202,7 @@ export function WelcomeScreen({ onStart }: WelcomeScreenProps) {
         <h1>
           <img
             src="/logo.webp"
-            alt={COPY.welcome.logoAlt}
+            alt={copy.welcome.logoAlt}
             width={384}
             height={384}
             fetchPriority="high"
@@ -206,7 +210,7 @@ export function WelcomeScreen({ onStart }: WelcomeScreenProps) {
           />
         </h1>
 
-        <p className="text-xl font-semibold">{COPY.welcome.tagline}</p>
+        <p className="text-xl font-semibold">{copy.welcome.tagline}</p>
 
         {/*
           The big button. `text-on-accent`, not `text-white`, for the contrast reason the picker's
@@ -224,7 +228,7 @@ export function WelcomeScreen({ onStart }: WelcomeScreenProps) {
           onClick={onStart}
           className="touch-target w-full rounded-lg bg-accent px-6 py-4 text-lg font-semibold text-on-accent hover:bg-accent-hover focus-visible:focus-ring"
         >
-          {COPY.welcome.enter}
+          {copy.welcome.enter}
         </button>
       </section>
 
@@ -234,26 +238,26 @@ export function WelcomeScreen({ onStart }: WelcomeScreenProps) {
         same thing, which is why they are `aria-hidden`.
       */}
       <section className="flex w-full max-w-content flex-col gap-3 sm:max-w-2xl">
-        <h2 className="text-sm text-fg-secondary">{COPY.welcome.howItWorksHeading}</h2>
+        <h2 className="text-sm text-fg-secondary">{copy.welcome.howItWorksHeading}</h2>
 
         <ol className="grid gap-3 sm:grid-cols-3">
           <Step
             number={1}
             icon={<PlaylistIcon />}
-            title={COPY.welcome.steps.pick.title}
-            body={COPY.welcome.steps.pick.body(MAX_DECK_PLAYLISTS)}
+            title={copy.welcome.steps.pick.title}
+            body={copy.welcome.steps.pick.body(MAX_DECK_PLAYLISTS)}
           />
           <Step
             number={2}
             icon={<PlayCardIcon />}
-            title={COPY.welcome.steps.play.title}
-            body={COPY.welcome.steps.play.body}
+            title={copy.welcome.steps.play.title}
+            body={copy.welcome.steps.play.body}
           />
           <Step
             number={3}
             icon={<FlipIcon />}
-            title={COPY.welcome.steps.guess.title}
-            body={COPY.welcome.steps.guess.body}
+            title={copy.welcome.steps.guess.title}
+            body={copy.welcome.steps.guess.body}
           />
         </ol>
       </section>
@@ -283,7 +287,7 @@ export function WelcomeScreen({ onStart }: WelcomeScreenProps) {
         =====================================================================
       */}
       <section className="flex w-full max-w-content flex-col gap-3 sm:max-w-2xl">
-        <h2 className="text-sm text-fg-secondary">{COPY.welcome.printHeading}</h2>
+        <h2 className="text-sm text-fg-secondary">{copy.welcome.printHeading}</h2>
 
         <div className="flex flex-col gap-4 rounded-lg border border-border bg-surface p-4 sm:flex-row sm:items-center sm:gap-6">
           <div
@@ -294,7 +298,7 @@ export function WelcomeScreen({ onStart }: WelcomeScreenProps) {
           </div>
 
           <div className="flex min-w-0 flex-1 flex-col gap-3">
-            <p className="text-sm text-fg-secondary">{COPY.welcome.printDetail}</p>
+            <p className="text-sm text-fg-secondary">{copy.welcome.printDetail}</p>
 
             {/*
               THE APP'S SECOND `<a>`, after the footer's author link, and it follows the same
@@ -309,14 +313,26 @@ export function WelcomeScreen({ onStart }: WelcomeScreenProps) {
             */}
             <a
               href={YEAR_CARDS_PDF_PATH}
-              download={COPY.welcome.yearCardsFileName}
+              download={copy.welcome.yearCardsFileName}
               className="touch-target flex items-center justify-center gap-2 self-start rounded-lg border border-border-strong px-4 py-2 font-medium text-fg hover:border-border-hover focus-visible:focus-ring"
             >
               <DownloadIcon />
-              {COPY.welcome.printCards}
+              {copy.welcome.printCards}
             </a>
           </div>
         </div>
+      </section>
+
+      {/*
+        THE LANGUAGE SWITCH (2026-09-28): in flow, last, centred -- NOT an absolute top corner. At
+        320px the 192px logo leaves ~40px beside it, so three touch targets up there would overlap
+        it, and moving the logo down instead breaks the `pt-8` equal-height contract with
+        `LandingScreen` above. On THIS screen only: the picker's corner already holds Back, and the
+        game screen is a height budget. A share link or a resumed session skips this screen and
+        relies on `LocaleProvider`'s auto-detection, which is the right default for both.
+      */}
+      <section className="flex w-full max-w-content justify-center">
+        <LanguageSelector locale={locale} onChange={setLocale} />
       </section>
 
       {/* The app's actual front door now, so the one screen where a copyright line is most expected. */}

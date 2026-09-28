@@ -66,7 +66,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 
-import { COPY } from '../game/copy';
+import { useCopy } from '../hooks/useLocale';
 import { qrCacheKey, readQrCache, writeQrCache } from '../game/qr-cache';
 import { loadQrcode } from '../game/qrcode-loader';
 
@@ -96,8 +96,6 @@ export interface QrCodeProps {
   alt?: string;
 }
 
-const DEFAULT_ALT = COPY.qr.alt;
-
 /**
  * The memoized `import('qrcode')` moved to `src/game/qrcode-loader.ts` on 2026-08-06, when the PDF
  * export became a second consumer of the same chunk. Everything that made it memoized -- including
@@ -126,7 +124,10 @@ const DEFAULT_ALT = COPY.qr.alt;
  * ===========================================================================
  */
 
-export function QrCode({ url, size, displaySize, alt = DEFAULT_ALT }: QrCodeProps) {
+export function QrCode({ url, size, displaySize, alt }: QrCodeProps) {
+  // The default is the ACTIVE language's, so it is read in render rather than as a parameter default.
+  const copy = useCopy();
+  const altText = alt ?? copy.qr.alt;
   const renderedSize = displaySize ?? `${size}px`;
 
   /**
@@ -247,7 +248,7 @@ export function QrCode({ url, size, displaySize, alt = DEFAULT_ALT }: QrCodeProp
     */
     <img
       src={dataUrl}
-      alt={alt}
+      alt={altText}
       width={size}
       height={size}
       /*

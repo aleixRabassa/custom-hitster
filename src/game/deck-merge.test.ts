@@ -8,8 +8,8 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { COPY } from './copy';
-import { MAX_DECK_PLAYLISTS, deckLabel, mergePlaylists } from './deck-merge';
+import { COPY, type Copy } from './copy';
+import { MAX_DECK_PLAYLISTS, deckBaseName, deckLabel, mergePlaylists } from './deck-merge';
 import type { PlaylistOutcome } from './playlist-client';
 import { JITSTER_OFFICIAL_PLAYLIST_ID, PLAYLIST_NAME_OVERRIDES } from './playlist-display-name';
 import type { Card, PlaylistSummary } from '../../shared/types';
@@ -241,5 +241,50 @@ describe('deckLabel', () => {
     // The `idle` case. This is what the dropped `playlist: null` sentinel used to cover, and a
     // caller rendering it gets `''` rather than a crash.
     expect(deckLabel([])).toBe('');
+  });
+
+  it("should compose the label from the active language's deck copy", () => {
+    // `deck-merge.ts` is pure, so the container hands in `useCopy().deck`. A stub catalogue proves
+    // both halves come from it -- the count's wording AND the ellipsis -- without depending on
+    // what any real translation currently says.
+    const deckCopy: Copy['deck'] = {
+      nameEllipsis: '~',
+      label: (name, others) => (others === 0 ? name : `${name} [${others}]`),
+    };
+
+    expect(
+      deckLabel([playlist('one', 'Songs For The Long Drive'), playlist('two')], deckCopy),
+    ).toBe('Songs For The Long D~ [1]');
+  });
+});
+
+describe('deckBaseName', () => {
+  it('should be the first display name, truncated, with no count', () => {
+    // What the saved library stores (2026-09-28): the count is copy, so it stays out of storage.
+    expect(
+      deckBaseName([
+        playlist('one', 'Songs For The Long Drive'),
+        playlist('two', 'Disco'),
+        playlist('three'),
+      ]),
+    ).toBe(`Songs For The Long D${COPY.deck.nameEllipsis}`);
+  });
+
+  it('should use the app label for an overridden playlist', () => {
+    expect(deckBaseName([playlist(JITSTER_OFFICIAL_PLAYLIST_ID, 'Hitser'), playlist('two')])).toBe(
+      PLAYLIST_NAME_OVERRIDES[JITSTER_OFFICIAL_PLAYLIST_ID],
+    );
+  });
+
+  it('should be exactly the part deckLabel joins the count to', () => {
+    const playlists = [playlist('one', 'Rock Classics'), playlist('two'), playlist('three')];
+
+    expect(COPY.deck.label(deckBaseName(playlists), playlists.length - 1)).toBe(
+      deckLabel(playlists),
+    );
+  });
+
+  it('should return an empty string for no playlists', () => {
+    expect(deckBaseName([])).toBe('');
   });
 });

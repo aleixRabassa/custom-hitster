@@ -30,7 +30,7 @@
 import { useEffect, useRef } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 
-import { COPY } from '../game/copy';
+import { useCopy } from '../hooks/useLocale';
 import { DeckActions } from './DeckActions';
 import type { DeckActionsProps } from './DeckActions';
 
@@ -54,6 +54,7 @@ export type DeckActionsDialogProps = DeckActionsProps & {
 };
 
 export function DeckActionsDialog({ onClose, ...deckActions }: DeckActionsDialogProps) {
+  const copy = useCopy();
   const panelRef = useRef<HTMLDivElement>(null);
 
   /**
@@ -146,7 +147,7 @@ export function DeckActionsDialog({ onClose, ...deckActions }: DeckActionsDialog
         className="flex w-full max-w-content flex-col gap-4 rounded-lg border border-border-strong bg-surface p-5 text-fg"
       >
         <h2 id="deck-actions-title" className="text-lg font-semibold">
-          {COPY.deckActionsDialog.title}
+          {copy.deckActionsDialog.title}
         </h2>
 
         <DeckActions {...deckActions} />
@@ -160,7 +161,7 @@ export function DeckActionsDialog({ onClose, ...deckActions }: DeckActionsDialog
           onClick={onClose}
           className="touch-target rounded-lg border border-border-strong px-4 py-2 font-medium text-fg hover:border-border-hover focus-visible:focus-ring"
         >
-          {COPY.deckActionsDialog.close}
+          {copy.deckActionsDialog.close}
         </button>
       </div>
     </div>

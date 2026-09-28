@@ -102,7 +102,7 @@
  * history has the full story) -- `Footer.test.tsx` asserts the class for exactly that reason.
  */
 
-import { COPY } from '../game/copy';
+import { useCopy } from '../hooks/useLocale';
 
 /**
  * Re-exported for the leak proofs, which subtract this exact string from a screen's `textContent`
@@ -112,6 +112,7 @@ import { COPY } from '../game/copy';
 export { COPYRIGHT_NOTICE } from '../game/copy';
 
 export function Footer() {
+  const copy = useCopy();
   return (
     /*
       A `<footer>` inside `<main>` is NOT a `contentinfo` landmark -- the role applies only when the
@@ -132,7 +133,7 @@ export function Footer() {
       above and below; the two numbers move together or not at all.
     */
     <footer className="absolute inset-x-0 bottom-8 text-center text-xs text-fg-muted">
-      {COPY.footer.prefix}
+      {copy.footer.prefix}
       {/*
         =========================================================================
          THE AUTHOR'S NAME CARRIES THE APP'S GREEN, ASKED FOR ON 2026-08-12.
@@ -186,13 +187,13 @@ export function Footer() {
       */}
       <a
         className="font-bold text-accent focus-visible:focus-ring"
-        href={COPY.footer.authorUrl}
+        href={copy.footer.authorUrl}
         target="_blank"
         rel="noreferrer noopener"
       >
-        {COPY.footer.author}
+        {copy.footer.author}
       </a>
-      {COPY.footer.suffix}
+      {copy.footer.suffix}
     </footer>
   );
 }

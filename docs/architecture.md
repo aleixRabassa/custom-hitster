@@ -403,6 +403,20 @@ The developer asked for "an explanatory, visual landing page with a big Start bu
 
 ---
 
+### Languages (`src/game/locale.ts`, `src/game/i18n.ts`, `src/hooks/useLocale.ts`) — built 2026-09-28
+
+English, Spanish and Catalan, chosen by the player with a selector on the welcome screen or, failing that, detected from `navigator.languages`. No i18n library: `COPY` was already one typed object with every varying sentence as a function, so each language is another object of the same shape, and a key-string API (`t('hud.cardsLeft')`) would have given up the typing that makes a missing translation a compile error.
+
+- **Catalogues.** `copy.ts` (`COPY`, English, plus `type Copy`), `copy.es.ts`, `copy.ca.ts`, and the error maps `messages.ts` / `messages.es.ts` / `messages.ca.ts`. `i18n.ts` joins them as `CATALOGUES: Record<Locale, { copy, errorMessages }>`. Plurals are hand-written per language — all three distinguish only 1 from the rest, so `Intl.PluralRules` would buy nothing. Catalan's `end.cardsPlayed` elides `de` → `d'` before a vowel-initial playlist name, the one piece of logic in any catalogue.
+- **Choosing.** `locale.ts` is pure: a stored choice (`hitster:locale:v1`, validated on read) beats the browser list, matched on the primary subtag (`es-AR` → `es`), falling back to English. `LocaleProvider` computes it in `useState`'s lazy initializer, so the first paint is already in the right language, and mirrors it to `document.documentElement.lang`.
+- **Reading.** `useCopy()` / `useLocale()` over a context whose default is the English catalogue, which is why the pre-existing suite did not change. Pure modules take the slice they need as a defaulted parameter. `usePdfExport`'s `exportDeck` now depends on the active `pdf` copy, so it changes identity on a language switch; `DeckActions`' `hasAutoExportedRef` already stops that from exporting twice.
+- **Mounting.** `main.tsx`: `StrictMode > LocaleProvider > ErrorBoundary > MotionConfig > App`. Outside the boundary so the crash screen is translated, which is also why the provider guards the `localStorage` getter itself.
+- **What does not change with the language.** The app name, the copyright line, the `jitster-` file names and the year-cards PDF; the manifest's `lang` (one per manifest, so it names the default) and `index.html`'s bytes; the playlist LABELS in `SUGGESTED_PLAYLISTS`, which render Spotify's own titles — only their blurbs are copy (`COPY.landing.suggestionBlurbs`, keyed by name).
+- **The saved library stores the language-free part.** `SavedPlaylist.name` is the base name; the "+N more" is composed at render. Entries saved before this carry an English suffix and are stripped on read against a frozen literal — with one known false positive, a playlist genuinely named "Foo +2 more" leading a three-playlist deck.
+- **Where the selector is.** The welcome screen's last in-flow section, never a top corner (see `WelcomeScreen.tsx`): the logo leaves ~40px beside it at 320px, and moving the logo breaks the equal-height contract with the picker. It costs ~5.4 kB gzip in total JS, landing in the shared `gestures` chunk.
+
+---
+
 ### The platform back press (`src/game/back-navigation.ts` + `src/hooks/useBackNavigation.ts`) — built 2026-08-12
 
 **The bug this fixes is invisible, which is why it is worth a subsection.** `App.tsx` never touches the address bar, which is correct for the web and has a consequence inside a Trusted Web Activity that is not: there is **no history entry to go back to**, so Android's back gesture closes the activity outright. Mid-game a reflexive edge swipe therefore ended the game while bypassing `ExitConfirmDialog` — and bypassed it _silently_, because the session survives in `localStorage` and a relaunch resumes. The player experiences it as the app quitting at random rather than as a game they lost.

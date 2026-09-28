@@ -4,6 +4,7 @@ import { MotionConfig } from 'motion/react';
 import './index.css';
 import App from './App';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { LocaleProvider } from './components/LocaleProvider';
 
 /**
  * ===========================================================================
@@ -50,13 +51,18 @@ import { ErrorBoundary } from './components/ErrorBoundary';
  *  tree is caught too. Its fallback renders no error message by design -- see
  *  `ErrorBoundary.tsx`, the deck is in scope of anything it catches.
  * ===========================================================================
+ *
+ * `LocaleProvider` is the OUTERMOST provider, outside `ErrorBoundary`, so the crash screen reads the
+ * player's language too. Its own render is a context value and a storage read that cannot throw.
  */
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <ErrorBoundary>
-      <MotionConfig reducedMotion="user">
-        <App />
-      </MotionConfig>
-    </ErrorBoundary>
+    <LocaleProvider>
+      <ErrorBoundary>
+        <MotionConfig reducedMotion="user">
+          <App />
+        </MotionConfig>
+      </ErrorBoundary>
+    </LocaleProvider>
   </StrictMode>,
 );

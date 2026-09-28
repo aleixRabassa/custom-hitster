@@ -30,7 +30,7 @@
  * having resolved nothing at all. Nothing here may block on `resolvedCount > 0`.
  */
 
-import { COPY } from '../game/copy';
+import { useCopy } from '../hooks/useLocale';
 import { Footer } from './Footer';
 import { Spinner } from './Spinner';
 import type { ReactNode } from 'react';
@@ -47,6 +47,7 @@ export interface PreparingScreenProps {
 }
 
 export function PreparingScreen({ notice }: PreparingScreenProps) {
+  const copy = useCopy();
   return (
     /*
       `relative pb-20` is `Footer`'s contract, and the band is the SAME on all four screens as of
@@ -71,7 +72,7 @@ export function PreparingScreen({ notice }: PreparingScreenProps) {
         */}
         <Spinner />
 
-        <p className="text-lg font-medium">{COPY.preparing.heading}</p>
+        <p className="text-lg font-medium">{copy.preparing.heading}</p>
 
         {/*
           Sets the expectation honestly: the wait is one lookup, not the whole deck.
@@ -82,7 +83,7 @@ export function PreparingScreen({ notice }: PreparingScreenProps) {
           the sentence stays: it is the only thing on the screen that says the game is about to
           start rather than that a long job is running.
         */}
-        <p className="max-w-narrow text-xs text-fg-muted">{COPY.preparing.detail}</p>
+        <p className="max-w-narrow text-xs text-fg-muted">{copy.preparing.detail}</p>
       </div>
 
       {/*

@@ -14,6 +14,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CardControls } from './CardControls';
 import { highConfidenceCard } from './__fixtures__/cards';
 import { COPY } from '../game/copy';
+import { CATALOGUES } from '../game/i18n';
+import { LocaleContext } from '../hooks/useLocale';
 import type { CardAudioControls } from '../hooks/useCardAudio';
 
 /** A stub `useCardAudio` return value. `canPlay` is the only interesting axis here. */
@@ -417,5 +419,20 @@ describe('CardControls', () => {
 
     play.click();
     expect(audio.pause).toHaveBeenCalledTimes(1);
+  });
+
+  it('should name the controls in the active language', () => {
+    // The same exact-list assertion as the generic-names test, against another catalogue: an
+    // `aria-label` is copy too, and it is the only name these icon buttons have.
+    const { copy } = CATALOGUES.es;
+    render(
+      <LocaleContext.Provider value={{ locale: 'es', ...CATALOGUES.es, setLocale: () => {} }}>
+        {controls()}
+      </LocaleContext.Provider>,
+    );
+
+    const names = screen.getAllByRole('button').map((button) => button.getAttribute('aria-label'));
+
+    expect(names).toEqual([copy.controls.exit, copy.controls.play, copy.controls.keepDeck]);
   });
 });

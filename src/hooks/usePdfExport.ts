@@ -47,6 +47,7 @@ import {
 } from '../game/pdf-sheet';
 import { pdfFileName, sanitizeForPdf } from '../game/pdf-text';
 import { loadQrcode } from '../game/qrcode-loader';
+import { useCopy } from './useLocale';
 import { spotifyTrackUrl } from '../../shared/spotify-url';
 import type { CardPlacement } from '../game/pdf-sheet';
 import type { Card } from '../../shared/types';
@@ -95,6 +96,9 @@ const QR_PIXELS = 512;
 
 export function usePdfExport(): UsePdfExportResult {
   const [state, setState] = useState<PdfExportState>(IDLE);
+  // The file name is the one string the document carries that is not track data -- in the ACTIVE
+  // language, hence a dependency of `exportDeck` below.
+  const pdfCopy = useCopy().pdf;
 
   /**
    * Which export the running async work belongs to, and whether the hook is still mounted.
@@ -115,91 +119,95 @@ export function usePdfExport(): UsePdfExportResult {
     };
   }, []);
 
-  const exportDeck = useCallback((deck: readonly Card[], playlistName: string) => {
-    const generation = ++generationRef.current;
-    const publish = (next: PdfExportState) => {
-      if (!isMountedRef.current || generationRef.current !== generation) return;
-      setState(next);
-    };
+  const exportDeck = useCallback(
+    (deck: readonly Card[], playlistName: string) => {
+      const generation = ++generationRef.current;
+      const publish = (next: PdfExportState) => {
+        if (!isMountedRef.current || generationRef.current !== generation) return;
+        setState(next);
+      };
 
-    const { cards, excludedCount } = selectPrintableCards(deck);
+      const { cards, excludedCount } = selectPrintableCards(deck);
 
-    if (cards.length === 0) {
-      publish({ status: 'nothing-to-print', completed: 0, total: 0, excludedCount });
-      return;
-    }
+      if (cards.length === 0) {
+        publish({ status: 'nothing-to-print', completed: 0, total: 0, excludedCount });
+        return;
+      }
 
-    publish({ status: 'working', completed: 0, total: cards.length, excludedCount });
+      publish({ status: 'working', completed: 0, total: cards.length, excludedCount });
 
-    void (async () => {
-      try {
-        /*
+      void (async () => {
+        try {
+          /*
           Both loads started together, then awaited: they are independent, and a QR chunk that is
           already warm from the game screen means this is effectively one request for jsPDF.
 
           A NAMED import of `jsPDF`, not a default one -- `verbatimModuleSyntax` is on with no
           `esModuleInterop`, which is the same constraint that made `qrcode`'s import named.
         */
-        const [{ jsPDF }, { toDataURL }] = await Promise.all([import('jspdf'), loadQrcode()]);
+          const [{ jsPDF }, { toDataURL }] = await Promise.all([import('jspdf'), loadQrcode()]);
 
-        const codes: string[] = [];
-        for (const card of cards) {
-          const dataUrl = await toDataURL(spotifyTrackUrl(card.id), {
-            // `margin` is in MODULES, not pixels. One module is a valid quiet zone; the paper
-            // margin around it is `CARD_PADDING_MM` in `pdf-sheet.ts`, and the two are additive.
-            margin: 1,
-            width: QR_PIXELS,
-            errorCorrectionLevel: 'M',
+          const codes: string[] = [];
+          for (const card of cards) {
+            const dataUrl = await toDataURL(spotifyTrackUrl(card.id), {
+              // `margin` is in MODULES, not pixels. One module is a valid quiet zone; the paper
+              // margin around it is `CARD_PADDING_MM` in `pdf-sheet.ts`, and the two are additive.
+              margin: 1,
+              width: QR_PIXELS,
+              errorCorrectionLevel: 'M',
+            });
+            codes.push(dataUrl);
+
+            publish({
+              status: 'working',
+              completed: codes.length,
+              total: cards.length,
+              excludedCount,
+            });
+
+            // The loop is already yielding on every `await`, so the count above actually paints. That
+            // is the whole reason generation is sequential rather than a `Promise.all` over 100 cards:
+            // a parallel burst would finish sooner and show nothing until it did.
+            if (generationRef.current !== generation) return;
+          }
+
+          const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+          // A standard font, hence `pdf-text.ts`: WinAnsi cannot draw Cyrillic or CJK, and embedding a
+          // font that could costs more than the whole rest of this chunk.
+          doc.setFont('helvetica', 'normal');
+
+          const pages = planSheets(cards.length);
+          pages.forEach((page, pageIndex) => {
+            if (pageIndex > 0) doc.addPage();
+
+            for (const placement of page.placements) {
+              drawCutOutline(doc, placement);
+
+              if (page.side === 'front')
+                drawFront(doc, placement, codes[placement.cardIndex] ?? '');
+              else drawBack(doc, placement, cards[placement.cardIndex]);
+            }
           });
-          codes.push(dataUrl);
+
+          doc.save(pdfFileName(playlistName, pdfCopy));
 
           publish({
-            status: 'working',
-            completed: codes.length,
+            status: 'done',
+            completed: cards.length,
             total: cards.length,
             excludedCount,
           });
-
-          // The loop is already yielding on every `await`, so the count above actually paints. That
-          // is the whole reason generation is sequential rather than a `Promise.all` over 100 cards:
-          // a parallel burst would finish sooner and show nothing until it did.
-          if (generationRef.current !== generation) return;
+        } catch (error) {
+          // A failed chunk fetch and a jsPDF throw land in the same place, and neither has anything
+          // useful to say to the player: nothing was downloaded, and pressing the button again is the
+          // whole remedy. The detail goes to the console, which is not a rendered surface.
+          console.error('[pdf] export failed:', error);
+          publish({ status: 'failed', completed: 0, total: 0, excludedCount });
         }
-
-        const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
-        // A standard font, hence `pdf-text.ts`: WinAnsi cannot draw Cyrillic or CJK, and embedding a
-        // font that could costs more than the whole rest of this chunk.
-        doc.setFont('helvetica', 'normal');
-
-        const pages = planSheets(cards.length);
-        pages.forEach((page, pageIndex) => {
-          if (pageIndex > 0) doc.addPage();
-
-          for (const placement of page.placements) {
-            drawCutOutline(doc, placement);
-
-            if (page.side === 'front') drawFront(doc, placement, codes[placement.cardIndex] ?? '');
-            else drawBack(doc, placement, cards[placement.cardIndex]);
-          }
-        });
-
-        doc.save(pdfFileName(playlistName));
-
-        publish({
-          status: 'done',
-          completed: cards.length,
-          total: cards.length,
-          excludedCount,
-        });
-      } catch (error) {
-        // A failed chunk fetch and a jsPDF throw land in the same place, and neither has anything
-        // useful to say to the player: nothing was downloaded, and pressing the button again is the
-        // whole remedy. The detail goes to the console, which is not a rendered surface.
-        console.error('[pdf] export failed:', error);
-        publish({ status: 'failed', completed: 0, total: 0, excludedCount });
-      }
-    })();
-  }, []);
+      })();
+    },
+    [pdfCopy],
+  );
 
   return { state, exportDeck };
 }

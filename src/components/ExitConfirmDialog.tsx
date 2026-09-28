@@ -39,7 +39,7 @@
 import { useEffect, useRef } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 
-import { COPY } from '../game/copy';
+import { useCopy } from '../hooks/useLocale';
 
 /** `KeyboardEvent.key` for the dismissal. */
 const CANCEL_KEY = 'Escape';
@@ -52,6 +52,7 @@ export interface ExitConfirmDialogProps {
 }
 
 export function ExitConfirmDialog({ onConfirm, onCancel }: ExitConfirmDialogProps) {
+  const copy = useCopy();
   const cancelRef = useRef<HTMLButtonElement>(null);
   const confirmRef = useRef<HTMLButtonElement>(null);
 
@@ -139,7 +140,7 @@ export function ExitConfirmDialog({ onConfirm, onCancel }: ExitConfirmDialogProp
         className="flex w-full max-w-content flex-col gap-4 rounded-lg border border-border-strong bg-surface p-5 text-fg"
       >
         <h2 id="exit-confirm-title" className="text-lg font-semibold">
-          {COPY.exitDialog.title}
+          {copy.exitDialog.title}
         </h2>
 
         {/*
@@ -149,7 +150,7 @@ export function ExitConfirmDialog({ onConfirm, onCancel }: ExitConfirmDialogProp
           as a threat over what is a two-button choice the player can simply decline.
         */}
         <p id="exit-confirm-description" className="text-sm text-fg-secondary">
-          {COPY.exitDialog.body}
+          {copy.exitDialog.body}
         </p>
 
         {/*
@@ -164,7 +165,7 @@ export function ExitConfirmDialog({ onConfirm, onCancel }: ExitConfirmDialogProp
             onClick={onCancel}
             className="flex-1 touch-target rounded-lg border border-border-strong px-4 py-2 font-medium text-fg hover:border-border-hover focus-visible:focus-ring"
           >
-            {COPY.exitDialog.cancel}
+            {copy.exitDialog.cancel}
           </button>
 
           {/* Red and FILLED, unlike the exit glyph: this is the press that actually destroys the
@@ -175,7 +176,7 @@ export function ExitConfirmDialog({ onConfirm, onCancel }: ExitConfirmDialogProp
             onClick={onConfirm}
             className="flex-1 touch-target rounded-lg bg-danger px-4 py-2 font-medium text-on-danger hover:bg-danger-hover focus-visible:focus-ring"
           >
-            {COPY.exitDialog.confirm}
+            {copy.exitDialog.confirm}
           </button>
         </div>
       </div>

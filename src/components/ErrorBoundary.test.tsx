@@ -34,6 +34,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ErrorBoundary } from './ErrorBoundary';
 import { COPY } from '../game/copy';
+import { CATALOGUES } from '../game/i18n';
+import { LocaleContext } from '../hooks/useLocale';
 import { highConfidenceCard } from './__fixtures__/cards';
 import { SESSION_STORAGE_KEY, SESSION_VERSION } from '../game/persistence';
 import type { StorageLike } from '../game/persistence';
@@ -210,5 +212,22 @@ describe('ErrorBoundary', () => {
     );
 
     expect(screen.getByRole('alert')).not.toBeNull();
+  });
+
+  it('should render the fallback in the active language', () => {
+    // The fallback is a function component inside the class precisely so it can read the locale;
+    // `main.tsx` mounts the provider OUTSIDE the boundary, which is what this arrangement models.
+    const { copy } = CATALOGUES.ca;
+    render(
+      <LocaleContext.Provider value={{ locale: 'ca', ...CATALOGUES.ca, setLocale: () => {} }}>
+        <ErrorBoundary>
+          <Exploding message="boom" />
+        </ErrorBoundary>
+      </LocaleContext.Provider>,
+    );
+
+    expect(screen.getByRole('heading', { name: copy.errorBoundary.heading })).not.toBeNull();
+    expect(screen.getByRole('button', { name: copy.errorBoundary.reload })).not.toBeNull();
+    expect(screen.getByRole('button', { name: copy.errorBoundary.startOver })).not.toBeNull();
   });
 });

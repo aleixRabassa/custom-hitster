@@ -48,7 +48,14 @@ import type { PlaylistClientErrorCode } from './playlist-client';
  */
 export type StartFailureCode = PlaylistClientErrorCode | 'no-years-found';
 
-export const PLAYLIST_ERROR_MESSAGES: Record<StartFailureCode, string> = {
+/**
+ * One language's error copy. Every catalogue -- this English one, `messages.es.ts` and
+ * `messages.ca.ts` -- is typed with it, so a new code fails the typecheck in all three at once.
+ */
+export type ErrorMessages = Record<StartFailureCode, string>;
+
+/** The English error copy, and the default for `playlistErrorMessage`. */
+export const PLAYLIST_ERROR_MESSAGES: ErrorMessages = {
   'invalid-url':
     'That does not look like a Spotify playlist link. Paste the link from Spotify’s Share menu.',
 
@@ -122,13 +129,17 @@ export const PLAYLIST_ERROR_MESSAGES: Record<StartFailureCode, string> = {
 };
 
 /**
- * The message for a code.
+ * The message for a code, in the language of `messages` (English by default; a component passes
+ * the active catalogue's map from `useLocale()`).
  *
  * A function rather than direct indexing so a code arriving from outside the type system -- a
  * response body, a persisted value -- cannot render `undefined` into the DOM. The map above is
  * exhaustive by type, so this fallback is unreachable through any typed path, and that is the
  * intent: it is a runtime backstop, not a substitute for exhaustiveness.
  */
-export function playlistErrorMessage(code: StartFailureCode): string {
-  return PLAYLIST_ERROR_MESSAGES[code] ?? PLAYLIST_ERROR_MESSAGES['unknown-error'];
+export function playlistErrorMessage(
+  code: StartFailureCode,
+  messages: ErrorMessages = PLAYLIST_ERROR_MESSAGES,
+): string {
+  return messages[code] ?? messages['unknown-error'];
 }

@@ -22,7 +22,7 @@
  * decision's reasons are answered in `DeckActions`' header rather than dropped.
  */
 
-import { COPY } from '../game/copy';
+import { useCopy } from '../hooks/useLocale';
 import { DeckActions } from './DeckActions';
 import { Footer } from './Footer';
 import { truncatePlaylistName } from '../game/deck-merge';
@@ -115,6 +115,7 @@ export function EndScreen({
   deck,
   pendingYearCount,
 }: EndScreenProps) {
+  const copy = useCopy();
   return (
     /*
       `relative pb-20` is `Footer`'s contract, and the band is the SAME on all four screens as of
@@ -123,9 +124,9 @@ export function EndScreen({
     */
     <main className="relative flex min-h-dvh flex-col items-center justify-center gap-8 bg-page p-6 pb-20 text-fg">
       <div className="flex flex-col items-center gap-2 text-center">
-        <h1 className="text-3xl font-semibold">{COPY.end.heading}</h1>
+        <h1 className="text-3xl font-semibold">{copy.end.heading}</h1>
         <p className="text-sm text-fg-secondary">
-          {COPY.end.cardsPlayed(cardsPlayed, playlistName)}
+          {copy.end.cardsPlayed(cardsPlayed, playlistName)}
         </p>
 
         {/*
@@ -156,14 +157,14 @@ export function EndScreen({
           // accent measured 3.67:1 and is a 1.4.3 failure; the background is unchanged.
           className="touch-target rounded-lg bg-accent px-4 py-2 font-medium text-on-accent hover:bg-accent-hover focus-visible:focus-ring"
         >
-          {COPY.end.restart}
+          {copy.end.restart}
         </button>
 
         {/*
           Worth saying out loud: a player who has just heard forty songs wants to know whether
           "play again" means the same order. It does not -- a fresh seed reshuffles.
         */}
-        <p className="text-center text-xs text-fg-muted">{COPY.end.restartDetail}</p>
+        <p className="text-center text-xs text-fg-muted">{copy.end.restartDetail}</p>
 
         {/*
           "Home", not "New playlist": the landing screen is also where the saved-playlist library
@@ -175,7 +176,7 @@ export function EndScreen({
           onClick={onHome}
           className="touch-target rounded-lg border border-border-strong px-4 py-2 font-medium text-fg hover:border-border-hover focus-visible:focus-ring"
         >
-          {COPY.end.home}
+          {copy.end.home}
         </button>
       </div>
 
@@ -188,7 +189,7 @@ export function EndScreen({
         extraction rather than a side effect of it.
       */}
       <section className="flex w-full max-w-content flex-col gap-3">
-        <h2 className="text-sm text-fg-secondary">{COPY.end.keepDeckHeading}</h2>
+        <h2 className="text-sm text-fg-secondary">{copy.end.keepDeckHeading}</h2>
 
         <DeckActions
           playlistIds={playlistIds}

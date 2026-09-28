@@ -53,7 +53,7 @@
 import { Component } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
 
-import { COPY } from '../game/copy';
+import { useCopy } from '../hooks/useLocale';
 import { clearSession } from '../game/persistence';
 import type { StorageLike } from '../game/persistence';
 
@@ -130,62 +130,73 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   render(): ReactNode {
     if (!this.state.hasCrashed) return this.props.children;
 
-    return (
-      <main
-        /*
-          `role="alert"` so the screen is ANNOUNCED. A crash replaces the whole page with no
-          keystroke and no focus change, so without it a screen-reader user is left on a page that
-          silently became something else.
-        */
-        role="alert"
-        className="flex min-h-dvh flex-col items-center justify-center gap-6 bg-page p-6 text-fg"
-      >
-        <div className="flex max-w-content flex-col gap-3 text-center">
-          <h1 className="text-2xl font-semibold">{COPY.errorBoundary.heading}</h1>
+    return <CrashScreen onReload={this.handleReload} onStartOver={this.handleStartOver} />;
+  }
+}
 
-          {/*
-            GENERIC, and it stays generic. No message, no stack, no code -- see the header block.
-            It says what happened, what to try, and where a developer should look, which is
-            everything that can be said without quoting the error.
-          */}
-          <p className="text-sm text-fg-secondary">{COPY.errorBoundary.body}</p>
-        </div>
+/**
+ * The fallback itself, split out of the class so it can read the active language with `useCopy()`
+ * -- a class cannot call a hook. It receives the two handlers and NOTHING about the error, so the
+ * leak stays unavailable here exactly as it is in the boundary's state.
+ */
+function CrashScreen({ onReload, onStartOver }: { onReload: () => void; onStartOver: () => void }) {
+  const copy = useCopy();
+
+  return (
+    <main
+      /*
+        `role="alert"` so the screen is ANNOUNCED. A crash replaces the whole page with no
+        keystroke and no focus change, so without it a screen-reader user is left on a page that
+        silently became something else.
+      */
+      role="alert"
+      className="flex min-h-dvh flex-col items-center justify-center gap-6 bg-page p-6 text-fg"
+    >
+      <div className="flex max-w-content flex-col gap-3 text-center">
+        <h1 className="text-2xl font-semibold">{copy.errorBoundary.heading}</h1>
 
         {/*
-          Reload first in the DOM, so reading order, visual order and tab order agree and the
-          destructive action is last in all three -- the same ordering `ExitConfirmDialog` uses.
+          GENERIC, and it stays generic. No message, no stack, no code -- see the header block.
+          It says what happened, what to try, and where a developer should look, which is
+          everything that can be said without quoting the error.
         */}
-        <div className="flex w-full max-w-content flex-col gap-3">
+        <p className="text-sm text-fg-secondary">{copy.errorBoundary.body}</p>
+      </div>
+
+      {/*
+        Reload first in the DOM, so reading order, visual order and tab order agree and the
+        destructive action is last in all three -- the same ordering `ExitConfirmDialog` uses.
+      */}
+      <div className="flex w-full max-w-content flex-col gap-3">
+        <button
+          type="button"
+          onClick={onReload}
+          className="touch-target rounded-lg bg-accent px-4 py-2 font-medium text-on-accent hover:bg-accent-hover focus-visible:focus-ring"
+        >
+          {copy.errorBoundary.reload}
+        </button>
+
+        <div className="flex flex-col gap-1">
           <button
             type="button"
-            onClick={this.handleReload}
-            className="touch-target rounded-lg bg-accent px-4 py-2 font-medium text-on-accent hover:bg-accent-hover focus-visible:focus-ring"
+            onClick={onStartOver}
+            className="touch-target rounded-lg border border-border-strong px-4 py-2 font-medium text-fg hover:border-border-hover focus-visible:focus-ring"
           >
-            {COPY.errorBoundary.reload}
+            {copy.errorBoundary.startOver}
           </button>
 
-          <div className="flex flex-col gap-1">
-            <button
-              type="button"
-              onClick={this.handleStartOver}
-              className="touch-target rounded-lg border border-border-strong px-4 py-2 font-medium text-fg hover:border-border-hover focus-visible:focus-ring"
-            >
-              {COPY.errorBoundary.startOver}
-            </button>
-
-            {/*
-              The consequence, next to the button rather than inside it. A label long enough to
-              carry it ("Start over and delete the saved game") stops looking like a button, and a
-              player who has just been shown a crash screen is not reading carefully -- so the
-              short label goes on the control and the cost goes underneath it, where it is still
-              read out with the button by a screen reader following the same reading order.
-            */}
-            <p className="text-xs text-fg-muted">{COPY.errorBoundary.startOverDetail}</p>
-          </div>
+          {/*
+            The consequence, next to the button rather than inside it. A label long enough to
+            carry it ("Start over and delete the saved game") stops looking like a button, and a
+            player who has just been shown a crash screen is not reading carefully -- so the
+            short label goes on the control and the cost goes underneath it, where it is still
+            read out with the button by a screen reader following the same reading order.
+          */}
+          <p className="text-xs text-fg-muted">{copy.errorBoundary.startOverDetail}</p>
         </div>
-      </main>
-    );
-  }
+      </div>
+    </main>
+  );
 }
 
 /**

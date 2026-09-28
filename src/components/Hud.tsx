@@ -17,7 +17,7 @@
  * thing to want and the second one is how one of them quietly stops working.
  */
 
-import { COPY } from '../game/copy';
+import { useCopy } from '../hooks/useLocale';
 
 export interface HudProps {
   /**
@@ -31,6 +31,7 @@ export interface HudProps {
 }
 
 export function Hud({ cardsRemaining, playlistName }: HudProps) {
+  const copy = useCopy();
   return (
     <div
       data-testid="hud"
@@ -59,7 +60,7 @@ export function Hud({ cardsRemaining, playlistName }: HudProps) {
         screen-reader user gets that a swipe actually advanced the deck.
       */}
       <span role="status" className="shrink-0 tabular-nums">
-        {COPY.hud.cardsLeft(cardsRemaining)}
+        {copy.hud.cardsLeft(cardsRemaining)}
       </span>
     </div>
   );

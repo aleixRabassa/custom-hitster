@@ -16,7 +16,7 @@ import {
   savedDeckKey,
 } from './playlist-library';
 import { COPY } from './copy';
-import { MAX_DECK_PLAYLISTS } from './deck-merge';
+import { MAX_DECK_PLAYLISTS, deckBaseName, deckLabel, truncatePlaylistName } from './deck-merge';
 import { JITSTER_OFFICIAL_PLAYLIST_ID, PLAYLIST_NAME_OVERRIDES } from './playlist-display-name';
 import type { SavedPlaylist } from './playlist-library';
 import type { StorageLike } from './persistence';
@@ -249,7 +249,7 @@ describe('playlist-library', () => {
 describe('the multi-playlist library', () => {
   it('should show an entry led by an overridden playlist under the app label, on read', () => {
     // An entry saved before `playlist-display-name.ts` existed holds the finished Spotify-title
-    // label. It heals on READ -- rebuilt from the override plus the same "+N more" count -- and
+    // label. It heals on READ -- to the override alone, the BASE name the store now means -- and
     // the stored payload is left exactly as it was.
     const storage = memoryStorage();
     savePlaylist(storage, {
@@ -260,31 +260,31 @@ describe('the multi-playlist library', () => {
     const rawBefore = storage.map.get(LIBRARY_STORAGE_KEY);
 
     expect(loadLibrary(storage)[0]?.name).toBe(
-      COPY.deck.label(PLAYLIST_NAME_OVERRIDES[JITSTER_OFFICIAL_PLAYLIST_ID]!, 2),
+      truncatePlaylistName(PLAYLIST_NAME_OVERRIDES[JITSTER_OFFICIAL_PLAYLIST_ID]!),
     );
     expect(storage.map.get(LIBRARY_STORAGE_KEY)).toBe(rawBefore);
   });
 
-  it('should leave the stored name alone when the first playlist has no override', () => {
-    // Only `ids[0]` names the label, so an overridden playlist further down the deck changes nothing.
+  it('should apply the override only when it leads the deck', () => {
+    // Only `ids[0]` names the deck, so an overridden playlist further down changes nothing.
     const storage = memoryStorage();
     savePlaylist(storage, {
       ids: ['a', JITSTER_OFFICIAL_PLAYLIST_ID],
-      name: 'Rock Classics +1 more',
+      name: 'Rock Classics',
       savedAt: 1_000,
     });
 
-    expect(loadLibrary(storage)[0]?.name).toBe('Rock Classics +1 more');
+    expect(loadLibrary(storage)[0]?.name).toBe('Rock Classics');
   });
 
   it('should save an entry holding several ids', () => {
     const storage = memoryStorage();
 
-    savePlaylist(storage, { ids: ['a', 'b', 'c'], name: 'Rock Classics +2 more', savedAt: 1_000 });
+    savePlaylist(storage, { ids: ['a', 'b', 'c'], name: 'Rock Classics', savedAt: 1_000 });
 
     // In ROW ORDER on the entry itself -- only the KEY is sorted.
     expect(loadLibrary(storage)).toEqual([
-      { ids: ['a', 'b', 'c'], name: 'Rock Classics +2 more', savedAt: 1_000 },
+      { ids: ['a', 'b', 'c'], name: 'Rock Classics', savedAt: 1_000 },
     ]);
   });
 
@@ -415,5 +415,85 @@ describe('savedDeckKey', () => {
     savedDeckKey({ ids });
 
     expect(ids).toEqual(['c', 'a', 'b']);
+  });
+});
+
+// ===========================================================================
+//  THE STORE HOLDS THE BASE NAME, NOT THE FINISHED LABEL (2026-09-28)
+//
+//  The "+N more" count is copy, and copy follows the active language -- so a
+//  stored `deckLabel()` would keep the language it was saved in. The store holds
+//  the first playlist's truncated name alone, the landing screen composes the
+//  label at render time, and entries written before the change lose their
+//  ENGLISH suffix on read. The raw payload is never rewritten.
+// ===========================================================================
+
+describe('the base name', () => {
+  /** Seed a v2 payload directly, the way a build from before 2026-09-28 left it. */
+  function seedV2(storage: ReturnType<typeof memoryStorage>, entries: SavedPlaylist[]): void {
+    storage.map.set(LIBRARY_STORAGE_KEY, JSON.stringify({ version: LIBRARY_VERSION, entries }));
+  }
+
+  it('should strip the legacy English count from a multi-playlist entry', () => {
+    const storage = memoryStorage();
+    seedV2(storage, [{ ids: ['a', 'b', 'c'], name: 'Foo +2 more', savedAt: 1_000 }]);
+    const rawBefore = storage.map.get(LIBRARY_STORAGE_KEY);
+
+    expect(loadLibrary(storage)[0]?.name).toBe('Foo');
+    // Healed on READ, never by a write -- the same contract the override repair keeps.
+    expect(storage.map.get(LIBRARY_STORAGE_KEY)).toBe(rawBefore);
+  });
+
+  it('should leave a single-playlist entry untouched', () => {
+    // A one-playlist label never had a count, so a name that merely LOOKS like one is a title.
+    const storage = memoryStorage();
+    seedV2(storage, [{ ids: ['a'], name: 'Foo +2 more', savedAt: 1_000 }]);
+
+    expect(loadLibrary(storage)[0]?.name).toBe('Foo +2 more');
+  });
+
+  it('should leave a suffix whose count does not match the ids untouched', () => {
+    // Stripped only when it is EXACTLY the suffix this entry's id count would have produced; any
+    // other count means the text is not that suffix, and a name is never guessed at.
+    const storage = memoryStorage();
+    seedV2(storage, [{ ids: ['a', 'b'], name: 'Foo +5 more', savedAt: 1_000 }]);
+
+    expect(loadLibrary(storage)[0]?.name).toBe('Foo +5 more');
+  });
+
+  it("should leave a lifted v1 entry's name as stored", () => {
+    // The v1 lift is load-bearing and must survive this repair: a v1 entry is exactly one id, so
+    // its name reaches the screen exactly as stored.
+    const storage = memoryStorage();
+    storage.map.set(
+      LIBRARY_STORAGE_KEY,
+      JSON.stringify({ version: 1, entries: [{ id: 'a', name: 'Foo +1 more', savedAt: 1_000 }] }),
+    );
+
+    expect(loadLibrary(storage)).toEqual([{ ids: ['a'], name: 'Foo +1 more', savedAt: 1_000 }]);
+  });
+
+  it('should store a newly saved multi-playlist deck under its base name', () => {
+    // What the container hands `savePlaylist`: `deckBaseName()`, with no count in any language.
+    const storage = memoryStorage();
+    const playlists = [
+      { id: 'a', name: 'Rock Classics', owner: 'Spotify' },
+      { id: 'b', name: 'Disco', owner: 'Spotify' },
+      { id: 'c', name: 'Soul', owner: 'Spotify' },
+    ];
+
+    savePlaylist(storage, {
+      ids: playlists.map((playlist) => playlist.id),
+      name: deckBaseName(playlists),
+      savedAt: 1_000,
+    });
+
+    const raw = JSON.parse(storage.map.get(LIBRARY_STORAGE_KEY) ?? '{}') as {
+      entries: SavedPlaylist[];
+    };
+    expect(raw.entries[0]?.name).toBe('Rock Classics');
+    expect(loadLibrary(storage)[0]?.name).toBe('Rock Classics');
+    // And the label the landing screen composes from it is the one the HUD shows.
+    expect(COPY.deck.label(loadLibrary(storage)[0]!.name, 2)).toBe(deckLabel(playlists));
   });
 });

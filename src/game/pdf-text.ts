@@ -29,7 +29,7 @@
  * ===========================================================================
  */
 
-import { COPY } from './copy';
+import { COPY, type Copy } from './copy';
 
 /**
  * Typographic characters that have a plain-ASCII equivalent worth preferring.
@@ -179,8 +179,11 @@ export function sanitizeForPdf(text: string): string {
  * separates it from the two `localStorage` keys, `hitster:session:v1` and `hitster:library:v1`, which
  * keep their old names on purpose: a renamed key is not read, so it silently discards a saved game
  * and a curated library. A filename has no such continuity to break.
+ *
+ * `pdfCopy` is the active language's `pdf` catalogue, passed in by `usePdfExport` (this module is
+ * pure and cannot read a hook); it defaults to English.
  */
-export function pdfFileName(playlistName: string): string {
+export function pdfFileName(playlistName: string, pdfCopy: Copy['pdf'] = COPY.pdf): string {
   const slug = sanitizeForPdf(playlistName)
     .normalize('NFD')
     .replace(/\p{M}/gu, '')
@@ -189,5 +192,5 @@ export function pdfFileName(playlistName: string): string {
     .replace(/^-+|-+$/g, '')
     .slice(0, 60);
 
-  return COPY.pdf.fileName(slug);
+  return pdfCopy.fileName(slug);
 }

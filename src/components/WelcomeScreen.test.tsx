@@ -10,8 +10,13 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { COPYRIGHT_NOTICE } from './Footer';
+import { LocaleProvider } from './LocaleProvider';
 import { WelcomeScreen, YEAR_CARDS_PDF_PATH } from './WelcomeScreen';
 import { COPY } from '../game/copy';
+import { CATALOGUES } from '../game/i18n';
+import { LANGUAGE_NAMES, LOCALES, type Locale } from '../game/locale';
+import type { StorageLike } from '../game/persistence';
+import { DEFAULT_LOCALE_CONTEXT, LocaleContext } from '../hooks/useLocale';
 import { auditableText } from './__fixtures__/auditable-text';
 import { fixtureDeck } from './__fixtures__/cards';
 
@@ -22,8 +27,34 @@ function renderWelcome() {
   return { ...rendered, onStart };
 }
 
+/** The screen in one fixed language, with no storage and no detection involved. */
+function renderWelcomeIn(locale: Locale) {
+  return render(
+    <LocaleContext.Provider value={{ ...DEFAULT_LOCALE_CONTEXT, locale, ...CATALOGUES[locale] }}>
+      <WelcomeScreen onStart={vi.fn()} />
+    </LocaleContext.Provider>,
+  );
+}
+
+function memoryStorage(): StorageLike {
+  const map = new Map<string, string>();
+  return {
+    getItem: (key) => map.get(key) ?? null,
+    setItem: (key, value) => {
+      map.set(key, value);
+    },
+    removeItem: (key) => {
+      map.delete(key);
+    },
+  };
+}
+
 describe('WelcomeScreen', () => {
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    // `LocaleProvider` writes to the shared document; reset it so no test inherits a language.
+    document.documentElement.lang = '';
+  });
 
   it('should hand the player to the picker on one press', () => {
     // The screen's one job. The button's name is `COPY.welcome.enter`, which is deliberately NOT
@@ -92,8 +123,9 @@ describe('WelcomeScreen', () => {
     const { container } = renderWelcome();
 
     // The footer's author link is excluded: it has its own tests and deliberately no touch target.
+    // The big button, the download, and one language button per locale (2026-09-28).
     const interactive = [...container.querySelectorAll('button, main > section a')];
-    expect(interactive).toHaveLength(2);
+    expect(interactive).toHaveLength(2 + LOCALES.length);
 
     for (const element of interactive) {
       expect(element.className).toContain('focus-visible:focus-ring');
@@ -151,11 +183,16 @@ describe('WelcomeScreen', () => {
     expect(decoration?.textContent ?? '').not.toMatch(/\d/);
   });
 
-  it('should not render any track title, artist, or year', () => {
+  it.each(LOCALES)('should not render any track title, artist, or year (%s)', (locale) => {
     // ===================================================================
     //  THE FRONT DOOR'S LEAK ASSERTION. The screen takes no `Card`, so this
     //  exists to make adding one -- "here is what a card looks like", with a
     //  real card -- fail a test.
+    //
+    //  RUN ONCE PER LOCALE (2026-09-28), because every string below is a
+    //  translation and a year can arrive in one language only. Each run
+    //  subtracts THAT locale's strings, so a translated `printDetail` is
+    //  removed by its own exact text.
     //
     //  FIVE STRINGS ARE SUBTRACTED, NOT TOLERATED, each by EXACT string, so
     //  the proxy stays absolute for everything else: reword any of them and
@@ -178,20 +215,21 @@ describe('WelcomeScreen', () => {
     //  of the five appears once. Neither range string contains the other (one
     //  starts with `/`, the other with `jitster-`), so the order is free.
     // ===================================================================
-    const { container } = renderWelcome();
+    const copy = CATALOGUES[locale].copy;
+    const { container } = renderWelcomeIn(locale);
     const audited = auditableText(container);
 
     // The subtraction is load-bearing only if the audit READS the two attributes: this is what
     // fails if `download` or `href` ever drops out of the shared list and the proxy goes back to
     // passing by omission.
-    expect(audited).toContain(COPY.welcome.yearCardsFileName);
+    expect(audited).toContain(copy.welcome.yearCardsFileName);
     expect(audited).toContain(YEAR_CARDS_PDF_PATH);
 
     const text = audited
-      .replace(COPYRIGHT_NOTICE, '')
-      .replace(COPY.footer.authorUrl, '')
-      .replace(COPY.welcome.printDetail, '')
-      .replace(COPY.welcome.yearCardsFileName, '')
+      .replace(copy.footer.notice, '')
+      .replace(copy.footer.authorUrl, '')
+      .replace(copy.welcome.printDetail, '')
+      .replace(copy.welcome.yearCardsFileName, '')
       .replace(YEAR_CARDS_PDF_PATH, '');
 
     for (const card of fixtureDeck) {
@@ -200,5 +238,35 @@ describe('WelcomeScreen', () => {
       if (typeof card.year === 'number') expect(text).not.toContain(String(card.year));
     }
     expect(text).not.toMatch(/\b(19|20)\d{2}\b/);
+  });
+
+  it('should name every language without a digit, since the names sit on a pre-start surface', () => {
+    for (const locale of LOCALES) expect(LANGUAGE_NAMES[locale]).not.toMatch(/\d/);
+  });
+
+  it('should re-render in the language the player picks, and say so to the document', () => {
+    // ===================================================================
+    //  THE REAL PROVIDER, NOT A HAND-BUILT CONTEXT: the press has to go
+    //  through `setLocale` for this to mean anything. Until the Spanish
+    //  catalogue lands, its `welcome.enter` equals English and the first
+    //  assertion is vacuous -- the `lang` assertion is the one that
+    //  discriminates in both states.
+    // ===================================================================
+    render(
+      <LocaleProvider storage={memoryStorage()} languages={['en']}>
+        <WelcomeScreen onStart={vi.fn()} />
+      </LocaleProvider>,
+    );
+
+    expect(document.documentElement.lang).toBe('en');
+
+    fireEvent.click(screen.getByRole('button', { name: LANGUAGE_NAMES.es }));
+
+    expect(screen.getByRole('button', { name: CATALOGUES.es.copy.welcome.enter })).not.toBeNull();
+    if (CATALOGUES.es.copy.welcome.enter !== COPY.welcome.enter) {
+      expect(screen.queryByRole('button', { name: COPY.welcome.enter })).toBeNull();
+    }
+    expect(screen.getByRole('button', { name: LANGUAGE_NAMES.es, pressed: true })).not.toBeNull();
+    expect(document.documentElement.lang).toBe('es');
   });
 });

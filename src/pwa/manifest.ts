@@ -143,10 +143,12 @@ export const manifest: Partial<ManifestOptions> = {
    * `auto`.
    *
    * Both are here because `bubblewrap init` prompts for them and Play seeds the default LISTING
-   * language from what the manifest says. Every player-visible string in the app is English — the
-   * whole copy surface is `src/game/copy.ts` and it is English end to end — so an app that let the
-   * store guess would be guessing at a fact this repo already knows. `ltr` follows from that; it is
-   * not a claim about what a translation would need, and translating the app means changing both.
+   * language from what the manifest says. **The app speaks English, Spanish and Catalan as of
+   * 2026-09-28** (`src/game/locale.ts`), but a web manifest has ONE `lang` and no per-language
+   * variant, so this names the DEFAULT locale and the listing's primary language: English. The
+   * running app corrects `<html lang>` to the active locale at runtime (`LocaleProvider`); nothing
+   * here follows it, and the name is "Playlist Jitster" in every language anyway. `ltr` holds for
+   * all three.
    */
   lang: 'en',
   dir: 'ltr',

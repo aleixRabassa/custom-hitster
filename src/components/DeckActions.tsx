@@ -56,7 +56,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { Spinner } from './Spinner';
-import { COPY } from '../game/copy';
+import { useCopy } from '../hooks/useLocale';
 import { buildDeckLink } from '../game/deck-link';
 import { sheetsForDeck, usePdfExport } from '../hooks/usePdfExport';
 import type { PdfExportState } from '../hooks/usePdfExport';
@@ -166,6 +166,7 @@ type CopyState = 'idle' | 'copied' | 'failed';
  * ===========================================================================
  */
 function ExportMessage({ state }: { state: PdfExportState }) {
+  const copy = useCopy();
   // `idle` and `working` say nothing: the button label is already carrying the progress, and an
   // empty region is what keeps this from announcing before it has news.
   if (state.status === 'idle' || state.status === 'working') return null;
@@ -177,11 +178,11 @@ function ExportMessage({ state }: { state: PdfExportState }) {
     >
       {state.status === 'done'
         ? state.excludedCount === 0
-          ? COPY.deckActions.exportDone
-          : COPY.deckActions.exportDonePartial(state.excludedCount)
+          ? copy.deckActions.exportDone
+          : copy.deckActions.exportDonePartial(state.excludedCount)
         : state.status === 'nothing-to-print'
-          ? COPY.deckActions.exportEmpty
-          : COPY.deckActions.exportFailed}
+          ? copy.deckActions.exportEmpty
+          : copy.deckActions.exportFailed}
     </p>
   );
 }
@@ -202,6 +203,7 @@ export function DeckActions({
   deck,
   pendingYearCount,
 }: DeckActionsProps) {
+  const copy = useCopy();
   const { state: pdf, exportDeck } = usePdfExport();
   const sheets = sheetsForDeck(deck);
   const isDeckResolved = pendingYearCount === 0;
@@ -359,7 +361,7 @@ export function DeckActions({
         <div role="status" className="flex flex-col items-center gap-3">
           <Spinner />
 
-          <p className="text-sm font-medium text-fg">{COPY.deckActions.waitingHeading}</p>
+          <p className="text-sm font-medium text-fg">{copy.deckActions.waitingHeading}</p>
 
           {/*
             Says what the wait actually is, in the same spirit as the preparing screen's second
@@ -367,7 +369,7 @@ export function DeckActions({
             here is a rough number of seconds -- which is the only honest expectation available.
           */}
           <p className="max-w-narrow text-xs text-fg-muted">
-            {COPY.deckActions.waitingDetail(pendingYearCount)}
+            {copy.deckActions.waitingDetail(pendingYearCount)}
           </p>
         </div>
 
@@ -402,8 +404,8 @@ export function DeckActions({
             className={BUTTON_CLASSES}
           >
             {pdf.status === 'working'
-              ? COPY.deckActions.printing(pdf.completed, pdf.total)
-              : COPY.deckActions.printPartial}
+              ? copy.deckActions.printing(pdf.completed, pdf.total)
+              : copy.deckActions.printPartial}
           </button>
 
           {/*
@@ -419,7 +421,7 @@ export function DeckActions({
             }}
             className={BUTTON_CLASSES}
           >
-            {COPY.deckActions.cancel}
+            {copy.deckActions.cancel}
           </button>
         </div>
 
@@ -435,7 +437,7 @@ export function DeckActions({
   return (
     <div className="flex flex-col gap-3">
       <button type="button" onClick={handleCopy} className={BUTTON_CLASSES}>
-        {COPY.deckActions.copyLink}
+        {copy.deckActions.copyLink}
       </button>
 
       {/*
@@ -448,7 +450,7 @@ export function DeckActions({
         that has to be read and believed, and a slash in it reads as boilerplate.
       */}
       <p className="text-center text-xs text-fg-muted">
-        {COPY.deckActions.shareCaption(playlistIds.length)}
+        {copy.deckActions.shareCaption(playlistIds.length)}
       </p>
 
       <button
@@ -462,7 +464,7 @@ export function DeckActions({
         disabled={isPlaylistSaved}
         className={BUTTON_CLASSES}
       >
-        {isPlaylistSaved ? COPY.deckActions.saved : COPY.deckActions.save}
+        {isPlaylistSaved ? copy.deckActions.saved : copy.deckActions.save}
       </button>
 
       <button
@@ -475,8 +477,8 @@ export function DeckActions({
         className={BUTTON_CLASSES}
       >
         {pdf.status === 'working'
-          ? COPY.deckActions.printing(pdf.completed, pdf.total)
-          : COPY.deckActions.print}
+          ? copy.deckActions.printing(pdf.completed, pdf.total)
+          : copy.deckActions.print}
       </button>
 
       {/*
@@ -495,8 +497,8 @@ export function DeckActions({
       */}
       <p className="text-center text-xs text-fg-muted">
         {isDeckResolved
-          ? COPY.deckActions.sheetSummary(sheets)
-          : COPY.deckActions.printWaitsForYears(pendingYearCount)}
+          ? copy.deckActions.sheetSummary(sheets)
+          : copy.deckActions.printWaitsForYears(pendingYearCount)}
       </p>
 
       <ExportMessage state={pdf} />
@@ -509,10 +511,10 @@ export function DeckActions({
       {copyState === 'idle' ? null : (
         <div role="status" className="flex flex-col gap-2">
           {copyState === 'copied' ? (
-            <p className="text-center text-xs text-fg-secondary">{COPY.deckActions.linkCopied}</p>
+            <p className="text-center text-xs text-fg-secondary">{copy.deckActions.linkCopied}</p>
           ) : (
             <>
-              <p className="text-center text-xs text-warning">{COPY.deckActions.linkCopyFailed}</p>
+              <p className="text-center text-xs text-warning">{copy.deckActions.linkCopyFailed}</p>
               {/*
                 `readOnly` and not a `<p>`: a text input can be selected with one keystroke and
                 is reachable by a keyboard, which is what makes this a real fallback rather than
@@ -522,7 +524,7 @@ export function DeckActions({
                 type="text"
                 readOnly
                 value={failedLink ?? ''}
-                aria-label={COPY.deckActions.shareLinkFieldLabel}
+                aria-label={copy.deckActions.shareLinkFieldLabel}
                 onFocus={(event) => event.currentTarget.select()}
                 className="rounded-lg border border-border bg-surface px-3 py-2 text-xs text-fg focus-visible:focus-ring"
               />

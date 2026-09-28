@@ -7,6 +7,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { Hud } from './Hud';
 import { COPY } from '../game/copy';
+import { CATALOGUES } from '../game/i18n';
+import { LocaleContext } from '../hooks/useLocale';
 import { fixtureDeck } from './__fixtures__/cards';
 
 describe('Hud', () => {
@@ -104,5 +106,17 @@ describe('Hud', () => {
       expect(text).not.toContain(card.artist);
     }
     expect(text).not.toMatch(/\b(19|20)\d{2}\b/);
+  });
+
+  it('should render the count in the active language', () => {
+    // No provider is English (every test above); a provider is what `main.tsx` mounts. Asserted
+    // against the catalogue, never a literal, so a reworded translation fails nothing.
+    render(
+      <LocaleContext.Provider value={{ locale: 'es', ...CATALOGUES.es, setLocale: () => {} }}>
+        <Hud cardsRemaining={3} playlistName="Rock Classics" />
+      </LocaleContext.Provider>,
+    );
+
+    expect(screen.getByTestId('hud').textContent).toContain(CATALOGUES.es.copy.hud.cardsLeft(3));
   });
 });

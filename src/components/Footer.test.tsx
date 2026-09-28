@@ -11,6 +11,9 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { Footer } from './Footer';
 import { COPY } from '../game/copy';
+import { CATALOGUES } from '../game/i18n';
+import { LOCALES } from '../game/locale';
+import { LocaleContext } from '../hooks/useLocale';
 
 describe('Footer', () => {
   // Not automatic in this repo: Testing Library only registers its own `afterEach(cleanup)` when
@@ -181,4 +184,22 @@ describe('Footer', () => {
     expect(footer?.hasAttribute('role')).toBe(false);
     expect(footer?.hasAttribute('aria-label')).toBe(false);
   });
+
+  it.each(LOCALES)(
+    "should render the %s catalogue's notice as one uninterrupted string",
+    (locale) => {
+      // The footer reads its parts through the active catalogue, so the no-separator contract above
+      // has to hold in EVERY language: a catalogue whose prefix, author and suffix do not concatenate
+      // to its own `notice` would split the string the leak proofs subtract.
+      const { container } = render(
+        <LocaleContext.Provider value={{ locale, ...CATALOGUES[locale], setLocale: () => {} }}>
+          <Footer />
+        </LocaleContext.Provider>,
+      );
+
+      expect(container.querySelector('footer')?.textContent).toBe(
+        CATALOGUES[locale].copy.footer.notice,
+      );
+    },
+  );
 });

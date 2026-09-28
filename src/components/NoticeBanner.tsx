@@ -34,7 +34,7 @@
  * so it cannot reappear on the next card (decision 9).
  */
 
-import { COPY } from '../game/copy';
+import { useCopy } from '../hooks/useLocale';
 import { MAX_EMBED_TRACKS } from '../../shared/constants';
 
 export interface NoticeBannerProps {
@@ -77,31 +77,32 @@ export function NoticeBanner({
   yearLookupsUnavailable,
   onDismiss,
 }: NoticeBannerProps) {
+  const copy = useCopy();
   const notices: string[] = [];
 
   if (truncated) {
     // "A playlist", not "this playlist": a combined deck can be truncated because ONE of five hit
     // the cap, and `MergedDeck.truncated` is an OR that does not say which.
-    notices.push(COPY.notice.truncated(MAX_EMBED_TRACKS));
+    notices.push(copy.notice.truncated(MAX_EMBED_TRACKS));
   }
 
   if (skippedCount > 0) {
     // Pluralised, because "1 tracks" in a message about data quality undermines the message.
-    notices.push(COPY.notice.skippedTracks(skippedCount));
+    notices.push(copy.notice.skippedTracks(skippedCount));
   }
 
   if (failedPlaylistCount > 0) {
-    notices.push(COPY.notice.failedPlaylists(failedPlaylistCount));
+    notices.push(copy.notice.failedPlaylists(failedPlaylistCount));
   }
 
   // Only for a COMBINED deck. One playlist is the case the whole app had before this feature, and
   // its size was never worth a line -- saying it now would put a banner on a screen that had none.
   if (loadedPlaylistCount > 1) {
-    notices.push(COPY.notice.combinedDeck(deckSize, loadedPlaylistCount));
+    notices.push(copy.notice.combinedDeck(deckSize, loadedPlaylistCount));
   }
 
   if (yearLookupsUnavailable) {
-    notices.push(COPY.notice.yearsUnavailable);
+    notices.push(copy.notice.yearsUnavailable);
   }
 
   // The common case: nothing applies, so nothing renders. Returning null rather than an empty
@@ -140,7 +141,7 @@ export function NoticeBanner({
       <button
         type="button"
         onClick={onDismiss}
-        aria-label={COPY.notice.dismiss}
+        aria-label={copy.notice.dismiss}
         className="-my-1 flex shrink-0 touch-target items-center justify-center rounded text-warning-glyph hover:text-warning-text focus-visible:focus-ring"
       >
         ✕

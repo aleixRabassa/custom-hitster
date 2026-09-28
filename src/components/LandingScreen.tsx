@@ -71,7 +71,6 @@ import { useRef, useState } from 'react';
 
 import { Footer } from './Footer';
 import { SuggestionButton } from './SuggestionButton';
-import { COPY } from '../game/copy';
 import { MAX_DECK_PLAYLISTS } from '../game/deck-merge';
 import { playlistErrorMessage } from '../game/messages';
 import { savedDeckKey } from '../game/playlist-library';
@@ -80,7 +79,9 @@ import {
   PLAYLIST_NAME_OVERRIDES,
 } from '../game/playlist-display-name';
 import { planSelectionToggle, selectedPlaylistIds } from '../game/playlist-selection';
+import { useLocale } from '../hooks/useLocale';
 import { isSpotifyShortLink, parsePlaylistUrl, spotifyPlaylistUrl } from '../../shared/spotify-url';
+import type { Copy } from '../game/copy';
 import type { StartFailureCode } from '../game/messages';
 import type { SavedPlaylist } from '../game/playlist-library';
 
@@ -112,6 +113,13 @@ interface PlaylistRow {
 /** The `id` of the `<p>` a row's input points `aria-describedby` at. */
 function rowErrorId(rowId: string): string {
   return `playlist-url-error-${rowId}`;
+}
+
+/** One suggested playlist: its Spotify id, its (untranslated) label and its blurb's copy key. */
+export interface SuggestedPlaylist {
+  readonly id: string;
+  readonly label: string;
+  readonly blurbKey: keyof Copy['landing']['suggestionBlurbs'];
 }
 
 /**
@@ -154,32 +162,40 @@ function rowErrorId(rowId: string): string {
  * allowed: it tells the player every card shares an artist, and the game is guessing the YEAR, which
  * an artist gives nothing away about. Naming a track or a year would still be a leak.
  *
+ * **A blurb is a KEY into `copy.landing.suggestionBlurbs` (2026-09-28), not a string.** It is the
+ * half of a row that is the app's own words, so it is translated with the rest of the copy; the
+ * label is a Spotify title (or the app's name for one) and reads the same in every language.
+ *
  * Stored as ids and turned into full links at the click, via `spotifyPlaylistUrl()`. The id is the
  * thing a verification checks, so it stays the constant; the URL is derived so the two can never
  * disagree.
  */
-export const SUGGESTED_PLAYLISTS: readonly { id: string; label: string; blurb: string }[] = [
+export const SUGGESTED_PLAYLISTS: readonly SuggestedPlaylist[] = [
   {
     id: JITSTER_OFFICIAL_PLAYLIST_ID,
     label: PLAYLIST_NAME_OVERRIDES[JITSTER_OFFICIAL_PLAYLIST_ID]!,
-    blurb: 'Mixed hits',
+    blurbKey: 'mixedHits',
   },
-  { id: '0Bq6Ofk5drHQKzevbnPzW2', label: 'Trap Argentino Prime', blurb: 'Argentine trap' },
-  { id: '4wZA7zbfDuTi9yqZy8WY4y', label: 'Hits Catalans', blurb: 'Catalan hits' },
-  { id: '6xrNthbRvaWedC81pc78xo', label: 'Openings Català', blurb: 'Anime openings in Catalan' },
+  { id: '0Bq6Ofk5drHQKzevbnPzW2', label: 'Trap Argentino Prime', blurbKey: 'argentineTrap' },
+  { id: '4wZA7zbfDuTi9yqZy8WY4y', label: 'Hits Catalans', blurbKey: 'catalanHits' },
+  { id: '6xrNthbRvaWedC81pc78xo', label: 'Openings Català', blurbKey: 'catalanAnimeOpenings' },
   {
     id: '3iANnuxueS6wustAWPbCgW',
     label: 'Disney: las 100 mejores',
-    blurb: 'Disney soundtracks',
+    blurbKey: 'disney',
   },
-  { id: '5y50Cn8dw3C25s2mwnCWQJ', label: 'Mejores BSO del cine', blurb: 'Film and TV scores' },
-  { id: '7m1C1eHUC2kJQL69dGMjaz', label: 'EDM Hits of All Time', blurb: 'EDM' },
-  { id: '37i9dQZF1DX8FwnYE6PRvL', label: 'Rock Party', blurb: 'Rock' },
-  { id: '37i9dQZF1DX1HCSfq0nSal', label: 'PEGAO', blurb: 'Reggaeton' },
-  { id: '7nnjdGCdCe24vVeSlFpGQV', label: 'Electro Latino Mejores Temazos', blurb: 'Latin electro' },
-  { id: '37i9dQZEVXbMDoHDwVN2tF', label: 'Top 50 Global', blurb: 'Global chart' },
-  { id: '37i9dQZF1DXaxEKcoCdWHD', label: 'Exitos España', blurb: 'Spanish hits' },
-  { id: '37i9dQZF1DX0XUsuxWHRQd', label: 'RapCaviar', blurb: 'Hip-hop' },
+  { id: '5y50Cn8dw3C25s2mwnCWQJ', label: 'Mejores BSO del cine', blurbKey: 'filmScores' },
+  { id: '7m1C1eHUC2kJQL69dGMjaz', label: 'EDM Hits of All Time', blurbKey: 'edm' },
+  { id: '37i9dQZF1DX8FwnYE6PRvL', label: 'Rock Party', blurbKey: 'rock' },
+  { id: '37i9dQZF1DX1HCSfq0nSal', label: 'PEGAO', blurbKey: 'reggaeton' },
+  {
+    id: '7nnjdGCdCe24vVeSlFpGQV',
+    label: 'Electro Latino Mejores Temazos',
+    blurbKey: 'latinElectro',
+  },
+  { id: '37i9dQZEVXbMDoHDwVN2tF', label: 'Top 50 Global', blurbKey: 'globalChart' },
+  { id: '37i9dQZF1DXaxEKcoCdWHD', label: 'Exitos España', blurbKey: 'spanishHits' },
+  { id: '37i9dQZF1DX0XUsuxWHRQd', label: 'RapCaviar', blurbKey: 'hipHop' },
 ];
 
 export interface LandingScreenProps {
@@ -230,6 +246,7 @@ export function LandingScreen({
   savedPlaylists = [],
   onRemoveSaved,
 }: LandingScreenProps) {
+  const { copy, errorMessages } = useLocale();
   const [rows, setRows] = useState<PlaylistRow[]>(() => [{ id: 'row-1', value: '' }]);
 
   /**
@@ -400,6 +417,16 @@ export function LandingScreen({
     submitRows(makeRows(ids.map((id) => spotifyPlaylistUrl(id))));
   };
 
+  /**
+   * A saved deck's label, composed at RENDER time in the active language (2026-09-28).
+   *
+   * The library stores only the base name (see `SavedPlaylist.name`), because the "+N more" count
+   * is copy -- so this is the same `copy.deck.label` join `deckLabel()` makes for the HUD, over the
+   * same two parts, and a row cannot disagree with the deck it deals.
+   */
+  const savedLabel = (saved: SavedPlaylist): string =>
+    copy.deck.label(saved.name, saved.ids.length - 1);
+
   return (
     /*
       `relative` and a bottom band of AT LEAST `pb-12` are the FOOTER'S CONTRACT, not decoration:
@@ -489,7 +516,7 @@ export function LandingScreen({
         className="touch-target absolute top-8 left-6 flex items-center gap-2 rounded-lg px-4 py-2 text-sm text-fg-secondary hover:text-fg focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)"
       >
         <span aria-hidden="true">←</span>
-        {COPY.landing.backToWelcome}
+        {copy.landing.backToWelcome}
       </button>
 
       {/*
@@ -568,14 +595,14 @@ export function LandingScreen({
           <h1>
             <img
               src="/logo.webp"
-              alt={COPY.landing.logoAlt}
+              alt={copy.landing.logoAlt}
               width={384}
               height={384}
               fetchPriority="high"
               className="size-48"
             />
           </h1>
-          <p className="text-sm text-fg-secondary">{COPY.landing.intro(MAX_DECK_PLAYLISTS)}</p>
+          <p className="text-sm text-fg-secondary">{copy.landing.intro(MAX_DECK_PLAYLISTS)}</p>
         </div>
 
         <form
@@ -603,7 +630,7 @@ export function LandingScreen({
                   would match all of them.
                 */}
                   <span className="text-sm text-fg-secondary">
-                    {COPY.landing.playlistLinkLabel(index)}
+                    {copy.landing.playlistLinkLabel(index)}
                   </span>
                   {/*
                   ===============================================================
@@ -640,7 +667,7 @@ export function LandingScreen({
                         ),
                       );
                     }}
-                    placeholder={COPY.landing.playlistLinkPlaceholder}
+                    placeholder={copy.landing.playlistLinkPlaceholder}
                     aria-invalid={row.errorCode !== undefined}
                     /*
                     `aria-describedby` pointed at this row's error WHILE ONE EXISTS, and undefined
@@ -690,7 +717,7 @@ export function LandingScreen({
                       removeRow(row.id);
                     }}
                     disabled={isLoading}
-                    aria-label={COPY.landing.removeRow(index + 1)}
+                    aria-label={copy.landing.removeRow(index + 1)}
                     className="touch-target rounded-lg border border-border px-3 text-fg-muted hover:border-border-strong hover:text-fg focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)"
                   >
                     <span aria-hidden="true">✕</span>
@@ -709,7 +736,7 @@ export function LandingScreen({
                 while there is an error, so the reference is never dangling.
               */
                 <p id={rowErrorId(row.id)} role="alert" className="text-sm text-danger">
-                  {playlistErrorMessage(row.errorCode)}
+                  {playlistErrorMessage(row.errorCode, errorMessages)}
                 </p>
               )}
             </div>
@@ -751,7 +778,7 @@ export function LandingScreen({
               className="touch-target flex w-full items-center gap-2 rounded-lg border border-dashed border-border px-4 py-3 text-fg-secondary hover:border-border-strong hover:bg-surface hover:text-fg focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)"
             >
               <span aria-hidden="true">+</span>
-              {COPY.landing.addRow}
+              {copy.landing.addRow}
             </button>
           )}
 
@@ -761,7 +788,7 @@ export function LandingScreen({
           and reaching five playlists is not an error.
         */}
           {canAddRow ? null : (
-            <p className="text-xs text-fg-muted">{COPY.landing.atMaxRows(MAX_DECK_PLAYLISTS)}</p>
+            <p className="text-xs text-fg-muted">{copy.landing.atMaxRows(MAX_DECK_PLAYLISTS)}</p>
           )}
 
           <button
@@ -787,7 +814,7 @@ export function LandingScreen({
           */
             className="touch-target rounded-lg bg-accent px-6 py-4 text-lg font-semibold text-on-accent hover:bg-accent-hover focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)"
           >
-            {isLoading ? COPY.landing.starting : COPY.landing.start}
+            {isLoading ? copy.landing.starting : copy.landing.start}
           </button>
 
           {/*
@@ -802,7 +829,7 @@ export function LandingScreen({
         */}
           {errorCode === undefined ? null : (
             <p role="alert" className="text-sm text-danger">
-              {playlistErrorMessage(errorCode)}
+              {playlistErrorMessage(errorCode, errorMessages)}
             </p>
           )}
         </form>
@@ -833,7 +860,7 @@ export function LandingScreen({
       */}
       {savedPlaylists.length === 0 ? null : (
         <section className="flex w-full max-w-content flex-col gap-2">
-          <h2 className="text-sm text-fg-secondary">{COPY.landing.savedHeading}</h2>
+          <h2 className="text-sm text-fg-secondary">{copy.landing.savedHeading}</h2>
 
           <ul className="flex flex-col gap-2">
             {savedPlaylists.map((saved) => (
@@ -871,7 +898,7 @@ export function LandingScreen({
                     which matters because the remove control beside it names the same playlist --
                     a badge here made every row's two buttons match one query.
                   */}
-                  <span>{saved.name}</span>
+                  <span>{savedLabel(saved)}</span>
                 </button>
 
                 <button
@@ -883,7 +910,7 @@ export function LandingScreen({
                     gives a screen-reader user no way to tell which one they are on. The ✕ is
                     `aria-hidden` decoration -- same split as `NoticeBanner`'s Dismiss.
                   */
-                  aria-label={COPY.landing.removeSaved(saved.name)}
+                  aria-label={copy.landing.removeSaved(savedLabel(saved))}
                   className="touch-target rounded-lg border border-border px-3 text-fg-muted hover:border-border-strong hover:text-fg focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)"
                 >
                   <span aria-hidden="true">✕</span>
@@ -932,7 +959,7 @@ export function LandingScreen({
           left-aligned grid draws a second axis. The string itself is unchanged, so `uppercase`
           could simply go: it was a display transform, not the text.
         */}
-        <h2 className="text-sm text-fg-secondary">{COPY.landing.suggestionsHeading}</h2>
+        <h2 className="text-sm text-fg-secondary">{copy.landing.suggestionsHeading}</h2>
 
         <ul className="grid gap-2 sm:grid-cols-2">
           {SUGGESTED_PLAYLISTS.map((playlist) => (
@@ -951,7 +978,7 @@ export function LandingScreen({
               */}
               <SuggestionButton
                 label={playlist.label}
-                blurb={playlist.blurb}
+                blurb={copy.landing.suggestionBlurbs[playlist.blurbKey]}
                 isSelected={selectedIds.has(playlist.id)}
                 isSelecting={isSelecting}
                 disabled={isLoading}

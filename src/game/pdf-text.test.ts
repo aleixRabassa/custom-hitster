@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { COPY } from './copy';
+import { CATALOGUES } from './i18n';
 import { pdfFileName, sanitizeForPdf } from './pdf-text';
 
 describe('sanitizeForPdf', () => {
@@ -93,6 +94,28 @@ describe('pdfFileName', () => {
     expect(pdfFileName('This is Duki (all songs)')).toBe(
       COPY.pdf.fileName('this-is-duki-all-songs'),
     );
+  });
+
+  it('should wrap the slug in the catalogue it is given, defaulting to English', () => {
+    // `usePdfExport` passes the active language's `pdf` block; the slug itself is locale-free.
+    expect(pdfFileName('Éxitos Verano', CATALOGUES.es.copy.pdf)).toBe(
+      CATALOGUES.es.copy.pdf.fileName('exitos-verano'),
+    );
+    expect(pdfFileName('', CATALOGUES.ca.copy.pdf)).toBe(CATALOGUES.ca.copy.pdf.fileName(''));
+
+    // The parameter is honoured rather than ignored -- a check that holds even while a catalogue
+    // happens to share English's wrapper.
+    const slugs: string[] = [];
+    const recording = {
+      fileName: (slug: string) => {
+        slugs.push(slug);
+        return COPY.pdf.fileName(slug);
+      },
+    };
+    pdfFileName('Rock Classics', recording);
+    expect(slugs).toEqual(['rock-classics']);
+
+    expect(pdfFileName('Rock Classics')).toBe(COPY.pdf.fileName('rock-classics'));
   });
 
   it('should never produce an empty or path-bearing name', () => {

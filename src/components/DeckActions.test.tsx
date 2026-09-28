@@ -16,6 +16,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DeckActions } from './DeckActions';
 import { fixtureDeck } from './__fixtures__/cards';
 import { COPY } from '../game/copy';
+import { CATALOGUES } from '../game/i18n';
+import { pdfFileName } from '../game/pdf-text';
+import { LocaleContext } from '../hooks/useLocale';
 import { sheetsForDeck } from '../hooks/usePdfExport';
 import type { DeckActionsProps } from './DeckActions';
 
@@ -317,6 +320,32 @@ describe('DeckActions', () => {
   });
 
   describe('the printable export', () => {
+    it('should label, report and name the export in the active language', async () => {
+      // `usePdfExport` reads the locale for the one string the document carries: its file name.
+      const { copy } = CATALOGUES.es;
+      render(
+        <LocaleContext.Provider value={{ locale: 'es', ...CATALOGUES.es, setLocale: () => {} }}>
+          <DeckActions
+            playlistIds={[PLAYLIST_ID]}
+            playlistName="Rock Classics"
+            seed={SEED}
+            shareOrigin={ORIGIN}
+            onSavePlaylist={vi.fn()}
+            isPlaylistSaved={false}
+            deck={fixtureDeck.filter((card) => typeof card.year === 'number')}
+            pendingYearCount={0}
+          />
+        </LocaleContext.Provider>,
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: copy.deckActions.print }));
+
+      await waitFor(() => {
+        expect(screen.queryByText(copy.deckActions.exportDone)).not.toBeNull();
+      });
+      expect(saveMock).toHaveBeenCalledWith(pdfFileName('Rock Classics', copy.pdf));
+    });
+
     it('should say how many sheets and which duplex setting before the press', () => {
       // The sheet count is a thing to know BEFORE committing paper, and long-edge is the setting the
       // column mirror in `pdf-sheet.ts` assumes -- short-edge would invert the correction, so the
