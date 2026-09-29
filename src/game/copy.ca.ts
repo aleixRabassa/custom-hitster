@@ -148,13 +148,13 @@ export const COPY_CA = {
     copyLink: "Copia l'enllaç per compartir",
     /** Same playlist(s), same shuffle -- never "the same deck". See the English original. */
     shareCaption: (playlistCount: number, fromCurrentCard: boolean) =>
-      `${playlistCount === 1 ? 'La mateixa playlist' : 'Les mateixes playlists'}, la mateixa barreja${fromCurrentCard ? ', des de la carta on ets' : ''} — si alguna playlist ha canviat, pot ser que algunes cançons siguin diferents`,
+      `Comparteix la partida. ${playlistCount === 1 ? 'La mateixa playlist' : 'Les mateixes playlists'}, la mateixa barreja${fromCurrentCard ? ', des de la carta on ets' : ''}`,
     save: 'Desa aquesta playlist',
     saved: 'Desada a les teves playlists',
     print: 'Imprimeix les cartes en PDF',
     printing: (completed: number, total: number) => `Generant el PDF… ${completed}/${total}`,
     sheetSummary: (sheets: number) =>
-      `${sheets === 1 ? '1 full A4' : `${sheets} fulls A4`}, ${CARDS_PER_SHEET} cartes per full — imprimeix a doble cara per la vora llarga`,
+      `${sheets === 1 ? '1 full A4' : `${sheets} fulls A4`}, ${CARDS_PER_SHEET} cartes per full — imprimeix a doble cara`,
     printWaitsForYears: (pendingCount: number) =>
       pendingCount === 1
         ? "1 carta encara està buscant l'any — la impressió espera que acabi"

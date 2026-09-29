@@ -305,20 +305,21 @@ export const COPY = {
      *  TWO VARIANTS SINCE 2026-09-29 (review of the shuffle system, D3). A link
      *  copied MID-GAME carries the current card, so the recipient starts on it;
      *  an end-screen link does not, because after the last card a position would
-     *  drop the recipient on the final card. Both say what can still differ: the
-     *  shuffle keeps the relative order of every shared card, but if the playlist
-     *  gained or lost tracks since, the CARD SET does not match -- "the tracks may
-     *  differ", not "slightly", which undersold a length change.
+     *  drop the recipient on the final card. Until later that day both also said
+     *  what can still differ ("if a playlist has changed since, some tracks may
+     *  differ"); the developer cut that tail as noise. The promise above is what
+     *  keeps it honest without it: "same shuffle" is exact, and nothing here
+     *  claims the card set is.
      * ===========================================================================
      */
     shareCaption: (playlistCount: number, fromCurrentCard: boolean) =>
-      `${playlistCount === 1 ? 'Same playlist' : 'Same playlists'}, same shuffle${fromCurrentCard ? ', starting from the card you are on' : ''} — if a playlist has changed since, some tracks may differ`,
+      `Share the game. ${playlistCount === 1 ? 'Same playlist' : 'Same playlists'}, same shuffle${fromCurrentCard ? ', starting from the card you are on' : ''}`,
     save: 'Save this playlist',
     saved: 'Saved to your playlists',
     print: 'Print as PDF cards',
     printing: (completed: number, total: number) => `Building PDF… ${completed}/${total}`,
     sheetSummary: (sheets: number) =>
-      `${sheets === 1 ? '1 A4 sheet' : `${sheets} A4 sheets`}, ${CARDS_PER_SHEET} cards each — print double-sided on the long edge`,
+      `${sheets === 1 ? '1 A4 sheet' : `${sheets} A4 sheets`}, ${CARDS_PER_SHEET} cards each — print double-sided`,
     printWaitsForYears: (pendingCount: number) =>
       `${pendingCount === 1 ? '1 card is' : `${pendingCount} cards are`} still looking up a year — printing waits for them all`,
     waitingHeading: 'Waiting for the last years…',

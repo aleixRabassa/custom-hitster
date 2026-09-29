@@ -606,7 +606,9 @@ export function LandingScreen({
               className="size-48"
             />
           </h1>
-          <p className="text-xl text-fg-secondary">{copy.landing.intro(MAX_DECK_PLAYLISTS)}</p>
+          <p className="text-xl font-semibold text-fg-secondary">
+            {copy.landing.intro(MAX_DECK_PLAYLISTS)}
+          </p>
         </div>
 
         <form
