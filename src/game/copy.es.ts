@@ -182,8 +182,9 @@ export const COPY_ES = {
 
   exitDialog: {
     title: '¿Terminar la partida?',
-    body: 'Esto termina la partida y te devuelve a la pantalla de inicio.',
+    body: 'Termina la partida y vuelve a la pantalla de inicio, o reiníciala con las mismas canciones en otro orden.',
     cancel: 'Seguir jugando',
+    restart: 'Reiniciar partida',
     confirm: 'Terminar partida',
   },
 

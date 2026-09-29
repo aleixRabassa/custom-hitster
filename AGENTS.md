@@ -68,7 +68,7 @@ game — the hero is the logo, ONE tagline (`COPY.welcome.tagline`; the lead sen
 cut on 2026-09-18 as a restatement of the three steps) and one big button reading `COPY.welcome.enter`,
 then three ordered "How it works" steps and the printable year cards; the button lands on
 `LandingScreen`, which kept its name because forty-odd doc and test lines use it. **The picker has a
-Back button** (`COPY.landing.backToWelcome`, a ghost `<button>` absolute in the top-left corner, out of flow, disabled while a
+Back button** (a ghost `<button>` absolute in the top-left corner, **icon-only since 2026-09-29** — an `aria-hidden` ← at `text-xl`, with `COPY.landing.backToWelcome` as its `aria-label` — out of flow, disabled while a
 request is loading, required `onBack` prop) that returns to the front door — a `<button>` and not an
 anchor, because there is no router and no history entry to go back to, and `App.tsx` still never touches
 the address bar. `App.tsx` decides with `hasEnteredPicker`, a `useState` of the same shape as
@@ -135,8 +135,9 @@ works" step cards it sits in the same slot as. Three traps. **The `text-sm` had 
 `<label>` and ONTO its caption `<span>`** — Tailwind's preflight gives an `<input>` `font: inherit`, so
 a type scale on the wrapper sizes the BOX's text too, which is the one thing the enlargement was for.
 **The Back button widened with everything else (`px-3 → px-4`)**, and `LandingScreen`'s own header
-records that at 320px it already grazed the logo's top-left corner — 8px closer now, and a row in
-[`docs/development.md`](./docs/development.md) §5. And **the `<main>` gaps were deliberately NOT
+recorded that at 320px it already grazed the logo's top-left corner — a row in
+[`docs/development.md`](./docs/development.md) §5. (Superseded 2026-09-29: the button is now the arrow
+alone at `px-3`, so it is narrower than either version with the "Back" text.) And **the `<main>` gaps were deliberately NOT
 unified**: the picker keeps `gap-8` (pinned by a test, with its own reasoning about the void between
 Start and the suggestions) where the front door has `gap-10`. The ask was the size of the components,
 not the spacing between them, and the logo's height does not depend on a gap.
@@ -890,7 +891,12 @@ something `plan.md` had already resolved, so read these before "fixing" the code
   count props. `resolvedCount` stays exported beside the reducer, with its tests, and has no caller.
 - **Exit goes through a confirmation dialog** (`ExitConfirmDialog`, opened by `GameScreen`). While it is
   open `GameScreen`'s window key handler is disabled — that is guard 4, and it exists because → would
-  otherwise deal a card behind the backdrop.
+  otherwise deal a card behind the backdrop. **Since 2026-09-29 it has THREE answers**: Keep playing,
+  **Restart game** (App's `handleRestart`, the end screen's "Play again": `state.deck` re-dealt with a
+  fresh seed, zero lookups, card 1) and End game. A restart usually leaves `GameScreen` MOUNTED
+  (`playing → playing`), so `handleRestartConfirmed` closes the dialog and stops the audio by hand, and
+  `CardStack` is keyed on `seed` so the jump to card 1 remounts it instead of playing the step-back
+  entrance. The Tab trap is a three-button cycle.
 - **The control bar's icons are inline SVG, not text glyphs**, sized from one token
   (`--size-control-icon`). ▶ and ❙❙ rendered at different weights and could resolve to an emoji font;
   nothing in CSS could equalise them. Exit is the emergency-exit pictogram in `--color-danger`.

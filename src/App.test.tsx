@@ -1131,6 +1131,58 @@ describe('App', () => {
     expect(saved.seed).not.toBe('seed-1');
   });
 
+  it('should restart mid-game from the exit confirmation', async () => {
+    // ===================================================================
+    //  "Restart game" (2026-09-29): the end screen's Play again, reached
+    //  from the Exit button without playing the deck out. Same guarantees
+    //  as the test above -- `state.deck` re-dealt, a new seed, no fetch --
+    //  plus the mid-game ones: back to the first card, still playing, and
+    //  the dialog gone. Resumed on card 2 of 3 so "back to card 1" is a
+    //  count the HUD can show.
+    // ===================================================================
+    stubYearApi();
+    const storage = memoryStorage();
+    const deck = [
+      highConfidenceCard,
+      { ...highConfidenceCard, id: 'aaaaaaaaaaaaaaaaaaaaaa' },
+      { ...highConfidenceCard, id: 'bbbbbbbbbbbbbbbbbbbbbb' },
+    ];
+    storage.map.set(
+      SESSION_STORAGE_KEY,
+      JSON.stringify({
+        version: SESSION_VERSION,
+        playlists: [PLAYLIST],
+        seed: 'seed-1',
+        deck,
+        currentIndex: 1,
+        isFlipped: false,
+        startIndex: 0,
+        status: 'playing',
+      } satisfies PersistedSession),
+    );
+
+    // A fetch that would FAIL if it were called, so a restart that secretly re-fetches fails here.
+    renderApp(playlistFetch(500, { code: 'internal-error' }), storage);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('hud').textContent).toContain(COPY.hud.cardsLeft(1));
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: COPY.controls.exit }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.exitDialog.restart }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('hud').textContent).toContain(COPY.hud.cardsLeft(2));
+    });
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    const saved = JSON.parse(storage.map.get(SESSION_STORAGE_KEY) ?? '{}') as PersistedSession;
+    expect(saved.seed).not.toBe('seed-1');
+    expect(saved.currentIndex).toBe(0);
+    expect(saved.status).toBe('playing');
+    expect(saved.deck).toHaveLength(3);
+  });
+
   it('should deal a fresh seed for the same playlist after End and Home, and after Exit', async () => {
     // Review §6, gap 6: every path back to the picker ends in a new deal with a new seed.
     stubYearApi();

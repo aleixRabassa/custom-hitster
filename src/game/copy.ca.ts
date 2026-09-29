@@ -193,8 +193,9 @@ export const COPY_CA = {
 
   exitDialog: {
     title: 'Vols acabar la partida?',
-    body: "Això acaba la partida i et torna a la pantalla d'inici.",
+    body: "Acaba la partida i torna a la pantalla d'inici, o reinicia-la amb les mateixes cançons en un altre ordre.",
     cancel: 'Continua jugant',
+    restart: 'Reinicia la partida',
     confirm: 'Acaba la partida',
   },
 

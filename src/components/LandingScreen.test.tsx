@@ -423,7 +423,8 @@ describe('LandingScreen', () => {
   describe('the way back to the welcome screen', () => {
     it('should call onBack once when the back button is pressed', () => {
       // The picker is behind a front door since 2026-09-18, and this is the only way back through it
-      // on a phone with no browser chrome. Queried by its VISIBLE text, which is its accessible name.
+      // on a phone with no browser chrome. Queried by its accessible name, an `aria-label` since the
+      // button went icon-only (2026-09-29).
       const { onBack, onSubmit } = renderLanding();
 
       fireEvent.click(screen.getByRole('button', { name: COPY.landing.backToWelcome }));
@@ -442,6 +443,19 @@ describe('LandingScreen', () => {
       expect(screen.getByRole('button', { name: COPY.landing.backToWelcome }).className).toContain(
         'absolute',
       );
+    });
+
+    it('should show only the arrow, with the label as its accessible name', () => {
+      // Icon-only at the developer's request (2026-09-29). The name must survive in `aria-label`, or
+      // the button is an unlabelled "leftwards arrow" to a screen reader -- and the glyph itself must
+      // be hidden from it, or the name would be read twice.
+      renderLanding();
+
+      const back = screen.getByRole('button', { name: COPY.landing.backToWelcome });
+      expect(back.getAttribute('aria-label')).toBe(COPY.landing.backToWelcome);
+      expect(back.textContent).not.toContain(COPY.landing.backToWelcome);
+      expect(back.querySelector('[aria-hidden="true"]')).not.toBeNull();
+      expect(back.className).toContain('text-xl');
     });
 
     it('should disable the back button while loading', () => {

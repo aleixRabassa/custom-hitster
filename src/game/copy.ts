@@ -176,7 +176,10 @@ export const COPY = {
     atMaxRows: (maxPlaylists: number) => `${maxPlaylists} playlists is the maximum for one deck.`,
     start: 'Start',
     starting: 'Loading…',
-    /** The way back to the welcome screen (2026-09-18). The ← beside it is `aria-hidden` decoration. */
+    /**
+     * The way back to the welcome screen (2026-09-18). NOT rendered as text since 2026-09-29: the
+     * button shows only an `aria-hidden` ←, and this is its `aria-label`.
+     */
     backToWelcome: 'Back',
     savedHeading: 'Your playlists',
     removeSaved: (name: string) => `Remove ${name} from your playlists`,
@@ -360,8 +363,10 @@ export const COPY = {
 
   exitDialog: {
     title: 'End the game?',
-    body: 'This ends the game and returns you to the start screen.',
+    body: 'End the game and return to the start screen, or restart it with the same songs in a new order.',
     cancel: 'Keep playing',
+    /** Re-deals the same deck in a new order and starts it from the first card. */
+    restart: 'Restart game',
     confirm: 'End game',
   },
 

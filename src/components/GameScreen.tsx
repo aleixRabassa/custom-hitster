@@ -123,6 +123,11 @@ export interface GameScreenProps {
   onPrevious: () => void;
   onExit: () => void;
   /**
+   * Re-deal this deck in a new order, from the exit confirmation's "Restart game" (2026-09-29) --
+   * the same handler as the end screen's "Play again".
+   */
+  onRestart: () => void;
+  /**
    * Whether the session can actually be played right now -- `status === 'playing'`.
    *
    * Gates both the gestures and the key handler. The container owns the answer; deriving it
@@ -205,6 +210,7 @@ export function GameScreen({
   onNext,
   onPrevious,
   onExit,
+  onRestart,
   isPlayable,
   cardsRemaining,
   playlistName,
@@ -371,6 +377,20 @@ export function GameScreen({
   };
 
   /**
+   * "Restart game" (2026-09-29). Unlike a confirmed exit, this screen usually SURVIVES it: the
+   * re-dealt deck's first card is normally resolved already, so the status goes `playing ->
+   * playing` and nothing unmounts. Hence both explicit halves. The dialog is closed by hand, or it
+   * would stay up over the new deck with guard 4 keeping the keyboard dead; and the audio is stopped
+   * by hand, because the card-change rule is keyed on card id and a reshuffle can put the card on
+   * screen at index 0 again.
+   */
+  const handleRestartConfirmed = () => {
+    stop();
+    setIsExitConfirmOpen(false);
+    onRestart();
+  };
+
+  /**
    * The platform back press, routed through the SAME handlers the on-screen controls use.
    *
    * `handleExitRequest`, not `handleExitConfirmed` -- back asks exactly as the Exit button asks,
@@ -459,6 +479,13 @@ export function GameScreen({
       */}
       <div className="flex flex-col items-center gap-3">
         <CardStack
+          /*
+            Keyed on the seed so a mid-game Restart (2026-09-29) REMOUNTS the stack. Without it the
+            stack's latched index delta reads the jump to card 1 as a step back and plays the
+            "previous card slides in" entrance; a fresh mount shows the new first card at rest, as
+            the session's first card always is. Only `START` changes the seed.
+          */
+          key={seed}
           deck={deck}
           currentIndex={currentIndex}
           isFlipped={isFlipped}
@@ -531,7 +558,11 @@ export function GameScreen({
         opens the other -- so neither has to know the other exists.
       */}
       {isExitConfirmOpen ? (
-        <ExitConfirmDialog onConfirm={handleExitConfirmed} onCancel={handleExitCancelled} />
+        <ExitConfirmDialog
+          onConfirm={handleExitConfirmed}
+          onCancel={handleExitCancelled}
+          onRestart={handleRestartConfirmed}
+        />
       ) : null}
 
       {isDeckActionsOpen ? (

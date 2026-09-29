@@ -489,9 +489,9 @@ export function LandingScreen({
          sat before the button existed -- that padding is 32px as of
          2026-09-21 and was 24px when this was written; the point is that the
          button costs the hero NOTHING, not the number. It stays
-         the FIRST DOM child so the tab order still reaches it first. Known
-         cost: on a 320px viewport the button's right padding grazes the logo's
-         top-left corner (the text clears it); a "three widths" row in
+         the FIRST DOM child so the tab order still reaches it first. It used
+         to graze the logo's top-left corner at 320px with its "Back" text;
+         icon-only (below) it is narrower, which only helps that row in
          `docs/development.md` §5.
 
          A `<button>`, NOT an `<a>`, and that is not a style choice: there is no
@@ -500,9 +500,13 @@ export function LandingScreen({
          flips a container flag, exactly as the welcome screen's own button
          does in the other direction.
 
-         The accessible name is the VISIBLE text -- no `aria-label`, for the
-         WCAG 2.5.3 reason the inputs below give -- and the arrow is
-         `aria-hidden` decoration, the same split as the "+" and the ✕.
+         ICON-ONLY AS OF 2026-09-29, at the developer's request: just the ←,
+         one step up the type scale (`text-xl`) from the `text-sm` it shared
+         with the old "Back" label. With no visible text there is nothing for
+         WCAG 2.5.3 to match, so the name moved to an `aria-label` read from
+         `COPY.landing.backToWelcome` -- the glyph stays `aria-hidden`, since
+         a screen reader would otherwise announce "leftwards arrow".
+         `touch-target` still guarantees the 44px press area around it.
 
          Disabled while a request is in flight, like every other control here:
          leaving mid-fetch would put the loading state and the error slot on a
@@ -513,10 +517,10 @@ export function LandingScreen({
         type="button"
         onClick={onBack}
         disabled={isLoading}
-        className="touch-target absolute top-8 left-6 flex items-center gap-2 rounded-lg px-4 py-2 text-sm text-fg-secondary hover:text-fg focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)"
+        aria-label={copy.landing.backToWelcome}
+        className="touch-target absolute top-8 left-6 flex items-center justify-center rounded-lg px-3 py-2 text-xl leading-none text-fg-secondary hover:text-fg focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)"
       >
         <span aria-hidden="true">←</span>
-        {copy.landing.backToWelcome}
       </button>
 
       {/*

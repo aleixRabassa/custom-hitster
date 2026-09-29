@@ -50,6 +50,8 @@ function renderScreen(props: {
   card?: typeof highConfidenceCard;
   isFlipped?: boolean;
   onExit?: () => void;
+  onRestart?: () => void;
+  seed?: string;
   onFlip?: () => void;
   onNext?: () => void;
   onPrevious?: () => void;
@@ -67,6 +69,7 @@ function renderScreen(props: {
       onNext={props.onNext ?? vi.fn()}
       onPrevious={props.onPrevious ?? vi.fn()}
       onExit={props.onExit ?? vi.fn()}
+      onRestart={props.onRestart ?? vi.fn()}
       isPlayable={props.isPlayable ?? true}
       // HUD props, arbitrary here: every assertion in this file is about the audio element or the
       // key handler, and the HUD is covered on its own in `Hud.test.tsx`.
@@ -75,7 +78,7 @@ function renderScreen(props: {
       // The deck-actions props. Arbitrary too -- what they DO is `DeckActions.test.tsx`'s job, and
       // what this file cares about is that opening the panel suspends the game's own controls.
       playlistIds={['37i9dQZF1DXcBWIGoYBM5M']}
-      seed="a1b2c3d4e5f60718"
+      seed={props.seed ?? 'a1b2c3d4e5f60718'}
       shareOrigin="https://hitster.example/"
       onSavePlaylist={props.onSavePlaylist ?? vi.fn()}
       isPlaylistSaved={false}
@@ -294,6 +297,52 @@ describe('GameScreen', () => {
 
     expect(calls).toContain(`pause:${highConfidenceCard.previewUrl}`);
     expect(onExit).toHaveBeenCalledTimes(1);
+  });
+
+  it('should stop audio, close the dialog and restart when restart is chosen', () => {
+    // ===================================================================
+    //  THIS SCREEN USUALLY SURVIVES A RESTART (2026-09-29), UNLIKE AN EXIT.
+    //
+    //  A re-dealt deck's first card is normally resolved already, so the
+    //  status goes `playing -> playing` and nothing unmounts. So the dialog
+    //  must be closed by hand -- left open, guard 4 would keep the keyboard
+    //  dead over the new deck -- and the audio stopped by hand, because the
+    //  card-change rule is keyed on card id and a reshuffle can deal the same
+    //  card first again. The double's `onRestart` does nothing, which is
+    //  exactly that surviving case.
+    // ===================================================================
+    const onExit = vi.fn();
+    const onRestart = vi.fn();
+    render(renderScreen({ onExit, onRestart }));
+
+    screen.getByRole('button', { name: COPY.controls.play }).click();
+    calls = [];
+
+    fireEvent.click(screen.getByRole('button', { name: COPY.controls.exit }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.exitDialog.restart }));
+
+    expect(calls).toContain(`pause:${highConfidenceCard.previewUrl}`);
+    expect(onRestart).toHaveBeenCalledTimes(1);
+    expect(onExit).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('should remount the card stack when the seed changes, and only then', () => {
+    // `key={seed}` on `CardStack` (2026-09-29) is what makes a mid-game restart show the new first
+    // card at rest instead of playing the jump to card 1 as a step back. jsdom cannot see the
+    // animation, but it can see the remount: a new seed must replace the stack's root node, and a
+    // re-render with the same seed must keep it.
+    const { container, rerender } = render(renderScreen({ seed: 'seed-a' }));
+    const stackRoot = () => container.querySelector('.isolate');
+    const first = stackRoot();
+    expect(first).not.toBeNull();
+
+    rerender(renderScreen({ seed: 'seed-a', isFlipped: true }));
+    expect(stackRoot()).toBe(first);
+
+    rerender(renderScreen({ seed: 'seed-b' }));
+    expect(stackRoot()).not.toBeNull();
+    expect(stackRoot()).not.toBe(first);
   });
 
   it('should not end the game on the exit press itself', () => {

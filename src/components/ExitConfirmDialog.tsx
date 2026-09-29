@@ -18,7 +18,14 @@
  *  mis-press away.
  * ===========================================================================
  *
- * Presentational like every other component here -- two callbacks in, nothing about a session
+ * ## Restart is the third answer (2026-09-29)
+ *
+ * Between Cancel and End sits "Restart game": the same deck re-dealt in a new order, from card 1 --
+ * exactly what the end screen's "Play again" does, reachable without playing the deck out first.
+ * It is as irreversible as End for the position in the deck, which is why it lives behind this
+ * question rather than on the control bar. Cancel stays first and keeps the focus; End stays last.
+ *
+ * Presentational like every other component here -- three callbacks in, nothing about a session
  * known. `GameScreen` owns whether it is open, because "is the confirm dialog showing" is screen
  * state rather than session state: the reducer has no `CONFIRM_EXIT` action and does not want one.
  *
@@ -49,11 +56,14 @@ export interface ExitConfirmDialogProps {
   onConfirm: () => void;
   /** The player backed out -- via the button, Escape, or the backdrop. Just close. */
   onCancel: () => void;
+  /** The player asked for the same deck, reshuffled. The caller stops the audio and re-deals. */
+  onRestart: () => void;
 }
 
-export function ExitConfirmDialog({ onConfirm, onCancel }: ExitConfirmDialogProps) {
+export function ExitConfirmDialog({ onConfirm, onCancel, onRestart }: ExitConfirmDialogProps) {
   const copy = useCopy();
   const cancelRef = useRef<HTMLButtonElement>(null);
+  const restartRef = useRef<HTMLButtonElement>(null);
   const confirmRef = useRef<HTMLButtonElement>(null);
 
   /**
@@ -105,14 +115,18 @@ export function ExitConfirmDialog({ onConfirm, onCancel }: ExitConfirmDialogProp
    *
    * `aria-modal` tells assistive technology that the rest of the page is inert; it does NOT make
    * Tab skip it, so without this a keyboard player tabs straight out of the dialog and onto the
-   * Play button behind the backdrop -- which they cannot see and cannot click. Two focusable
-   * elements makes the trap a swap rather than a cycle through a queried list.
+   * Play button behind the backdrop -- which they cannot see and cannot click. A cycle over the
+   * three buttons in DOM order, Shift+Tab walking it backwards; anything else focused (nothing
+   * should be) enters the cycle at Cancel.
    */
   const handleTab = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (event.key !== 'Tab') return;
 
     event.preventDefault();
-    const target = event.target === cancelRef.current ? confirmRef.current : cancelRef.current;
+    const order = [cancelRef.current, restartRef.current, confirmRef.current];
+    const index = order.findIndex((button) => button === event.target);
+    const step = event.shiftKey ? order.length - 1 : 1;
+    const target = index === -1 ? order[0] : order[(index + step) % order.length];
     target?.focus();
   };
 
@@ -154,11 +168,13 @@ export function ExitConfirmDialog({ onConfirm, onCancel }: ExitConfirmDialogProp
         </p>
 
         {/*
-          Cancel first in the DOM, so reading order, visual order and tab order are the same list
-          in every direction -- a column on a phone, a row from `sm` up. The destructive button is
-          last in all three, which is also where a player's eye stops.
+          Cancel first in the DOM, so reading order, visual order and tab order are the same list.
+          The destructive button is last, which is also where a player's eye stops. A COLUMN at
+          every width since Restart made it three (2026-09-29): the panel is capped at
+          `max-w-content`, and three labels side by side in 24rem wrap mid-word in Spanish and
+          Catalan.
         */}
-        <div className="flex flex-col gap-3 sm:flex-row">
+        <div className="flex flex-col gap-3">
           <button
             ref={cancelRef}
             type="button"
@@ -166,6 +182,15 @@ export function ExitConfirmDialog({ onConfirm, onCancel }: ExitConfirmDialogProp
             className="flex-1 touch-target rounded-lg border border-border-strong px-4 py-2 font-medium text-fg hover:border-border-hover focus-visible:focus-ring"
           >
             {copy.exitDialog.cancel}
+          </button>
+
+          <button
+            ref={restartRef}
+            type="button"
+            onClick={onRestart}
+            className="flex-1 touch-target rounded-lg border border-border-strong px-4 py-2 font-medium text-fg hover:border-border-hover focus-visible:focus-ring"
+          >
+            {copy.exitDialog.restart}
           </button>
 
           {/* Red and FILLED, unlike the exit glyph: this is the press that actually destroys the

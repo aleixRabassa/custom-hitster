@@ -22,7 +22,7 @@ describe('ExitConfirmDialog', () => {
   it('should expose itself as a modal dialog with a name and a description', () => {
     // `role="dialog"` plus `aria-modal` is what tells assistive technology the rest of the page is
     // inert; the labelled title and described body are what it reads out when focus lands inside.
-    render(<ExitConfirmDialog onConfirm={vi.fn()} onCancel={vi.fn()} />);
+    render(<ExitConfirmDialog onConfirm={vi.fn()} onCancel={vi.fn()} onRestart={vi.fn()} />);
 
     const dialog = screen.getByRole('dialog');
     expect(dialog.getAttribute('aria-modal')).toBe('true');
@@ -36,7 +36,7 @@ describe('ExitConfirmDialog', () => {
     // the press ends the game and leaves the game screen. The longer version enumerating what
     // `END` destroys (the shuffle, the position in the deck, every resolved year) was cut on
     // purpose, so this asserts the destination and no longer looks for that copy.
-    render(<ExitConfirmDialog onConfirm={vi.fn()} onCancel={vi.fn()} />);
+    render(<ExitConfirmDialog onConfirm={vi.fn()} onCancel={vi.fn()} onRestart={vi.fn()} />);
 
     const body = document.getElementById('exit-confirm-description')?.textContent ?? '';
     expect(body).toBe(COPY.exitDialog.body);
@@ -45,7 +45,7 @@ describe('ExitConfirmDialog', () => {
   it('should confirm only on the confirm button', () => {
     const onConfirm = vi.fn();
     const onCancel = vi.fn();
-    render(<ExitConfirmDialog onConfirm={onConfirm} onCancel={onCancel} />);
+    render(<ExitConfirmDialog onConfirm={onConfirm} onCancel={onCancel} onRestart={vi.fn()} />);
 
     screen.getByRole('button', { name: COPY.exitDialog.confirm }).click();
 
@@ -53,10 +53,36 @@ describe('ExitConfirmDialog', () => {
     expect(onCancel).not.toHaveBeenCalled();
   });
 
+  it('should restart only on the restart button', () => {
+    // The third answer (2026-09-29): the same deck reshuffled. It must neither end the game nor
+    // merely close the dialog -- the caller decides what a restart does.
+    const onConfirm = vi.fn();
+    const onCancel = vi.fn();
+    const onRestart = vi.fn();
+    render(<ExitConfirmDialog onConfirm={onConfirm} onCancel={onCancel} onRestart={onRestart} />);
+
+    screen.getByRole('button', { name: COPY.exitDialog.restart }).click();
+
+    expect(onRestart).toHaveBeenCalledTimes(1);
+    expect(onConfirm).not.toHaveBeenCalled();
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  it('should put restart between cancel and end, so the destructive end stays last', () => {
+    render(<ExitConfirmDialog onConfirm={vi.fn()} onCancel={vi.fn()} onRestart={vi.fn()} />);
+
+    const names = screen.getAllByRole('button').map((button) => button.textContent);
+    expect(names).toEqual([
+      COPY.exitDialog.cancel,
+      COPY.exitDialog.restart,
+      COPY.exitDialog.confirm,
+    ]);
+  });
+
   it('should cancel on the cancel button', () => {
     const onConfirm = vi.fn();
     const onCancel = vi.fn();
-    render(<ExitConfirmDialog onConfirm={onConfirm} onCancel={onCancel} />);
+    render(<ExitConfirmDialog onConfirm={onConfirm} onCancel={onCancel} onRestart={vi.fn()} />);
 
     screen.getByRole('button', { name: COPY.exitDialog.cancel }).click();
 
@@ -68,7 +94,7 @@ describe('ExitConfirmDialog', () => {
     // At the WINDOW, because focus is on a button inside the dialog rather than on the panel -- a
     // handler bound to the panel would only see Escape if the panel itself were focused.
     const onCancel = vi.fn();
-    render(<ExitConfirmDialog onConfirm={vi.fn()} onCancel={onCancel} />);
+    render(<ExitConfirmDialog onConfirm={vi.fn()} onCancel={onCancel} onRestart={vi.fn()} />);
 
     fireEvent.keyDown(window, { key: 'Escape' });
 
@@ -80,7 +106,7 @@ describe('ExitConfirmDialog', () => {
     // bubbles up to the backdrop's handler, so without the target check, pressing the title text --
     // or missing a button by a pixel -- would dismiss the dialog.
     const onCancel = vi.fn();
-    render(<ExitConfirmDialog onConfirm={vi.fn()} onCancel={onCancel} />);
+    render(<ExitConfirmDialog onConfirm={vi.fn()} onCancel={onCancel} onRestart={vi.fn()} />);
 
     fireEvent.click(screen.getByRole('dialog'));
     expect(onCancel).not.toHaveBeenCalled();
@@ -101,7 +127,7 @@ describe('ExitConfirmDialog', () => {
     //  Cancel is the safe target and it is also the answer a player
     //  usually wants.
     // ===================================================================
-    render(<ExitConfirmDialog onConfirm={vi.fn()} onCancel={vi.fn()} />);
+    render(<ExitConfirmDialog onConfirm={vi.fn()} onCancel={vi.fn()} onRestart={vi.fn()} />);
 
     expect(document.activeElement).toBe(
       screen.getByRole('button', { name: COPY.exitDialog.cancel }),
@@ -112,16 +138,28 @@ describe('ExitConfirmDialog', () => {
     // `aria-modal` makes the page inert to assistive technology; it does NOT make Tab skip it. So
     // without the trap a keyboard player tabs out onto the Play button behind the backdrop, which
     // they can neither see nor click.
-    render(<ExitConfirmDialog onConfirm={vi.fn()} onCancel={vi.fn()} />);
+    render(<ExitConfirmDialog onConfirm={vi.fn()} onCancel={vi.fn()} onRestart={vi.fn()} />);
 
     const cancel = screen.getByRole('button', { name: COPY.exitDialog.cancel });
+    const restart = screen.getByRole('button', { name: COPY.exitDialog.restart });
     const confirm = screen.getByRole('button', { name: COPY.exitDialog.confirm });
 
+    // A cycle over three since Restart joined (2026-09-29), not the two-button swap it replaced.
     fireEvent.keyDown(cancel, { key: 'Tab' });
+    expect(document.activeElement).toBe(restart);
+
+    fireEvent.keyDown(restart, { key: 'Tab' });
     expect(document.activeElement).toBe(confirm);
 
     fireEvent.keyDown(confirm, { key: 'Tab' });
     expect(document.activeElement).toBe(cancel);
+
+    // And backwards with Shift.
+    fireEvent.keyDown(cancel, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(confirm);
+
+    fireEvent.keyDown(confirm, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(restart);
   });
 
   it('should return focus to the trigger when it closes', () => {
@@ -131,7 +169,9 @@ describe('ExitConfirmDialog', () => {
     document.body.appendChild(trigger);
     trigger.focus();
 
-    const { unmount } = render(<ExitConfirmDialog onConfirm={vi.fn()} onCancel={vi.fn()} />);
+    const { unmount } = render(
+      <ExitConfirmDialog onConfirm={vi.fn()} onCancel={vi.fn()} onRestart={vi.fn()} />,
+    );
     expect(document.activeElement).not.toBe(trigger);
 
     unmount();
@@ -144,7 +184,9 @@ describe('ExitConfirmDialog', () => {
     // It renders OVER an unflipped card, so it is a leak surface exactly as `CardControls` is. The
     // component takes no card at all -- this exists so that adding "you are on track 7 of 42",
     // or the current title, fails a test.
-    const { container } = render(<ExitConfirmDialog onConfirm={vi.fn()} onCancel={vi.fn()} />);
+    const { container } = render(
+      <ExitConfirmDialog onConfirm={vi.fn()} onCancel={vi.fn()} onRestart={vi.fn()} />,
+    );
     const text = container.textContent ?? '';
 
     for (const card of fixtureDeck) {

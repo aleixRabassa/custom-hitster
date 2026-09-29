@@ -861,6 +861,8 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
         onNext={next}
         onPrevious={previous}
         onExit={handleExit}
+        // Mid-game "Restart game" from the exit confirmation (2026-09-29): the end screen's handler.
+        onRestart={handleRestart}
         // `status === 'playing'` is the whole condition, and reaching this line is that condition.
         // Derived here because `GameScreen` deliberately knows nothing about `GameStatus`.
         isPlayable
