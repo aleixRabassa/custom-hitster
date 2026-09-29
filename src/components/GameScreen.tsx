@@ -79,7 +79,7 @@
  * swipe half. Nothing interactive was added inside `Card`.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import { CardControls } from './CardControls';
@@ -289,9 +289,21 @@ export function GameScreen({
    *     covers → , and Escape belongs to the dialog alone. It covers BOTH
    *     dialogs -- the exit confirmation and the deck-actions panel -- and
    *     a third one added later must be added to this condition too.
+   *
+   *  A LAYOUT EFFECT, NOT A PASSIVE ONE (2026-09-29), so the listener and
+   *  the card arrive in ONE commit. A passive effect runs after the commit
+   *  that puts the card on screen, so there is a window in which the card
+   *  is visible and → does nothing. In a browser that window is shorter
+   *  than a frame and no hand finds it; in jsdom it is exactly where
+   *  `App.test.tsx`'s `waitFor(hud)` -> `keyDown` landed under load. The
+   *  probe counted the window's `keydown` listeners at every press: 203
+   *  presses found one, and the ONE press that found zero was the one
+   *  failing test (`docs/agent_findings.md`, 2026-09-29). Going back to
+   *  `useEffect` reopens it, and no timeout closes it: a press that finds
+   *  no listener is gone, however long the test then waits.
    * ===================================================================
    */
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!isPlayable || isExitConfirmOpen || isDeckActionsOpen) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {

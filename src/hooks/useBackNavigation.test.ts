@@ -9,9 +9,9 @@
  *     implemented, so these tests exercise the hook's own listener rather than
  *     a double.
  *
- *  2. It fires ASYNCHRONOUSLY, and NOT within one macrotask: a `setTimeout(0)`
- *     is too early, and the event was observed at roughly 10ms. Every assertion
- *     that follows a traversal therefore waits on a real timer (`settle`), and
+ *  2. It fires ASYNCHRONOUSLY, and NOT within one macrotask: ONE `setTimeout(0)`
+ *     is too early, because jsdom traverses in TWO nested timer hops. Every
+ *     assertion that follows a traversal therefore waits for both (`settle`), and
  *     that delay is also what makes the cleanup-ordering hazard REAL rather than
  *     theoretical -- there is a window in which a removed-too-late listener
  *     would still be attached.
@@ -58,13 +58,20 @@ function Probe({ isDeckActionsOpen = false, isExitConfirmOpen = false, ...handle
 }
 
 /**
- * Wait long enough for a queued traversal to land, inside `act` so any state update it causes is
- * flushed before the assertion. 50ms against a measured ~10ms -- generous on purpose, because the
- * failure mode of being too quick is a flaky suite that reads as a hook bug.
+ * Let a queued traversal land, inside `act` so any state update it causes is flushed before the
+ * assertion.
+ *
+ * TWO `setTimeout(0)` hops awaited in order, not a sleep, and that is what makes it deterministic.
+ * jsdom queues a traversal as one timer hop that queues a second, and Node fires equal-delay timers
+ * in insertion order, so each of these hops lands after the matching jsdom hop. This was a 50 ms
+ * sleep until 2026-09-29, and that flaked under load: when the loop stalls, the 50 ms timer falls
+ * due in the same pass as jsdom's FIRST hop and fires before the second is even queued. Full
+ * reasoning on `flushHistoryTraversal` in `src/App.test.tsx`.
  */
 async function settle() {
   await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
   });
 }
 

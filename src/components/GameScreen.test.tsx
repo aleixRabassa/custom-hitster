@@ -738,8 +738,8 @@ describe('GameScreen keyboard controls', () => {
  * `src/hooks/useBackNavigation.test.ts`, so what is left for this file is the WIRING -- that a
  * press reaches the same confirmation the Exit button reaches, and that it never reaches `onExit`.
  *
- * A back press is `window.history.back()` and jsdom really traverses, but ASYNCHRONOUSLY (measured
- * at roughly 10ms on 2026-08-12), so every press is followed by a timed wait inside `act`.
+ * A back press is `window.history.back()` and jsdom really traverses, but ASYNCHRONOUSLY (two
+ * nested timer hops), so every press is followed by a drain of both hops inside `act`.
  *
  * WHAT NONE OF THIS PROVES is that Android's gesture arrives as a `popstate` in a Trusted Web
  * Activity at all. jsdom's history is a model, not Chrome's, and the device pass in the plan's
@@ -764,11 +764,18 @@ describe('GameScreen back navigation', () => {
     vi.restoreAllMocks();
   });
 
-  /** Press back the way the platform does, then wait for jsdom's queued traversal to land. */
+  /**
+   * Press back the way the platform does, then let jsdom's queued traversal land.
+   *
+   * Two ordered `setTimeout(0)` hops rather than a 50 ms sleep, which a stalled loop fires before
+   * jsdom's second hop (2026-09-29). Same drain as `settle` in `useBackNavigation.test.ts`; the
+   * reasoning is on `flushHistoryTraversal` in `src/App.test.tsx`.
+   */
   async function pressBack() {
     window.history.back();
     await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
   }
 

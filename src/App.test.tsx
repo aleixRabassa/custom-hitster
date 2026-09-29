@@ -80,6 +80,16 @@ vi.mock('qrcode', () => ({ toString: toStringMock }));
  *  genuinely broken one fails in 5 s instead of 1 s, which is the whole cost.
  *  `configure` is per file (Vitest isolates modules per file), as is
  *  `vi.setConfig`; nothing here leaks into the unit suites.
+ *
+ *  THE BUDGETS WERE HALF OF IT (2026-09-29). The file kept flaking after
+ *  they were raised, and the failing tests had used the WHOLE 5 s: → was
+ *  pressed and the end screen, or the HUD's count, never moved. That is a LOST
+ *  event, not a slow one. `waitFor(hud)` resolves once the HUD is committed,
+ *  and until that day `GameScreen` attached its `keydown` listener in a
+ *  PASSIVE effect, which under load ran after the test had already pressed
+ *  the key. It is now a layout effect, so the HUD being in the document means
+ *  the listener is attached. Do not raise these numbers for that shape; see
+ *  the handler's own comment block in `GameScreen.tsx`.
  * ===========================================================================
  */
 configure({ asyncUtilTimeout: 5_000 });
