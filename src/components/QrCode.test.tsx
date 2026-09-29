@@ -36,23 +36,32 @@ import { COPY } from '../game/copy';
 import { highConfidenceCard } from './__fixtures__/cards';
 import { clearQrCache } from '../game/qr-cache';
 
-const { toDataURLMock } = vi.hoisted(() => ({
+const { toStringMock } = vi.hoisted(() => ({
   // `vi.hoisted` is required: `vi.mock`'s factory is hoisted above ordinary `const`
   // declarations, so referencing a plain const inside it throws a TDZ error at import time.
-  toDataURLMock: vi.fn<(text: string, options?: unknown) => Promise<string>>(),
+  toStringMock: vi.fn<(text: string, options?: unknown) => Promise<string>>(),
 }));
 
-vi.mock('qrcode', () => ({ toDataURL: toDataURLMock }));
+vi.mock('qrcode', () => ({ toString: toStringMock }));
 
-/** A fake data URL that carries its input, so a test can read the encoded value back out. */
+/** A fake SVG that carries its input, so a test can read the encoded value back out. */
+function fakeSvg(text: string): string {
+  return `<svg>QR(${text})</svg>`;
+}
+
+/**
+ * The `src` the component must render for `fakeSvg(text)`. Built the way `QrCode.tsx` builds it on
+ * purpose: the assertion is that the markup reaches the image intact, escaping included -- a raw
+ * splice would cut the URL at the first `#` in a real code's fill colours.
+ */
 function fakeDataUrl(text: string): string {
-  return `data:image/png;base64,QR(${text})`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(fakeSvg(text))}`;
 }
 
 describe('QrCode', () => {
   beforeEach(() => {
-    toDataURLMock.mockReset();
-    toDataURLMock.mockImplementation((text) => Promise.resolve(fakeDataUrl(text)));
+    toStringMock.mockReset();
+    toStringMock.mockImplementation((text) => Promise.resolve(fakeSvg(text)));
     /*
       ===================================================================
        AS REQUIRED AS THE `cleanup` BELOW, AND FOR THE SAME KIND OF
@@ -86,7 +95,21 @@ describe('QrCode', () => {
 
     const image = await screen.findByRole('img');
     expect(image.getAttribute('src')).toBe(fakeDataUrl(url));
-    expect(toDataURLMock).toHaveBeenCalledWith(url, expect.anything());
+    expect(toStringMock).toHaveBeenCalledWith(url, expect.anything());
+  });
+
+  it('should generate the code as an SVG', async () => {
+    // The performance decision of 2026-09-29, pinned (see the component's header). The option is
+    // the part the double cannot see: `toString` WITHOUT `type` returns the UTF-8 text rendering,
+    // which the component would wrap as an "SVG" data URL that paints nothing -- and every other
+    // test here would still pass, because they only read back what the double returns.
+    render(<QrCode url="https://open.spotify.com/track/3z8h0TU7ReDPLIbEnYhWZb" size={160} />);
+
+    await screen.findByRole('img');
+    expect(toStringMock).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ type: 'svg' }),
+    );
   });
 
   it('should hold a same-sized placeholder until the code resolves', () => {
@@ -146,7 +169,7 @@ describe('QrCode', () => {
       expect(screen.getByRole('img').getAttribute('src')).toBe(fakeDataUrl(second));
     });
 
-    expect(toDataURLMock).toHaveBeenCalledTimes(2);
+    expect(toStringMock).toHaveBeenCalledTimes(2);
   });
 
   it('should paint a cached code on the first render, with no placeholder and no regeneration', async () => {
@@ -164,7 +187,7 @@ describe('QrCode', () => {
     //  The two halves asserted here are what a player sees: NO PLACEHOLDER
     //  on the first render (a cache read in an effect would still paint one
     //  frame of it, because `useEffect` runs after paint), and no second
-    //  `toDataURL` for a code that already exists.
+    //  generation for a code that already exists.
     // ===================================================================
     const url = 'https://open.spotify.com/track/preloadpreloadpreloadp';
 
@@ -178,7 +201,7 @@ describe('QrCode', () => {
     // Synchronously, on the very first render -- not awaited.
     expect(screen.getByRole('img').getAttribute('src')).toBe(fakeDataUrl(url));
     expect(document.querySelector('[data-motion="qr-placeholder"]')).toBeNull();
-    expect(toDataURLMock).toHaveBeenCalledTimes(1);
+    expect(toStringMock).toHaveBeenCalledTimes(1);
   });
 
   it('should key the cache on the bitmap size, so a different size still generates', async () => {
@@ -194,9 +217,9 @@ describe('QrCode', () => {
     render(<QrCode url={url} size={224} />);
 
     await waitFor(() => {
-      expect(toDataURLMock).toHaveBeenCalledTimes(2);
+      expect(toStringMock).toHaveBeenCalledTimes(2);
     });
-    expect(toDataURLMock).toHaveBeenLastCalledWith(url, expect.objectContaining({ width: 224 }));
+    expect(toStringMock).toHaveBeenLastCalledWith(url, expect.objectContaining({ width: 224 }));
   });
 
   it('should ignore a resolved code for a superseded url', async () => {
@@ -218,7 +241,7 @@ describe('QrCode', () => {
     const fast = 'https://open.spotify.com/track/fastfastfastfastfastfa';
 
     let resolveSlow: (value: string) => void = () => {};
-    toDataURLMock.mockImplementationOnce(
+    toStringMock.mockImplementationOnce(
       () =>
         new Promise<string>((resolve) => {
           resolveSlow = resolve;
@@ -233,7 +256,7 @@ describe('QrCode', () => {
     });
 
     // Card 1's code finally arrives, long after its card is gone.
-    resolveSlow(fakeDataUrl(slow));
+    resolveSlow(fakeSvg(slow));
     // A full macrotask turn, which drains every pending microtask rather than exactly one -- so
     // this stays correct however many `.then` hops the chain grows.
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -247,7 +270,7 @@ describe('QrCode', () => {
     //
     //  Through Phase 6 one `size` prop was both the generated bitmap and
     //  the rendered box. Once the card became fluid, keeping them
-    //  conflated would mean `toDataURL` -- which returns a PROMISE -- being
+    //  conflated would mean generation -- which returns a PROMISE -- being
     //  called again on every frame of a resize: a debounce, extra state,
     //  and the placeholder flashing mid-drag.
     //
@@ -266,12 +289,12 @@ describe('QrCode', () => {
     expect((placeholder as HTMLElement).style.width).toBe(display);
 
     const image = await screen.findByRole('img');
-    // Generation got the BITMAP size and nothing else. `width` in the options is what `qrcode`
+    // Generation got the FIXED size and nothing else. `width` in the options is what `qrcode`
     // encodes at, and it must be the fixed number rather than the CSS length.
-    expect(toDataURLMock).toHaveBeenCalledWith(url, expect.objectContaining({ width: 176 }));
-    expect(toDataURLMock).toHaveBeenCalledTimes(1);
+    expect(toStringMock).toHaveBeenCalledWith(url, expect.objectContaining({ width: 176 }));
+    expect(toStringMock).toHaveBeenCalledTimes(1);
 
-    // The element carries BOTH: the attributes are the intrinsic bitmap dimensions, so the browser
+    // The element carries BOTH: the attributes are the intrinsic dimensions, so the browser
     // reserves the right aspect ratio, and the inline style is what it is actually drawn at.
     expect(image.getAttribute('width')).toBe('176');
     expect(image.getAttribute('height')).toBe('176');
@@ -306,12 +329,12 @@ describe('QrCode', () => {
   it('should keep the placeholder when generation fails', async () => {
     // Nothing useful to say to the player and nothing to retry: the input is a URL built
     // from an opaque id, so a rejection means the library is broken, not the data.
-    toDataURLMock.mockImplementation(() => Promise.reject(new Error('boom')));
+    toStringMock.mockImplementation(() => Promise.reject(new Error('boom')));
 
     render(<QrCode url="https://open.spotify.com/track/x" size={160} />);
 
     await waitFor(() => {
-      expect(toDataURLMock).toHaveBeenCalled();
+      expect(toStringMock).toHaveBeenCalled();
     });
     expect(screen.queryByRole('img')).toBeNull();
     expect(document.querySelector('[aria-hidden="true"]')).not.toBeNull();

@@ -12,7 +12,7 @@
  *  front card is a `Card` inside an `AnimatePresence` keyed on card id, and the
  *  advance unmounts one and mounts the other. Without a cache the new front card
  *  starts generation from scratch and paints the pulsing placeholder for the
- *  length of a `toDataURL()` -- the exact flash the preload was added to remove.
+ *  length of a generation -- the exact flash the preload was added to remove.
  *
  *  So the cache is keyed on what a code is generated FOR (`size` and `url`,
  *  never `displaySize` -- see `QrCode.tsx`) rather than on which element asked
@@ -38,7 +38,7 @@ const cache = new Map<string, string>();
 /**
  * What a generated code belongs to.
  *
- * `size` is the BITMAP edge length and `displaySize` must never enter this — the two were one
+ * `size` is the code's intrinsic edge length and `displaySize` must never enter this — they were one
  * prop until Phase 7 and keeping them apart is what stops a fluid card from re-encoding on
  * every frame of a resize. A key built from the displayed size would put them back together.
  */

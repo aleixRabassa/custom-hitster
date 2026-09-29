@@ -19,11 +19,11 @@ import { highConfidenceCard, lowConfidenceCard, noPreviewCard } from './__fixtur
 import { clearQrCache } from '../game/qr-cache';
 import { resetBackNavigationTraversals } from '../hooks/useBackNavigation';
 
-const { toDataURLMock } = vi.hoisted(() => ({
-  toDataURLMock: vi.fn<(text: string, options?: unknown) => Promise<string>>(),
+const { toStringMock } = vi.hoisted(() => ({
+  toStringMock: vi.fn<(text: string, options?: unknown) => Promise<string>>(),
 }));
 
-vi.mock('qrcode', () => ({ toDataURL: toDataURLMock }));
+vi.mock('qrcode', () => ({ toString: toStringMock }));
 
 let calls: string[] = [];
 
@@ -76,10 +76,8 @@ function renderScreen(props: {
 describe('GameScreen', () => {
   beforeEach(() => {
     calls = [];
-    toDataURLMock.mockReset();
-    toDataURLMock.mockImplementation((text) =>
-      Promise.resolve(`data:image/png;base64,QR(${text})`),
-    );
+    toStringMock.mockReset();
+    toStringMock.mockImplementation((text) => Promise.resolve(`<svg>QR(${text})</svg>`));
     // Generated codes are cached at module level (`src/game/qr-cache.ts`) so the deck's preload
     // survives a card advance. Vitest isolates modules per FILE, so every test here would
     // otherwise render against whatever the previous one generated. Same reason as `cleanup`.
@@ -494,10 +492,8 @@ describe('GameScreen', () => {
  */
 describe('GameScreen keyboard controls', () => {
   beforeEach(() => {
-    toDataURLMock.mockReset();
-    toDataURLMock.mockImplementation((text) =>
-      Promise.resolve(`data:image/png;base64,QR(${text})`),
-    );
+    toStringMock.mockReset();
+    toStringMock.mockImplementation((text) => Promise.resolve(`<svg>QR(${text})</svg>`));
 
     // jsdom implements neither method, and `GameScreen`'s stop-on-mount effect calls `pause()`
     // for every render below. Stubbed only to keep "Not implemented" out of the output --
@@ -701,10 +697,8 @@ describe('GameScreen keyboard controls', () => {
  */
 describe('GameScreen back navigation', () => {
   beforeEach(() => {
-    toDataURLMock.mockReset();
-    toDataURLMock.mockImplementation((text) =>
-      Promise.resolve(`data:image/png;base64,QR(${text})`),
-    );
+    toStringMock.mockReset();
+    toStringMock.mockImplementation((text) => Promise.resolve(`<svg>QR(${text})</svg>`));
     clearQrCache();
     // Module state in the hook, reset for the same reason `clearQrCache` is: Vitest isolates
     // modules per FILE, so a test that unmounted without waiting would leave the traversal counter

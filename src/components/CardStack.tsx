@@ -55,7 +55,7 @@
  *   QR encodes it. That was weighed and accepted when this changed: the id is 22
  *   opaque characters, the hidden face is a mystery BY CONSTRUCTION, and the
  *   card it belongs to is the one the player is in the act of dealing themselves.
- *   The cost is one extra `toDataURL()` per advance, one card ahead -- which is
+ *   The cost is one extra QR generation per advance, one card ahead -- which is
  *   the whole point, since that work is what has moved off the critical path.
  *  ===========================================================================
  * ===========================================================================
@@ -210,7 +210,7 @@ export function CardStack({
    * normally a cache hit (it was generated when this card was the current one, and again as the
    * back behind it), with one exception worth knowing: after a `RESUME` mid-deck nothing has
    * rendered it this page, so the first drag back can catch the placeholder. Off-screen, and one
-   * `toDataURL()` later it is warm for the rest of the session.
+   * generation later it is warm for the rest of the session.
    */
   const previousCard = deck[currentIndex - 1];
 

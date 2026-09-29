@@ -705,7 +705,7 @@ uncovered two concentric rectangles smaller than the card. The back is now `abso
 **The leak half of the old rule is untouched and still asserted** — the back mounts
 `CardHiddenSide`, `CardStack` does not import `CardRevealSide`, and no title, artist or year reaches
 the document a card early, in text or in an attribute. What does is the **track id**, because the QR
-encodes it; that was weighed and accepted, and the cost half (one extra `toDataURL()` per advance)
+encodes it; that was weighed and accepted, and the cost half (one extra QR generation per advance)
 is the feature rather than a side effect. Two consequences to know: `card-ring-dim` and
 `--color-ring-dim` are **gone**, replaced by `card-ring-quiet`, which suppresses the back's bloom
 through a **custom property** rather than a competing `box-shadow` (same cascade-order hazard the
@@ -731,7 +731,8 @@ which `overflow-hidden` **crops rather than shows**, i.e. a silently unscannable
 displayed size at the 224px / ~140px it always was; then **the caption moved off the face** (below), the
 vertical constraint vanished, and 3/4 is what the padding alone allows with a visible margin left —
 **288px / 180px, and `QR_BITMAP_SIZE` had to follow 224 → 288**, because encoding below the displayed
-size upscales a QR and blurs the module edges a camera reads.
+size upscales a QR and blurs the module edges a camera reads. **That last rule died on 2026-09-29, when the
+code became an SVG** (see the QR block below) — a vector has no resolution to fall short of.
 `--ring-width` deliberately did **not** follow the card (a derived ring goes sub-pixel and blurs into
 its own bloom). One new hazard: **`--container-content` and the card's ceiling are now both 24rem**, so
 the three components capped at `--card-width` look mergeable with the reading measure — they agree at
@@ -762,6 +763,21 @@ old disappear-on-flip with `{isFlipped ? null : …}` removes a line from a `jus
 **the card would jump on every flip**. `CardHiddenSide.test.tsx` asserts the face has NO text at all,
 and the silent-colour canary (this line once shipped as `text-text-muted` and rendered near-black on
 near-black) moved to `GameScreen.test.tsx` with it.
+
+**THE CARD'S QR IS AN SVG AS OF 2026-09-29, NOT A PNG — and `toDataURL` there is the edit to refuse.**
+`QrCode.tsx` calls `qrcode`'s `toString({ type: 'svg' })` and wraps it in a `data:image/svg+xml`
+URL. `toDataURL` draws onto a canvas and PNG-encodes on the main thread, and on the share-link route
+that WAS the long task: the current card's code and `CardStack`'s preloaded back continue off one
+`loadQrcode()` promise, so both ran in one microtask checkpoint — Lighthouse's ~970 ms task, almost
+all of the route's ~620 ms TBT, and the route's LCP element. Measured and written up in
+[`docs/review.unlighthouse.md`](./docs/review.unlighthouse.md). Three things. **The PDF export still
+uses `toDataURL` on purpose** (jsPDF embeds a raster), so it is not a second caller to "fix".
+**Every test double for the card QR must mock `toString` explicitly**: an object mocked as
+`{ toDataURL }` still has `Object.prototype.toString`, which returns `"[object Object]"` without
+throwing — a garbage `src` and a green suite. `QrCode.test.tsx` pins the `type: 'svg'` option,
+the one thing a double cannot see. And **the phone scan was done on the PNG**: a browser-rasterised
+vector at a fractional module size is not what was scanned on 2026-08-05/06, so the scan is a row in
+[`docs/development.md`](./docs/development.md) §5 again.
 
 **The deck-actions icon is the three-node share glyph as of 2026-08-11, and it is `filled` — so its
 two link paths MUST carry `fill="none"`.** Otherwise the filled `<svg>` paints the triangle the four

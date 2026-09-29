@@ -18,16 +18,41 @@
  * it the card's layout jumps when the code resolves, which is most visible on the card that
  * matters most -- the first one.
  *
+ * ## The code is an SVG, not a PNG (2026-09-29)
+ *
+ * `qrcode`'s `toString({ type: 'svg' })`, wrapped in a data URL, where this component used
+ * `toDataURL` until 2026-09-29. `toDataURL` draws the code onto a canvas and PNG-encodes it on the
+ * main thread, and on the share-link route that WAS the long task: both codes the game screen
+ * generates (this card and the preloaded back in `CardStack`) continue off the same `loadQrcode()`
+ * promise, so they ran in one microtask checkpoint -- a 174 ms task that Lighthouse's 4x CPU
+ * multiplier reported as ~970 ms, and almost all of the route's ~620 ms of Total Blocking Time.
+ * ~85% of that task was the canvas render and the PNG encode, which the SVG path does not do at
+ * all: it builds a ~2 kB string. Measured cold, two codes, 4x CPU: ~105 ms as PNG, ~42 ms as SVG.
+ * The rest is the QR encoding itself, which both paths share. Full numbers in
+ * `docs/review.unlighthouse.md`.
+ *
+ * A vector also has no resolution to get wrong: it rasterises at whatever size it is drawn, so
+ * the "never encode below the displayed size" rule that used to govern `size` is gone.
+ *
+ * **The PDF export still uses `toDataURL`**, deliberately -- jsPDF embeds a raster -- so
+ * `usePdfExport.ts` is not a second caller to "fix" to match this one.
+ *
+ * **Test doubles must mock `toString` explicitly.** A `vi.mock('qrcode', () => ({ toDataURL }))`
+ * object still HAS a `toString` -- `Object.prototype.toString` -- so this component would call it,
+ * get `"[object Object]"`, and render an `<img>` with a garbage `src` and no error anywhere.
+ *
  * ## The generated size and the displayed size are two props, and that is Phase 7 decision 4
  *
- * `size` is the bitmap `toDataURL` encodes and it is a FIXED number of pixels. `displaySize` is
- * any CSS length and may be fluid -- `CardHiddenSide` passes a token that tracks the card.
+ * `size` is the code's INTRINSIC size: the SVG's `width`/`height`, the `<img>`'s `width`/`height`
+ * (so the browser reserves the right aspect ratio) and part of the cache key. It is a FIXED number
+ * of pixels. `displaySize` is any CSS length and may be fluid -- `CardHiddenSide` passes a token
+ * that tracks the card.
  *
  * Conflating them, which is what this component did through Phase 6, is what would make the code
- * regenerate on every frame of a resize once the card became fluid: `toDataURL` returns a promise,
+ * regenerate on every frame of a resize once the card became fluid: generation returns a promise,
  * so a viewport-derived generation size would need a debounce, extra state, and would flash the
- * placeholder mid-resize. Downscaling a finished QR in CSS costs nothing instead -- it does not
- * harm scannability, and the error correction level is already `M`.
+ * placeholder mid-resize. Scaling a finished QR in CSS costs nothing instead -- and since the code
+ * became a vector it does not even resample.
  *
  * The consequence to preserve: `size` is what the cache key and the generation counter are built
  * from, and `displaySize` must never enter either, or the two come back together.
@@ -74,11 +99,10 @@ export interface QrCodeProps {
   /** The URL to encode. For a card this is `spotifyTrackUrl(card.id)`. */
   url: string;
   /**
-   * The GENERATED bitmap's edge length in pixels.
+   * The generated code's INTRINSIC edge length in pixels.
    *
-   * A fixed number, chosen for the largest size the code will ever be shown at. It feeds
-   * `toDataURL` and the cache key, so changing it re-encodes; it must never be derived from the
-   * viewport. See the header block.
+   * A fixed number. It feeds the SVG's `width`/`height`, the `<img>`'s and the cache key, so
+   * changing it re-encodes; it must never be derived from the viewport. See the header block.
    */
   size: number;
   /**
@@ -169,7 +193,7 @@ export function QrCode({ url, size, displaySize, alt }: QrCodeProps) {
     /*
       The library and the code it generates are awaited as ONE chain, so the generation counter
       guards both halves with the same check -- a chunk that resolves late is dropped exactly as a
-      slow `toDataURL` is. That matters more here than before the split: the import widens the
+      slow generation is. That matters more here than before the split: the import widens the
       window in which a card can be superseded, which makes the race more likely rather than
       different in kind.
 
@@ -178,8 +202,10 @@ export function QrCode({ url, size, displaySize, alt }: QrCodeProps) {
       typecheck even though most examples online write it that way.
     */
     loadQrcode()
-      .then(({ toDataURL }) =>
-        toDataURL(url, {
+      .then(({ toString }) =>
+        toString(url, {
+          // SVG, NOT `toDataURL`'s PNG (2026-09-29). See "The code is an SVG" in the header.
+          type: 'svg',
           // `margin` is in modules, not pixels. The default of 4 is a lot of white space at
           // card size; 1 keeps the quiet zone valid while the code stays large enough to scan.
           margin: 1,
@@ -187,7 +213,11 @@ export function QrCode({ url, size, displaySize, alt }: QrCodeProps) {
           errorCorrectionLevel: 'M',
         }),
       )
-      .then((dataUrl) => {
+      .then((svg) => {
+        // `encodeURIComponent`, not a raw splice: the markup carries `#` in its fill colours, and an
+        // unescaped `#` ends a data URL at the fragment.
+        const dataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+
         /*
           Cached BEFORE the staleness check, and deliberately. A superseded generation produced a
           perfectly good code for the url it was asked about -- it is only wrong for the element
@@ -231,7 +261,7 @@ export function QrCode({ url, size, displaySize, alt }: QrCodeProps) {
         /*
           `data-motion="qr-placeholder"` is the reduced-motion hook: the block in `src/index.css`
           drops the pulse and keeps the box, because the box's job is to hold the card's layout
-          while `toDataURL` resolves and it goes on doing that perfectly well while still.
+          while the generation resolves and it goes on doing that perfectly well while still.
         */
         data-motion="qr-placeholder"
         className="animate-pulse rounded bg-surface-raised"
@@ -242,7 +272,7 @@ export function QrCode({ url, size, displaySize, alt }: QrCodeProps) {
 
   return (
     /*
-      `width`/`height` carry the BITMAP's size, so the intrinsic dimensions and the aspect ratio
+      `width`/`height` carry the code's INTRINSIC size, so the dimensions and the aspect ratio
       the browser reserves are the real ones; the inline style is what the code is actually drawn
       at. When `displaySize` is omitted the two agree, which is the pre-Phase-7 behaviour.
     */

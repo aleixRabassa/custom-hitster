@@ -48,11 +48,11 @@ import type { StorageLike } from './game/persistence';
 import type { PersistedSession } from './game/types';
 import type { Card, PlaylistResult } from '../shared/types';
 
-const { toDataURLMock } = vi.hoisted(() => ({
-  toDataURLMock: vi.fn<(text: string, options?: unknown) => Promise<string>>(),
+const { toStringMock } = vi.hoisted(() => ({
+  toStringMock: vi.fn<(text: string, options?: unknown) => Promise<string>>(),
 }));
 
-vi.mock('qrcode', () => ({ toDataURL: toDataURLMock }));
+vi.mock('qrcode', () => ({ toString: toStringMock }));
 
 /**
  * ===========================================================================
@@ -412,10 +412,8 @@ describe('App', () => {
   }, 60_000);
 
   beforeEach(() => {
-    toDataURLMock.mockReset();
-    toDataURLMock.mockImplementation((text) =>
-      Promise.resolve(`data:image/png;base64,QR(${text})`),
-    );
+    toStringMock.mockReset();
+    toStringMock.mockImplementation((text) => Promise.resolve(`<svg>QR(${text})</svg>`));
     // Generated codes are cached at module level (`src/game/qr-cache.ts`) so the deck's preload
     // survives a card advance. Vitest isolates modules per FILE, so every test here would
     // otherwise render against whatever the previous one generated. Same reason as `cleanup`.

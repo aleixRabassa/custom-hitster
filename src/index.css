@@ -360,15 +360,14 @@
    *  140 before. Both ends are bigger, and the floor is still comfortably above
    *  the ~144px that was scan-verified on a real phone on 2026-08-06.
    *
-   *  288px is also exactly `QR_BITMAP_SIZE` in `CardHiddenSide.tsx`, which HAD
-   *  to be raised from 224 with this: encoding above the displayed size is
-   *  harmless (the browser downsamples), encoding below it upscales a QR and
-   *  blurs the module edges a camera is looking for. Raise this ratio again and
-   *  that constant has to follow, or the code silently gets softer.
+   *  288px is also exactly `QR_BITMAP_SIZE` in `CardHiddenSide.tsx`, which had
+   *  to be raised from 224 with this while the code was a PNG bitmap. Since
+   *  2026-09-29 it is an SVG, which rasterises at whatever size it is drawn,
+   *  so raising this ratio no longer needs that constant to follow.
    * ===========================================================================
    *
-   * The GENERATED bitmap's size is a different number and must stay one
-   * (decision 4): `toDataURL` is asynchronous, so a generation size that tracked
+   * The GENERATED size is a different number and must stay one (decision 4):
+   * generation is asynchronous, so a generation size that tracked
    * the viewport would re-encode the code on every resize frame and flash the
    * placeholder while it did. `QrCode.tsx` takes the two separately.
    */
@@ -777,7 +776,7 @@ body {
 
   /*
    * The QR PLACEHOLDER's pulse. The box stays, at the same size: its job is to
-   * hold the card's layout while `toDataURL` resolves, and it keeps doing that.
+   * hold the card's layout while the code is generated, and it keeps doing that.
    */
   [data-motion='qr-placeholder'] {
     animation: none;

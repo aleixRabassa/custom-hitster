@@ -32,14 +32,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { QrCode } from './QrCode';
 
-const { toDataURLMock } = vi.hoisted(() => ({
-  toDataURLMock: vi.fn<(text: string, options?: unknown) => Promise<string>>(),
+const { toStringMock } = vi.hoisted(() => ({
+  toStringMock: vi.fn<(text: string, options?: unknown) => Promise<string>>(),
 }));
 
 vi.mock('qrcode', () => {
   // Never reached, and asserted below: the point is that generation is not attempted at all when
   // the library is missing. The export exists only so the shape of the mock is honest.
-  void toDataURLMock;
+  void toStringMock;
   throw new Error('Failed to fetch dynamically imported module: /assets/browser-DFBgVuWK.js');
 });
 
@@ -57,7 +57,7 @@ describe('QrCode when the library fails to load', () => {
     expect(screen.queryByRole('img')).toBeNull();
     // Never called: there was no library to call it on. This is what distinguishes this case from
     // "generation rejected", which is covered in `QrCode.test.tsx`.
-    expect(toDataURLMock).not.toHaveBeenCalled();
+    expect(toStringMock).not.toHaveBeenCalled();
 
     /*
       The box is still holding the card's layout at the right size, which is its OTHER job and the

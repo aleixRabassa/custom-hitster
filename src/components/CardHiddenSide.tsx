@@ -63,40 +63,33 @@ import type { Card } from '../../shared/types';
 export interface CardHiddenSideProps {
   card: Card;
   /**
-   * The QR's GENERATED bitmap edge length in pixels. Not its displayed size — see below.
+   * The QR's GENERATED (intrinsic) edge length in pixels. Not its displayed size — see below.
    *
-   * Overridable for tests and for a future caller that needs a different bitmap; the displayed
+   * Overridable for tests and for a future caller that needs a different size; the displayed
    * size is not a prop, because it is a property of the card's layout rather than of this face.
    */
   qrSize?: number;
 }
 
 /**
- * The bitmap the QR is encoded at, in pixels.
+ * The QR's intrinsic size, in pixels.
  *
- * Sized for the LARGEST the code is ever displayed at, which is 288px — `--qr-display-size` is
- * 3/4 of the card's width and the card's width tops out at 384px. Fixed, and it stays fixed
- * (Phase 7 decision 4): the displayed size became fluid, the generated one must not follow it,
- * because `toDataURL` is asynchronous and a viewport-derived size would re-encode on every frame
- * of a resize. Downscaling a finished code in CSS is free.
+ * 288px, the LARGEST the code is ever displayed at — `--qr-display-size` is 3/4 of the card's width
+ * and the card's width tops out at 384px. Fixed, and it stays fixed (Phase 7 decision 4): the
+ * displayed size became fluid, the generated one must not follow it, because generation is
+ * asynchronous and a viewport-derived size would re-encode on every frame of a resize.
  *
- * **This number has to move with `--qr-display-size`, and it is the direction that matters.**
- * It was 176 while the code displayed at 11/18 of a 288px card; the code then went to 14/18, so a
- * 176px bitmap would have been scaled UP by 27% and a QR is exactly the kind of image that must not
- * be — upscaling blurs the module edges a camera is looking for. Encoding above the displayed size
- * is harmless (the browser downsamples), encoding below it is not.
+ * **Since 2026-09-29 the code is an SVG, and this number stopped being a resolution.** Until then
+ * it was the PNG bitmap `toDataURL` encoded, and it HAD to track `--qr-display-size` from above
+ * (176 → 224 → 288 as the code grew), because a bitmap scaled UP blurs the module edges a camera is
+ * looking for. A vector rasterises at whatever size it is drawn, so that rule is gone: raising the
+ * display ratio or the card's ceiling no longer requires touching this constant. It is kept at the
+ * largest display size so the `<img>`'s intrinsic dimensions stay truthful, and because changing it
+ * would only re-key the cache for nothing. See `QrCode.tsx`, "The code is an SVG".
  *
- * **The square card of 2026-08-11 did not move it, and that was arithmetic rather than luck:** the
- * ratio went to 7/12 precisely so 7/12 of the new 384px ceiling was the same 224px the old 14/18 of
- * 288px had been. **The ENLARGEMENT later the same day did move it**, from 224 to 288, because the
- * caption leaving the face let the ratio go to 3/4 and 3/4 × 384 = 288. If either the ratio or the
- * card's ceiling is raised again, recompute their product and raise this with it.
- *
- * The cost is a bigger cached data URL per card and it was weighed: `src/game/qr-cache.ts` never
- * evicts and a deck is capped at 100 cards, so this is the one number in the app that multiplies by
- * the deck size. A QR is a two-colour PNG of a few hundred modules — the bitmap grows with the
- * square of the edge but the compressed payload grows far more slowly, and 100 codes is still well
- * inside a few hundred kB.
+ * The cached payload is ~2 kB of markup per card (`src/game/qr-cache.ts` never evicts and a deck is
+ * capped at 100 cards, so this is the one number in the app that multiplies by the deck size), and
+ * it does not grow with this number at all.
  */
 const QR_BITMAP_SIZE = 288;
 

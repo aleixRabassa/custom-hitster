@@ -152,7 +152,7 @@ describe('src/index.css', () => {
     expect(body).toMatch(/display:\s*none/);
 
     // The QR PLACEHOLDER: the pulse goes, the box stays. Its job is holding the card's layout while
-    // `toDataURL` resolves, and it does that just as well while still.
+    // the code is generated, and it does that just as well while still.
     expect(body).toContain("[data-motion='qr-placeholder']");
     expect(body).toMatch(/animation:\s*none/);
   });

@@ -233,15 +233,15 @@ The fixture deck still exists at `src/components/__fixtures__/cards.ts` and is s
 
 Six things about the card cannot be asserted from a test, and the last one cannot be checked on a desktop at all:
 
-| Check                                                                                                                                        | Status                          |
-| -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
-| Flip and Next                                                                                                                                | **Verified 2026-08-05 — works** |
-| Play, pause, restart; audio stops on flip and on advance                                                                                     | Pending — needs a real deck     |
-| **Devtools DOM search on an UNFLIPPED card** for the current track's title, artist and year — all three must be absent, not merely invisible | Pending                         |
-| **Scan the QR with a real phone** and confirm it opens the right track in Spotify                                                            | **Verified 2026-08-05 — works** |
-| A preview-less track disables Play/Pause and Restart while Exit and the QR stay live (rare — ~0.5% of tracks; Reggae Classics has two)       | Pending                         |
-| The four year states render distinctly (plain / unconfirmed / "check this one yourself" / still looking up)                                  | Pending                         |
-| **On Android (or Chrome's media panel): start playback and confirm the notification and lock screen show no track title or artist**          | Pending — needs real hardware   |
+| Check                                                                                                                                        | Status                                                                 |
+| -------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Flip and Next                                                                                                                                | **Verified 2026-08-05 — works**                                        |
+| Play, pause, restart; audio stops on flip and on advance                                                                                     | Pending — needs a real deck                                            |
+| **Devtools DOM search on an UNFLIPPED card** for the current track's title, artist and year — all three must be absent, not merely invisible | Pending                                                                |
+| **Scan the QR with a real phone** and confirm it opens the right track in Spotify                                                            | **Verified 2026-08-05 on the PNG** — owed again for the SVG, see below |
+| A preview-less track disables Play/Pause and Restart while Exit and the QR stay live (rare — ~0.5% of tracks; Reggae Classics has two)       | Pending                                                                |
+| The four year states render distinctly (plain / unconfirmed / "check this one yourself" / still looking up)                                  | Pending                                                                |
+| **On Android (or Chrome's media panel): start playback and confirm the notification and lock screen show no track title or artist**          | Pending — needs real hardware                                          |
 
 The last row is the one that matters most and the only leak vector no automated test in this repo can reach: nothing on the page can retract metadata once the OS media session has it. The code side is settled — a test asserts the app never writes `navigator.mediaSession.metadata` — but whether a browser populates that panel from a bare MP3 on its own is a question only a device answers.
 
@@ -739,6 +739,19 @@ The catalogues, the detection, the selector and the `lang` attribute are unit-te
 | 4   | **The selector at 320px**: the three buttons fit or wrap cleanly above the footer, and the welcome screen's logo has not moved.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Pending |
 | 5   | **A library entry saved in English reads with the other language's "+N more"** after switching, and a pre-2026-09-28 entry does too.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Pending |
 | 6   | **The longest translated labels fit their buttons** — Catalan's "Imprimeix les cartes en PDF", "Copia l'enllaç per compartir", Spanish "Copiar enlace para compartir" — on the game screen's dialog and the end screen.                                                                                                                                                                                                                                                                                                                                                                                                           | Pending |
+
+### The card's QR as an SVG — changed 2026-09-29, all of it Pending
+
+`QrCode.tsx` renders `qrcode`'s SVG output instead of a `toDataURL` PNG (see
+[`review.unlighthouse.md`](./review.unlighthouse.md) for why). Same encoder, same module grid, so the
+code a camera sees is the same code — but every scan in this file was taken on the PNG, and a browser
+rasterising a vector at a fractional module size is a different image.
+
+| #   | Check                                                                                                                                                                                | Status  |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------- |
+| 1   | **Scan the card's QR with a real phone at the ceiling card (a desktop window) and at the 240px floor card (a 320px-wide phone)**, and confirm each opens the right track in Spotify. | Pending |
+| 2   | **The printed PDF's codes still scan** — untouched by this change (the export keeps `toDataURL`), listed only so nobody assumes the SVG reached paper.                               | Pending |
+| 3   | **Re-run the share-link Lighthouse audit against production after the deploy**, 5 runs, and record it beside the `prod-5b181c4` baseline in `review.unlighthouse.md`.                | Pending |
 
 ---
 

@@ -729,6 +729,17 @@ ratio _crops_ the code rather than spilling it. In pixels the code went 224 → 
 size upscales a QR and blurs the module edges a camera reads. It is the one number in the app that
 multiplies by deck size, since `qr-cache.ts` never evicts and a deck is capped at 100 cards.
 
+**On 2026-09-29 the code became an SVG, which retired the upscaling rule.** `QrCode.tsx` now calls
+`qrcode`'s `toString({ type: 'svg' })` and renders it as a `data:image/svg+xml` URL, because
+`toDataURL`'s canvas render and PNG encode were the share-link route's long task (the current card's
+code and the preloaded back resolve in one microtask checkpoint; measured in
+[`docs/review.unlighthouse.md`](./review.unlighthouse.md)). A vector rasterises at whatever size it is
+drawn, so `QR_BITMAP_SIZE` no longer has to track `--qr-display-size` from above; it stays at 288 as
+the `<img>`'s intrinsic size and part of the cache key, and the cached payload is ~2.6 kB of escaped
+markup a card whatever its value. The PDF export is unaffected — it still rasterises with `toDataURL`,
+because jsPDF embeds an image. The phone scan that verified the code was taken on the PNG, so it is
+owed again (`development.md` §5).
+
 #### The scan caption sits below the card, not on it
 
 "Scan to play the full song" was the only text on the hidden face until 2026-08-11; `GameScreen` now

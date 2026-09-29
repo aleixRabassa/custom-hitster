@@ -27,12 +27,12 @@ import {
 import { clearQrCache } from '../game/qr-cache';
 import type { Card } from '../../shared/types';
 
-const { toDataURLMock, presenceCustomSpy } = vi.hoisted(() => ({
-  toDataURLMock: vi.fn<(text: string, options?: unknown) => Promise<string>>(),
+const { toStringMock, presenceCustomSpy } = vi.hoisted(() => ({
+  toStringMock: vi.fn<(text: string, options?: unknown) => Promise<string>>(),
   presenceCustomSpy: vi.fn<(custom: unknown) => void>(),
 }));
 
-vi.mock('qrcode', () => ({ toDataURL: toDataURLMock }));
+vi.mock('qrcode', () => ({ toString: toStringMock }));
 
 /*
   `AnimatePresence` is the REAL one, wrapped so each render's `custom` prop is recorded.
@@ -79,10 +79,8 @@ function lastPresenceCustom(): unknown {
 
 describe('CardStack', () => {
   beforeEach(() => {
-    toDataURLMock.mockReset();
-    toDataURLMock.mockImplementation((text) =>
-      Promise.resolve(`data:image/png;base64,QR(${text})`),
-    );
+    toStringMock.mockReset();
+    toStringMock.mockImplementation((text) => Promise.resolve(`<svg>QR(${text})</svg>`));
     /*
       Generated codes are cached at MODULE level (`src/game/qr-cache.ts`), which is what carries
       the back's preloaded code across an advance. Vitest isolates modules per FILE, not per test,
@@ -164,10 +162,10 @@ describe('CardStack', () => {
     const { container } = renderStack([highConfidenceCard, lowConfidenceCard, noYearCard], 0);
 
     await waitFor(() => {
-      expect(toDataURLMock).toHaveBeenCalledTimes(2);
+      expect(toStringMock).toHaveBeenCalledTimes(2);
     });
 
-    const encoded = toDataURLMock.mock.calls.map(([text]) => text);
+    const encoded = toStringMock.mock.calls.map(([text]) => text);
     expect(encoded.some((text) => text.includes(highConfidenceCard.id))).toBe(true);
     expect(encoded.some((text) => text.includes(lowConfidenceCard.id))).toBe(true);
     // TWO cards ahead is not preloaded. The back caps the cost at one extra code per advance.
