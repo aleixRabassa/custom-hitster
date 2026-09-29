@@ -747,11 +747,11 @@ The catalogues, the detection, the selector and the `lang` attribute are unit-te
 code a camera sees is the same code — but every scan in this file was taken on the PNG, and a browser
 rasterising a vector at a fractional module size is a different image.
 
-| #   | Check                                                                                                                                                                                | Status  |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------- |
-| 1   | **Scan the card's QR with a real phone at the ceiling card (a desktop window) and at the 240px floor card (a 320px-wide phone)**, and confirm each opens the right track in Spotify. | Pending |
-| 2   | **The printed PDF's codes still scan** — untouched by this change (the export keeps `toDataURL`), listed only so nobody assumes the SVG reached paper.                               | Pending |
-| 3   | **Re-run the share-link Lighthouse audit against production after the deploy**, 5 runs, and record it beside the `prod-5b181c4` baseline in `review.unlighthouse.md`.                | Pending |
+| #   | Check                                                                                                                                                                                | Status                                                                                                     |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| 1   | **Scan the card's QR with a real phone at the ceiling card (a desktop window) and at the 240px floor card (a 320px-wide phone)**, and confirm each opens the right track in Spotify. | Pending                                                                                                    |
+| 2   | **The printed PDF's codes still scan** — untouched by this change (the export keeps `toDataURL`), listed only so nobody assumes the SVG reached paper.                               | Pending                                                                                                    |
+| 3   | **Re-run the share-link Lighthouse audit against production after the deploy**, 5 runs, and record it beside the `prod-5b181c4` baseline in `review.unlighthouse.md`.                | **Done 2026-09-29** — share route 84 → 98, TBT 622 → 107 ms (`prod-50c84b8`, `review.unlighthouse.md` §3b) |
 
 ---
 

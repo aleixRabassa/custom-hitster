@@ -26,7 +26,7 @@ describe('LanguageSelector', () => {
     const { group } = renderSelector();
     const buttons = within(group).getAllByRole('button');
 
-    expect(buttons.map((button) => button.textContent)).toEqual(
+    expect(buttons.map((button) => button.getAttribute('aria-label'))).toEqual(
       LOCALES.map((locale) => LANGUAGE_NAMES[locale]),
     );
     // `lang` is what makes a screen reader pronounce each name in its own language.
@@ -58,6 +58,18 @@ describe('LanguageSelector', () => {
     fireEvent.click(screen.getByRole('button', { name: LANGUAGE_NAMES.ca, pressed: true }));
 
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('should draw each option as a decorative SVG flag with no text of its own', () => {
+    const { group } = renderSelector();
+
+    for (const button of within(group).getAllByRole('button')) {
+      // An emoji flag renders as two letters on Windows; the flag must be an inline SVG.
+      expect(button.textContent).toBe('');
+      const flag = button.querySelector('svg');
+      expect(flag).not.toBeNull();
+      expect(flag?.getAttribute('aria-hidden')).toBe('true');
+    }
   });
 
   it('should give every button a focus-visible style and a touch target', () => {

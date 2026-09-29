@@ -14,7 +14,8 @@ mobile form factor, simulated throttling (defaults), headless Chrome, strictly s
   code ran back to back in a single task.
 - **Implemented:** the card's QR is now rendered from `qrcode`'s SVG output. In local before/after runs of the
   share route, fast-CPU mode: **Performance 72 → 93, TBT ~950 ms → 3 ms.**
-- **Not yet measured on production** — the change is not deployed. The production re-run is owed (§5).
+- **Confirmed on production after the deploy (`50c84b8`, §3b): share route 84 → 98 (96–99), TBT ~620 ms → ~107 ms**, and
+  that despite 4 of 5 runs landing in slow-CPU mode, against a baseline taken entirely in fast mode.
 - **The phone scan needs repeating.** Every past scan was done on the PNG (§4).
 
 ## 1. Production baseline — `prod-5b181c4`
@@ -117,6 +118,28 @@ production's 1.9 s. Same server, same port, same machine, back to back.
   not CPU.
 - The home route is unchanged, as it should be: the landing screen renders no QR.
 
+## 3b. Production after the deploy — `prod-50c84b8`
+
+Base `https://playlistjitster.vercel.app`, N = 5 per route, same runner and settings as §1. The deployed bundle was
+checked against a local build of `50c84b8` (`index-qGxCW42h.js`, `GameScreen-Dd1-ROxR.js`). The Balanced power
+plan put **most runs in slow-CPU mode this time** (share 4 of 5, privacy 5 of 5), where the §1 baseline was
+fast-mode for every share run — so the comparison below is conservative: the "after" is measured on the slower CPU.
+
+| Route     | Before `prod-5b181c4` Perf median [min–max] | After `prod-50c84b8` Perf median [min–max] | Fast n · median | Slow n · median | TBT before → after (median, all runs) | LCP before → after |
+| --------- | ------------------------------------------- | ------------------------------------------ | --------------- | --------------- | ------------------------------------- | ------------------ |
+| `base`    | 100 [93–100]                                | **100** [100–100]                          | 2 · 100         | 3 · 100         | 16 → 7 ms                             | 1.45 → 1.41 s      |
+| `share`   | 84 [79–84] (all fast)                       | **98** [96–99]                             | 1 · 99          | 4 · 98          | **622 → 107 ms**                      | 1.91 → 1.94 s      |
+| `privacy` | 100 [100–100]                               | **100** [100–100]                          | 0 · —           | 5 · 100         | 0 → 0 ms                              | 0.95 → 1.13 s      |
+
+- **Share route:** `total-blocking-time` went from failing 5/5 to passing 5/5. The one fast-mode run had 21 ms
+  of TBT; the ~100–135 ms on the slow-mode runs is ordinary React rendering on the slower CPU, not the QR.
+  `bootup-time` and `mainthread-work-breakdown` still fail 5/5, as the slow-CPU runs would predict.
+- **LCP is unchanged, as expected** (§3): the QR paints only once the first card's year arrives.
+- **Privacy's LCP rose 0.18 s with an unchanged page.** That is the CPU mode (slow for all five runs), not a
+  regression; so is its `max-potential-fid` 5/5 on a 100 score.
+- Still failing everywhere, as before: the three insights in §6 (`render-blocking-insight`,
+  `network-dependency-tree-insight`, and home's `lcp-discovery-insight`).
+
 ## 4. What changed in the repository
 
 - `src/components/QrCode.tsx` — `toString({ type: 'svg' })` wrapped as `data:image/svg+xml;charset=utf-8,` +
@@ -147,7 +170,7 @@ worker-startup flake already recorded in `agent_findings.md`, and a clean re-run
 | #   | Item                                                                                                                                                                                                                                                                                                  |
 | --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1   | **Scan the SVG QR with a real phone**, at the ceiling card and at the 240px floor card. The encoder and matrix are unchanged, but the camera now sees a browser-rasterised vector at a fractional module size, and every recorded scan was of the PNG. Row 1 of the new table in `development.md` §5. |
-| 2   | **Re-run the production audit after the deploy** (share route, N = 5), and add the column beside `prod-5b181c4` above.                                                                                                                                                                                |
+| 2   | ~~Re-run the production audit after the deploy~~ — **done 2026-09-29**, §3b.                                                                                                                                                                                                                          |
 | 3   | The production audit of the **game screen after a swipe** (the next card's code is generated mid-game). Lighthouse audits only the load; the SVG change removes the same cost there too, unmeasured.                                                                                                  |
 
 ## 6. Findings recorded but not acted on
@@ -181,4 +204,4 @@ Lighthouse _insights_ rather than scored audits).
   `finalDisplayedUrl`, `runtimeError` and a non-null Performance score. One home run returned `NO_FCP` and was
   re-run.
 - **Raw reports and summaries were kept in the session scratchpad, not in the repo** (`uh-results/` is not a
-  tracked path here). Labels: `prod-5b181c4`, `local-head`, `local-head2`, `local-svg`.
+  tracked path here). Labels: `prod-5b181c4`, `local-head`, `local-head2`, `local-svg`, `prod-50c84b8`.

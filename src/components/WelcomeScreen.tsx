@@ -330,8 +330,12 @@ export function WelcomeScreen({ onStart }: WelcomeScreenProps) {
         `LandingScreen` above. On THIS screen only: the picker's corner already holds Back, and the
         game screen is a height budget. A share link or a resumed session skips this screen and
         relies on `LocaleProvider`'s auto-detection, which is the right default for both.
+
+        The buttons are flags with no visible words (2026-09-29), so the section got a visible
+        heading in the same shape as the two above it.
       */}
-      <section className="flex w-full max-w-content justify-center">
+      <section className="flex w-full max-w-content flex-col items-center gap-3">
+        <h2 className="text-sm text-fg-secondary">{copy.language.label}</h2>
         <LanguageSelector locale={locale} onChange={setLocale} />
       </section>
 

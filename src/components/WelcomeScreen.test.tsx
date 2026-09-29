@@ -77,6 +77,14 @@ describe('WelcomeScreen', () => {
     expect(screen.getByRole('img', { name: COPY.welcome.logoAlt })).not.toBeNull();
   });
 
+  it('should head the language flags with a visible section heading', () => {
+    // The flag buttons carry no words (2026-09-29), so the section says what they are for.
+    renderWelcome();
+
+    expect(screen.getByRole('heading', { level: 2, name: COPY.language.label })).not.toBeNull();
+    expect(screen.getByRole('group', { name: COPY.language.label })).not.toBeNull();
+  });
+
   it('should explain the game in three ordered steps', () => {
     // An `<ol>` because the order is the game's order. Asserted against the copy constants so the
     // steps can be reworded freely; what is pinned is that all three are on screen, in this order.
