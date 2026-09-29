@@ -5242,3 +5242,10 @@ The first AAB upload got this Console warning: "La protección automática de Pl
 - **The D4 "same link" check is a subset check on playlist ids, not equality.** A recipient whose five-playlist link lost one to a private playlist has four in their save, and a reload of their tab must not ask "replace your game?". The seed is 64 random bits, so it is the real identity; the card is never compared.
 - **`satisfies Copy` cannot enforce a new function PARAMETER.** A translation of `shareCaption` that ignores the new `fromCurrentCard` argument still fits the two-argument type. A per-locale test (`shareCaption(n, true) !== shareCaption(n, false)` in every catalogue) is the guard.
 - **Accepting the prompt must not call `end()`.** `END` clears the save, so a link whose fetch then fails would cost the player the game they were keeping. The deal effect's `start()` replaces the session only when the new deck lands.
+
+## 2026-09-29 — Fisher-Yates and the shuffle version removed, the same day they were split
+
+- **The developer removed version 1 a few hours after it was kept**, with no saved games to protect. `shuffleDeck` is now the hash sort; `ShuffleVersion`, `GameState.shuffleVersion`, the save field and the link's `v` param are gone. Accepted cost: **a link minted before 2026-09-29 deals a different order than its sender saw.**
+- **The `v` param is IGNORED, not rejected**, because links minted by `104c1e2` carry `v=2` and deal with the same algorithm. A reject would have turned every one of them into the plain welcome screen.
+- **A save carrying `shuffleVersion` still loads.** `validateSession` rebuilds field by field, so the stale field is dropped rather than failing validation.
+- **There is no version lever left.** The hash sort's output is pinned as literals; changing it now re-deals every save and link in circulation silently. A future algorithm has to bring a version back, or accept that knowingly.

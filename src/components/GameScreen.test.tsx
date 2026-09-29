@@ -76,7 +76,6 @@ function renderScreen(props: {
       // what this file cares about is that opening the panel suspends the game's own controls.
       playlistIds={['37i9dQZF1DXcBWIGoYBM5M']}
       seed="a1b2c3d4e5f60718"
-      shuffleVersion={2}
       shareOrigin="https://hitster.example/"
       onSavePlaylist={props.onSavePlaylist ?? vi.fn()}
       isPlaylistSaved={false}
@@ -479,7 +478,7 @@ describe('GameScreen', () => {
     const field = screen.getByLabelText(COPY.deckActions.shareLinkFieldLabel) as HTMLInputElement;
     const params = new URL(field.value).searchParams;
     expect(params.get('card')).toBe(highConfidenceCard.id);
-    expect(params.get('v')).toBe('2');
+    expect(params.has('v')).toBe(false);
     expect(document.body.textContent ?? '').toContain(COPY.deckActions.shareCaption(1, true));
 
     expect(field.value).not.toContain(highConfidenceCard.title);

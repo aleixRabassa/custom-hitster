@@ -379,6 +379,12 @@ and are not in the repository._
 
 ## 8. Implementation (2026-09-29)
 
+> **Version 1 was removed later the same day (2026-09-29), at the developer's request.** There were no saved games
+> to protect, so Fisher-Yates and the whole version machinery (`ShuffleVersion`, `GameState.shuffleVersion`, the save
+> field, the link's `v` param) were deleted and `shuffleDeck` is now the hash sort. A link minted before 2026-09-29
+> deals a different order than it did, which was accepted; a `v` param is ignored, so links minted in between still
+> work; a save carrying `shuffleVersion` still loads. The paragraph below describes the intermediate state.
+
 **D1 — the hash sort, versioned.** `shuffle.ts` gained `sortDeckByHash` (version 2: sort by
 `hashSeed(seed + ':' + card.id)`, ties by id) and `dealDeck(items, seed, version)`; `shuffleDeck` is version 1 and
 frozen. **The version travels with the seed everywhere the seed goes**: `GameState.shuffleVersion`, the saved

@@ -23,28 +23,39 @@
  * WHY IT IS SEEDED AT ALL, rather than just calling `Math.random()`: the seed is what makes
  * a dealt deck reproducible, and three things rest on that -- a reload restores the same
  * order from the persisted seed, the same deck can be re-dealt without re-fetching, and
- * Phase 8's shareable deck URL is (playlist ids + seed + shuffle version) and nothing more.
+ * Phase 8's shareable deck URL is (playlist ids + seed) and nothing more.
  *
- * TWO ALGORITHMS, and both outputs are a STORED FORMAT: a seed in a saved session or a share
- * link is only meaningful together with the exact function that deals it, so changing any
- * constant below (FNV, the avalanche, mulberry32, the key format) re-deals every saved game and
- * every link in circulation with no error anywhere. `shuffle.test.ts` pins both outputs as
- * literals for exactly that reason. A new algorithm is a new `ShuffleVersion`, never an edit.
+ * ===========================================================================
+ *  THE OUTPUT IS A STORED FORMAT, AND THERE IS NO VERSION TO PROTECT A CHANGE.
  *
- * Both are PURE: no `Math.random()`, no `Date.now()`, no `crypto`. The one browser API
- * involved lives in `generateSeed()`, alone, so it is obvious where the non-determinism
- * enters.
+ *  A seed in a saved session or a share link is only meaningful together with
+ *  the exact function that deals it, so changing any constant below (FNV, the
+ *  avalanche, the key format, the tie-break) re-deals every saved game and every
+ *  link in circulation, with no error anywhere. `shuffle.test.ts` pins the
+ *  output as literals for exactly that reason: a failing pin is fixed by
+ *  reverting, never by updating the literal.
+ *
+ *  Until 2026-09-29 there were two algorithms and a `v` param saying which one
+ *  dealt a link: the seeded Fisher-Yates every deck used before that day, and
+ *  this one. The developer removed Fisher-Yates the same day, with no saved games
+ *  to protect, accepting that a link minted before 2026-09-29 now deals a
+ *  different order. So a FUTURE algorithm change has no lever left: it has to
+ *  bring a version back (in the link, the save and `GameState`) or accept the
+ *  same re-deal knowingly. Links minted while the version existed carry `v=2`,
+ *  and `parseDeckLink` ignores it.
+ * ===========================================================================
+ *
+ * PURE: no `Math.random()`, no `Date.now()`, no `crypto`. The one browser API involved lives in
+ * `generateSeed()`, alone, so it is obvious where the non-determinism enters.
  */
 
 /**
- * Hash a string seed down to the 32 bits the generator needs.
+ * Hash a string to 32 bits: FNV-1a, then a final avalanche step.
  *
- * FNV-1a, then a final avalanche step. The avalanche is load-bearing rather than decorative:
- * without it, seeds that differ in one low bit ("game-1" vs "game-2") produce hash values
- * that differ in one low bit, and mulberry32's first output would barely move -- so two
- * consecutive games would deal near-identical first cards. Version 2 leans on it harder still:
- * there `hashSeed` IS the shuffle, and the keys of two cards whose ids share a long prefix differ
- * only in the last few characters hashed. Exported for the tests, and for `sortDeckByHash`.
+ * The avalanche is load-bearing rather than decorative. `hashSeed` IS the shuffle -- every card's
+ * sort key is `hashSeed(seed + ':' + id)` -- and without the avalanche two keys whose strings share
+ * a long prefix (the same seed, ids that differ only near the end) would differ only in their low
+ * bits, which is a visible pattern in the order. Exported for the tests.
  */
 export function hashSeed(seed: string): number {
   let h = 2166136261 >>> 0;
@@ -64,89 +75,23 @@ export function hashSeed(seed: string): number {
 }
 
 /**
- * mulberry32: a 32-bit PRNG in six lines, good enough to shuffle a hundred cards.
- *
- * Hand-written rather than pulled from a package (plan.phase-3.md: no new dependencies). The
- * requirement here is "reproducible and not visibly patterned", not cryptographic quality --
- * `generateSeed()` is where real entropy belongs.
- */
-function createRandom(state: number): () => number {
-  let a = state >>> 0;
-
-  return () => {
-    a = (a + 0x6d2b79f5) | 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-/**
- * Version 1, FROZEN: Fisher-Yates, seeded, returning a NEW array.
- *
- * Not the default since 2026-09-29 (see `sortDeckByHash`), and kept byte-for-byte because its
- * output is a stored format: every share link minted before that date carries no `v=` and is
- * dealt by this function. Do not "fix" or tidy it -- `shuffle.test.ts` pins its output as a
- * literal, and a change that fails that test is a change that silently re-deals those links.
- *
- * Never mutates its input: the reducer treats the cards handed to `START` as data it does not
- * own, and Phase 6 may well be holding the same array in its own fetch state.
- *
- * Generic rather than `Card[]`-specific because nothing here looks at a card -- and a
- * `shuffleDeck<T>` is trivially testable with plain strings.
- */
-export function shuffleDeck<T>(items: readonly T[], seed: string): T[] {
-  const shuffled = [...items];
-  const random = createRandom(hashSeed(seed));
-
-  // Downwards, and the swap index is `random() * (i + 1)` -- INCLUSIVE of `i`. The classic
-  // off-by-one here (`* i`, or looping to `i > 0` with an exclusive bound) is not a crash: it
-  // silently biases the permutation, which is exactly the kind of bug a card game hides well.
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(random() * (i + 1));
-    // `noUncheckedIndexedAccess` makes these `T | undefined`, so read them out first: both
-    // indices are provably in range, and asserting on the destructured values reads better
-    // than four non-null assertions inline.
-    const a = shuffled[i] as T;
-    const b = shuffled[j] as T;
-    shuffled[i] = b;
-    shuffled[j] = a;
-  }
-
-  return shuffled;
-}
-
-/**
- * Which algorithm dealt a deck. Travels WITH the seed -- in `GameState`, in the saved session and in
- * the share link's `v` param -- because a seed on its own does not say how to deal it.
- *
- * - `1`: `shuffleDeck`, the seeded Fisher-Yates every deck was dealt with until 2026-09-29. Kept,
- *   and kept exactly, because every share link minted before then carries no version and must
- *   still deal the order its sender saw.
- * - `2`: `sortDeckByHash`, the default for every new deal since 2026-09-29.
- */
-export type ShuffleVersion = 1 | 2;
-
-/** The algorithm every NEW deal uses. A link or a save without a version means `1`. */
-export const CURRENT_SHUFFLE_VERSION: ShuffleVersion = 2;
-
-/**
- * Version 2: order the cards by `hashSeed(seed + ':' + card.id)`, ties broken by id.
+ * Shuffle `items` by sorting them on `hashSeed(seed + ':' + item.id)`, ties broken by id.
  *
  * ===========================================================================
  *  THE ORDER DEPENDS ONLY ON THE SET OF CARDS, NEVER ON THE ORDER THEY ARRIVE IN.
  *
- *  That is the whole reason it replaced Fisher-Yates as the default (review of
- *  the shuffle system, 2026-09-29, decision D1). Fisher-Yates applies one fixed
- *  permutation per (seed, length), so ONE track added to or removed from an
- *  editorial playlist re-randomises the entire deck for a link's recipient, and
- *  re-dealing an already-shuffled deck ("Play again") with a seed gives a
- *  different order from dealing the raw fetch with that same seed -- which is
- *  why a link copied after Play again never reproduced the deck. Here every card
- *  gets its own key, so a card's place relative to every other card is fixed by
- *  the seed alone: a missing card leaves a gap, an extra card slots in, and the
- *  input order is irrelevant by construction.
+ *  That is why it replaced a seeded Fisher-Yates (review of the shuffle system,
+ *  2026-09-29, decision D1). Fisher-Yates applies one fixed permutation per
+ *  (seed, length), so ONE track added to or removed from an editorial playlist
+ *  re-randomised the entire deck for a link's recipient, and re-dealing an
+ *  already-shuffled deck ("Play again") with a seed gave a different order from
+ *  dealing the raw fetch with that same seed -- which is why a link copied after
+ *  Play again never reproduced the deck. Here every card gets its own key, so a
+ *  card's place relative to every other card is fixed by the seed alone: a
+ *  missing card leaves a gap, an extra card slots in, and the input order is
+ *  irrelevant by construction -- for DISTINCT ids, which `deck-merge.ts`
+ *  guarantees. Two cards sharing an id get equal keys and equal tie-breaks, so
+ *  the stable sort keeps them in input order.
  *
  *  Uniform for the same reason a random-key sort always is: the keys are
  *  independent-looking 32-bit hashes, so every relative order is equally likely.
@@ -155,9 +100,10 @@ export const CURRENT_SHUFFLE_VERSION: ShuffleVersion = 2;
  *  `<` on the id strings, never `localeCompare`, which varies by runtime locale.
  * ===========================================================================
  *
- * Never mutates its input, exactly like `shuffleDeck`.
+ * Never mutates its input: the reducer treats the cards handed to `START` as data it does not own,
+ * and the playlist hook may well be holding the same array in its own fetch state.
  */
-export function sortDeckByHash<T extends { id: string }>(items: readonly T[], seed: string): T[] {
+export function shuffleDeck<T extends { id: string }>(items: readonly T[], seed: string): T[] {
   const keyed = items.map((item) => ({ item, key: hashSeed(`${seed}:${item.id}`) }));
 
   keyed.sort((a, b) => {
@@ -170,25 +116,13 @@ export function sortDeckByHash<T extends { id: string }>(items: readonly T[], se
   return keyed.map(({ item }) => item);
 }
 
-/** Deal `items` with the algorithm `version` names. The one function the reducer calls. */
-export function dealDeck<T extends { id: string }>(
-  items: readonly T[],
-  seed: string,
-  version: ShuffleVersion,
-): T[] {
-  return version === 1 ? shuffleDeck(items, seed) : sortDeckByHash(items, seed);
-}
-
 /**
  * How many random bytes a generated seed carries. 8 bytes -> 16 hex chars.
  *
- * NOT 2^64 distinct decks under version 1: `shuffleDeck` folds the seed to 32 bits with `hashSeed`
- * and mulberry32 has 32 bits of state, so a given card list has at most 2^32 deals there. Every
- * property a player can observe (first card, a card's position, neighbours, fixed points) is still
- * uniform, and 4.3e9 deals is more games than anyone will play. Version 2 has no such fold -- each
- * card's key hashes the WHOLE seed string -- so it is bounded by the seed count and by n!. The full
- * 64 bits also matter where the seed is an IDENTITY rather than a shuffle input: a link and a save
- * store the whole string, and `linkArrivalIntent` compares it.
+ * Each card's key hashes the WHOLE seed string, so the number of distinct deals is bounded by the
+ * seed count and by n!, not by a 32-bit PRNG state. The full 64 bits also matter where the seed is
+ * an IDENTITY rather than a shuffle input: a link and a save store the whole string, and
+ * `linkArrivalIntent` compares it.
  */
 const SEED_BYTES = 8;
 

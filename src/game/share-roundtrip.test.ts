@@ -24,7 +24,7 @@ import { buildDeckLink, parseDeckLink, type DeckLink } from './deck-link';
 import { mergePlaylists, type MergedDeck } from './deck-merge';
 import type { PlaylistOutcome } from './playlist-client';
 import { currentCard, gameReducer, initialGameState } from './reducer';
-import { shuffleDeck, sortDeckByHash, type ShuffleVersion } from './shuffle';
+import { shuffleDeck } from './shuffle';
 import type { GameState } from './types';
 import type { Card, PlaylistSummary } from '../../shared/types';
 
@@ -68,10 +68,7 @@ function fetchDeck(first: Card[], second: Card[]): MergedDeck {
 }
 
 /** `START` over a fetched deck, the way `useGameSession.start()` dispatches it. */
-function deal(
-  deck: MergedDeck,
-  options: { seed?: string; shuffleVersion?: ShuffleVersion; startCardId?: string } = {},
-): GameState {
+function deal(deck: MergedDeck, options: { seed?: string; startCardId?: string } = {}): GameState {
   return gameReducer(initialGameState, {
     type: 'START',
     cards: deck.cards,
@@ -80,13 +77,13 @@ function deal(
   });
 }
 
-/** The link `DeckActions` builds from a state: the loaded playlists, the seed and the version. */
+/** The link `DeckActions` builds from a state: the loaded playlists and the seed. */
 function shareLink(state: GameState, cardId?: string): string {
   return buildDeckLink(
     ORIGIN,
     state.playlists.map((playlist) => playlist.id),
     state.seed,
-    { shuffleVersion: state.shuffleVersion, cardId },
+    cardId === undefined ? {} : { cardId },
   );
 }
 
@@ -97,11 +94,10 @@ function openLink(url: string): DeckLink {
   return link;
 }
 
-/** The recipient's deal: their own fetch, the link's seed, version and card. */
+/** The recipient's deal: their own fetch, the link's seed and card. */
 function dealFromLink(deck: MergedDeck, link: DeckLink): GameState {
   return deal(deck, {
     seed: link.seed,
-    shuffleVersion: link.shuffleVersion,
     ...(link.cardId === null ? {} : { startCardId: link.cardId }),
   });
 }
@@ -126,7 +122,6 @@ describe('a share link reproduces the sender deck', () => {
       // A separate fetch of the same playlists: new objects, the same content.
       const recipient = dealFromLink(fetchDeck(tracks('a', 30), tracks('b', 20)), link);
 
-      expect(link.shuffleVersion).toBe(2);
       expect(link.playlistIds).toEqual([FIRST.id, SECOND.id]);
       expect(idsOf(recipient.deck)).toEqual(idsOf(sender.deck));
     }
@@ -139,9 +134,10 @@ describe('a share link reproduces the sender deck', () => {
     //  "Play again" re-deals `state.deck` -- already shuffled, already
     //  missing its yearless cards -- with a FRESH seed, and the link then
     //  carries that seed. The recipient applies it to the RAW fetch. Under
-    //  Fisher-Yates, same seed over a different input list is an unrelated
-    //  order; under the hash sort the input order is irrelevant, so the
-    //  recipient's deck restricted to the sender's cards IS the sender's deck.
+    //  the Fisher-Yates this app used until 2026-09-29, same seed over a
+    //  different input list was an unrelated order; under the hash sort the
+    //  input order is irrelevant, so the recipient's deck restricted to the
+    //  sender's cards IS the sender's deck.
     // ===================================================================
     for (let game = 0; game < 25; game++) {
       const fetched = fetchDeck(tracks('a', 30), tracks('b', 20));
@@ -166,8 +162,8 @@ describe('a share link reproduces the sender deck', () => {
       }
       expect(sender.deck.length).toBeLessThan(fetched.cards.length);
 
-      // "Play again" exactly as `App.tsx`'s `handleRestart` deals it: the live deck, no seed, no
-      // version -- so a fresh seed and the current algorithm.
+      // "Play again" exactly as `App.tsx`'s `handleRestart` deals it: the live deck and no seed --
+      // so a fresh one.
       const restarted = gameReducer(sender, {
         type: 'START',
         cards: sender.deck,
@@ -185,59 +181,44 @@ describe('a share link reproduces the sender deck', () => {
     }
   });
 
-  it('should deal a version-1 link (no v) with Fisher-Yates, exactly as before 2026-09-29', () => {
-    // The exact shape every old build minted: no `v`. It must deal the order its sender saw, which
-    // was `shuffleDeck` over the raw merged fetch -- not the hash sort every new deal uses.
-    const url = `${ORIGIN.slice(0, -1)}?playlist=${FIRST.id},${SECOND.id}&seed=${SEED}`;
-    const link = openLink(url);
+  it('should deal a link as shuffleDeck over the raw merged fetch, with or without v=2', () => {
+    // A link minted by the versioned build (104c1e2) carries `v=2`; the parser ignores it, so it
+    // deals exactly what the same link without it deals -- which is `shuffleDeck` over the fetch.
+    const bare = `${ORIGIN.slice(0, -1)}?playlist=${FIRST.id},${SECOND.id}&seed=${SEED}`;
     const fetched = fetchDeck(tracks('a', 30), tracks('b', 20));
+    const expected = idsOf(shuffleDeck(fetched.cards, SEED));
 
-    const recipient = dealFromLink(fetched, link);
-
-    expect(link.shuffleVersion).toBe(1);
-    expect(recipient.shuffleVersion).toBe(1);
-    expect(idsOf(recipient.deck)).toEqual(idsOf(shuffleDeck(fetched.cards, SEED)));
-    // And the version is what decided it: the same seed through the other algorithm differs.
-    expect(idsOf(recipient.deck)).not.toEqual(idsOf(sortDeckByHash(fetched.cards, SEED)));
+    for (const url of [bare, `${bare}&v=2`]) {
+      const recipient = dealFromLink(fetchDeck(tracks('a', 30), tracks('b', 20)), openLink(url));
+      expect(idsOf(recipient.deck)).toEqual(expected);
+    }
   });
 
-  it('should share a version-1 deck as a version-1 link, so a re-share stays exact', () => {
-    // A game dealt from an old link and shared again must say `1`, or its recipient is dealt the
-    // same seed with the other algorithm.
-    const fetched = fetchDeck(tracks('a', 30), tracks('b', 20));
-    const sender = deal(fetched, { seed: SEED, shuffleVersion: 1 });
-    const url = shareLink(sender);
+  it('should never put a v in a shared link', () => {
+    const sender = deal(fetchDeck(tracks('a', 30), tracks('b', 20)));
 
-    expect(url).not.toContain('v=');
-    expect(
-      idsOf(dealFromLink(fetchDeck(tracks('a', 30), tracks('b', 20)), openLink(url)).deck),
-    ).toEqual(idsOf(sender.deck));
+    expect(shareLink(sender)).not.toContain('v=');
+    expect(shareLink(sender, sender.deck[0]!.id)).not.toContain('v=');
   });
 });
 
 describe('a dealt deck mixes its playlists', () => {
-  it.each([1, 2] as const)(
-    'should interleave the cards of two playlists rather than concatenating them (version %i)',
-    (shuffleVersion) => {
-      const state = deal(fetchDeck(tracks('a', 20), tracks('b', 20)), {
-        seed: SEED,
-        shuffleVersion,
-      });
-      const sources = state.deck.map((card) => card.id[0]);
+  it('should interleave the cards of two playlists rather than concatenating them', () => {
+    const state = deal(fetchDeck(tracks('a', 20), tracks('b', 20)), { seed: SEED });
+    const sources = state.deck.map((card) => card.id[0]);
 
-      // A concatenation has exactly one change of source. A shuffle of 20 + 20 has ~20.
-      const changes = sources.filter((source, i) => i > 0 && source !== sources[i - 1]).length;
-      expect(changes).toBeGreaterThan(10);
-      // And both playlists reach the opening cards, rather than one playlist's block.
-      expect(new Set(sources.slice(0, 10))).toEqual(new Set(['a', 'b']));
-    },
-  );
+    // A concatenation has exactly one change of source. A shuffle of 20 + 20 has ~20.
+    const changes = sources.filter((source, i) => i > 0 && source !== sources[i - 1]).length;
+    expect(changes).toBeGreaterThan(10);
+    // And both playlists reach the opening cards, rather than one playlist's block.
+    expect(new Set(sources.slice(0, 10))).toEqual(new Set(['a', 'b']));
+  });
 });
 
-describe('a version-2 link survives playlist drift', () => {
+describe('a link survives playlist drift', () => {
   it('should keep the sender cards in the sender order when a playlist gained a track', () => {
     // The editorial-refresh case: between the send and the open, Spotify added one track to the
-    // first playlist. Under Fisher-Yates a length change re-dealt everything (review §4a).
+    // first playlist. Under the old Fisher-Yates a length change re-dealt everything (review §4a).
     for (let game = 0; game < 25; game++) {
       const sender = deal(fetchDeck(tracks('a', 30), tracks('b', 20)));
       const link = openLink(shareLink(sender));

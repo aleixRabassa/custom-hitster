@@ -18,7 +18,7 @@
  *  - THE SPOILER RISK IS THE REASON EVERY MESSAGE HERE IS A COUNT. Nothing in
  *    this component renders a title, an artist or a year; the export reports
  *    `completed/total` and an EXCLUDED COUNT, and the share link names the
- *    playlists, a seed and a shuffle version -- plus, MID-GAME ONLY since
+ *    playlists and a seed -- plus, MID-GAME ONLY since
  *    2026-09-29, the current card's TRACK ID (see `currentCardId`). That id is
  *    the one piece of card data this component can put in the DOM, and only in
  *    the copy-failed fallback's `value`. It is not new information -- the QR on
@@ -41,7 +41,7 @@
  * ===========================================================================
  *  THE SHARE LINK IS BUILT AT CLICK TIME, AND THAT IS NOT A MICRO-OPTIMISATION.
  *
- *  It is (playlist ids + seed + shuffle version, and mid-game the current card),
+ *  It is (playlist ids + seed, and mid-game the current card),
  *  and a RESTART DEALS A FRESH SEED. A link captured in a `useMemo` or in state
  *  at mount would therefore be the wrong link for any deck reached by pressing
  *  "Play again" -- it would point at the shuffle before it -- and mid-game it
@@ -67,7 +67,6 @@ import { useCopy } from '../hooks/useLocale';
 import { buildDeckLink } from '../game/deck-link';
 import { sheetsForDeck, usePdfExport } from '../hooks/usePdfExport';
 import type { PdfExportState } from '../hooks/usePdfExport';
-import type { ShuffleVersion } from '../game/shuffle';
 import type { Card } from '../../shared/types';
 
 export interface DeckActionsProps {
@@ -82,14 +81,6 @@ export interface DeckActionsProps {
   playlistName: string;
   /** The seed this deck was dealt with, from `state.seed`. The other half of the link. */
   seed: string;
-  /**
-   * Which algorithm dealt the deck from `seed`, from `state.shuffleVersion` (2026-09-29, D1).
-   *
-   * Required, and it goes into the link, because a seed on its own does not say how to deal it: a
-   * link that dropped it would have the recipient re-deal the sender's seed with whatever the
-   * default algorithm is on the day they open it.
-   */
-  shuffleVersion: ShuffleVersion;
   /**
    * The track id of the card the player is on, or absent (2026-09-29, D3).
    *
@@ -232,7 +223,6 @@ export function DeckActions({
   playlistIds,
   playlistName,
   seed,
-  shuffleVersion,
   currentCardId,
   shareOrigin,
   onSavePlaylist,
@@ -297,10 +287,12 @@ export function DeckActions({
     // Built here, from the props as they are NOW -- every id, in row order, and the card the player
     // is on at the moment of the press (a card advance re-renders this with a new id). See the
     // header block.
-    const link = buildDeckLink(shareOrigin, playlistIds, seed, {
-      shuffleVersion,
-      ...(currentCardId === undefined ? {} : { cardId: currentCardId }),
-    });
+    const link = buildDeckLink(
+      shareOrigin,
+      playlistIds,
+      seed,
+      currentCardId === undefined ? {} : { cardId: currentCardId },
+    );
 
     const fail = () => {
       setCopyState('failed');

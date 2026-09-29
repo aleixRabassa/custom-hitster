@@ -681,7 +681,6 @@ describe('App', () => {
         deck,
         currentIndex: 0,
         isFlipped: false,
-        shuffleVersion: 2,
         startIndex: 0,
         status: 'preparing',
       } satisfies PersistedSession),
@@ -731,7 +730,6 @@ describe('App', () => {
         deck: [noYearCard],
         currentIndex: 0,
         isFlipped: false,
-        shuffleVersion: 2,
         startIndex: 0,
         status: 'playing',
       } satisfies PersistedSession),
@@ -1057,7 +1055,6 @@ describe('App', () => {
       deck: [highConfidenceCard],
       currentIndex: 0,
       isFlipped: false,
-      shuffleVersion: 2,
       startIndex: 0,
       status: 'playing',
     };
@@ -1093,7 +1090,6 @@ describe('App', () => {
         deck,
         currentIndex: 0,
         isFlipped: false,
-        shuffleVersion: 2,
         startIndex: 0,
         status: 'playing',
       } satisfies PersistedSession),
@@ -1120,11 +1116,9 @@ describe('App', () => {
     });
     expect(screen.getByTestId('hud').textContent).toContain(COPY.hud.cardsLeft(1));
 
-    // A NEW seed (review §6, gap 5), and the CURRENT algorithm whatever dealt the game before it --
-    // which is what lets a link copied after Play again reproduce the deck (see `handleRestart`).
+    // A NEW seed (review §6, gap 5).
     const saved = JSON.parse(storage.map.get(SESSION_STORAGE_KEY) ?? '{}') as PersistedSession;
     expect(saved.seed).not.toBe('seed-1');
-    expect(saved.shuffleVersion).toBe(2);
   });
 
   it('should deal a fresh seed for the same playlist after End and Home, and after Exit', async () => {
@@ -1262,7 +1256,6 @@ describe('App', () => {
           version: SESSION_VERSION,
           playlists: [PLAYLIST],
           seed: 'resumed-seed',
-          shuffleVersion: 2,
           deck: [highConfidenceCard],
           currentIndex: 0,
           startIndex: 0,
@@ -1362,9 +1355,8 @@ describe('App', () => {
       //  DECISION D2 (2026-09-29): A RELOAD NEVER MODIFIES A GAME.
       //
       //  This is a reload of the tab the link was opened in: the saved game's
-      //  seed and shuffle version are the link's own (a link with no `v` is
-      //  version 1), so asking "replace your game?" here would be asking on
-      //  every reload. The link also names a DIFFERENT card from the one the
+      //  seed is the link's own, so asking "replace your game?" here would be
+      //  asking on every reload. The link also names a DIFFERENT card from the one the
       //  player is on -- the sender's position must never move a reloader.
       // ===================================================================
       stubYearApi();
@@ -1372,7 +1364,6 @@ describe('App', () => {
       const secondCard = { ...highConfidenceCard, id: 'aaaaaaaaaaaaaaaaaaaaaa' };
       writeSave(storage, {
         seed: LINK_SEED,
-        shuffleVersion: 1,
         deck: [highConfidenceCard, secondCard],
         currentIndex: 1,
         isFlipped: true,
@@ -1441,7 +1432,7 @@ describe('App', () => {
         <App
           storage={storage}
           fetchImpl={fetchImpl}
-          search={`${LINK_SEARCH}&v=2&card=${startCard.id}`}
+          search={`${LINK_SEARCH}&card=${startCard.id}`}
         />,
       );
 
@@ -1449,7 +1440,6 @@ describe('App', () => {
         expect(screen.queryByTestId('hud')).not.toBeNull();
       });
       const saved = savedSession(storage);
-      expect(saved.shuffleVersion).toBe(2);
       expect(saved.deck[saved.currentIndex]?.id).toBe(startCard.id);
       expect(saved.startIndex).toBe(saved.currentIndex);
     });
@@ -1463,7 +1453,7 @@ describe('App', () => {
         <App
           storage={storage}
           fetchImpl={fetchImpl}
-          search={`${LINK_SEARCH}&v=2&card=zzzzzzzzzzzzzzzzzzzzzz`}
+          search={`${LINK_SEARCH}&card=zzzzzzzzzzzzzzzzzzzzzz`}
         />,
       );
 
@@ -1503,7 +1493,6 @@ describe('App', () => {
       });
       const saved = savedSession(storage);
       expect(saved.seed).not.toBe(LINK_SEED);
-      expect(saved.shuffleVersion).toBe(2);
     });
 
     it('should show the plain welcome screen for a malformed link', async () => {
@@ -1954,7 +1943,6 @@ describe('App', () => {
           version: SESSION_VERSION,
           playlists: [PLAYLIST],
           seed: 'resumed-seed',
-          shuffleVersion: 2,
           deck: [highConfidenceCard],
           currentIndex: 0,
           startIndex: 0,
@@ -2001,7 +1989,6 @@ describe('App', () => {
           version: SESSION_VERSION,
           playlists: [PLAYLIST],
           seed: 'a1b2c3d4e5f60718',
-          shuffleVersion: 1,
           deck: [highConfidenceCard],
           currentIndex: 0,
           startIndex: 0,

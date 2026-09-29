@@ -10,7 +10,7 @@ import {
   pendingYearCount,
   resolvedCount,
 } from './reducer';
-import { CURRENT_SHUFFLE_VERSION, shuffleDeck, sortDeckByHash } from './shuffle';
+import { shuffleDeck } from './shuffle';
 import type { GameState, PersistedSession } from './types';
 import type { Card, PlaylistSummary } from '../../shared/types';
 
@@ -137,49 +137,23 @@ describe('gameReducer transitions', () => {
     expect(state.seed).toBe('shared-deck-seed');
     // Compared with the shuffle function rather than with a literal: pinning the algorithm's
     // OUTPUT is `shuffle.test.ts`'s job. This asserts which algorithm the reducer picks.
-    expect(state.deck).toEqual(sortDeckByHash(CARDS, 'shared-deck-seed'));
+    expect(state.deck).toEqual(shuffleDeck(CARDS, 'shared-deck-seed'));
   });
 
-  it('should deal with the hash sort and record the current version when START names none', () => {
-    // Decision D1 (2026-09-29): every NEW deal is version 2, so its order depends only on the set of
-    // cards -- which is what keeps a link reproducible after Play again and across playlist drift.
+  it('should deal with shuffleDeck, whatever order the cards arrive in', () => {
+    // The reducer adds nothing to the shuffle: the deck is exactly `shuffleDeck` over the cards.
+    // The reversed input is what "Play again" and a re-ordered fetch look like, and it must deal
+    // the same deck from the same seed -- the property a share link's reproducibility rests on.
     const state = preparing();
-
-    expect(CURRENT_SHUFFLE_VERSION).toBe(2);
-    expect(state.shuffleVersion).toBe(2);
-    expect(state.deck).toEqual(sortDeckByHash(CARDS, SEED));
-  });
-
-  it('should deal with Fisher-Yates when START asks for shuffle version 1', () => {
-    // A link minted before 2026-09-29 carries no version and was dealt by Fisher-Yates; its
-    // recipient must get the order its sender saw, so version 1 is kept exactly.
-    const state = gameReducer(initialGameState, {
+    const reversed = gameReducer(initialGameState, {
       type: 'START',
-      cards: CARDS,
+      cards: [...CARDS].reverse(),
       playlists: [PLAYLIST],
       seed: SEED,
-      shuffleVersion: 1,
     });
 
-    expect(state.shuffleVersion).toBe(1);
     expect(state.deck).toEqual(shuffleDeck(CARDS, SEED));
-    // And the two algorithms genuinely disagree on this input, or the test above proves nothing.
-    expect(state.deck).not.toEqual(sortDeckByHash(CARDS, SEED));
-  });
-
-  it('should record the shuffle version on an empty deal too', () => {
-    // The `ended` branch builds its own state object, so it is one more place a field can be missed.
-    const state = gameReducer(initialGameState, {
-      type: 'START',
-      cards: [],
-      playlists: [PLAYLIST],
-      seed: SEED,
-      shuffleVersion: 1,
-    });
-
-    expect(state.status).toBe('ended');
-    expect(state.shuffleVersion).toBe(1);
-    expect(state.startIndex).toBe(0);
+    expect(reversed.deck).toEqual(state.deck);
   });
 
   it('should start on the named card when START carries a startCardId', () => {
@@ -619,7 +593,6 @@ describe('gameReducer transitions', () => {
       version: 2,
       playlists: [PLAYLIST],
       seed: 'persisted-seed',
-      shuffleVersion: 1,
       deck: [card('a', { year: 1975, yearConfidence: 'high' }), card('b'), card('c')],
       currentIndex: 2,
       startIndex: 1,
@@ -633,9 +606,6 @@ describe('gameReducer transitions', () => {
       status: 'playing',
       playlists: [PLAYLIST],
       seed: 'persisted-seed',
-      // Restored, never re-defaulted: a link shared from this resumed game must name the algorithm
-      // that actually dealt it.
-      shuffleVersion: 1,
       deck: session.deck,
       currentIndex: 2,
       startIndex: 1,
@@ -653,7 +623,6 @@ describe('gameReducer transitions', () => {
       version: 2,
       playlists: [PLAYLIST, SECOND_PLAYLIST, THIRD_PLAYLIST],
       seed: 'persisted-seed',
-      shuffleVersion: 2,
       deck: [card('a', { year: 1975, yearConfidence: 'high' })],
       currentIndex: 0,
       startIndex: 0,
@@ -690,7 +659,6 @@ describe('gameReducer transitions', () => {
       version: 2,
       playlists: [PLAYLIST],
       seed: 'persisted-seed',
-      shuffleVersion: 2,
       deck: [
         card('a', { year: 1975, yearConfidence: 'high' }),
         card('gone', { year: null, yearConfidence: 'none' }),
@@ -716,7 +684,6 @@ describe('gameReducer transitions', () => {
       version: 2,
       playlists: [PLAYLIST],
       seed: 'persisted-seed',
-      shuffleVersion: 2,
       deck: [card('x', { year: null, yearConfidence: 'none' })],
       currentIndex: 0,
       startIndex: 0,
@@ -875,7 +842,6 @@ describe('gameReducer startIndex', () => {
       version: 2,
       playlists: [PLAYLIST],
       seed: 'persisted-seed',
-      shuffleVersion: 2,
       deck: [
         card('gone-1', { year: null, yearConfidence: 'none' }),
         card('a'),
@@ -903,7 +869,6 @@ describe('gameReducer startIndex', () => {
       version: 2,
       playlists: [PLAYLIST],
       seed: 'persisted-seed',
-      shuffleVersion: 2,
       deck: [card('a'), card('gone', { year: null, yearConfidence: 'none' })],
       currentIndex: 1,
       startIndex: 1,

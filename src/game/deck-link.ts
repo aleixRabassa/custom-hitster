@@ -1,5 +1,5 @@
 /**
- * The shareable deck link: `?playlist={id}[,{id}...]&seed={hex}[&v=2][&card={trackId}]`.
+ * The shareable deck link: `?playlist={id}[,{id}...]&seed={hex}[&card={trackId}]`.
  *
  * Pure parse and build over STRINGS. No `window`, no `URL` construction against
  * `location`, no history API — the caller hands in a query string and an origin, which is what
@@ -11,29 +11,30 @@
  *  WHAT THE LINK PROMISES: "SAME PLAYLISTS, SAME SHUFFLE, SAME CARD". STILL NOT
  *  "THE SAME DECK".
  *
- *  The seeded deal is exact -- `dealDeck` over the same cards with the same seed
- *  and the same version always deals the same order. What changed on 2026-09-29
- *  (review of the shuffle system, decisions D1 and D3) is how much of that
- *  survives when the INPUT differs:
+ *  The seeded deal is exact -- `shuffleDeck` over the same cards with the same
+ *  seed always deals the same order. And because the shuffle is a hash sort
+ *  (review of the shuffle system, 2026-09-29, decision D1), a card's place
+ *  relative to every other card depends only on the seed and the two ids, so
+ *  much of that survives when the INPUT differs:
  *
- *  - VERSION 2 (`v=2`, every link minted since): the deal is a hash sort, so a
- *    card's place relative to every other card depends only on the seed and the
- *    two ids. The ORDER NOW SURVIVES PLAYLIST DRIFT -- a track added or removed
- *    on the recipient's side is a card slotted in or a gap, never a
- *    re-randomised deck -- and a link copied after "Play again" reproduces the
- *    deck, because re-dealing an already-shuffled deck with a seed IS dealing
- *    the raw fetch with it.
- *  - VERSION 1 (no `v`, every link minted before): Fisher-Yates, kept exactly.
- *    A link in the wild must still deal the order its sender saw, and it still
- *    has Fisher-Yates' fragility: any change in length re-deals everything.
+ *  - THE ORDER SURVIVES PLAYLIST DRIFT. A track added or removed on the
+ *    recipient's side is a card slotted in or a gap, never a re-randomised deck.
+ *  - A LINK COPIED AFTER "PLAY AGAIN" REPRODUCES THE DECK, because re-dealing an
+ *    already-shuffled deck with a seed IS dealing the raw fetch with it.
  *  - POSITION (`card`, mid-game links only): the sender's CURRENT card, by track
  *    id. An id rather than an index because the sender's deck has already shrunk
  *    by its yearless cards while the recipient's starts full, and because an id
  *    survives drift where an index silently points at a different card. An id
  *    the recipient's deck does not hold falls back to card 1.
  *
+ *  LINKS MINTED BEFORE 2026-09-29 NOW DEAL A DIFFERENT ORDER. They were dealt by
+ *  a seeded Fisher-Yates, which the developer deleted that day together with the
+ *  `v` param that told the two algorithms apart. Such a link still parses and
+ *  still deals the same playlists from the same seed -- just not the order its
+ *  sender saw. Accepted by the developer, with no saved games to protect.
+ *
  *  The input to the deal is still not reproducible, for THREE independent
- *  reasons, and they now cost CARDS rather than the ORDER:
+ *  reasons, and they cost CARDS rather than the ORDER:
  *
  *  1. A card whose year lookup finds nothing is REMOVED from the deck
  *     (`gameReducer`, `YEAR_RESOLVED`, 2026-08-05), and which cards those are
@@ -53,13 +54,17 @@
  * ===========================================================================
  *
  * ===========================================================================
- *  `v` IS NEVER WRITTEN FOR VERSION 1, AND AN ABSENT `v` MEANS VERSION 1 FOREVER.
+ *  A `v` PARAM IS IGNORED, NEVER VALIDATED -- `v=2`, `v=1` AND `v=abc` ALIKE.
  *
- *  A version-1 deck (a game dealt from an old link, or resumed from an old save)
- *  shares a link BYTE-IDENTICAL to what a pre-2026-09-29 build minted, so it
- *  also deals correctly on a stale cached build. A `v` this build does not know
- *  (`v=3`, `v=`) rejects the WHOLE link: dealing a future version's seed with
- *  today's algorithm would deal a confident, wrong order.
+ *  Links minted between 104c1e2 and the Fisher-Yates removal (both 2026-09-29)
+ *  carry `v=2`, and they must keep working. Ignoring rather than rejecting is
+ *  right because there is only ONE algorithm now, so the param carries no
+ *  information: every value of it would be dealt identically, and rejecting one
+ *  would turn a link that can still deal its playlists into the plain welcome
+ *  screen over a distinction this build can no longer act on. If an algorithm
+ *  change ever brings a version back, it needs a fresh, explicit rule here --
+ *  and every `v=2` link already in the wild will be carrying a value it did not
+ *  choose.
  * ===========================================================================
  *
  * ## Why query params and not a hash fragment
@@ -68,13 +73,11 @@
  * clients, which for a link people paste into WhatsApp is the deciding half. Query params are
  * also what `GameState.seed`'s own comment predicted: the seed is "accepted as an override on
  * `START`, so a Phase 8 shareable URL (playlist id + seed) is a caller change rather than a
- * reducer change". That held for the first version of the link; the version and the start card
- * (2026-09-29) are the two things the reducer had to learn, as `START`'s `shuffleVersion` and
- * `startCardId`.
+ * reducer change". That held for the first version of the link; the start card (2026-09-29) is
+ * the one thing the reducer had to learn, as `START`'s `startCardId`.
  */
 
 import { MAX_DECK_PLAYLISTS } from './deck-merge';
-import type { ShuffleVersion } from './shuffle';
 import type { GameState } from './types';
 import { SPOTIFY_ID_PATTERN, parsePlaylistUrl } from '../../shared/spotify-url';
 
@@ -97,12 +100,6 @@ const ID_SEPARATOR = ',';
 
 /** The query parameter carrying the shuffle seed. */
 export const SEED_PARAM = 'seed';
-
-/**
- * The query parameter naming the algorithm that dealt the deck (`ShuffleVersion`). Absent means
- * `1`; see the header block for why the builder never writes `v=1`.
- */
-export const SHUFFLE_VERSION_PARAM = 'v';
 
 /**
  * The query parameter carrying the sender's current card, as a 22-character Spotify track id.
@@ -146,20 +143,12 @@ export interface DeckLink {
   playlistIds: string[];
   /** Lowercased hex, exactly as `generateSeed()` mints it. */
   seed: string;
-  /** 1 when the link has no `v` param. */
-  shuffleVersion: ShuffleVersion;
   /** The `card` param: a 22-char Spotify track id, case preserved. null when absent. */
   cardId: string | null;
 }
 
 /** What a link carries beyond its playlists and seed. */
 export interface DeckLinkOptions {
-  /**
-   * The version that dealt the deck. REQUIRED, never defaulted: a forgotten version would silently
-   * mint a version-1 link for a version-2 deck, and the recipient would be dealt a different order
-   * with nothing on either screen to say so.
-   */
-  shuffleVersion: ShuffleVersion;
   /** The sender's current card. Only a mid-game link passes it (see `CARD_PARAM`). */
   cardId?: string;
 }
@@ -174,15 +163,15 @@ export interface DeckLinkOptions {
  *  Someone whose chat client ate half a URL is not in a failure state worth a red
  *  banner -- they are a visitor who should see the form. Every rejection here
  *  therefore looks identical to "no link at all": a bad seed, an album link, a
- *  missing parameter, a mangled `%`-escape, an unknown `v` and a malformed `card`
- *  all return `null`.
+ *  missing parameter, a mangled `%`-escape and a malformed `card` all return
+ *  `null`. (A `v` param is not among them: it is ignored, see the module header.)
  *
  *  `playlist` and `seed` are REQUIRED. A playlist with no seed would deal a random
  *  order, which is what the landing form already does and not what the link
- *  promised; a seed with no playlist addresses nothing. `v` and `card` are
- *  optional, but PRESENT-AND-MALFORMED is a rejection rather than an absence --
- *  the same one-bad-element rule the playlist list follows, so a mangled position
- *  cannot quietly deal from card 1 as if the sender had sent none.
+ *  promised; a seed with no playlist addresses nothing. `card` is optional, but
+ *  PRESENT-AND-MALFORMED is a rejection rather than an absence -- the same
+ *  one-bad-element rule the playlist list follows, so a mangled position cannot
+ *  quietly deal from card 1 as if the sender had sent none.
  * ===========================================================================
  *
  * ===========================================================================
@@ -255,11 +244,10 @@ export function parseDeckLink(search: string): DeckLink | null {
   const seed = seedParam.trim();
   if (!SEED_PATTERN.test(seed)) return null;
 
-  // `get`, not `getAll`: the builder writes each of these at most once, and a repeated one is a
-  // reshaped link whose first value is as good a reading as any.
-  const shuffleVersion = parseShuffleVersion(params.get(SHUFFLE_VERSION_PARAM));
-  if (shuffleVersion === null) return null;
+  // `v` is deliberately never read: one algorithm, so it carries no information (module header).
 
+  // `get`, not `getAll`: the builder writes `card` at most once, and a repeated one is a reshaped
+  // link whose first value is as good a reading as any.
   const cardParam = params.get(CARD_PARAM);
   let cardId: string | null = null;
   if (cardParam !== null) {
@@ -270,25 +258,7 @@ export function parseDeckLink(search: string): DeckLink | null {
     cardId = trimmed;
   }
 
-  return { playlistIds, seed: seed.toLowerCase(), shuffleVersion, cardId };
-}
-
-/**
- * The `v` param as a `ShuffleVersion`: absent is `1`, and anything but the exact strings this build
- * can deal is `null`. Matched as strings rather than through `Number()`, so `v=2.0`, `v=02` and
- * `v=0x2` are the unknown versions they look like rather than a `2` nobody wrote.
- */
-function parseShuffleVersion(value: string | null): ShuffleVersion | null {
-  if (value === null) return 1;
-
-  switch (value.trim()) {
-    case '1':
-      return 1;
-    case '2':
-      return 2;
-    default:
-      return null;
-  }
+  return { playlistIds, seed: seed.toLowerCase(), cardId };
 }
 
 /**
@@ -311,22 +281,19 @@ function parseShuffleVersion(value: string | null): ShuffleVersion | null {
  * comma is a legal query-value character (see `ID_SEPARATOR`), and it keeps the link readable in
  * the chat clients this app's links get pasted into.
  *
- * `v` is appended for every version BUT 1, so a version-1 deck's link is byte-identical to what
- * every build before 2026-09-29 minted (see the header block); `card` comes last, and only when
- * given. The test is `!== 1` rather than `=== 2` so that a future version cannot mint an
- * unversioned link -- the same forgotten-version failure `DeckLinkOptions` refuses, one step later.
+ * No `v` is ever written: there is one algorithm (see the header block). `card` comes last, and
+ * only when given.
  */
 export function buildDeckLink(
   origin: string,
   playlistIds: readonly string[],
   seed: string,
-  options: DeckLinkOptions,
+  options: DeckLinkOptions = {},
 ): string {
   const base = origin.endsWith('/') ? origin.slice(0, -1) : origin;
   const ids = playlistIds.join(ID_SEPARATOR);
 
   let link = `${base}?${PLAYLIST_PARAM}=${ids}&${SEED_PARAM}=${seed}`;
-  if (options.shuffleVersion !== 1) link += `&${SHUFFLE_VERSION_PARAM}=${options.shuffleVersion}`;
   if (options.cardId !== undefined) link += `&${CARD_PARAM}=${options.cardId}`;
 
   return link;
@@ -358,13 +325,11 @@ export type LinkArrival = 'deal' | 'resume' | 'ask';
  * ===========================================================================
  *
  * ===========================================================================
- *  "DESCRIBES THE SAVED DECK" IS SAME SEED, SAME VERSION, AND THE SAVED
- *  PLAYLISTS A SUBSET OF THE LINK'S -- AND NEVER THE CARD.
+ *  "DESCRIBES THE SAVED DECK" IS SAME SEED AND THE SAVED PLAYLISTS A SUBSET OF
+ *  THE LINK'S -- AND NEVER THE CARD.
  *
  *  - THE SEED is 64 random bits, so it is the real identity: two unrelated games
  *    do not share one.
- *  - THE VERSION, because the same seed dealt by the other algorithm is a
- *    different order, i.e. a different deck.
  *  - A SUBSET, NOT EQUALITY: a recipient whose link named five playlists, one of
  *    which failed to load, has four in state (`GameState.playlists` holds only
  *    the playlists that LOADED). Their reload must still resume silently.
@@ -382,13 +347,12 @@ export type LinkArrival = 'deal' | 'resume' | 'ask';
  */
 export function linkArrivalIntent(
   link: DeckLink,
-  session: Pick<GameState, 'status' | 'playlists' | 'seed' | 'shuffleVersion'>,
+  session: Pick<GameState, 'status' | 'playlists' | 'seed'>,
 ): LinkArrival {
   if (session.status === 'idle' || session.status === 'ended') return 'deal';
 
   const describesSavedDeck =
     session.seed === link.seed &&
-    session.shuffleVersion === link.shuffleVersion &&
     session.playlists.every((playlist) => link.playlistIds.includes(playlist.id));
 
   return describesSavedDeck ? 'resume' : 'ask';

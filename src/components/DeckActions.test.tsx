@@ -82,7 +82,7 @@ const CURRENT_CARD_ID = fixtureDeck[2]?.id ?? '';
 /**
  * The query of a copied link, as parameters rather than as one string.
  *
- * ORDER-FREE ON PURPOSE (2026-09-29). The link grew a shuffle version and, mid-game, a card, and
+ * ORDER-FREE ON PURPOSE (2026-09-29). The link grew, mid-game, a card, and
  * which order `buildDeckLink` writes them in is `deck-link.ts`'s decision -- its own tests pin the
  * exact string. What THIS component owns is which values go in, so that is what these assert.
  */
@@ -95,8 +95,6 @@ function renderActions(overrides: Partial<DeckActionsProps> = {}) {
     playlistIds: [PLAYLIST_ID],
     playlistName: 'Rock Classics',
     seed: SEED,
-    // The algorithm every new deal uses. A v1 deck (an old link or save) has its own test below.
-    shuffleVersion: 2,
     shareOrigin: ORIGIN,
     onSavePlaylist: vi.fn(),
     isPlaylistSaved: false,
@@ -237,6 +235,7 @@ describe('DeckActions', () => {
       expect(link?.startsWith('https://hitster.example?')).toBe(true);
       expect(linkParams(link).get('playlist')).toBe(PLAYLIST_ID);
       expect(linkParams(link).get('seed')).toBe(SEED);
+      expect(linkParams(link).has('v')).toBe(false);
       // Confirmed in a live region, which is safe even beside an unflipped card: the region's text
       // is a fixed sentence, whatever the link holds.
       await waitFor(() => {
@@ -263,6 +262,7 @@ describe('DeckActions', () => {
         `${PLAYLIST_ID},${SECOND_PLAYLIST_ID}`,
       );
       expect(linkParams(writeText.mock.calls[0]?.[0]).get('seed')).toBe(SEED);
+      expect(linkParams(writeText.mock.calls[0]?.[0]).has('v')).toBe(false);
       await waitFor(() => {
         expect(screen.getByRole('status').textContent).toBe(COPY.deckActions.linkCopied);
       });
@@ -276,28 +276,6 @@ describe('DeckActions', () => {
       expect(document.body.textContent ?? '').toContain(COPY.deckActions.shareCaption(2, false));
     });
 
-    it('should carry the shuffle version: v=2 for a v2 deck, none for a v1 deck', () => {
-      // ===================================================================
-      //  A SEED DOES NOT SAY HOW TO DEAL IT (2026-09-29, D1).
-      //
-      //  Every link minted before the hash sort carries no version and must
-      //  still deal Fisher-Yates, so "no `v`" MEANS version 1 -- which is why
-      //  a v1 deck writes none rather than `v=1`, and a v2 deck must write
-      //  one or its recipient re-deals it with the wrong algorithm.
-      // ===================================================================
-      const writeText = vi.fn<(text: string) => Promise<void>>(() => Promise.resolve());
-      stubClipboard(writeText);
-      const { rerender, props } = renderActions({ shuffleVersion: 2 });
-
-      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.copyLink }));
-      expect(linkParams(writeText.mock.calls[0]?.[0]).get('v')).toBe('2');
-
-      rerender(<DeckActions {...props} shuffleVersion={1} />);
-      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.copyLink }));
-      expect(linkParams(writeText.mock.calls[1]?.[0]).get('v')).toBeNull();
-      expect(linkParams(writeText.mock.calls[1]?.[0]).get('seed')).toBe(SEED);
-    });
-
     it('should carry the current card mid-game and no card without one', () => {
       // D3: a mid-game link starts the recipient on the sender's card. The end screen passes no
       // card, because after the last card a position would drop the recipient on the final card.
@@ -307,6 +285,7 @@ describe('DeckActions', () => {
 
       fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.copyLink }));
       expect(linkParams(writeText.mock.calls[0]?.[0]).get('card')).toBe(CURRENT_CARD_ID);
+      expect(linkParams(writeText.mock.calls[0]?.[0]).has('v')).toBe(false);
 
       // Built at click time, so the card is the one on screen AT THE PRESS -- a later card
       // re-renders this with a new id, exactly as a Play again re-renders it with a new seed.
@@ -365,6 +344,7 @@ describe('DeckActions', () => {
       fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.copyLink }));
 
       expect(writeText.mock.calls[1]?.[0]).toContain(`seed=${nextSeed}`);
+      expect(linkParams(writeText.mock.calls[1]?.[0]).has('v')).toBe(false);
     });
 
     it('should show the link as selectable text when the clipboard rejects', async () => {
@@ -383,6 +363,7 @@ describe('DeckActions', () => {
       )) as HTMLInputElement;
       expect(linkParams(field.value).get('playlist')).toBe(PLAYLIST_ID);
       expect(linkParams(field.value).get('seed')).toBe(SEED);
+      expect(linkParams(field.value).has('v')).toBe(false);
       expect(field.readOnly).toBe(true);
     });
 
@@ -395,9 +376,9 @@ describe('DeckActions', () => {
       expect(() => {
         fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.copyLink }));
       }).not.toThrow();
-      expect(
-        (screen.getByLabelText(COPY.deckActions.shareLinkFieldLabel) as HTMLInputElement).value,
-      ).toContain(`seed=${SEED}`);
+      const field = screen.getByLabelText(COPY.deckActions.shareLinkFieldLabel) as HTMLInputElement;
+      expect(field.value).toContain(`seed=${SEED}`);
+      expect(linkParams(field.value).has('v')).toBe(false);
     });
 
     it('should say nothing before the copy button is pressed', () => {
@@ -445,7 +426,6 @@ describe('DeckActions', () => {
             playlistIds={[PLAYLIST_ID]}
             playlistName="Rock Classics"
             seed={SEED}
-            shuffleVersion={2}
             shareOrigin={ORIGIN}
             onSavePlaylist={vi.fn()}
             isPlaylistSaved={false}

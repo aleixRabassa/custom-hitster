@@ -476,21 +476,20 @@ identically with the artist rule reverted. Same false-comfort shape as the pre-2
 - **`--color-fg-year` is a separate token from `--color-ring-from` despite sharing its value**, and the year is **flat rather than the mockup's gradient**. `background-clip: text` needs `color: transparent`, so a gradient that fails to paint renders the year _invisible_ — the same silent shape as the unknown-colour-utility bug this repo already shipped — and a gradient has no single contrast ratio to record.
 - **The deck's two peeking backs do not render at all on a full-height card**, and this one is a real defect: centre-origin `scale()` lifts the bottom edge by 8.96px while `translateY` pushes it down 10px, so they peek by 1.04px and 2.08px and are inset on every other side. Pre-existing from Phase 5, measured 2026-08-06, **not fixed** — the remedy is a deck-feel decision. Consequence: `card-ring-dim` is currently inert at desktop card sizes.
 
-**Everything plan 2 built is a caller change: the reducer, `GameState` and the persistence format are untouched** — true of plan 2, and no longer of the link as a whole: the 2026-09-29 versioned shuffle and start card (block above) added `shuffleVersion` and `startCardId` to `START` and two optional fields to the save. Three new pure modules in `src/game/` (`deck-link.ts`, `playlist-library.ts`, `pdf-sheet.ts` + `pdf-text.ts`), one new hook (`src/hooks/usePdfExport.ts`), and the shared `src/game/qrcode-loader.ts`. **Which subtree each landed in was the usual decision, and the rule is "put it where it can be tested":** `deck-link.ts` takes a query STRING rather than reading `location`, `playlist-library.ts` takes an injected `StorageLike` exactly as `persistence.ts` does, and `pdf-sheet.ts` holds every millimetre as arithmetic over numbers — the same decision/binding split as `gestures.ts` and `resolver.ts`, for the same reason: **getting the duplex column mirror wrong pairs every printed card with the wrong answer and is discoverable only by printing and cutting.** The binding halves are `App.tsx`, `EndScreen.tsx` and `usePdfExport.ts`. See [`docs/architecture.md`](./docs/architecture.md) §3.
+**Everything plan 2 built is a caller change: the reducer, `GameState` and the persistence format are untouched** — true of plan 2, and no longer of the link as a whole: the 2026-09-29 start card (block above) added `startCardId` to `START` and `startIndex` to `GameState` and the save. Three new pure modules in `src/game/` (`deck-link.ts`, `playlist-library.ts`, `pdf-sheet.ts` + `pdf-text.ts`), one new hook (`src/hooks/usePdfExport.ts`), and the shared `src/game/qrcode-loader.ts`. **Which subtree each landed in was the usual decision, and the rule is "put it where it can be tested":** `deck-link.ts` takes a query STRING rather than reading `location`, `playlist-library.ts` takes an injected `StorageLike` exactly as `persistence.ts` does, and `pdf-sheet.ts` holds every millimetre as arithmetic over numbers — the same decision/binding split as `gestures.ts` and `resolver.ts`, for the same reason: **getting the duplex column mirror wrong pairs every printed card with the wrong answer and is discoverable only by printing and cutting.** The binding halves are `App.tsx`, `EndScreen.tsx` and `usePdfExport.ts`. See [`docs/architecture.md`](./docs/architecture.md) §3.
 
-**THE SHUFFLE IS VERSIONED AS OF 2026-09-29, AND THE VERSION TRAVELS WITH THE SEED — a seed on its own no
-longer says how to deal a deck.** Implemented from [`docs/review.shuffle-system.md`](./docs/review.shuffle-system.md)
-§8, after the developer took all four decisions. **Every new deal is version 2**, `sortDeckByHash` in `shuffle.ts`:
-cards ordered by `hashSeed(seed + ':' + card.id)`, so the order depends only on the SET of cards. That is what fixed
-the one real bug — a link copied after "Play again" never reproduced the deck, because Fisher-Yates re-applied to
-an already-shuffled input is a different order — and what makes a shared order survive a playlist gaining or
-losing a track. **Version 1 is the old Fisher-Yates, frozen**, kept because every link minted before today carries
-no version. Five rules. **The version lives in three places and each has its own default**: `GameState.shuffleVersion`,
-the saved session (**absent = 1**, since every older save was Fisher-Yates dealt — defaulting it to the current
-version is the edit that makes a resumed game share a wrong link), and the link's `v` param (**absent = 1**; built
-only for version 2, so a v1 deck's link is byte-identical to what old builds minted; an unknown `v` rejects the
-whole link). **Both algorithms' outputs are pinned as literals in `shuffle.test.ts`** — they are a stored format,
-so a failing pin is fixed by reverting, and a new algorithm is a new version, never an edit. **A mid-game link
+**THE SHUFFLE IS A HASH SORT AS OF 2026-09-29, AND THERE IS ONE ALGORITHM AND NO VERSION.** Implemented from
+[`docs/review.shuffle-system.md`](./docs/review.shuffle-system.md) §8, after the developer took all four decisions.
+`shuffleDeck` in `shuffle.ts` orders cards by `hashSeed(seed + ':' + card.id)`, so the order depends only on the
+SET of cards. That fixed the one real bug — a link copied after "Play again" never reproduced the deck, because
+the seeded Fisher-Yates it replaced, re-applied to an already-shuffled input, is a different order — and it makes a
+shared order survive a playlist gaining or losing a track. **For a few hours the same day both algorithms existed**,
+with a `shuffleVersion` in `GameState`, the save and the link's `v` param; the developer then removed Fisher-Yates
+and the whole version machinery (no saved games to protect), **accepting that a link minted before 2026-09-29 now
+deals a different order**. So: **a `v` param is IGNORED, never rejected** (links minted in between carry `v=2`), a
+save carrying a `shuffleVersion` field still loads, and **the output is pinned as literals in `shuffle.test.ts`** —
+it is a stored format, a failing pin is fixed by reverting, and a future algorithm change has no lever left: it must
+bring a version back, or accept the same re-deal knowingly. **A mid-game link
 carries `&card=<trackId>`** and the recipient starts ON that card (`START.startCardId`; card 1 plus the
 `startCardMissing` notice when the card is gone); the end screen's link does not, because its position is the
 last card. So the card-1 gate is now "the CURRENT card has a year", the resolver crawls from the start card and
@@ -498,7 +497,7 @@ wraps, and `GameState.startIndex` (the lowest index this player has been on; sav
 screen's `cardsPlayed` subtracts. The copy-failed fallback `<input value>` beside an unflipped card now holds that
 track id — the QR already encodes it, and the leak tests subtract it by exact string. **A link over a saved game is
 decided by `linkArrivalIntent` in `deck-link.ts`, once, at mount**: `deal` when there is nothing to resume, `resume`
-with NO prompt when the link describes the saved deck (same seed, same version, every saved playlist named by the
+with NO prompt when the link describes the saved deck (same seed, every saved playlist named by the
 link — a SUBSET check, so a recipient who lost one of five playlists still reloads silently; the card is never
 compared, so the sender's position never moves a reloader), and `ask` otherwise, which renders
 `ReplaceSessionPrompt` as its own branch before the status switch — never as an overlay, so no game screen, no

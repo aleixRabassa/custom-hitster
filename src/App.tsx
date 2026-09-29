@@ -291,8 +291,8 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
    *    -> `deal`, exactly as a link always did. After End or Exit the save is
    *    cleared, so a reload of a link-opened tab deals the link again: the game
    *    no longer exists, and that re-deal is accepted.
-   *  - The link describes the saved deck -- same seed, same shuffle version, the
-   *    saved playlists all named by it -> `resume`, with no prompt. That is a
+   *  - The link describes the saved deck -- same seed, the saved playlists all
+   *    named by it -> `resume`, with no prompt. That is a
    *    reload of the tab the link was opened in, and asking "replace your game?"
    *    on every reload would be the modification the developer ruled out. The
    *    link's `card` is NOT compared: the sender's position must never move a
@@ -360,9 +360,9 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
    * A REF rather than state, and that is step 9's "the seed rides along, it does not become a
    * second trigger": the deal effect below is keyed on the fetch RESULT's identity, and a link in
    * state would add a second dependency that could fire it again. Consumed and cleared by the deal,
-   * so the seed, the shuffle version and the start card apply to exactly the one deck the link
-   * asked for -- all three together, since 2026-09-29, because a seed dealt with the wrong algorithm
-   * or from the wrong card is a different deck.
+   * so the seed and the start card apply to exactly the one deck the link asked for -- both
+   * together, since 2026-09-29, because the right seed dealt from the wrong card is a different
+   * game.
    */
   const pendingLinkRef = useRef<DeckLink | null>(null);
 
@@ -449,7 +449,6 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
     } else {
       start(deck.cards, deck.playlists, {
         seed: link.seed,
-        shuffleVersion: link.shuffleVersion,
         ...(startCardId === null ? {} : { startCardId }),
       });
     }
@@ -571,12 +570,11 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
     // resolved years travel with the cards, and it works after a RESUMED session -- where the
     // original `/api/playlist` response no longer exists in memory.
     //
-    // No seed argument, so `START` generates a new one and the order actually changes -- and no
-    // shuffle version, so it is dealt with the CURRENT algorithm even when the game before it was a
-    // version-1 link. That is what makes a link shared after Play again reproduce this deck
-    // (2026-09-29): the version-2 hash sort depends only on the SET of cards, so re-dealing
-    // `state.deck` with a seed gives the recipient's raw fetch, dealt with that seed, the same order.
-    // Under Fisher-Yates it did not, because the permutation was applied to a different input order.
+    // No seed argument, so `START` generates a new one and the order actually changes. A link shared
+    // after Play again reproduces this deck (2026-09-29) because the shuffle is a hash sort that
+    // depends only on the SET of cards: re-dealing `state.deck` with a seed gives the recipient's raw
+    // fetch, dealt with that seed, the same order. The Fisher-Yates it replaced did not, because it
+    // applied one permutation to a different input order.
     if (state.playlists.length > 0) start(state.deck, state.playlists);
   }, [start, state.deck, state.playlists]);
 
@@ -819,14 +817,13 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
         /*
           The share link's ingredients, straight from live state rather than remembered: a Restart
           deals a FRESH seed, and the end screen unmounts and remounts around it, so these props
-          always name the seed and algorithm the deck just played was dealt with. Since 2026-09-29
+          always name the seed the deck just played was dealt with. Since 2026-09-29
           that is also enough for the link to REPRODUCE it after a Restart -- see `handleRestart`.
           No start card: the end screen's link opens at the top, since the player's position is the
           last card.
         */
         playlistIds={playlistIds}
         seed={state.seed}
-        shuffleVersion={state.shuffleVersion}
         shareOrigin={shareOrigin()}
         // The deck, for the PDF export and for nothing else. This screen renders no track data --
         // its own leak test asserts that -- and the cards go into a file the player asked for.
@@ -881,7 +878,6 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
         */
         playlistIds={playlistIds}
         seed={state.seed}
-        shuffleVersion={state.shuffleVersion}
         shareOrigin={shareOrigin()}
         onSavePlaylist={handleSavePlaylist}
         isPlaylistSaved={isPlaylistSaved}

@@ -9,7 +9,6 @@
  * state.
  */
 
-import type { ShuffleVersion } from './shuffle';
 import type { Card, PlaylistSummary, YearConfidence } from '../../shared/types';
 
 /**
@@ -64,18 +63,11 @@ export interface GameState {
   playlists: readonly PlaylistSummary[];
   /**
    * The shuffle seed this deck was dealt with. Persisted, and accepted as an override on
-   * `START`, which is what made Phase 8's shareable URL (playlist id + seed) a caller change. It
-   * stopped being the whole link on 2026-09-29: a seed needs `shuffleVersion` beside it to say how to
-   * deal it, and a mid-game link adds the start card. Empty string while `idle`.
+   * `START`, which is what made Phase 8's shareable URL (playlist id + seed) a caller change; a
+   * mid-game link adds the start card (2026-09-29). Only meaningful together with the exact
+   * function that deals it -- see `shuffleDeck` in `shuffle.ts`. Empty string while `idle`.
    */
   seed: string;
-  /**
-   * Which algorithm dealt `deck` from `seed` (see `ShuffleVersion` in `shuffle.ts`). It travels with
-   * the seed into the save and into the share link, because a seed alone does not say how to deal
-   * it: a deck dealt from a pre-2026-09-29 link is version 1, and a link shared from that deck must
-   * say so. `CURRENT_SHUFFLE_VERSION` while `idle`.
-   */
-  shuffleVersion: ShuffleVersion;
   /**
    * The SHUFFLED deck. Years are filled in place as the resolver reports them, which is why
    * `Card.year` is three-state: `undefined` = not looked up, `null` = looked up and nothing
@@ -137,17 +129,15 @@ export type GameAction =
   /**
    * Deal a new deck. Shuffles synchronously (decision 15: shuffle first, then resolve), so
    * the resolver is only ever handed an already-shuffled deck and "card 1" always means the
-   * first card of the SHUFFLED deck. `seed` is generated when omitted, `shuffleVersion` defaults
-   * to `CURRENT_SHUFFLE_VERSION`, and `startCardId` (a shared link's `card` param) starts the
-   * player on that card instead of card 1 -- looked up in the SHUFFLED deck, and ignored when no
-   * card there has that id.
+   * first card of the SHUFFLED deck. `seed` is generated when omitted, and `startCardId` (a
+   * shared link's `card` param) starts the player on that card instead of card 1 -- looked up in
+   * the SHUFFLED deck, and ignored when no card there has that id.
    */
   | {
       type: 'START';
       cards: Card[];
       playlists: readonly PlaylistSummary[];
       seed?: string;
-      shuffleVersion?: ShuffleVersion;
       startCardId?: string;
     }
   /**
@@ -191,13 +181,6 @@ export interface PersistedSession {
    */
   playlists: PlaylistSummary[];
   seed: string;
-  /**
-   * Which algorithm dealt the deck. OPTIONAL IN STORAGE, required here: a save written before
-   * 2026-09-29 has no such field and was dealt by Fisher-Yates, so `loadSession` reads its absence
-   * as `1` -- never as the current version, which would make a link shared from that resumed game
-   * deal a different order.
-   */
-  shuffleVersion: ShuffleVersion;
   /** The shuffled deck INCLUDING every year already resolved -- so a reload costs zero lookups. */
   deck: Card[];
   currentIndex: number;

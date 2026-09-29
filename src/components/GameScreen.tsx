@@ -91,7 +91,6 @@ import { Hud } from './Hud';
 import { useCopy } from '../hooks/useLocale';
 import { useBackNavigation } from '../hooks/useBackNavigation';
 import { useCardAudio } from '../hooks/useCardAudio';
-import type { ShuffleVersion } from '../game/shuffle';
 import type { Card as CardData } from '../../shared/types';
 
 /** `KeyboardEvent.key` for the flip. A literal because `'Space'` is the *code*, not the key. */
@@ -157,8 +156,6 @@ export interface GameScreenProps {
   playlistIds: readonly string[];
   /** The seed this deck was dealt with, from `state.seed`. The other half of the link. */
   seed: string;
-  /** Which algorithm dealt the deck from `seed`, from `state.shuffleVersion`. Goes into the link. */
-  shuffleVersion: ShuffleVersion;
   /** Where a shared link should point -- `origin + pathname`, supplied by the container. */
   shareOrigin: string;
   /** Save this playlist to the landing screen's library. */
@@ -213,7 +210,6 @@ export function GameScreen({
   playlistName,
   playlistIds,
   seed,
-  shuffleVersion,
   shareOrigin,
   onSavePlaylist,
   isPlaylistSaved,
@@ -531,7 +527,6 @@ export function GameScreen({
           playlistIds={playlistIds}
           playlistName={playlistName}
           seed={seed}
-          shuffleVersion={shuffleVersion}
           // The card on screen at the moment of the press, so a mid-game link starts the recipient
           // there (D3). Spread rather than passed as `undefined`, for `exactOptionalPropertyTypes`.
           {...(currentCard === undefined ? {} : { currentCardId: currentCard.id })}

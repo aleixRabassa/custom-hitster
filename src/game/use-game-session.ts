@@ -34,21 +34,18 @@ import { createYearResolver } from './resolver';
 import { lookupYear } from './year-client';
 import type { StorageLike } from './persistence';
 import type { YearResolver } from './resolver';
-import type { ShuffleVersion } from './shuffle';
 import type { GameAction, GameState } from './types';
 import type { Card, PlaylistSummary } from '../../shared/types';
 
 /**
  * How a deal differs from a fresh one. Every field is optional and an empty object (or none at all)
- * is a fresh, randomly seeded deal on card 1 with the current algorithm -- the picker's case.
+ * is a fresh, randomly seeded deal on card 1 -- the picker's case.
  *
- * A share link fills all three: its `seed`, its `shuffleVersion` (`1` for a link minted before
- * 2026-09-29, which carries no version), and -- for a link shared mid-game -- its `card` param as
+ * A share link fills both: its `seed`, and -- for a link shared mid-game -- its `card` param as
  * `startCardId`. See `START` in `types.ts` for what each one does in the reducer.
  */
 export interface StartOptions {
   seed?: string;
-  shuffleVersion?: ShuffleVersion;
   startCardId?: string;
 }
 
@@ -91,9 +88,9 @@ export interface GameSession {
    * `deck-merge.ts`. The resolver takes the DECK rather than the playlist, so a five-playlist
    * crawl needs no new code here -- only more time (see `resolver.ts` for the per-lookup cost).
    *
-   * `options` is empty for a fresh deal (a generated seed, the current algorithm, card 1). A share
-   * link passes its seed and shuffle version so the recipient gets the sender's order, and a
-   * mid-game link its card id so they start on the sender's card -- see `StartOptions`.
+   * `options` is empty for a fresh deal (a generated seed, card 1). A share link passes its seed so
+   * the recipient gets the sender's order, and a mid-game link its card id so they start on the
+   * sender's card -- see `StartOptions`.
    */
   start: (cards: Card[], playlists: readonly PlaylistSummary[], options?: StartOptions) => void;
   flip: () => void;
@@ -225,10 +222,9 @@ export function useGameSession(options: UseGameSessionOptions = {}): GameSession
       clearSession(storage);
 
       // Built without `undefined` properties: an absent field is what tells the reducer to use
-      // its default (a generated seed, the current algorithm, card 1).
+      // its default (a generated seed, card 1).
       const action: Extract<GameAction, { type: 'START' }> = { type: 'START', cards, playlists };
       if (options.seed !== undefined) action.seed = options.seed;
-      if (options.shuffleVersion !== undefined) action.shuffleVersion = options.shuffleVersion;
       if (options.startCardId !== undefined) action.startCardId = options.startCardId;
 
       dispatch(action);

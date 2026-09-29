@@ -55,7 +55,6 @@ function renderEnd(overrides: Partial<EndScreenProps> = {}) {
     onHome: vi.fn(),
     playlistIds: [PLAYLIST_ID],
     seed: SEED,
-    shuffleVersion: 2,
     shareOrigin: ORIGIN,
     onSavePlaylist: vi.fn(),
     isPlaylistSaved: false,
@@ -75,25 +74,24 @@ describe('EndScreen', () => {
     vi.restoreAllMocks();
   });
 
-  it("should share a link with the deck's shuffle version and no starting card", () => {
+  it('should share a link with no starting card', () => {
     // ===================================================================
     //  THE END SCREEN'S LINK STARTS AT THE TOP (2026-09-29, D3).
     //
     //  After the last card the reducer leaves `currentIndex` on the final
     //  card, so a position here would start the recipient on the last card
-    //  of a deck they have never played. The version still travels -- a seed
-    //  alone does not say how to deal it.
+    //  of a deck they have never played.
     // ===================================================================
     stubClipboard(undefined);
-    renderEnd({ shuffleVersion: 2 });
+    renderEnd();
 
     fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.copyLink }));
 
     const field = screen.getByLabelText(COPY.deckActions.shareLinkFieldLabel) as HTMLInputElement;
     const params = new URL(field.value).searchParams;
-    expect(params.get('v')).toBe('2');
     expect(params.get('card')).toBeNull();
     expect(params.get('seed')).toBe(SEED);
+    expect(params.has('v')).toBe(false);
     // And the caption says the same: no "starting from the card you are on".
     expect(document.body.textContent ?? '').toContain(COPY.deckActions.shareCaption(1, false));
   });

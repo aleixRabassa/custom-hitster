@@ -16,7 +16,7 @@
  *      Returning the identical reference is what keeps that free of re-renders.
  */
 
-import { CURRENT_SHUFFLE_VERSION, dealDeck, generateSeed } from './shuffle';
+import { generateSeed, shuffleDeck } from './shuffle';
 import type { GameAction, GameState } from './types';
 import type { Card } from '../../shared/types';
 
@@ -25,7 +25,6 @@ export const initialGameState: GameState = {
   status: 'idle',
   playlists: [],
   seed: '',
-  shuffleVersion: CURRENT_SHUFFLE_VERSION,
   deck: [],
   currentIndex: 0,
   startIndex: 0,
@@ -46,10 +45,6 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       // mismatch. Moving it into `start()` would restore purity at the cost of a second place
       // that knows what an absent seed means.
       const seed = action.seed ?? generateSeed();
-      // An absent version means a NEW deal, and a new deal uses the current algorithm. A caller
-      // replaying a version-1 link passes `1` explicitly -- the default is never a guess about an
-      // old deck, because an old deck always arrives with its version attached.
-      const shuffleVersion = action.shuffleVersion ?? CURRENT_SHUFFLE_VERSION;
 
       /*
         Yearless cards are filtered at ALL THREE entry points -- here, `YEAR_RESOLVED` and
@@ -61,10 +56,9 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         the other two branches have already cleaned. It costs one pass over a hundred cards once
         per game and removes the question entirely.
       */
-      const deck = dealDeck(
+      const deck = shuffleDeck(
         action.cards.filter((card) => card.year !== null),
         seed,
-        shuffleVersion,
       );
 
       // Nothing left to deal. Reachable two ways -- an empty `cards` argument, and a deck whose
@@ -75,7 +69,6 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           status: 'ended',
           playlists: action.playlists,
           seed,
-          shuffleVersion,
           deck,
           currentIndex: 0,
           startIndex: 0,
@@ -134,7 +127,6 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         status,
         playlists: action.playlists,
         seed,
-        shuffleVersion,
         deck,
         currentIndex: startIndex,
         startIndex,
@@ -470,7 +462,6 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         status: deck.length === 0 ? 'ended' : session.status,
         playlists: session.playlists,
         seed: session.seed,
-        shuffleVersion: session.shuffleVersion,
         deck,
         currentIndex,
         startIndex,

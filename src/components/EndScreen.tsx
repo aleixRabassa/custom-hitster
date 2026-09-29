@@ -27,7 +27,6 @@ import { DeckActions } from './DeckActions';
 import { Footer } from './Footer';
 import { truncatePlaylistName } from '../game/deck-merge';
 import { playlistDisplayName } from '../game/playlist-display-name';
-import type { ShuffleVersion } from '../game/shuffle';
 import type { Card, PlaylistSummary } from '../../shared/types';
 
 export interface EndScreenProps {
@@ -66,16 +65,14 @@ export interface EndScreenProps {
   onHome: () => void;
   /** The deck's 1..5 Spotify playlist ids, from `state.playlists`. One half of the share link. */
   playlistIds: readonly string[];
-  /** The seed this deck was dealt with, from `state.seed`. The other half. */
-  seed: string;
   /**
-   * Which algorithm dealt the deck from `seed`, from `state.shuffleVersion`. Goes into the link.
+   * The seed this deck was dealt with, from `state.seed`. The other half.
    *
    * There is deliberately NO `currentCardId` beside it: the deck has run out and the reducer leaves
    * `currentIndex` on the last card, so an end-screen link that carried a position would start the
    * recipient on the final card. Links from here start at the top (2026-09-29, D3).
    */
-  shuffleVersion: ShuffleVersion;
+  seed: string;
   /** Where the link should point -- `origin + pathname`, supplied by the container. */
   shareOrigin: string;
   /**
@@ -118,7 +115,6 @@ export function EndScreen({
   onHome,
   playlistIds,
   seed,
-  shuffleVersion,
   shareOrigin,
   onSavePlaylist,
   isPlaylistSaved,
@@ -205,7 +201,6 @@ export function EndScreen({
           playlistIds={playlistIds}
           playlistName={playlistName}
           seed={seed}
-          shuffleVersion={shuffleVersion}
           shareOrigin={shareOrigin}
           onSavePlaylist={onSavePlaylist}
           isPlaylistSaved={isPlaylistSaved}

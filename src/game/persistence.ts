@@ -20,7 +20,6 @@
  * under the node environment with a plain in-memory stub, keeping jsdom a Phase 4 decision.
  */
 
-import type { ShuffleVersion } from './shuffle';
 import type { GameState, PersistedSession } from './types';
 import type { Card, PlaylistSummary, YearConfidence } from '../../shared/types';
 
@@ -56,14 +55,17 @@ export const SESSION_STORAGE_KEY = 'hitster:session:v1';
  *  which is the opposite of what the lift is for.
  * ===========================================================================
  *
- * `shuffleVersion` and `startIndex` (2026-09-29) did NOT bump it, deliberately. Both are
- * OPTIONAL on read with a default that is exact rather than a guess -- a save without
- * `shuffleVersion` was written before hash-sort dealing existed, so its deck was dealt by
- * Fisher-Yates (`1`); a save without `startIndex` was written before a link could start a game
- * mid-deck, so the player started on card 1 (`0`). A bump would have made every game in progress
- * on deploy day unreadable in order to learn two facts the missing field already states. The other
- * direction is harmless too: an OLDER build reading a new save drops both fields, because
+ * `startIndex` (2026-09-29) did NOT bump it, deliberately. It is OPTIONAL on read with a default
+ * that is exact rather than a guess -- a save without it was written before a link could start a
+ * game mid-deck, so the player started on card 1 (`0`). A bump would have made every game in
+ * progress on deploy day unreadable in order to learn a fact the missing field already states. The
+ * other direction is harmless too: an OLDER build reading a new save drops the field, because
  * validation rebuilds the session field by field.
+ *
+ * A save written on 2026-09-29 may also carry a `shuffleVersion` field, from the one day the
+ * shuffle had two algorithms. It is IGNORED on read, never rejected: the save stores the dealt
+ * cards rather than the recipe, so the field changes nothing about the resumed deck, and field-by-
+ * field validation drops it so the next `saveSession` writes it out of existence.
  */
 export const SESSION_VERSION = 2;
 
@@ -106,7 +108,6 @@ export function toPersistedSession(state: GameState): PersistedSession | null {
     // persisted shape is mutable and structurally separate on purpose (see `PersistedSession`).
     playlists: [...state.playlists],
     seed: state.seed,
-    shuffleVersion: state.shuffleVersion,
     deck: state.deck,
     currentIndex: state.currentIndex,
     startIndex: state.startIndex,
@@ -218,15 +219,12 @@ function validateSession(value: unknown): PersistedSession | null {
   if (typeof currentIndex !== 'number' || !Number.isInteger(currentIndex)) return null;
   if (currentIndex < 0 || currentIndex >= deck.length) return null;
 
-  // Both optional, both with an EXACT default (see `SESSION_VERSION` for why neither bumped it).
-  // A v1 payload predates both fields by months, so its values are fixed rather than read: a
-  // v1-shaped payload that somehow carried them would be describing something no build wrote.
-  const isLegacy = version === SESSION_VERSION_LEGACY;
-
-  const shuffleVersion = isLegacy ? 1 : validateShuffleVersion(record['shuffleVersion']);
-  if (shuffleVersion === null) return null;
-
-  const startIndex = isLegacy ? 0 : validateStartIndex(record['startIndex'], currentIndex);
+  // Optional, with an EXACT default (see `SESSION_VERSION` for why it did not bump it). A v1
+  // payload predates the field by months, so its value is fixed rather than read: a v1-shaped
+  // payload that somehow carried it would be describing something no build wrote. A legacy
+  // `shuffleVersion` field is not read at all (see `SESSION_VERSION`).
+  const startIndex =
+    version === SESSION_VERSION_LEGACY ? 0 : validateStartIndex(record['startIndex'], currentIndex);
   if (startIndex === null) return null;
 
   const isFlipped = record['isFlipped'];
@@ -243,29 +241,12 @@ function validateSession(value: unknown): PersistedSession | null {
     version: SESSION_VERSION,
     playlists,
     seed,
-    shuffleVersion,
     deck,
     currentIndex,
     startIndex,
     isFlipped,
     status,
   };
-}
-
-/**
- * The algorithm that dealt the saved deck. ABSENT MEANS `1`, NEVER THE CURRENT VERSION.
- *
- * A save written before 2026-09-29 was dealt by Fisher-Yates. Defaulting it to the current version
- * would not change the resumed deck (the save stores the dealt cards, not the recipe), but it would
- * change every link SHARED from that resumed game: the link would name hash-sort dealing, and its
- * recipient would get a different order from the one on the sharer's screen. Any other value is a
- * payload this code did not write, and is rejected like every other bad field.
- */
-function validateShuffleVersion(value: unknown): ShuffleVersion | null {
-  if (value === undefined) return 1;
-  if (value === 1 || value === 2) return value;
-
-  return null;
 }
 
 /**

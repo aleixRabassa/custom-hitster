@@ -771,16 +771,16 @@ The decisions (`linkArrivalIntent`, the reducer's start card, both algorithms) a
 cases are driven through `App.test.tsx` with an injected query string. What no local check reaches is a real
 address bar, a real reload, two real devices, and the TWA sharing Chrome's `localStorage`.
 
-| #   | Check                                                                                                                                                      | Status  |
-| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
-| 1   | **Share a link mid-game from one phone and open it on another**: the recipient starts on the sender's card, and the cards after it come in the same order. | Pending |
-| 2   | **Share after "Play again"** and open it on a second device: the order matches the sender's (this was the bug).                                            | Pending |
-| 3   | **A link minted before 2026-09-29 (no `v`)** still deals the order its sender saw — keep one such link from a chat history and open it after the deploy.   | Pending |
-| 4   | **Reload a link-opened tab mid-game, flipped and unflipped**: no prompt, same card, same flip state.                                                       | Pending |
-| 5   | **Open a different link with a game in progress**: the prompt appears; "Keep my game" resumes it; "Play the shared deck" deals the link.                   | Pending |
-| 6   | **The prompt in the browser for a game started in the installed app** (the TWA shares Chrome's storage), and the reverse.                                  | Pending |
-| 7   | **After End or Exit, reload the link-opened tab**: the link deals again from its card (or card 1), with a fresh crawl.                                     | Pending |
-| 8   | **The Spanish and Catalan prompt and share caption read naturally** — part of the native-speaker pass the three-languages section already owes.            | Pending |
+| #   | Check                                                                                                                                                             | Status  |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| 1   | **Share a link mid-game from one phone and open it on another**: the recipient starts on the sender's card, and the cards after it come in the same order.        | Pending |
+| 2   | **Share after "Play again"** and open it on a second device: the order matches the sender's (this was the bug).                                                   | Pending |
+| 3   | **A link minted by `104c1e2` (it carries `v=2`)** still deals the order its sender saw after this deploy — the `v` is ignored now, and the algorithm is the same. | Pending |
+| 4   | **Reload a link-opened tab mid-game, flipped and unflipped**: no prompt, same card, same flip state.                                                              | Pending |
+| 5   | **Open a different link with a game in progress**: the prompt appears; "Keep my game" resumes it; "Play the shared deck" deals the link.                          | Pending |
+| 6   | **The prompt in the browser for a game started in the installed app** (the TWA shares Chrome's storage), and the reverse.                                         | Pending |
+| 7   | **After End or Exit, reload the link-opened tab**: the link deals again from its card (or card 1), with a fresh crawl.                                            | Pending |
+| 8   | **The Spanish and Catalan prompt and share caption read naturally** — part of the native-speaker pass the three-languages section already owes.                   | Pending |
 
 ### The suggestion multi-select — built 2026-08-12, and the gesture itself is the part nothing local runs
 
