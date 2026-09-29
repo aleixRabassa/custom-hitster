@@ -210,7 +210,7 @@ export function WelcomeScreen({ onStart }: WelcomeScreenProps) {
           />
         </h1>
 
-        <p className="text-xl font-semibold">{copy.welcome.tagline}</p>
+        <p className="text-xl font-semibold text-fg-secondary">{copy.welcome.tagline}</p>
 
         {/*
           The big button. `text-on-accent`, not `text-white`, for the contrast reason the picker's
