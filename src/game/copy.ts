@@ -147,7 +147,7 @@ export const COPY = {
     printCards: 'Print your cards',
     /** Names the first printed year; the range itself is in `yearCardsFileName`. See the block above. */
     printDetail:
-      'A printable PDF of year cards from 1970. Print it, cut them out, and lay out the timeline on a table.',
+      'Download a printable PDF of year cards from 1970. Print it, cut them out, and lay out the timeline on a table.',
     /**
      * The saved file's name, user-visible in a downloads list -- which is why it is copy, exactly as
      * `pdf.fileName` is. The asset's path under `public/` is a different string and lives with the

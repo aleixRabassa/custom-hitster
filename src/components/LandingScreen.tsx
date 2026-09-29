@@ -184,7 +184,7 @@ export const SUGGESTED_PLAYLISTS: readonly SuggestedPlaylist[] = [
     label: 'Disney: top 100',
     blurbKey: 'disney',
   },
-  { id: '5y50Cn8dw3C25s2mwnCWQJ', label: 'Mejores BSO del cine', blurbKey: 'filmScores' },
+  { id: '5y50Cn8dw3C25s2mwnCWQJ', label: 'Mejores BSO', blurbKey: 'filmScores' },
   { id: '7m1C1eHUC2kJQL69dGMjaz', label: 'EDM Hits of All Time', blurbKey: 'edm' },
   { id: '37i9dQZF1DX8FwnYE6PRvL', label: 'Rock Party', blurbKey: 'rock' },
   { id: '37i9dQZF1DX1HCSfq0nSal', label: 'PEGAO', blurbKey: 'reggaeton' },

@@ -40,7 +40,7 @@ export const COPY_CA = {
     printHeading: 'Prefereixes el paper?',
     printCards: 'Imprimeix les cartes',
     printDetail:
-      'Descarrega el pdf amb cartes desde 1970. Imprimeix-lo, retalla les cartes i juga físicament.',
+      'Descarrega un pdf imprimible amb cartes desde 1970. Imprimeix-lo, retalla les cartes i juga físicament.',
     yearCardsFileName: COPY.welcome.yearCardsFileName,
   },
 

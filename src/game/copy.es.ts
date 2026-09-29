@@ -19,21 +19,21 @@ export const COPY_ES = {
       pick: {
         title: 'Elige tus playlists',
         body: (maxPlaylists: number) =>
-          `Pega hasta ${maxPlaylists} enlaces de playlists de Spotify, o elige una sugerida. Las canciones se barajan en un solo mazo.`,
+          `Pega hasta ${maxPlaylists} playlists de Spotify, o elige entre las sugeridas. Las canciones se barajan en un solo mazo.`,
       },
       play: {
         title: 'Juega la carta',
-        body: 'Pulsa Reproducir para escuchar un fragmento, o escanea el código QR de la carta para abrir la canción completa en Spotify.',
+        body: 'Pulsa play para escuchar un fragmento, o escanea el código QR para escucharla completa en Spotify.',
       },
       guess: {
         title: 'Adivina el año',
-        body: 'Adivina el año y toca la carta para ver la respuesta. Desliza a la derecha para sacar la siguiente carta, o a la izquierda para volver a la anterior.',
+        body: 'Adivina el año y toca la carta para ver la respuesta. Desliza a la derecha para pasar a la siguiente, o a la izquierda para volver a la anterior.',
       },
     },
     printHeading: '¿Prefieres papel?',
     printCards: 'Imprime tus cartas',
     printDetail:
-      'Un PDF imprimible con cartas de años desde 1970. Imprímelo, recórtalas y monta la línea del tiempo sobre la mesa.',
+      'Descarga un PDF imprimible con cartas desde 1970. Imprímelo, recórtalas y juega físicamente.',
     yearCardsFileName: COPY.welcome.yearCardsFileName,
   },
 
@@ -57,9 +57,9 @@ export const COPY_ES = {
       mixedHits: 'Éxitos variados',
       argentineTrap: 'Trap argentino',
       catalanHits: 'Éxitos en catalán',
-      catalanAnimeOpenings: 'Openings de anime en catalán',
+      catalanAnimeOpenings: 'Openings anime catalán',
       disney: 'Bandas sonoras de Disney',
-      filmScores: 'Bandas sonoras de cine y series',
+      filmScores: 'BSO de cine y series',
       edm: 'EDM',
       rock: 'Rock',
       reggaeton: 'Reggaeton',
