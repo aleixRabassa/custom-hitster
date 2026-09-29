@@ -26,15 +26,15 @@ export const COPY_CA = {
       pick: {
         title: 'Tria les teves playlists',
         body: (maxPlaylists: number) =>
-          `Enganxa fins a ${maxPlaylists} enllaços de playlists de Spotify, o tria'n una de suggerida. Les cançons es barregen en una sola baralla.`,
+          `Enganxa fins a ${maxPlaylists} enllaços de playlists de Spotify, o tria'n de les suggerides. Les cançons es barregen en una sola baralla.`,
       },
       play: {
         title: 'Fes sonar la carta',
-        body: 'Prem Reprodueix per escoltar un fragment, o escaneja el codi QR de la carta per obrir la cançó sencera a Spotify.',
+        body: 'Prem play per escoltar un fragment, o escaneja el codi QR de la carta per escoltar-la sencera a Spotify.',
       },
       guess: {
         title: "Endevina l'any",
-        body: "Endevina l'any i toca la carta per veure la resposta. Llisca cap a la dreta per treure la carta següent, o cap a l'esquerra per tornar a l'anterior.",
+        body: "Endevina l'any i toca la carta per veure la resposta. Llisca a la dreta per passar a la següent carta, o cap a l'esquerra per tornar a l'anterior.",
       },
     },
     printHeading: 'Prefereixes el paper?',
