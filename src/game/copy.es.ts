@@ -71,7 +71,7 @@ export const COPY_ES = {
   },
 
   language: {
-    label: 'Elige idioma',
+    label: 'Escoge el idioma',
   },
 
   preparing: {

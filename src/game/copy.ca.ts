@@ -26,21 +26,21 @@ export const COPY_CA = {
       pick: {
         title: 'Tria les teves playlists',
         body: (maxPlaylists: number) =>
-          `Enganxa fins a ${maxPlaylists} enllaços de playlists de Spotify, o tria'n de les suggerides. Les cançons es barregen en una sola baralla.`,
+          `Enganxa fins a ${maxPlaylists} playlists de Spotify, o tria'n de les suggerides. Les cançons es barregen en una sola baralla.`,
       },
       play: {
         title: 'Fes sonar la carta',
-        body: 'Prem play per escoltar un fragment, o escaneja el codi QR de la carta per escoltar-la sencera a Spotify.',
+        body: 'Prem play per escoltar-ne un fragment, o escaneja el codi QR per escoltar-la sencera a Spotify.',
       },
       guess: {
         title: "Endevina l'any",
-        body: "Endevina l'any i toca la carta per veure la resposta. Llisca a la dreta per passar a la següent carta, o cap a l'esquerra per tornar a l'anterior.",
+        body: "Endevina l'any i toca la carta per descobrir la resposta. Llisca a la dreta per passar a la següent, o a l'esquerra per tornar a l'anterior.",
       },
     },
     printHeading: 'Prefereixes el paper?',
     printCards: 'Imprimeix les cartes',
     printDetail:
-      "Un PDF imprimible amb cartes d'any a partir del 1970. Imprimeix-lo, retalla les cartes i munta la línia del temps sobre una taula.",
+      'Descarrega el pdf amb cartes desde 1970. Imprimeix-lo, retalla les cartes i juga físicament.',
     yearCardsFileName: COPY.welcome.yearCardsFileName,
   },
 
@@ -64,9 +64,9 @@ export const COPY_CA = {
       mixedHits: 'Èxits variats',
       argentineTrap: 'Trap argentí',
       catalanHits: 'Èxits en català',
-      catalanAnimeOpenings: "Sintonies d'anime en català",
-      disney: 'Bandes sonores de Disney',
-      filmScores: 'Bandes sonores de cinema i sèries',
+      catalanAnimeOpenings: "Openings d'anime català",
+      disney: 'Bandes sonores Disney',
+      filmScores: 'BSO de cine i sèries',
       edm: 'EDM',
       rock: 'Rock',
       reggaeton: 'Reggaeton',
@@ -78,7 +78,7 @@ export const COPY_CA = {
   },
 
   language: {
-    label: 'Tria idioma',
+    label: "Tria l'idioma",
   },
 
   preparing: {

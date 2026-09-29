@@ -181,7 +181,7 @@ export const SUGGESTED_PLAYLISTS: readonly SuggestedPlaylist[] = [
   { id: '6xrNthbRvaWedC81pc78xo', label: 'Openings Català', blurbKey: 'catalanAnimeOpenings' },
   {
     id: '3iANnuxueS6wustAWPbCgW',
-    label: 'Disney: las 100 mejores',
+    label: 'Disney: top 100',
     blurbKey: 'disney',
   },
   { id: '5y50Cn8dw3C25s2mwnCWQJ', label: 'Mejores BSO del cine', blurbKey: 'filmScores' },
@@ -190,7 +190,7 @@ export const SUGGESTED_PLAYLISTS: readonly SuggestedPlaylist[] = [
   { id: '37i9dQZF1DX1HCSfq0nSal', label: 'PEGAO', blurbKey: 'reggaeton' },
   {
     id: '7nnjdGCdCe24vVeSlFpGQV',
-    label: 'Electro Latino Mejores Temazos',
+    label: 'Electro Latino Temazos',
     blurbKey: 'latinElectro',
   },
   { id: '37i9dQZEVXbMDoHDwVN2tF', label: 'Top 50 Global', blurbKey: 'globalChart' },
@@ -606,7 +606,7 @@ export function LandingScreen({
               className="size-48"
             />
           </h1>
-          <p className="text-sm text-fg-secondary">{copy.landing.intro(MAX_DECK_PLAYLISTS)}</p>
+          <p className="text-xl text-fg-secondary">{copy.landing.intro(MAX_DECK_PLAYLISTS)}</p>
         </div>
 
         <form
