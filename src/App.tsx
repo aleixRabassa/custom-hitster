@@ -37,14 +37,16 @@ import { EndScreen } from './components/EndScreen';
 import { LandingScreen } from './components/LandingScreen';
 import { NoticeBanner } from './components/NoticeBanner';
 import { PreparingScreen } from './components/PreparingScreen';
+import { ReplaceSessionPrompt } from './components/ReplaceSessionPrompt';
 import { WelcomeScreen } from './components/WelcomeScreen';
-import { parseDeckLink } from './game/deck-link';
+import { linkArrivalIntent, parseDeckLink } from './game/deck-link';
 import { deckBaseName, deckLabel } from './game/deck-merge';
 import { loadLibrary, removePlaylist, savePlaylist, savedDeckKey } from './game/playlist-library';
 import { useGameSession } from './game/use-game-session';
 import { useCopy } from './hooks/useLocale';
 import { usePlaylist } from './hooks/usePlaylist';
 import { spotifyPlaylistUrl } from '../shared/spotify-url';
+import type { DeckLink } from './game/deck-link';
 import type { MergedDeck } from './game/deck-merge';
 import type { StartFailureCode } from './game/messages';
 import type { PlaylistFetch } from './game/playlist-client';
@@ -159,6 +161,9 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
     // The PDF export's gate. Zero means every card in the deck carries a real year, so a printed
     // sheet is the whole deck rather than a quietly short one -- see `DeckActions`.
     pendingYearCount,
+    // The end screen's count: the deck minus the cards before where this player started, which is
+    // not the whole deck when a shared link started them mid-deck (2026-09-29).
+    cardsPlayed,
     // `resolvedCount` is deliberately still NOT taken from the hook: the preparing screen's "N of M
     // years found" line was removed and it was this container's only consumer. Its COMPLEMENT is
     // taken, above -- which is the "a later phase will want a progress readout, and it will want it
@@ -263,22 +268,67 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
    *  nothing else; the SUBMISSION is what has to be idempotent, and the ref below
    *  is what makes it so.
    *
-   *  A SAVED SESSION OUTRANKS A LINK (step 8, decision 3). `useGameSession`'s own
-   *  lazy initialiser has already run by this line, so `state.status` is `idle`
-   *  exactly when there was nothing to resume -- and any other status means a game
-   *  is in progress. Opening an old share link must not silently discard it, so the
-   *  link is not even read in that case. The params stay in the address bar, so a
-   *  player who finishes or exits can reload to use them.
+   *  PARSED WHATEVER THE STATUS, SINCE 2026-09-29 (decision D4). It used to be
+   *  read only when there was nothing to resume -- "a saved session outranks a
+   *  link", silently. Now a link opened over a saved game is ASKED about, so the
+   *  container needs the link in every case to choose between dealing it,
+   *  resuming, and asking. That choice is `linkArrival`, below.
    * ===========================================================================
    */
-  const [deckLink] = useState(() =>
-    state.status === 'idle' ? parseDeckLink(search ?? window.location.search) : null,
+  const [deckLink] = useState(() => parseDeckLink(search ?? window.location.search));
+
+  /**
+   * What the link does on arrival: deal, resume the saved game silently, or ask. Decided ONCE.
+   *
+   * ===========================================================================
+   *  A RELOAD NEVER MODIFIES A GAME (decision D2, 2026-09-29).
+   *
+   *  `useGameSession`'s lazy initialiser has already run by this line, so
+   *  `state.status` is the RESTORED status. Three cases, and `linkArrivalIntent`
+   *  in `deck-link.ts` is where they are decided and tested:
+   *
+   *  - Nothing to resume (`idle`, or a restored deck that collapsed to `ended`)
+   *    -> `deal`, exactly as a link always did. After End or Exit the save is
+   *    cleared, so a reload of a link-opened tab deals the link again: the game
+   *    no longer exists, and that re-deal is accepted.
+   *  - The link describes the saved deck -- same seed, same shuffle version, the
+   *    saved playlists all named by it -> `resume`, with no prompt. That is a
+   *    reload of the tab the link was opened in, and asking "replace your game?"
+   *    on every reload would be the modification the developer ruled out. The
+   *    link's `card` is NOT compared: the sender's position must never move a
+   *    reloader off their own card.
+   *  - Any other link over a saved game -> `ask` (`ReplaceSessionPrompt`).
+   *
+   *  A lazy initialiser rather than a derivation, because the answer is about the
+   *  session that was on disk when the tab opened. Recomputed on a later render it
+   *  would compare the link against whatever game is being played by then.
+   *
+   *  A declined prompt is NOT remembered (the developer's choice): the params stay
+   *  in the address bar, so every reload during the player's own game asks again,
+   *  and once that game ends a reload deals the link.
+   * ===========================================================================
+   */
+  const [linkArrival] = useState(() =>
+    deckLink === null ? null : linkArrivalIntent(deckLink, state),
+  );
+
+  /**
+   * The replace-your-game prompt: open, accepted (the link's fetch is in flight), or closed.
+   *
+   * `accepted` is NOT closed on purpose. The saved game is only replaced when the link's deck
+   * actually DEALS -- the deal effect's `start()` does that, and closes this -- so a fetch that fails
+   * leaves the player on the prompt with the error and their game untouched. Ending the saved game
+   * on the press would have made a failed fetch cost them the game they chose to give up for a deck
+   * they never got.
+   */
+  const [linkPrompt, setLinkPrompt] = useState<'open' | 'accepted' | 'closed'>(() =>
+    linkArrival === 'ask' ? 'open' : 'closed',
   );
 
   // See the block above `deckLink`: a link counts as having pressed through the front door, and so
   // does a restored session (`state.status` is already the restored status on this first render).
-  // The two terms are exclusive by construction -- `deckLink` is only read when the status is
-  // `idle` -- so on a resume the second term is the whole truth.
+  // Since 2026-09-29 both terms can be true at once -- the link is parsed over a saved game too --
+  // and either is enough on its own.
   const [hasEnteredPicker, setHasEnteredPicker] = useState(
     deckLink !== null || state.status !== 'idle',
   );
@@ -305,14 +355,16 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
   const [savedPlaylists, setSavedPlaylists] = useState(() => loadLibrary(libraryStorage));
 
   /**
-   * The seed the next deal should use, or null for a fresh one.
+   * The link the next deal comes from, or null for a fresh shuffle.
    *
    * A REF rather than state, and that is step 9's "the seed rides along, it does not become a
-   * second trigger": the deal effect below is keyed on the fetch RESULT's identity, and a seed in
+   * second trigger": the deal effect below is keyed on the fetch RESULT's identity, and a link in
    * state would add a second dependency that could fire it again. Consumed and cleared by the deal,
-   * so it applies to exactly the one deck the link asked for.
+   * so the seed, the shuffle version and the start card apply to exactly the one deck the link
+   * asked for -- all three together, since 2026-09-29, because a seed dealt with the wrong algorithm
+   * or from the wrong card is a different deck.
    */
-  const pendingSeedRef = useRef<string | null>(null);
+  const pendingLinkRef = useRef<DeckLink | null>(null);
 
   /**
    * The notices from the fetch, held here rather than read from `requestState`.
@@ -332,6 +384,7 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
     failedPlaylistCount: number;
     deckSize: number;
     loadedPlaylistCount: number;
+    startCardMissing: boolean;
   } | null>(null);
 
   /**
@@ -361,39 +414,58 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
     if (dealtDeckRef.current === deck) return;
     dealtDeckRef.current = deck;
 
+    // The share link, if this deal is the one it asked for. Cleared as it is consumed: a later
+    // submission from the landing form gets a fresh shuffle, which is what asking for another
+    // playlist means.
+    const link = pendingLinkRef.current;
+    pendingLinkRef.current = null;
+
+    // A link whose card has left the playlist since it was shared still deals -- from the top, which
+    // the reducer does by itself when no card matches -- and says so, since "the link opens on the
+    // card being played" is what the sender was told. Detectable here, and only here: the merged
+    // cards are the recipient's whole deck before anything is dropped.
+    const startCardId = link?.cardId ?? null;
+    const startCardMissing =
+      startCardId !== null && !deck.cards.some((card) => card.id === startCardId);
+
     setNotice({
       truncated: deck.truncated,
       skippedCount: deck.skippedCount,
       failedPlaylistCount: deck.failures.length,
       deckSize: deck.cards.length,
       loadedPlaylistCount: deck.playlists.length,
+      startCardMissing,
     });
     setEndedView('end-screen');
-
-    // The seed from a share link, if this deal is the one it asked for. Cleared as it is consumed:
-    // a later submission from the landing form gets a fresh shuffle, which is what asking for
-    // another playlist means. `start`'s third argument is the whole feature -- `GameState.seed`
-    // predicted it, so the reducer is untouched.
-    const seed = pendingSeedRef.current;
-    pendingSeedRef.current = null;
+    // An accepted replace-your-game prompt closes HERE, on the deal, and not on the press: this
+    // `start()` is what replaces the saved game. Unconditional because nothing else requests a deck
+    // while the prompt is open.
+    setLinkPrompt('closed');
 
     // Straight through: the merge already put the loaded playlists in row order and the cards in
     // one deduped deck, so the container adds nothing to either. One playlist is the `n = 1` case.
-    if (seed === null) start(deck.cards, deck.playlists);
-    else start(deck.cards, deck.playlists, seed);
+    if (link === null) {
+      start(deck.cards, deck.playlists);
+    } else {
+      start(deck.cards, deck.playlists, {
+        seed: link.seed,
+        shuffleVersion: link.shuffleVersion,
+        ...(startCardId === null ? {} : { startCardId }),
+      });
+    }
   }, [requestState, start]);
 
   /**
    * Submit the playlists the player asked for by hand.
    *
    * Wrapping `request` rather than passing it straight to the landing screen, for one reason: it
-   * DROPS a pending link seed. A link whose fetch failed leaves the seed set, and applying it to
-   * whatever playlists the player pastes next would deal that deck in an order somebody else's link
-   * chose -- harmless, but not what either of them asked for.
+   * DROPS a pending link. A link whose fetch failed leaves it set, and applying its seed and start
+   * card to whatever playlists the player pastes next would deal that deck in an order somebody
+   * else's link chose -- harmless, but not what either of them asked for.
    */
   const handleSubmit = useCallback(
     (urls: string[]) => {
-      pendingSeedRef.current = null;
+      pendingLinkRef.current = null;
       request(urls);
     },
     [request],
@@ -428,9 +500,9 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
    *  EVER DEALS: a shared link leaves the player on the landing screen forever,
    *  in development only. That is what the first version of this effect did.
    *
-   *  It needs no guard, because both dependencies are stable by construction:
-   *  `deckLink` is set once by a lazy initialiser and never updated, and
-   *  `request` is a `useCallback` with an empty dependency list. So the body runs
+   *  It needs no guard, because every dependency is stable by construction:
+   *  `deckLink` and `linkArrival` are set once by lazy initialisers and never
+   *  updated, and `request` is a `useCallback` with an empty dependency list. So the body runs
    *  exactly once per mount -- once in production, twice under StrictMode with
    *  the first request aborted, which is the same shape as the year resolver's
    *  own double-mount behaviour.
@@ -440,7 +512,10 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
    * ===========================================================================
    */
   useEffect(() => {
-    if (deckLink === null) return;
+    // Only a link that DEALS on arrival requests here. One over a saved game either resumes that
+    // game (a reload) or waits for the prompt, whose accept handler requests from the click -- a
+    // click is not a dependency, so this effect's stability argument above is untouched.
+    if (deckLink === null || linkArrival !== 'deal') return;
 
     /*
       1..5 ids, all of them. `parseDeckLink` has already deduped them, capped them and rejected the
@@ -448,7 +523,31 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
       which is the point of it being a pure module. A single-id link is the `n = 1` case, so every
       link shared before this feature existed still deals exactly the deck it always did.
     */
-    pendingSeedRef.current = deckLink.seed;
+    pendingLinkRef.current = deckLink;
+    request(deckLink.playlistIds.map((id) => spotifyPlaylistUrl(id)));
+  }, [deckLink, linkArrival, request]);
+
+  /**
+   * The prompt's "keep my game": close it and resume the saved game, which never stopped being the
+   * session. The request is reset so an error from a failed "play the shared deck" does not follow
+   * the player onto the picker when their own game ends.
+   */
+  const handleKeepSession = useCallback(() => {
+    pendingLinkRef.current = null;
+    setLinkPrompt('closed');
+    resetRequest();
+  }, [resetRequest]);
+
+  /**
+   * The prompt's "play the shared deck": fetch the link's playlists exactly as a link on a fresh
+   * visit would. The prompt stays up (with its loading state) until the deal effect's `start()`
+   * replaces the saved game; pressing it again after a failed fetch is the retry.
+   */
+  const handleReplaceSession = useCallback(() => {
+    if (deckLink === null) return;
+
+    pendingLinkRef.current = deckLink;
+    setLinkPrompt('accepted');
     request(deckLink.playlistIds.map((id) => spotifyPlaylistUrl(id)));
   }, [deckLink, request]);
 
@@ -472,7 +571,12 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
     // resolved years travel with the cards, and it works after a RESUMED session -- where the
     // original `/api/playlist` response no longer exists in memory.
     //
-    // No seed argument, so `START` generates a new one and the order actually changes.
+    // No seed argument, so `START` generates a new one and the order actually changes -- and no
+    // shuffle version, so it is dealt with the CURRENT algorithm even when the game before it was a
+    // version-1 link. That is what makes a link shared after Play again reproduce this deck
+    // (2026-09-29): the version-2 hash sort depends only on the SET of cards, so re-dealing
+    // `state.deck` with a seed gives the recipient's raw fetch, dealt with that seed, the same order.
+    // Under Fisher-Yates it did not, because the permutation was applied to a different input order.
     if (state.playlists.length > 0) start(state.deck, state.playlists);
   }, [start, state.deck, state.playlists]);
 
@@ -647,6 +751,7 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
         failedPlaylistCount={notice?.failedPlaylistCount ?? 0}
         deckSize={notice?.deckSize ?? 0}
         loadedPlaylistCount={notice?.loadedPlaylistCount ?? 0}
+        startCardMissing={notice?.startCardMissing ?? false}
         // The one notice that comes from game state rather than from the fetch: no
         // `MUSICBRAINZ_USER_AGENT` on the server means no card will ever get a year.
         yearLookupsUnavailable={state.yearLookupsUnavailable}
@@ -659,6 +764,20 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
   // =========================================================================
   //  THE STATUS SWITCH
   // =========================================================================
+
+  // A link opened over a saved game, asked about BEFORE any status is rendered (decision D4). Its
+  // own branch rather than an overlay on the game screen, so nothing of the saved game is mounted
+  // underneath: no Back-button history entry, no window key handler, no card audio.
+  if (linkPrompt !== 'closed') {
+    return (
+      <ReplaceSessionPrompt
+        onKeep={handleKeepSession}
+        onReplace={handleReplaceSession}
+        isLoading={requestState.status === 'loading'}
+        {...(requestState.status === 'error' ? { errorCode: requestState.code } : {})}
+      />
+    );
+  }
 
   if (state.status === 'idle') {
     // The front door, until the player walks through it -- or until a link does it for them: the
@@ -687,9 +806,10 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
 
     return (
       <EndScreen
-        // The deck's length, not `currentIndex + 1`: a natural finish means every card was played,
-        // and the reducer leaves `currentIndex` on the LAST card rather than one past the end.
-        cardsPlayed={state.deck.length}
+        // Not `currentIndex + 1`: a natural finish means every card from the player's start was
+        // played, and the reducer leaves `currentIndex` on the LAST card rather than one past the
+        // end. Not the deck's length either since 2026-09-29: a link can start the player mid-deck.
+        cardsPlayed={cardsPlayed}
         playlistName={playlistName}
         // The full list, and this is the ONLY screen that gets it (decision 9). Post-game, so
         // nothing can be spoiled, and it is the one surface with room for five names.
@@ -697,12 +817,16 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
         onRestart={handleRestart}
         onHome={handleHome}
         /*
-          The share link's two ingredients, straight from live state rather than remembered: a
-          Restart deals a FRESH seed, and the end screen unmounts and remounts around it, so these
-          props can never describe a deck other than the one just played.
+          The share link's ingredients, straight from live state rather than remembered: a Restart
+          deals a FRESH seed, and the end screen unmounts and remounts around it, so these props
+          always name the seed and algorithm the deck just played was dealt with. Since 2026-09-29
+          that is also enough for the link to REPRODUCE it after a Restart -- see `handleRestart`.
+          No start card: the end screen's link opens at the top, since the player's position is the
+          last card.
         */
         playlistIds={playlistIds}
         seed={state.seed}
+        shuffleVersion={state.shuffleVersion}
         shareOrigin={shareOrigin()}
         // The deck, for the PDF export and for nothing else. This screen renders no track data --
         // its own leak test asserts that -- and the cards go into a file the player asked for.
@@ -752,11 +876,12 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
           the same live state -- which is what makes the share link correct here too: it is built at
           click time from the seed this deck was actually dealt with.
 
-          Not one of them derives from a card, so the game screen's leak story is unchanged by the
-          whole feature. The deck itself is already a prop of this screen.
+          None of these derives from a card. The link's start card (2026-09-29) is read by
+          `GameScreen` itself from the deck and index it already has -- see its own props.
         */
         playlistIds={playlistIds}
         seed={state.seed}
+        shuffleVersion={state.shuffleVersion}
         shareOrigin={shareOrigin()}
         onSavePlaylist={handleSavePlaylist}
         isPlaylistSaved={isPlaylistSaved}

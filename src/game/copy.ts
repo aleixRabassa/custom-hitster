@@ -131,7 +131,7 @@ export const COPY = {
       pick: {
         title: 'Pick your playlists',
         body: (maxPlaylists: number) =>
-          `Paste up to ${maxPlaylists} public Spotify playlist links, or start from one of the suggestions. The tracks are shuffled into one deck.`,
+          `Paste up to ${maxPlaylists} Spotify playlist links, or pick a suggested one. The tracks are shuffled into one deck.`,
       },
       play: {
         title: 'Play the card',
@@ -139,7 +139,7 @@ export const COPY = {
       },
       guess: {
         title: 'Guess the year',
-        body: 'Say when it came out, then tap the card to flip it and see the answer. Swipe right to deal the next card, or left to go back one.',
+        body: 'Guess the year and tap the card to see the answer. Swipe right to deal the next card, or left to go back one.',
       },
     },
     printHeading: 'Prefer paper?',
@@ -211,7 +211,7 @@ export const COPY = {
    * recognise their own.
    */
   language: {
-    label: 'Language',
+    label: 'Select language',
   },
 
   preparing: {
@@ -263,6 +263,12 @@ export const COPY = {
       `${deckSize} cards from ${playlistCount} playlists, shuffled into one deck.`,
     yearsUnavailable:
       'Years are unavailable on this deployment, so cards will not show one. The deck is still playable — scan a card to hear the song.',
+    /**
+     * A mid-game share link named a card this deck no longer holds -- the playlist changed, or the
+     * card was dropped as yearless -- so the recipient starts at the top instead (2026-09-29).
+     */
+    startCardMissing:
+      'The card this link was shared from is no longer in the playlist, so the deck starts from the top.',
     dismiss: 'Dismiss notice',
   },
 
@@ -292,10 +298,18 @@ export const COPY = {
      *  Pluralised on the id count rather than left as "playlist(s)": this is the
      *  sentence that has to be read and believed, and a slash in it reads as
      *  boilerplate.
+     *
+     *  TWO VARIANTS SINCE 2026-09-29 (review of the shuffle system, D3). A link
+     *  copied MID-GAME carries the current card, so the recipient starts on it;
+     *  an end-screen link does not, because after the last card a position would
+     *  drop the recipient on the final card. Both say what can still differ: the
+     *  shuffle keeps the relative order of every shared card, but if the playlist
+     *  gained or lost tracks since, the CARD SET does not match -- "the tracks may
+     *  differ", not "slightly", which undersold a length change.
      * ===========================================================================
      */
-    shareCaption: (playlistCount: number) =>
-      `${playlistCount === 1 ? 'Same playlist' : 'Same playlists'}, same shuffle — the years are looked up again, so the deck can differ slightly`,
+    shareCaption: (playlistCount: number, fromCurrentCard: boolean) =>
+      `${playlistCount === 1 ? 'Same playlist' : 'Same playlists'}, same shuffle${fromCurrentCard ? ', starting from the card you are on' : ''} — if a playlist has changed since, some tracks may differ`,
     save: 'Save this playlist',
     saved: 'Saved to your playlists',
     print: 'Print as PDF cards',
@@ -323,6 +337,25 @@ export const COPY = {
   deckActionsDialog: {
     title: 'Keep this deck',
     close: 'Back to the game',
+  },
+
+  /**
+   * The question asked when a share link is opened over a saved game that is NOT that link's own
+   * deck (2026-09-29, decision D4). A full screen of its own, not an overlay. It holds no track data
+   * -- it has none -- so nothing here names a card.
+   */
+  replaceSession: {
+    heading: 'You have a game in progress',
+    body: 'This link is for a different deck. Playing it replaces your saved game once the new deck is dealt.',
+    /** The safe default, and the one that takes focus. */
+    keep: 'Keep my game',
+    replace: 'Play the shared deck',
+    /** Beside the spinner, which reduced motion hides -- so this line carries the whole state. */
+    replacing: 'Loading the shared deck…',
+    /** The replace button's label once the link's fetch has failed: pressing it tries again. */
+    retry: 'Try the shared deck again',
+    /** Under the fetch error, because the question a player has next is "did I lose my game?". */
+    savedGameIntact: 'Your saved game has not been touched.',
   },
 
   exitDialog: {

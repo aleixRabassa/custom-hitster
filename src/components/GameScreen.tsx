@@ -91,6 +91,7 @@ import { Hud } from './Hud';
 import { useCopy } from '../hooks/useLocale';
 import { useBackNavigation } from '../hooks/useBackNavigation';
 import { useCardAudio } from '../hooks/useCardAudio';
+import type { ShuffleVersion } from '../game/shuffle';
 import type { Card as CardData } from '../../shared/types';
 
 /** `KeyboardEvent.key` for the flip. A literal because `'Space'` is the *code*, not the key. */
@@ -143,13 +144,21 @@ export interface GameScreenProps {
   /**
    * The deck's 1..5 Spotify playlist ids, from `state.playlists`. One half of the share link.
    *
-   * These five are the deck-actions props, straight through to `DeckActionsDialog` and used for
-   * nothing else here. They are playlist-level and seed-level -- not one of them derives from a
-   * card, which is what keeps this screen's leak story unchanged by the whole feature.
+   * These are the deck-actions props, straight through to `DeckActionsDialog` and used for nothing
+   * else here. They are playlist-level and seed-level, and not one of them derives from a card.
+   *
+   * ONE thing the dialog gets from this screen DOES (2026-09-29, D3): the current card's track id,
+   * `currentCardId`, taken from `deck[currentIndex]` below rather than passed in, so a mid-game
+   * share link starts the recipient on the card the sender is on. It can reach the DOM only inside
+   * the link's copy-failed fallback, and it is not new information on this screen -- the QR on the
+   * current card encodes exactly that id. It is never a title, an artist or a year, which is what
+   * the leak rule protects; `GameScreen.test.tsx` asserts all three stay out of that fallback.
    */
   playlistIds: readonly string[];
   /** The seed this deck was dealt with, from `state.seed`. The other half of the link. */
   seed: string;
+  /** Which algorithm dealt the deck from `seed`, from `state.shuffleVersion`. Goes into the link. */
+  shuffleVersion: ShuffleVersion;
   /** Where a shared link should point -- `origin + pathname`, supplied by the container. */
   shareOrigin: string;
   /** Save this playlist to the landing screen's library. */
@@ -204,6 +213,7 @@ export function GameScreen({
   playlistName,
   playlistIds,
   seed,
+  shuffleVersion,
   shareOrigin,
   onSavePlaylist,
   isPlaylistSaved,
@@ -521,6 +531,10 @@ export function GameScreen({
           playlistIds={playlistIds}
           playlistName={playlistName}
           seed={seed}
+          shuffleVersion={shuffleVersion}
+          // The card on screen at the moment of the press, so a mid-game link starts the recipient
+          // there (D3). Spread rather than passed as `undefined`, for `exactOptionalPropertyTypes`.
+          {...(currentCard === undefined ? {} : { currentCardId: currentCard.id })}
           shareOrigin={shareOrigin}
           onSavePlaylist={onSavePlaylist}
           isPlaylistSaved={isPlaylistSaved}

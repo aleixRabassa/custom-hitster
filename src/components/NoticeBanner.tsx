@@ -1,5 +1,5 @@
 /**
- * The five non-blocking notices, as a dismissible banner.
+ * The six non-blocking notices, as a dismissible banner.
  *
  * ===========================================================================
  *  NO NOTICE HERE MAY EVER GATE START.
@@ -7,10 +7,10 @@
  *  Every one of these describes a deck that is already dealt and already
  *  playable: a playlist that may hold more tracks than we could read, a handful
  *  of unreadable entries left out, a deployment with no year lookups at all, a
- *  playlist among several that could not be loaded, or simply how big the
- *  combined deck came out. None of them is a reason to stop. A modal, a confirm
- *  step, or a disabled Start button here would turn five footnotes into five
- *  obstacles.
+ *  playlist among several that could not be loaded, how big the combined deck
+ *  came out, or a shared link whose starting card is no longer in the deck. None
+ *  of them is a reason to stop. A modal, a confirm step, or a disabled Start
+ *  button here would turn six footnotes into six obstacles.
  * ===========================================================================
  *
  * Count-only, like every other pre-reveal surface: "3 tracks could not be read" names no track,
@@ -65,6 +65,16 @@ export interface NoticeBannerProps {
    * year. The deck is still playable -- the QR always works.
    */
   yearLookupsUnavailable: boolean;
+  /**
+   * A mid-game share link named a starting card (`&card=`) that this deck does not hold -- the
+   * playlist changed since the link was made, or the card never made it into the recipient's deck
+   * -- so the game fell back to card 1 (2026-09-29, D3). Optional and false by default: only a
+   * link-dealt deck can set it.
+   *
+   * A boolean, never the id: the banner sits above an unflipped card, and naming the missing track
+   * would be naming a card the player has not played.
+   */
+  startCardMissing?: boolean;
   onDismiss: () => void;
 }
 
@@ -75,6 +85,7 @@ export function NoticeBanner({
   deckSize = 0,
   loadedPlaylistCount = 0,
   yearLookupsUnavailable,
+  startCardMissing = false,
   onDismiss,
 }: NoticeBannerProps) {
   const copy = useCopy();
@@ -105,6 +116,12 @@ export function NoticeBanner({
     notices.push(copy.notice.yearsUnavailable);
   }
 
+  // Worth a line because the link PROMISED a position: a recipient who expected to join on the
+  // sender's card and silently gets card 1 reads it as the link being broken.
+  if (startCardMissing) {
+    notices.push(copy.notice.startCardMissing);
+  }
+
   // The common case: nothing applies, so nothing renders. Returning null rather than an empty
   // container matters because the caller lays this out in a flex column.
   if (notices.length === 0) return null;
@@ -126,7 +143,7 @@ export function NoticeBanner({
     >
       <ul className="flex flex-1 flex-col gap-1">
         {notices.map((notice) => (
-          // Keyed on the text itself: the list is derived from three independent booleans, so
+          // Keyed on the text itself: the list is derived from independent conditions, so
           // there is no id to key on, and the strings are distinct by construction.
           <li key={notice}>{notice}</li>
         ))}

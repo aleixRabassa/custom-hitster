@@ -19,14 +19,14 @@ export const COPY_CA = {
 
   welcome: {
     logoAlt: COPY.welcome.logoAlt,
-    tagline: 'El joc de la línia del temps musical, ara amb les teves playlists de Spotify.',
+    tagline: 'El joc de cronologia musical, ara amb les teves playlists de Spotify.',
     enter: 'Comença a jugar',
     howItWorksHeading: 'Com funciona',
     steps: {
       pick: {
         title: 'Tria les teves playlists',
         body: (maxPlaylists: number) =>
-          `Enganxa fins a ${maxPlaylists} enllaços de playlists públiques de Spotify, o comença amb una de les suggerides. Les cançons es barregen en una sola baralla.`,
+          `Enganxa fins a ${maxPlaylists} enllaços de playlists de Spotify, o tria'n una de suggerida. Les cançons es barregen en una sola baralla.`,
       },
       play: {
         title: 'Fes sonar la carta',
@@ -34,7 +34,7 @@ export const COPY_CA = {
       },
       guess: {
         title: "Endevina l'any",
-        body: "Digues quan va sortir i després toca la carta per girar-la i veure la resposta. Llisca cap a la dreta per treure la carta següent, o cap a l'esquerra per tornar a l'anterior.",
+        body: "Endevina l'any i toca la carta per veure la resposta. Llisca cap a la dreta per treure la carta següent, o cap a l'esquerra per tornar a l'anterior.",
       },
     },
     printHeading: 'Prefereixes el paper?',
@@ -78,7 +78,7 @@ export const COPY_CA = {
   },
 
   language: {
-    label: 'Idioma',
+    label: 'Tria idioma',
   },
 
   preparing: {
@@ -129,6 +129,8 @@ export const COPY_CA = {
       `${deckSize === 1 ? '1 carta' : `${deckSize} cartes`} de ${playlistCount} playlists, barrejades en una sola baralla.`,
     yearsUnavailable:
       'Els anys no estan disponibles en aquest desplegament, així que les cartes no en mostraran cap. La baralla es pot jugar igualment — escaneja una carta per escoltar la cançó.',
+    startCardMissing:
+      'La carta des de la qual es va compartir aquest enllaç ja no és a la playlist, així que la baralla comença des del principi.',
     dismiss: "Tanca l'avís",
   },
 
@@ -145,8 +147,8 @@ export const COPY_CA = {
   deckActions: {
     copyLink: "Copia l'enllaç per compartir",
     /** Same playlist(s), same shuffle -- never "the same deck". See the English original. */
-    shareCaption: (playlistCount: number) =>
-      `${playlistCount === 1 ? 'La mateixa playlist' : 'Les mateixes playlists'}, la mateixa barreja — els anys es tornen a buscar, així que la baralla pot variar una mica`,
+    shareCaption: (playlistCount: number, fromCurrentCard: boolean) =>
+      `${playlistCount === 1 ? 'La mateixa playlist' : 'Les mateixes playlists'}, la mateixa barreja${fromCurrentCard ? ', des de la carta on ets' : ''} — si alguna playlist ha canviat, pot ser que algunes cançons siguin diferents`,
     save: 'Desa aquesta playlist',
     saved: 'Desada a les teves playlists',
     print: 'Imprimeix les cartes en PDF',
@@ -177,6 +179,16 @@ export const COPY_CA = {
   deckActionsDialog: {
     title: 'Guarda aquesta baralla',
     close: 'Torna a la partida',
+  },
+
+  replaceSession: {
+    heading: 'Tens una partida en curs',
+    body: "Aquest enllaç és d'una altra baralla. Si la jugues, substituirà la partida desada tan bon punt es reparteixi la nova baralla.",
+    keep: 'Continua amb la meva partida',
+    replace: 'Juga la baralla compartida',
+    replacing: 'Carregant la baralla compartida…',
+    retry: 'Torna a provar la baralla compartida',
+    savedGameIntact: 'La partida desada continua intacta.',
   },
 
   exitDialog: {

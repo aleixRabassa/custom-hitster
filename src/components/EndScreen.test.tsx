@@ -21,6 +21,18 @@ const PLAYLIST_ID = '37i9dQZF1DXcBWIGoYBM5M';
 const SEED = 'a1b2c3d4e5f60718';
 const ORIGIN = 'https://hitster.example/';
 
+/**
+ * Replace `navigator.clipboard` -- see the same helper in `DeckActions.test.tsx`. `undefined` is the
+ * no-clipboard branch, which is the one that renders the copy fallback synchronously.
+ */
+function stubClipboard(writeText: unknown): void {
+  Object.defineProperty(navigator, 'clipboard', {
+    value: writeText === undefined ? undefined : { writeText },
+    configurable: true,
+    writable: true,
+  });
+}
+
 /** A three-playlist deck, and the label `deckLabel()` derives from it. */
 const THREE_PLAYLISTS: PlaylistSummary[] = [
   { id: PLAYLIST_ID, name: 'Rock Classics', owner: 'Spotify' },
@@ -43,6 +55,7 @@ function renderEnd(overrides: Partial<EndScreenProps> = {}) {
     onHome: vi.fn(),
     playlistIds: [PLAYLIST_ID],
     seed: SEED,
+    shuffleVersion: 2,
     shareOrigin: ORIGIN,
     onSavePlaylist: vi.fn(),
     isPlaylistSaved: false,
@@ -58,7 +71,31 @@ function renderEnd(overrides: Partial<EndScreenProps> = {}) {
 describe('EndScreen', () => {
   afterEach(() => {
     cleanup();
+    stubClipboard(undefined);
     vi.restoreAllMocks();
+  });
+
+  it("should share a link with the deck's shuffle version and no starting card", () => {
+    // ===================================================================
+    //  THE END SCREEN'S LINK STARTS AT THE TOP (2026-09-29, D3).
+    //
+    //  After the last card the reducer leaves `currentIndex` on the final
+    //  card, so a position here would start the recipient on the last card
+    //  of a deck they have never played. The version still travels -- a seed
+    //  alone does not say how to deal it.
+    // ===================================================================
+    stubClipboard(undefined);
+    renderEnd({ shuffleVersion: 2 });
+
+    fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.copyLink }));
+
+    const field = screen.getByLabelText(COPY.deckActions.shareLinkFieldLabel) as HTMLInputElement;
+    const params = new URL(field.value).searchParams;
+    expect(params.get('v')).toBe('2');
+    expect(params.get('card')).toBeNull();
+    expect(params.get('seed')).toBe(SEED);
+    // And the caption says the same: no "starting from the card you are on".
+    expect(document.body.textContent ?? '').toContain(COPY.deckActions.shareCaption(1, false));
   });
 
   it('should host the footer: positioned, with the bottom band reserved', () => {

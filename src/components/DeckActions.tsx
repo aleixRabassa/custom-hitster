@@ -17,10 +17,15 @@
  *
  *  - THE SPOILER RISK IS THE REASON EVERY MESSAGE HERE IS A COUNT. Nothing in
  *    this component renders a title, an artist or a year; the export reports
- *    `completed/total` and an EXCLUDED COUNT, and the share link names a
- *    playlist and a seed. `DeckActions.test.tsx` asserts that against the whole
- *    fixture deck, which is what makes this safe to mount beside an unflipped
- *    card rather than merely believed to be.
+ *    `completed/total` and an EXCLUDED COUNT, and the share link names the
+ *    playlists, a seed and a shuffle version -- plus, MID-GAME ONLY since
+ *    2026-09-29, the current card's TRACK ID (see `currentCardId`). That id is
+ *    the one piece of card data this component can put in the DOM, and only in
+ *    the copy-failed fallback's `value`. It is not new information -- the QR on
+ *    the card the player is looking at already encodes exactly that id -- and it
+ *    is not a title, an artist or a year. `DeckActions.test.tsx` asserts those
+ *    three against the whole fixture deck, which is what makes this safe to
+ *    mount beside an unflipped card rather than merely believed to be.
  *  - THE SWIPE CONFLICT IS ANSWERED BY WHERE IT MOUNTS, not by what it says:
  *    on the game screen this lives inside `DeckActionsDialog`, whose backdrop
  *    covers the card, and `GameScreen` suspends its own key handler while that
@@ -36,11 +41,13 @@
  * ===========================================================================
  *  THE SHARE LINK IS BUILT AT CLICK TIME, AND THAT IS NOT A MICRO-OPTIMISATION.
  *
- *  It is (playlist id + seed), and a RESTART DEALS A FRESH SEED. A link captured
- *  in a `useMemo` or in state at mount would therefore be the wrong link for any
- *  deck reached by pressing "Play again" -- it would point at the shuffle before
- *  it. Building inside the handler means the props read at that instant are the
- *  ones that go into the URL.
+ *  It is (playlist ids + seed + shuffle version, and mid-game the current card),
+ *  and a RESTART DEALS A FRESH SEED. A link captured in a `useMemo` or in state
+ *  at mount would therefore be the wrong link for any deck reached by pressing
+ *  "Play again" -- it would point at the shuffle before it -- and mid-game it
+ *  would name a card the player has since swiped past. Building inside the
+ *  handler means the props read at that instant are the ones that go into the
+ *  URL.
  *
  *  THE COPY MUST NOT PROMISE AN IDENTICAL DECK (decision 4). "Same playlist(s),
  *  same shuffle" is true. "The same deck" is not, and it now has THREE reasons
@@ -60,6 +67,7 @@ import { useCopy } from '../hooks/useLocale';
 import { buildDeckLink } from '../game/deck-link';
 import { sheetsForDeck, usePdfExport } from '../hooks/usePdfExport';
 import type { PdfExportState } from '../hooks/usePdfExport';
+import type { ShuffleVersion } from '../game/shuffle';
 import type { Card } from '../../shared/types';
 
 export interface DeckActionsProps {
@@ -74,6 +82,33 @@ export interface DeckActionsProps {
   playlistName: string;
   /** The seed this deck was dealt with, from `state.seed`. The other half of the link. */
   seed: string;
+  /**
+   * Which algorithm dealt the deck from `seed`, from `state.shuffleVersion` (2026-09-29, D1).
+   *
+   * Required, and it goes into the link, because a seed on its own does not say how to deal it: a
+   * link that dropped it would have the recipient re-deal the sender's seed with whatever the
+   * default algorithm is on the day they open it.
+   */
+  shuffleVersion: ShuffleVersion;
+  /**
+   * The track id of the card the player is on, or absent (2026-09-29, D3).
+   *
+   * ===========================================================================
+   *  PRESENT MID-GAME ONLY, AND THE END SCREEN'S ABSENCE IS THE DECISION.
+   *
+   *  A link carrying it starts the recipient on that card instead of card 1.
+   *  The end screen passes nothing: the deck has run out, the reducer leaves
+   *  `currentIndex` on the LAST card, and a position there would drop the
+   *  recipient on the final card of a deck they have never played.
+   *
+   *  A track ID, never an index: the sender's deck has already shed its yearless
+   *  cards while the recipient starts from the full fetch, so an index would
+   *  land on a different card. It is the one card-derived value this component
+   *  holds, and it can reach the DOM only through the copy-failed fallback's
+   *  `value` -- see the header block for why that is not a leak.
+   * ===========================================================================
+   */
+  currentCardId?: string;
   /** Where the link should point -- `origin + pathname`, supplied by the container. */
   shareOrigin: string;
   /**
@@ -197,6 +232,8 @@ export function DeckActions({
   playlistIds,
   playlistName,
   seed,
+  shuffleVersion,
+  currentCardId,
   shareOrigin,
   onSavePlaylist,
   isPlaylistSaved,
@@ -257,8 +294,13 @@ export function DeckActions({
   const [failedLink, setFailedLink] = useState<string | null>(null);
 
   const handleCopy = () => {
-    // Built here, from the props as they are NOW -- every id, in row order. See the header block.
-    const link = buildDeckLink(shareOrigin, playlistIds, seed);
+    // Built here, from the props as they are NOW -- every id, in row order, and the card the player
+    // is on at the moment of the press (a card advance re-renders this with a new id). See the
+    // header block.
+    const link = buildDeckLink(shareOrigin, playlistIds, seed, {
+      shuffleVersion,
+      ...(currentCardId === undefined ? {} : { cardId: currentCardId }),
+    });
 
     const fail = () => {
       setCopyState('failed');
@@ -447,10 +489,11 @@ export function DeckActions({
         promising "the same deck" here is the one thing this copy must not do.
 
         Pluralised on the id count rather than left as "playlist(s)": the caption is the sentence
-        that has to be read and believed, and a slash in it reads as boilerplate.
+        that has to be read and believed, and a slash in it reads as boilerplate. And it says
+        whether the link starts on the current card, because only a mid-game link does.
       */}
       <p className="text-center text-xs text-fg-muted">
-        {copy.deckActions.shareCaption(playlistIds.length)}
+        {copy.deckActions.shareCaption(playlistIds.length, currentCardId !== undefined)}
       </p>
 
       <button
@@ -506,7 +549,9 @@ export function DeckActions({
       {/*
         One live region for both copy outcomes, and it exists only once there is something to say --
         `idle` renders nothing, so nothing is announced before the player presses anything. Safe
-        even beside an unflipped card: a link names a playlist and a seed, never a track.
+        even beside an unflipped card: the region's TEXT is two fixed sentences, and the link in the
+        fallback's `value` names playlists, a seed, a version and -- mid-game -- the current card's
+        track id, which the QR on that card already encodes. Never a title, an artist or a year.
       */}
       {copyState === 'idle' ? null : (
         <div role="status" className="flex flex-col gap-2">

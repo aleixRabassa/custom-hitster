@@ -1,7 +1,11 @@
 # Review: the shuffle system
 
-**Date:** 2026-09-29 · **Commit reviewed:** `5b181c4` · **Scope:** read-only. Nothing was implemented, including
-the two wrong comments and the missing tests listed below.
+**Date:** 2026-09-29 · **Commit reviewed:** `5b181c4` · **Scope:** the review itself was read-only.
+
+> **IMPLEMENTED 2026-09-29, after all four decisions were taken** (D1 hash sort with a `v=` param, D2 as read in
+> §5.1, D3 `&card=`, D4 a prompt that is not remembered when declined). Every §6 test gap and both §7 comments
+> are closed. What was built, and where, is in [§8](#8-implementation-2026-09-29). The sections above §8 are the
+> review as written and describe the code at `5b181c4`.
 
 The developer's three requirements, as stated:
 
@@ -17,7 +21,7 @@ The developer's three requirements, as stated:
 | 3b  | Link keeps the position      | **Not met at all.** The link carries no position; the recipient always starts at card 1.        |
 
 Four decisions were needed from the developer; they are collected in [§5](#5-decisions-for-the-developer).
-**D2 and D4 were taken on 2026-09-29** ([§5.1](#51-decisions-taken-2026-09-29)); D1 and D3 are still open.
+**All four were taken on 2026-09-29**: D2 and D4 in [§5.1](#51-decisions-taken-2026-09-29), D1 and D3 in [§8](#8-implementation-2026-09-29).
 
 ---
 
@@ -370,3 +374,44 @@ link's reproducibility under input drift), each cross-checked against the code. 
 throwaway scripts importing the real `shuffle.ts` and `deck-merge.ts`, run with the repo's `tsx`; they lived in a
 session scratchpad (`sensitivity.ts`, `shuffle-check.mts`, `merge-check.ts`, `restart-check.ts`, `sattolo.mts`)
 and are not in the repository._
+
+---
+
+## 8. Implementation (2026-09-29)
+
+**D1 — the hash sort, versioned.** `shuffle.ts` gained `sortDeckByHash` (version 2: sort by
+`hashSeed(seed + ':' + card.id)`, ties by id) and `dealDeck(items, seed, version)`; `shuffleDeck` is version 1 and
+frozen. **The version travels with the seed everywhere the seed goes**: `GameState.shuffleVersion`, the saved
+session (absent on read = 1, because every older save was Fisher-Yates dealt) and the link's `v` param (absent = 1,
+so every link shared before today deals the order its sender saw; built only for version 2, so a v1 deck's link is
+byte-identical to what old builds minted). Every new deal is version 2, Play again included — which is what fixes
+the Play-again bug: reshuffling `state.deck` with s2 now gives the same order as the recipient's raw fetch dealt
+with s2. Measured by `share-roundtrip.test.ts`. An unknown `v` rejects the whole link.
+
+**D3 — `&card=<trackId>`, mid-game links only.** `buildDeckLink(origin, ids, seed, { shuffleVersion, cardId? })`;
+`GameScreen` passes the current card to the deck-actions dialog, the end screen passes none. The reducer's `START`
+takes `startCardId` and starts on it (card 1 when it is absent from the deal, with the `startCardMissing` notice).
+Everything §4b listed was done: the gate reads the **current** card (`START` and `YEAR_RESOLVED`); a yearless start
+card that is last while `preparing` clamps to the new last card instead of ending a game that never started; the
+resolver crawls from the start card and wraps (`deps.startIndex`, which also helps a resume); the two false
+invariant comments are rewritten; the end screen counts `cardsPlayed = deck.length - startIndex`, where
+`GameState.startIndex` is the lowest index the player has been on (saved, absent = 0); the copy-failed fallback's
+track id is a documented subtraction in the leak tests; `shareCaption` takes a second `fromCurrentCard` argument in
+all three catalogues.
+
+**D4 + D2 — `linkArrivalIntent` and `ReplaceSessionPrompt`.** `deckLink` is parsed whatever the status, and a pure
+decision in `deck-link.ts` picks `deal` (`idle`/`ended`), `resume` (the link describes the saved deck: same seed,
+same version, every saved playlist named by the link — a SUBSET check, so a recipient who lost one playlist of five
+still reloads silently; the card is never compared) or `ask`. The prompt is its own screen before the status
+switch, so nothing of the saved game is mounted under it. "Play the shared deck" fetches the link and leaves the
+saved game alone until the new deck DEALS, so a failed fetch shows the error with "Keep my game" still available.
+Declining is not remembered. After End or Exit a reload deals the link again, as accepted in §5.1 rule 4.
+
+**Not done, deliberately:** `generateSeed()` still runs inside `START` (§3 "Minor"). Harmless, as the review says,
+and commented as an accepted impurity.
+
+**Tests:** gap 1 — `shuffle.test.ts` pins both algorithms' output and `hashSeed` as literals; gap 2 — the Sattolo
+variant was run against the new tests and fails three of them; gap 3 and 4 — `share-roundtrip.test.ts`; gap 5 —
+distinct seeds in `shuffle.test.ts`, `reducer.test.ts` and after Play again in `App.test.tsx`; gap 6 and 7 — the
+link and reload cases in `App.test.tsx` (the post-End reload is pinned; Exit reaches the same state, since `END`
+clears the save either way); gap 8 — the avalanche test.

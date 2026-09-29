@@ -16,6 +16,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GameScreen } from './GameScreen';
 import { COPY } from '../game/copy';
 import { highConfidenceCard, lowConfidenceCard, noPreviewCard } from './__fixtures__/cards';
+import { auditableText } from './__fixtures__/auditable-text';
 import { clearQrCache } from '../game/qr-cache';
 import { resetBackNavigationTraversals } from '../hooks/useBackNavigation';
 
@@ -26,6 +27,18 @@ const { toStringMock } = vi.hoisted(() => ({
 vi.mock('qrcode', () => ({ toString: toStringMock }));
 
 let calls: string[] = [];
+
+/**
+ * Replace `navigator.clipboard` -- see the same helper in `DeckActions.test.tsx`. `undefined` is the
+ * no-clipboard branch, which is the one that renders the copy fallback synchronously.
+ */
+function stubClipboard(writeText: unknown): void {
+  Object.defineProperty(navigator, 'clipboard', {
+    value: writeText === undefined ? undefined : { writeText },
+    configurable: true,
+    writable: true,
+  });
+}
 
 /**
  * The helper still speaks in terms of ONE card, even though `GameScreen` now takes a deck and
@@ -63,6 +76,7 @@ function renderScreen(props: {
       // what this file cares about is that opening the panel suspends the game's own controls.
       playlistIds={['37i9dQZF1DXcBWIGoYBM5M']}
       seed="a1b2c3d4e5f60718"
+      shuffleVersion={2}
       shareOrigin="https://hitster.example/"
       onSavePlaylist={props.onSavePlaylist ?? vi.fn()}
       isPlaylistSaved={false}
@@ -99,6 +113,8 @@ describe('GameScreen', () => {
 
   afterEach(() => {
     cleanup();
+    // Leaves jsdom's own `navigator.clipboard` shape behind rather than a stub from the last test.
+    stubClipboard(undefined);
     vi.restoreAllMocks();
   });
 
@@ -437,6 +453,41 @@ describe('GameScreen', () => {
     ]) {
       expect(text).not.toContain(value);
     }
+  });
+
+  it('should share the card on screen mid-game, and leak nothing else through the fallback', () => {
+    // ===================================================================
+    //  D3 (2026-09-29): A MID-GAME LINK STARTS THE RECIPIENT ON THIS CARD.
+    //
+    //  The wiring `deck[currentIndex] -> currentCardId` is observable only
+    //  here, so this opens the real panel over the real card and reads the
+    //  link out of the copy fallback (no clipboard API, so it renders).
+    //
+    //  The fallback's `value` now holds the current card's TRACK ID, beside
+    //  that card unflipped. That is deliberate and it is not a leak: the QR
+    //  on the same card encodes the same id, and an id is not a title, an
+    //  artist or a year. So the id is asserted PRESENT, and then subtracted
+    //  by exact string before the year check, so a future fixture id that
+    //  happened to contain "19xx" could not fail it for the wrong reason.
+    // ===================================================================
+    stubClipboard(undefined);
+    const { container } = render(renderScreen({}));
+
+    fireEvent.click(screen.getByRole('button', { name: COPY.controls.keepDeck }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.copyLink }));
+
+    const field = screen.getByLabelText(COPY.deckActions.shareLinkFieldLabel) as HTMLInputElement;
+    const params = new URL(field.value).searchParams;
+    expect(params.get('card')).toBe(highConfidenceCard.id);
+    expect(params.get('v')).toBe('2');
+    expect(document.body.textContent ?? '').toContain(COPY.deckActions.shareCaption(1, true));
+
+    expect(field.value).not.toContain(highConfidenceCard.title);
+    expect(field.value).not.toContain(highConfidenceCard.artist);
+    const audited = auditableText(container).replaceAll(highConfidenceCard.id, '');
+    expect(audited).not.toContain(highConfidenceCard.title);
+    expect(audited).not.toContain(highConfidenceCard.artist);
+    expect(audited).not.toContain(String(highConfidenceCard.year));
   });
 
   it('should make the print action wait for the deck mid-game', () => {

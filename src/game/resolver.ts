@@ -23,8 +23,9 @@
  *  skip it, and does not count it as a failure.
  *
  *  What makes the wait bearable is not throughput, it is ordering: the deck is
- *  crawled in PLAY order and Start waits on card 1 alone
- *  (`gameReducer`'s card-1 gate). Do not "optimise" this into a parallel fetch.
+ *  crawled in PLAY order, starting from the card the player starts on, and
+ *  Start waits on that card alone (`gameReducer`'s gate). Do not "optimise"
+ *  this into a parallel fetch.
  * ===========================================================================
  *
  * Framework-free by construction -- it must NEVER import React. The lookup, the sleep and the
@@ -58,6 +59,12 @@ export interface ResolverDeps {
   onLookupsUnavailable: () => void;
   /** Jitter source. Injectable purely so tests can assert exact delays; defaults to `Math.random`. */
   random?: () => number;
+  /**
+   * The deck index the player starts on (2026-09-29); defaults to 0. The crawl walks from here to
+   * the end of the deck and THEN wraps round to the cards before it -- see `order` below. Anything
+   * that is not an integer inside the deck is treated as 0.
+   */
+  startIndex?: number;
 }
 
 export interface YearResolver {
@@ -117,7 +124,26 @@ export function createYearResolver(deck: readonly Card[], deps: ResolverDeps): Y
 
   /** Every distinct card, by id. A duplicated track is looked up ONCE and reported once. */
   const byId = new Map<string, Card>();
-  /** Ids still needing a lookup, in DECK order -- i.e. play order (see `shuffle.ts`). */
+  /**
+   * Ids still needing a lookup, in PLAY order starting from `startIndex`: deck indices
+   * `startIndex..n-1`, then `0..startIndex-1`. For every deal that starts on card 1 that is
+   * plain deck order (see `shuffle.ts`).
+   *
+   * ===========================================================================
+   *  ROTATED, NOT DECK ORDER, SINCE 2026-09-29 -- because a shared mid-game link
+   *  starts the player on the sender's card.
+   *
+   *  Plain deck order would spend the first lookup on card 1 (the gate would
+   *  wait on a card nobody is looking at until the priority jump caught up), and
+   *  because `cursor` never rewinds, a player starting at card 20 would outrun
+   *  the crawl on every single advance. Walking from the start card keeps the
+   *  crawl ahead of the player in the direction they are actually going; the
+   *  cards before it are the ones they reach only by stepping BACK, so they go
+   *  last, and the priority jump covers a player who steps back before the crawl
+   *  gets there. A resumed session passes its `currentIndex` here for the same
+   *  reason.
+   * ===========================================================================
+   */
   const order: string[] = [];
   /** Ids that will never be looked up again: reported, or given up on. */
   const settled = new Set<string>();
@@ -126,7 +152,14 @@ export function createYearResolver(deck: readonly Card[], deps: ResolverDeps): Y
   /** Ids the player is waiting on, newest last. */
   const priority: string[] = [];
 
-  for (const card of deck) {
+  const requestedStart = deps.startIndex ?? 0;
+  const startIndex =
+    Number.isInteger(requestedStart) && requestedStart >= 0 && requestedStart < deck.length
+      ? requestedStart
+      : 0;
+  const rotated = [...deck.slice(startIndex), ...deck.slice(0, startIndex)];
+
+  for (const card of rotated) {
     if (byId.has(card.id)) continue;
     byId.set(card.id, card);
 
@@ -182,7 +215,7 @@ export function createYearResolver(deck: readonly Card[], deps: ResolverDeps): Y
   }
 
   async function crawl(): Promise<void> {
-    // ---- Main pass: the whole deck, in play order -------------------------------
+    // ---- Main pass: the whole deck, in play order from the start card ----------
     while (!stopped && !halted) {
       const cardId = takePriority() ?? takeNext();
       if (cardId === undefined) break;
@@ -217,7 +250,7 @@ export function createYearResolver(deck: readonly Card[], deps: ResolverDeps): Y
     return undefined;
   }
 
-  /** The next card in deck order. `cursor` only ever moves forward. */
+  /** The next card in `order` (play order from the start card). `cursor` only ever moves forward. */
   function takeNext(): string | undefined {
     while (cursor < order.length) {
       const cardId = order[cursor++];

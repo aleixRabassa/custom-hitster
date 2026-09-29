@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  cardsPlayed,
   cardsRemaining,
   currentCard,
   gameReducer,
@@ -9,7 +10,7 @@ import {
   pendingYearCount,
   resolvedCount,
 } from './reducer';
-import { shuffleDeck } from './shuffle';
+import { CURRENT_SHUFFLE_VERSION, shuffleDeck, sortDeckByHash } from './shuffle';
 import type { GameState, PersistedSession } from './types';
 import type { Card, PlaylistSummary } from '../../shared/types';
 
@@ -63,6 +64,30 @@ function firstCardId(state: GameState): string {
   return first.id;
 }
 
+/** The id of the card at `index` in a dealt deck, failing loudly rather than returning ''. */
+function idAt(state: GameState, index: number): string {
+  const found = state.deck[index];
+  if (!found) throw new Error(`no card at index ${index}`);
+
+  return found.id;
+}
+
+/** A `preparing` session dealt from a shared mid-game link that names `startCardId`. */
+function preparingFrom(startCardId: string, cards: Card[] = CARDS, seed = SEED): GameState {
+  return gameReducer(initialGameState, {
+    type: 'START',
+    cards,
+    playlists: [PLAYLIST],
+    seed,
+    startCardId,
+  });
+}
+
+/** The id the shuffle puts at `index` for `cards` and `seed` -- what a sender would share. */
+function dealtIdAt(index: number, cards: Card[] = CARDS, seed = SEED): string {
+  return idAt(preparing(cards, seed), index);
+}
+
 // ===========================================================================
 //  TRANSITIONS
 // ===========================================================================
@@ -77,6 +102,7 @@ describe('gameReducer transitions', () => {
     expect(state.status).toBe('preparing');
     expect(state.playlists).toEqual([PLAYLIST]);
     expect(state.currentIndex).toBe(0);
+    expect(state.startIndex).toBe(0);
     expect(state.isFlipped).toBe(false);
     expect(state.yearLookupsUnavailable).toBe(false);
     expect(state.deck).toHaveLength(CARDS.length);
@@ -94,13 +120,89 @@ describe('gameReducer transitions', () => {
     expect(state.seed).toMatch(/^[0-9a-f]{16}$/);
   });
 
+  it('should generate a different seed for each seedless START', () => {
+    // Requirement 2 of the shuffle review ("a different order every game") rests on this, and the
+    // format check above cannot see it: a seed cached anywhere between two deals would pass it.
+    const deal = () =>
+      gameReducer(initialGameState, { type: 'START', cards: CARDS, playlists: [PLAYLIST] }).seed;
+
+    expect(deal()).not.toBe(deal());
+  });
+
   it('should use an explicitly supplied seed on START', () => {
     // The forward-compatibility hook for Phase 8's shareable deck URL: the same playlist and
     // the same seed must deal the same deck, with no reducer change needed then.
     const state = preparing(CARDS, 'shared-deck-seed');
 
     expect(state.seed).toBe('shared-deck-seed');
-    expect(state.deck).toEqual(shuffleDeck(CARDS, 'shared-deck-seed'));
+    // Compared with the shuffle function rather than with a literal: pinning the algorithm's
+    // OUTPUT is `shuffle.test.ts`'s job. This asserts which algorithm the reducer picks.
+    expect(state.deck).toEqual(sortDeckByHash(CARDS, 'shared-deck-seed'));
+  });
+
+  it('should deal with the hash sort and record the current version when START names none', () => {
+    // Decision D1 (2026-09-29): every NEW deal is version 2, so its order depends only on the set of
+    // cards -- which is what keeps a link reproducible after Play again and across playlist drift.
+    const state = preparing();
+
+    expect(CURRENT_SHUFFLE_VERSION).toBe(2);
+    expect(state.shuffleVersion).toBe(2);
+    expect(state.deck).toEqual(sortDeckByHash(CARDS, SEED));
+  });
+
+  it('should deal with Fisher-Yates when START asks for shuffle version 1', () => {
+    // A link minted before 2026-09-29 carries no version and was dealt by Fisher-Yates; its
+    // recipient must get the order its sender saw, so version 1 is kept exactly.
+    const state = gameReducer(initialGameState, {
+      type: 'START',
+      cards: CARDS,
+      playlists: [PLAYLIST],
+      seed: SEED,
+      shuffleVersion: 1,
+    });
+
+    expect(state.shuffleVersion).toBe(1);
+    expect(state.deck).toEqual(shuffleDeck(CARDS, SEED));
+    // And the two algorithms genuinely disagree on this input, or the test above proves nothing.
+    expect(state.deck).not.toEqual(sortDeckByHash(CARDS, SEED));
+  });
+
+  it('should record the shuffle version on an empty deal too', () => {
+    // The `ended` branch builds its own state object, so it is one more place a field can be missed.
+    const state = gameReducer(initialGameState, {
+      type: 'START',
+      cards: [],
+      playlists: [PLAYLIST],
+      seed: SEED,
+      shuffleVersion: 1,
+    });
+
+    expect(state.status).toBe('ended');
+    expect(state.shuffleVersion).toBe(1);
+    expect(state.startIndex).toBe(0);
+  });
+
+  it('should start on the named card when START carries a startCardId', () => {
+    // Decision D3: a mid-game link names the TRACK the sender was on, and the recipient starts on it.
+    // Both indices land on it: nothing before it has been played by this player yet.
+    const target = dealtIdAt(7);
+    const state = preparingFrom(target);
+
+    expect(state.currentIndex).toBe(7);
+    expect(state.startIndex).toBe(7);
+    expect(currentCard(state)?.id).toBe(target);
+    // Same deck as a deal without the id -- the position changes, never the order.
+    expect(state.deck).toEqual(preparing().deck);
+  });
+
+  it('should start on card 1 when the startCardId is not in the deck', () => {
+    // The playlist changed since it was shared, or that card was already known yearless. The order is
+    // still the sender's; only the position is lost, so the deal goes ahead from the top.
+    const state = preparingFrom('not-in-this-deck');
+
+    expect(state.currentIndex).toBe(0);
+    expect(state.startIndex).toBe(0);
+    expect(state.status).toBe('preparing');
   });
 
   it('should replace an existing session when START is dispatched again', () => {
@@ -517,8 +619,10 @@ describe('gameReducer transitions', () => {
       version: 2,
       playlists: [PLAYLIST],
       seed: 'persisted-seed',
+      shuffleVersion: 1,
       deck: [card('a', { year: 1975, yearConfidence: 'high' }), card('b'), card('c')],
-      currentIndex: 1,
+      currentIndex: 2,
+      startIndex: 1,
       isFlipped: true,
       status: 'playing',
     };
@@ -529,8 +633,12 @@ describe('gameReducer transitions', () => {
       status: 'playing',
       playlists: [PLAYLIST],
       seed: 'persisted-seed',
+      // Restored, never re-defaulted: a link shared from this resumed game must name the algorithm
+      // that actually dealt it.
+      shuffleVersion: 1,
       deck: session.deck,
-      currentIndex: 1,
+      currentIndex: 2,
+      startIndex: 1,
       isFlipped: true,
       // Re-derived by the next crawl rather than restored: it describes the server's
       // configuration, not the session.
@@ -545,8 +653,10 @@ describe('gameReducer transitions', () => {
       version: 2,
       playlists: [PLAYLIST, SECOND_PLAYLIST, THIRD_PLAYLIST],
       seed: 'persisted-seed',
+      shuffleVersion: 2,
       deck: [card('a', { year: 1975, yearConfidence: 'high' })],
       currentIndex: 0,
+      startIndex: 0,
       isFlipped: false,
       status: 'playing',
     };
@@ -580,6 +690,7 @@ describe('gameReducer transitions', () => {
       version: 2,
       playlists: [PLAYLIST],
       seed: 'persisted-seed',
+      shuffleVersion: 2,
       deck: [
         card('a', { year: 1975, yearConfidence: 'high' }),
         card('gone', { year: null, yearConfidence: 'none' }),
@@ -587,6 +698,7 @@ describe('gameReducer transitions', () => {
         card('c'),
       ],
       currentIndex: 2,
+      startIndex: 0,
       isFlipped: false,
       status: 'playing',
     };
@@ -604,8 +716,10 @@ describe('gameReducer transitions', () => {
       version: 2,
       playlists: [PLAYLIST],
       seed: 'persisted-seed',
+      shuffleVersion: 2,
       deck: [card('x', { year: null, yearConfidence: 'none' })],
       currentIndex: 0,
+      startIndex: 0,
       isFlipped: false,
       status: 'playing',
     };
@@ -615,6 +729,192 @@ describe('gameReducer transitions', () => {
     expect(state.deck).toHaveLength(0);
     expect(state.status).toBe('ended');
     expect(state.currentIndex).toBe(0);
+    expect(state.startIndex).toBe(0);
+  });
+});
+
+// ===========================================================================
+//  THE START INDEX (2026-09-29)
+//
+//  The lowest index the player has been on. Zero for a deal from the top; the
+//  link's card for a deal from a shared mid-game link. Always <= currentIndex,
+//  and moved by dropped cards exactly as currentIndex is.
+// ===========================================================================
+
+describe('gameReducer startIndex', () => {
+  /** A link-started game, past its gate: started on dealt index 5, that card resolved. */
+  function playingFromFive(): GameState {
+    const state = preparingFrom(dealtIdAt(5));
+
+    return gameReducer(state, {
+      type: 'YEAR_RESOLVED',
+      cardId: idAt(state, 5),
+      year: 1980,
+      confidence: 'high',
+    });
+  }
+
+  it('should leave startIndex alone on NEXT', () => {
+    const state = gameReducer(playingFromFive(), { type: 'NEXT' });
+
+    expect(state.currentIndex).toBe(6);
+    expect(state.startIndex).toBe(5);
+  });
+
+  it('should lower startIndex when PREVIOUS steps below it', () => {
+    // Stepping back past a link's start card shows the player cards they had not seen, so from
+    // then on those count as played.
+    let state = gameReducer(playingFromFive(), { type: 'PREVIOUS' });
+
+    expect(state.currentIndex).toBe(4);
+    expect(state.startIndex).toBe(4);
+
+    state = gameReducer(state, { type: 'NEXT' });
+    state = gameReducer(state, { type: 'NEXT' });
+    state = gameReducer(state, { type: 'PREVIOUS' });
+
+    // Back to 5 from 6: still above the lowest point, so the lowest point stays.
+    expect(state.currentIndex).toBe(5);
+    expect(state.startIndex).toBe(4);
+  });
+
+  it('should move startIndex back when a card before it is dropped', () => {
+    const state = playingFromFive();
+    const startId = idAt(state, 5);
+
+    const next = gameReducer(state, {
+      type: 'YEAR_RESOLVED',
+      cardId: idAt(state, 2),
+      year: null,
+      confidence: 'none',
+    });
+
+    expect(next.startIndex).toBe(4);
+    expect(next.currentIndex).toBe(4);
+    // Still the same CARD, which is what the index is standing in for.
+    expect(idAt(next, next.startIndex)).toBe(startId);
+  });
+
+  it('should leave startIndex alone when a card after it is dropped', () => {
+    const state = gameReducer(playingFromFive(), { type: 'NEXT' });
+    expect(state.currentIndex).toBe(6);
+
+    const next = gameReducer(state, {
+      type: 'YEAR_RESOLVED',
+      cardId: idAt(state, 9),
+      year: null,
+      confidence: 'none',
+    });
+
+    expect(next.startIndex).toBe(5);
+    expect(next.currentIndex).toBe(6);
+  });
+
+  it('should point startIndex at the following card when the start card itself is dropped', () => {
+    // The player moved on to 7; the card they started on (5) then resolves yearless. The array
+    // closes up: the player's index moves back by one to stay on their card, and the unchanged
+    // start index now names the card that followed the dropped one.
+    let state = gameReducer(playingFromFive(), { type: 'NEXT' });
+    state = gameReducer(state, { type: 'NEXT' });
+    const startId = idAt(state, 5);
+    const followingId = idAt(state, 6);
+
+    // A literal rather than a dispatch, because the start card has already resolved to a year in
+    // `playingFromFive` and a second result for it cannot be produced through the reducer's inputs.
+    const withPendingStart: GameState = {
+      ...state,
+      deck: state.deck.map((c) => (c.id === startId ? card(c.id) : c)),
+    };
+
+    const next = gameReducer(withPendingStart, {
+      type: 'YEAR_RESOLVED',
+      cardId: startId,
+      year: null,
+      confidence: 'none',
+    });
+
+    expect(next.startIndex).toBe(5);
+    expect(idAt(next, next.startIndex)).toBe(followingId);
+    expect(next.currentIndex).toBe(6);
+    expect(next.startIndex).toBeLessThanOrEqual(next.currentIndex);
+  });
+
+  it('should keep startIndex within currentIndex when the last card drops mid-game', () => {
+    // The case that would otherwise write an unloadable save: both indices on the last card, that
+    // card drops, the deck shrinks under both.
+    const cards = [card('a'), card('b'), card('c')];
+    const lastId = dealtIdAt(2, cards, 'three');
+    let state = preparingFrom(lastId, cards, 'three');
+    state = gameReducer(state, {
+      type: 'YEAR_RESOLVED',
+      cardId: lastId,
+      year: 1990,
+      confidence: 'high',
+    });
+    expect(state.status).toBe('playing');
+
+    const withPendingLast: GameState = {
+      ...state,
+      deck: state.deck.map((c) => (c.id === lastId ? card(c.id) : c)),
+    };
+
+    const next = gameReducer(withPendingLast, {
+      type: 'YEAR_RESOLVED',
+      cardId: lastId,
+      year: null,
+      confidence: 'none',
+    });
+
+    expect(next.status).toBe('ended');
+    expect(next.currentIndex).toBe(1);
+    expect(next.startIndex).toBe(1);
+  });
+
+  it('should restore startIndex on RESUME and move it back past dropped cards', () => {
+    const session: PersistedSession = {
+      version: 2,
+      playlists: [PLAYLIST],
+      seed: 'persisted-seed',
+      shuffleVersion: 2,
+      deck: [
+        card('gone-1', { year: null, yearConfidence: 'none' }),
+        card('a'),
+        card('gone-2', { year: null, yearConfidence: 'none' }),
+        card('start', { year: 1980, yearConfidence: 'high' }),
+        card('here', { year: 1990, yearConfidence: 'high' }),
+      ],
+      currentIndex: 4,
+      startIndex: 3,
+      isFlipped: false,
+      status: 'playing',
+    };
+
+    const state = gameReducer(initialGameState, { type: 'RESUME', session });
+
+    expect(state.deck.map((c) => c.id)).toEqual(['a', 'start', 'here']);
+    expect(currentCard(state)?.id).toBe('here');
+    expect(idAt(state, state.startIndex)).toBe('start');
+  });
+
+  it('should clamp a restored startIndex under the restored currentIndex', () => {
+    // Both on the same yearless card: the player lands on the card that followed it, and the start
+    // index must follow rather than pointing past the player.
+    const session: PersistedSession = {
+      version: 2,
+      playlists: [PLAYLIST],
+      seed: 'persisted-seed',
+      shuffleVersion: 2,
+      deck: [card('a'), card('gone', { year: null, yearConfidence: 'none' })],
+      currentIndex: 1,
+      startIndex: 1,
+      isFlipped: false,
+      status: 'playing',
+    };
+
+    const state = gameReducer(initialGameState, { type: 'RESUME', session });
+
+    expect(state.currentIndex).toBe(0);
+    expect(state.startIndex).toBe(0);
   });
 });
 
@@ -789,6 +1089,101 @@ describe('gameReducer card-1 gate', () => {
     expect(next.status).toBe('preparing');
   });
 
+  it('should wait on the start card rather than card 1 for a link-started deal', () => {
+    // A mid-game link starts the player on the sender's card, so THAT is the card the gate waits on.
+    // Card 1 resolving first must not open it onto a pending year.
+    const state = preparingFrom(dealtIdAt(6));
+
+    const afterFirst = gameReducer(state, {
+      type: 'YEAR_RESOLVED',
+      cardId: firstCardId(state),
+      year: 1970,
+      confidence: 'high',
+    });
+    expect(afterFirst.status).toBe('preparing');
+
+    const afterStart = gameReducer(afterFirst, {
+      type: 'YEAR_RESOLVED',
+      cardId: idAt(state, 6),
+      year: 1985,
+      confidence: 'high',
+    });
+    expect(afterStart.status).toBe('playing');
+    expect(afterStart.currentIndex).toBe(6);
+  });
+
+  it('should skip preparing when the start card is already resolved, even if card 1 is not', () => {
+    const startId = dealtIdAt(3);
+    const cards = CARDS.map((c) =>
+      c.id === startId ? { ...c, year: 1975, yearConfidence: 'high' as const } : c,
+    );
+
+    expect(preparingFrom(startId, cards).status).toBe('playing');
+  });
+
+  it('should gate on the start card even when card 1 is already resolved', () => {
+    const firstId = dealtIdAt(0);
+    const cards = CARDS.map((c) =>
+      c.id === firstId ? { ...c, year: 1975, yearConfidence: 'high' as const } : c,
+    );
+
+    expect(preparingFrom(dealtIdAt(3), cards).status).toBe('preparing');
+  });
+
+  it('should not end a game that never started when its last-card start is dropped', () => {
+    // ===================================================================
+    //  "DECK FINISHED" FOR A GAME THAT NEVER STARTED (review §4b).
+    //
+    //  A link whose card is last in this deck starts the player there; if
+    //  that card turns out yearless while `preparing`, `playing`'s rule --
+    //  nothing follows, so the deck is exhausted -- would end a game with
+    //  every other card still in it. Nothing has been played, so the player
+    //  is clamped to the new last card and the gate waits on that one.
+    // ===================================================================
+    const lastIndex = CARDS.length - 1;
+    const state = preparingFrom(dealtIdAt(lastIndex));
+    const newLastId = idAt(state, lastIndex - 1);
+
+    const next = gameReducer(state, {
+      type: 'YEAR_RESOLVED',
+      cardId: idAt(state, lastIndex),
+      year: null,
+      confidence: 'none',
+    });
+
+    expect(next.status).toBe('preparing');
+    expect(next.deck).toHaveLength(CARDS.length - 1);
+    expect(next.currentIndex).toBe(lastIndex - 1);
+    expect(next.startIndex).toBe(lastIndex - 1);
+    expect(currentCard(next)?.id).toBe(newLastId);
+    expect(next.isFlipped).toBe(false);
+  });
+
+  it('should open the gate at once when the new last card is already resolved', () => {
+    // The same clamp, landing on a card whose year is already in: nothing left to wait for.
+    const lastIndex = CARDS.length - 1;
+    let state = preparingFrom(dealtIdAt(lastIndex));
+    const newLastId = idAt(state, lastIndex - 1);
+
+    state = gameReducer(state, {
+      type: 'YEAR_RESOLVED',
+      cardId: newLastId,
+      year: 1999,
+      confidence: 'high',
+    });
+    expect(state.status).toBe('preparing');
+
+    const next = gameReducer(state, {
+      type: 'YEAR_RESOLVED',
+      cardId: idAt(state, lastIndex),
+      year: null,
+      confidence: 'none',
+    });
+
+    expect(next.status).toBe('playing');
+    expect(currentCard(next)?.id).toBe(newLastId);
+  });
+
   it('should enter playing on YEAR_LOOKUPS_UNAVAILABLE while preparing', () => {
     // A deployment with no `MUSICBRAINZ_USER_AGENT` fails identically for every card, so
     // waiting for card 1 would wait forever. The deck is yearless but playable.
@@ -953,10 +1348,43 @@ describe('gameReducer selectors', () => {
     expect(state.deck).toHaveLength(1);
   });
 
+  it('should count the whole deck as played for a deal from the top', () => {
+    // `startIndex === 0`, so this is exactly the `deck.length` the end screen used to show.
+    let state = playing([card('a'), card('b'), card('c')], 'three');
+    state = gameReducer(state, { type: 'NEXT' });
+    state = gameReducer(state, { type: 'NEXT' });
+    state = gameReducer(state, { type: 'NEXT' });
+
+    expect(state.status).toBe('ended');
+    expect(cardsPlayed(state)).toBe(3);
+  });
+
+  it('should count only from the start card for a link-started deal', () => {
+    // Review §4b: `deck.length` over-counted a mid-deck start by every card before it.
+    const state = preparingFrom(dealtIdAt(15));
+
+    expect(cardsPlayed(state)).toBe(CARDS.length - 15);
+  });
+
+  it('should count the cards a link-started player stepped back to', () => {
+    let state = preparingFrom(dealtIdAt(15));
+    state = gameReducer(state, {
+      type: 'YEAR_RESOLVED',
+      cardId: idAt(state, 15),
+      year: 1980,
+      confidence: 'high',
+    });
+    state = gameReducer(state, { type: 'PREVIOUS' });
+    state = gameReducer(state, { type: 'PREVIOUS' });
+
+    expect(cardsPlayed(state)).toBe(CARDS.length - 13);
+  });
+
   it('should be safe on an empty deck', () => {
     expect(currentCard(initialGameState)).toBeUndefined();
     expect(isCurrentYearPending(initialGameState)).toBe(false);
     expect(cardsRemaining(initialGameState)).toBe(0);
+    expect(cardsPlayed(initialGameState)).toBe(0);
     expect(resolvedCount(initialGameState)).toBe(0);
     expect(pendingYearCount(initialGameState)).toBe(0);
   });

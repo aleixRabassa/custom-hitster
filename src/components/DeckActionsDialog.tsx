@@ -23,8 +23,11 @@
  * ## It is a pre-reveal surface, and it renders no card data
  *
  * This mounts over an UNFLIPPED card, so the leak rule applies in full. Every string in this file
- * is a literal, and `DeckActions` -- which does hold the deck, for the PDF -- renders only counts.
- * `DeckActionsDialog.test.tsx` and `DeckActions.test.tsx` both assert it against the fixture deck.
+ * comes from the copy catalogue, and `DeckActions` -- which does hold the deck, for the PDF --
+ * renders only counts. The one card-derived value that can reach the DOM through it is the current
+ * card's TRACK ID, inside the share link's copy-failed fallback (2026-09-29): the QR on that very
+ * card already encodes it, and it is never a title, an artist or a year. `DeckActionsDialog.test.tsx`
+ * and `DeckActions.test.tsx` both assert those three against the fixture deck.
  */
 
 import { useEffect, useRef } from 'react';

@@ -12,14 +12,14 @@ export const COPY_ES = {
 
   welcome: {
     logoAlt: COPY.welcome.logoAlt,
-    tagline: 'El juego de la línea del tiempo musical, ahora con tus propias playlists de Spotify.',
+    tagline: 'El juego de cronología musical, ahora con tus playlists de Spotify.',
     enter: 'Empezar a jugar',
     howItWorksHeading: 'Cómo se juega',
     steps: {
       pick: {
         title: 'Elige tus playlists',
         body: (maxPlaylists: number) =>
-          `Pega hasta ${maxPlaylists} enlaces de playlists públicas de Spotify, o empieza con una de las sugerencias. Las canciones se barajan en un solo mazo.`,
+          `Pega hasta ${maxPlaylists} enlaces de playlists de Spotify, o elige una sugerida. Las canciones se barajan en un solo mazo.`,
       },
       play: {
         title: 'Juega la carta',
@@ -27,7 +27,7 @@ export const COPY_ES = {
       },
       guess: {
         title: 'Adivina el año',
-        body: 'Di cuándo salió y luego toca la carta para darle la vuelta y ver la respuesta. Desliza a la derecha para sacar la siguiente carta, o a la izquierda para volver a la anterior.',
+        body: 'Adivina el año y toca la carta para ver la respuesta. Desliza a la derecha para sacar la siguiente carta, o a la izquierda para volver a la anterior.',
       },
     },
     printHeading: '¿Prefieres papel?',
@@ -71,7 +71,7 @@ export const COPY_ES = {
   },
 
   language: {
-    label: 'Idioma',
+    label: 'Elige idioma',
   },
 
   preparing: {
@@ -122,6 +122,8 @@ export const COPY_ES = {
       `${deckSize === 1 ? '1 carta' : `${deckSize} cartas`} de ${playlistCount === 1 ? '1 playlist' : `${playlistCount} playlists`}, ${deckSize === 1 ? 'barajada' : 'barajadas'} en un solo mazo.`,
     yearsUnavailable:
       'Los años no están disponibles en este despliegue, así que las cartas no mostrarán ninguno. El mazo se puede jugar igualmente — escanea una carta para escuchar la canción.',
+    startCardMissing:
+      'La carta desde la que se compartió este enlace ya no está en la playlist, así que el mazo empieza desde el principio.',
     dismiss: 'Cerrar aviso',
   },
 
@@ -138,8 +140,8 @@ export const COPY_ES = {
   deckActions: {
     copyLink: 'Copiar enlace para compartir',
     /** "Same playlist, same shuffle" -- never "the same deck". See the English comment. */
-    shareCaption: (playlistCount: number) =>
-      `${playlistCount === 1 ? 'Misma playlist' : 'Mismas playlists'}, misma mezcla — los años se vuelven a buscar, así que el mazo puede variar un poco`,
+    shareCaption: (playlistCount: number, fromCurrentCard: boolean) =>
+      `${playlistCount === 1 ? 'Misma playlist' : 'Mismas playlists'}, misma mezcla${fromCurrentCard ? ', desde la carta en la que estás' : ''} — si alguna playlist ha cambiado, puede que varíen algunas canciones`,
     save: 'Guardar esta playlist',
     saved: 'Guardada en tus playlists',
     print: 'Imprimir como cartas en PDF',
@@ -166,6 +168,16 @@ export const COPY_ES = {
   deckActionsDialog: {
     title: 'Guardar este mazo',
     close: 'Volver a la partida',
+  },
+
+  replaceSession: {
+    heading: 'Tienes una partida en curso',
+    body: 'Este enlace es de otro mazo. Si lo juegas, sustituirá tu partida guardada en cuanto se reparta el nuevo mazo.',
+    keep: 'Seguir con mi partida',
+    replace: 'Jugar el mazo compartido',
+    replacing: 'Cargando el mazo compartido…',
+    retry: 'Volver a probar el mazo compartido',
+    savedGameIntact: 'Tu partida guardada sigue intacta.',
   },
 
   exitDialog: {

@@ -84,12 +84,14 @@ function session(): GameState {
     status: 'playing',
     playlists: [PLAYLIST],
     seed: 'persistence-seed',
+    shuffleVersion: 2,
     deck: [
       card('a', { year: 1975, yearConfidence: 'high', previewUrl: 'https://p.scdn.co/mp3/a' }),
       card('b', { year: null, yearConfidence: 'none' }),
       card('c'),
     ],
     currentIndex: 1,
+    startIndex: 0,
     isFlipped: true,
     yearLookupsUnavailable: false,
   };
@@ -108,12 +110,25 @@ function validPayload(overrides: Partial<PersistedSession> = {}): PersistedSessi
     version: SESSION_VERSION,
     playlists: [PLAYLIST],
     seed: 'persisted-seed',
+    shuffleVersion: 2,
     deck: [card('a', { year: 1975, yearConfidence: 'high' }), card('b')],
     currentIndex: 1,
+    startIndex: 0,
     isFlipped: false,
     status: 'playing',
     ...overrides,
   };
+}
+
+/** `validPayload()` as a save written before 2026-09-29, i.e. with neither new field present. */
+function preShuffleVersionPayload(
+  overrides: Partial<PersistedSession> = {},
+): Record<string, unknown> {
+  const payload: Record<string, unknown> = { ...validPayload(overrides) };
+  delete payload['shuffleVersion'];
+  delete payload['startIndex'];
+
+  return payload;
 }
 
 describe('saveSession / loadSession', () => {
@@ -128,8 +143,10 @@ describe('saveSession / loadSession', () => {
       version: SESSION_VERSION,
       playlists: state.playlists,
       seed: state.seed,
+      shuffleVersion: state.shuffleVersion,
       deck: state.deck,
       currentIndex: state.currentIndex,
+      startIndex: state.startIndex,
       isFlipped: state.isFlipped,
       status: state.status,
     });
@@ -349,8 +366,8 @@ describe('the multi-playlist session format', () => {
     //  how a wrong year ends up on a card" rule allows.
     // ===================================================================
     const storage = memoryStorage();
-    const { playlists, ...rest } = validPayload();
-    seed(storage, { ...rest, version: 1, playlist: playlists[0] });
+    const { playlists, ...rest } = preShuffleVersionPayload();
+    seed(storage, { ...rest, version: 1, playlist: (playlists as PlaylistSummary[])[0] });
 
     const loaded = loadSession(storage);
 
@@ -359,6 +376,22 @@ describe('the multi-playlist session format', () => {
     expect(loaded?.version).toBe(SESSION_VERSION);
     // And nothing of the old shape survives the rebuild.
     expect(loaded).not.toHaveProperty('playlist');
+    // A v1 save predates both 2026-09-29 fields, so it was Fisher-Yates dealt from card 1.
+    expect(loaded?.shuffleVersion).toBe(1);
+    expect(loaded?.startIndex).toBe(0);
+  });
+
+  it('should fix a v1 payload at shuffle version 1 and start index 0 whatever it carries', () => {
+    // No build ever wrote a v1 payload with these fields, so they are not read: the lift is exact
+    // only because a v1 save is known to be a Fisher-Yates deal from the top.
+    const storage = memoryStorage();
+    const { playlists, ...rest } = validPayload({ shuffleVersion: 2, startIndex: 1 });
+    seed(storage, { ...rest, version: 1, playlist: playlists[0] });
+
+    const loaded = loadSession(storage);
+
+    expect(loaded?.shuffleVersion).toBe(1);
+    expect(loaded?.startIndex).toBe(0);
   });
 
   it('should reject a payload whose playlists array is empty', () => {
@@ -400,6 +433,103 @@ describe('the multi-playlist session format', () => {
     seed(storage, { ...validPayload(), playlists: many });
 
     expect(loadSession(storage)?.playlists).toHaveLength(MAX_DECK_PLAYLISTS + 3);
+  });
+});
+
+// ===========================================================================
+//  shuffleVersion AND startIndex (2026-09-29)
+//
+//  Both optional on read with an exact default, which is why SESSION_VERSION
+//  stayed at 2: a save without them predates them.
+// ===========================================================================
+
+describe('the shuffle version and start index', () => {
+  it('should write both fields', () => {
+    const storage = memoryStorage();
+    saveSession({ ...session(), shuffleVersion: 1, startIndex: 1 }, storage);
+
+    const raw = JSON.parse(storage.data.get(SESSION_STORAGE_KEY) ?? '{}') as Record<
+      string,
+      unknown
+    >;
+
+    expect(raw['shuffleVersion']).toBe(1);
+    expect(raw['startIndex']).toBe(1);
+    expect(loadSession(storage)).toMatchObject({ shuffleVersion: 1, startIndex: 1 });
+  });
+
+  it('should read an absent shuffleVersion as 1, never as the current version', () => {
+    // ===================================================================
+    //  A SAVE WRITTEN BEFORE 2026-09-29 WAS DEALT BY FISHER-YATES.
+    //
+    //  The resumed deck would look the same either way -- the save holds
+    //  the dealt cards, not the recipe -- but a link shared from that game
+    //  carries the version, and naming the hash sort would deal its
+    //  recipient a different order from the one on the sharer's screen.
+    // ===================================================================
+    const storage = memoryStorage();
+    seed(storage, preShuffleVersionPayload());
+
+    const loaded = loadSession(storage);
+
+    expect(loaded?.shuffleVersion).toBe(1);
+    expect(loaded?.startIndex).toBe(0);
+    // Not rejected, and nothing else about it changed: the version stayed at 2 for exactly this.
+    expect(loaded?.version).toBe(SESSION_VERSION);
+    expect(loaded?.deck).toHaveLength(2);
+  });
+
+  it('should reject a shuffleVersion that is neither 1 nor 2', () => {
+    for (const shuffleVersion of [0, 3, '2', null, 1.5]) {
+      const storage = memoryStorage();
+      seed(storage, { ...validPayload(), shuffleVersion });
+
+      expect(loadSession(storage)).toBeNull();
+      expect(storage.data.has(SESSION_STORAGE_KEY)).toBe(false);
+    }
+  });
+
+  it('should accept a startIndex anywhere from 0 to currentIndex', () => {
+    for (const startIndex of [0, 1]) {
+      const storage = memoryStorage();
+      seed(storage, validPayload({ currentIndex: 1, startIndex }));
+
+      expect(loadSession(storage)?.startIndex).toBe(startIndex);
+    }
+  });
+
+  it('should reject a startIndex outside 0..currentIndex or not an integer', () => {
+    // Above `currentIndex` is outside the invariant the reducer keeps, so it did not come from this
+    // code -- even though it is a valid index into the deck.
+    for (const startIndex of [-1, 1, 2, 0.5, '0', null]) {
+      const storage = memoryStorage();
+      seed(storage, { ...validPayload({ currentIndex: 0 }), startIndex });
+
+      expect(loadSession(storage)).toBeNull();
+    }
+  });
+
+  it('should round-trip a link-started session through RESUME', () => {
+    const storage = memoryStorage();
+    const state = gameReducer(initialGameState, {
+      type: 'START',
+      cards: [card('a'), card('b'), card('c'), card('d')],
+      playlists: [PLAYLIST],
+      seed: 'link-seed',
+      shuffleVersion: 1,
+      startCardId: 'c',
+    });
+    saveSession(state, storage);
+
+    const resumed = gameReducer(initialGameState, {
+      type: 'RESUME',
+      session: loadSession(storage)!,
+    });
+
+    expect(resumed.shuffleVersion).toBe(1);
+    expect(resumed.currentIndex).toBe(state.currentIndex);
+    expect(resumed.startIndex).toBe(state.startIndex);
+    expect(resumed.deck[resumed.currentIndex]?.id).toBe('c');
   });
 });
 

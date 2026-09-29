@@ -1,6 +1,7 @@
 /**
  * `gameReducer` and the derived selectors: the whole of the game's state logic, and all of it
- * pure.
+ * pure -- with ONE known, accepted exception: `START` calls `generateSeed()` when the action
+ * carries no seed (see that branch).
  *
  * Nothing here fetches, sleeps, or knows that a resolver exists. The reducer is a SINK for
  * lookups (`YEAR_RESOLVED`) and never a driver of them, which is what lets the entire
@@ -15,7 +16,7 @@
  *      Returning the identical reference is what keeps that free of re-renders.
  */
 
-import { generateSeed, shuffleDeck } from './shuffle';
+import { CURRENT_SHUFFLE_VERSION, dealDeck, generateSeed } from './shuffle';
 import type { GameAction, GameState } from './types';
 import type { Card } from '../../shared/types';
 
@@ -24,8 +25,10 @@ export const initialGameState: GameState = {
   status: 'idle',
   playlists: [],
   seed: '',
+  shuffleVersion: CURRENT_SHUFFLE_VERSION,
   deck: [],
   currentIndex: 0,
+  startIndex: 0,
   isFlipped: false,
   yearLookupsUnavailable: false,
 };
@@ -35,7 +38,18 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case 'START': {
       // Shuffled HERE, synchronously, before anything can look at the deck -- see the block
       // comment in `shuffle.ts` for why the alternative ordering wastes the first lookup.
+      //
+      // `generateSeed()` here is the one impure call in this file, and it is ACCEPTED rather than
+      // fixed (review of the shuffle system, 2026-09-29, §3 "Minor"). StrictMode calls a reducer
+      // twice in development and each call draws a different seed, but the seed and the deck it
+      // dealt come out of the same call and land as ONE state object, so nothing can observe a
+      // mismatch. Moving it into `start()` would restore purity at the cost of a second place
+      // that knows what an absent seed means.
       const seed = action.seed ?? generateSeed();
+      // An absent version means a NEW deal, and a new deal uses the current algorithm. A caller
+      // replaying a version-1 link passes `1` explicitly -- the default is never a guess about an
+      // old deck, because an old deck always arrives with its version attached.
+      const shuffleVersion = action.shuffleVersion ?? CURRENT_SHUFFLE_VERSION;
 
       /*
         Yearless cards are filtered at ALL THREE entry points -- here, `YEAR_RESOLVED` and
@@ -47,9 +61,10 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         the other two branches have already cleaned. It costs one pass over a hundred cards once
         per game and removes the question entirely.
       */
-      const deck = shuffleDeck(
+      const deck = dealDeck(
         action.cards.filter((card) => card.year !== null),
         seed,
+        shuffleVersion,
       );
 
       // Nothing left to deal. Reachable two ways -- an empty `cards` argument, and a deck whose
@@ -60,33 +75,56 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           status: 'ended',
           playlists: action.playlists,
           seed,
+          shuffleVersion,
           deck,
           currentIndex: 0,
+          startIndex: 0,
           isFlipped: false,
           yearLookupsUnavailable: false,
         };
       }
 
+      /*
+        Where the player starts. Card 1 for every deal except one from a shared mid-game link
+        (decision D3, 2026-09-29), whose `card` param names the TRACK the sender was on -- an id,
+        never an index, because the sender's deck has already shrunk by its yearless cards and the
+        recipient's has not.
+
+        An id that is not in this deck (the playlist changed since it was shared, or that card was
+        already known yearless and filtered above) falls back to card 1 rather than failing the
+        deal: the order is still the sender's, only the position is lost. `startIndex` starts equal
+        to `currentIndex`, and only `PREVIOUS` lowers it.
+      */
+      const startIndex =
+        action.startCardId === undefined
+          ? 0
+          : Math.max(
+              0,
+              deck.findIndex((card) => card.id === action.startCardId),
+            );
+
       // =======================================================================
-      //  THE CARD-1 GATE IS SKIPPED WHEN CARD 1 IS ALREADY RESOLVED.
+      //  THE GATE IS SKIPPED WHEN THE START CARD IS ALREADY RESOLVED.
       //
-      //  The gate waits for card 1's lookup to COMPLETE, and `year !== undefined`
-      //  IS a completed lookup -- that is exactly what the three states of
-      //  `Card.year` mean. So there is nothing to wait for and `preparing` would
-      //  be a screen shown until the heat death of the universe.
+      //  The gate waits for the CURRENT card's lookup to COMPLETE -- card 1 for
+      //  every deal except one from a mid-game link, which starts the player on
+      //  the sender's card (2026-09-29; see the `YEAR_RESOLVED` gate below). And
+      //  `year !== undefined` IS a completed lookup -- that is exactly what the
+      //  three states of `Card.year` mean. So there is nothing to wait for and
+      //  `preparing` would be a screen shown until the heat death of the universe.
       //
       //  This is not hypothetical: Phase 6's RESTART re-deals `state.deck`, and a
-      //  session can only have left `preparing` in the first place BECAUSE card 1
-      //  resolved. So every restart arrives here with a resolved card 1. The
-      //  resolver correctly skips already-filled cards (`resolver.ts` adds them
-      //  straight to `settled`), which means no `YEAR_RESOLVED` is ever dispatched
-      //  and nothing else can open the gate. Restart hung on the loading screen,
-      //  every time, until this branch existed.
+      //  session can only have left `preparing` in the first place BECAUSE its
+      //  start card resolved, so a re-dealt deck is mostly resolved. The resolver
+      //  correctly skips already-filled cards (`resolver.ts` adds them straight
+      //  to `settled`), which means no `YEAR_RESOLVED` is ever dispatched for
+      //  them and nothing else can open the gate. Restart hung on the loading
+      //  screen, every time, until this branch existed.
       //
       //  Found 2026-08-05 by `App.test.tsx`'s restart test. It was unreachable
       //  before Phase 6 because nothing could deal a pre-resolved deck.
       // =======================================================================
-      const status = deck[0]?.year === undefined ? 'preparing' : 'playing';
+      const status = deck[startIndex]?.year === undefined ? 'preparing' : 'playing';
 
       // A wholesale replacement, deliberately: starting a new SET OF PLAYLISTS mid-game must not
       // merge into the old deck, keep the old index, or leave a stale `yearLookupsUnavailable`
@@ -96,8 +134,10 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         status,
         playlists: action.playlists,
         seed,
+        shuffleVersion,
         deck,
-        currentIndex: 0,
+        currentIndex: startIndex,
+        startIndex,
         isFlipped: false,
         yearLookupsUnavailable: false,
       };
@@ -156,6 +196,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       let matched = false;
       /** Dropped cards sitting BEFORE the current one: the amount `currentIndex` moves back by. */
       let droppedBeforeCurrent = 0;
+      /** Dropped cards sitting BEFORE `startIndex`: the amount it moves back by, same rule. */
+      let droppedBeforeStart = 0;
       /** Whether the card the player is looking at right now is one of the dropped ones. */
       let droppedCurrent = false;
 
@@ -171,6 +213,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         if (isYearless) {
           if (index < state.currentIndex) droppedBeforeCurrent += 1;
           else if (index === state.currentIndex) droppedCurrent = true;
+
+          if (index < state.startIndex) droppedBeforeStart += 1;
 
           return;
         }
@@ -188,7 +232,14 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       // answers for every track and knows none of them, so it is rare rather than impossible --
       // and `ended` is the only honest destination, since there is nothing left to play.
       if (deck.length === 0) {
-        return { ...state, deck, currentIndex: 0, isFlipped: false, status: 'ended' };
+        return {
+          ...state,
+          deck,
+          currentIndex: 0,
+          startIndex: 0,
+          isFlipped: false,
+          status: 'ended',
+        };
       }
 
       /*
@@ -204,43 +255,70 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const shifted = state.currentIndex - droppedBeforeCurrent;
       const isFlipped = droppedCurrent ? false : state.isFlipped;
 
-      // The current card was dropped and nothing followed it: the deck is exhausted, exactly as
-      // `NEXT` past the last card is. Clamping instead would send the player BACKWARDS onto a
-      // card they have already played without their asking -- `PREVIOUS` exists since 2026-09-18,
-      // but it is the player's move, never the resolver's.
-      if (droppedCurrent && shifted > deck.length - 1) {
-        return { ...state, deck, currentIndex: deck.length - 1, isFlipped: false, status: 'ended' };
-      }
+      /*
+        The current card was dropped and nothing followed it.
+
+        WHILE `playing`, the deck is exhausted, exactly as `NEXT` past the last card is. Clamping
+        instead would send the player BACKWARDS onto a card they have already played without their
+        asking -- `PREVIOUS` exists since 2026-09-18, but it is the player's move, never the
+        resolver's.
+
+        WHILE `preparing`, it is NOT the end, and ending would be a bug (2026-09-29). The only way
+        to be on the last card before the game has started is a shared mid-game link whose card
+        happens to be last in this deck; if that card turns out yearless, `ended` would put "Deck
+        finished" on screen for a game that never started, over a deck that still holds every other
+        card. Nothing has been played, so there is nothing to protect by refusing to step back: the
+        player is clamped to the new last card (the clamp below does exactly that, and `isFlipped`
+        is already reset because `droppedCurrent` is set), and the gate then opens or keeps waiting
+        on THAT card like on any other.
+      */
+      const isExhausted = droppedCurrent && shifted > deck.length - 1;
 
       const currentIndex = Math.min(Math.max(shifted, 0), deck.length - 1);
 
+      // Moved back by the cards dropped before it, exactly like `currentIndex`; if the start card
+      // itself was dropped, the unchanged value already points at the card that followed it. The
+      // clamp keeps `startIndex <= currentIndex` through the clamp above -- a save holding a
+      // `startIndex` past its `currentIndex` would be rejected by `loadSession` on the next reload.
+      const startIndex = Math.min(Math.max(state.startIndex - droppedBeforeStart, 0), currentIndex);
+
+      if (isExhausted && state.status === 'playing') {
+        return { ...state, deck, currentIndex, startIndex, isFlipped: false, status: 'ended' };
+      }
+
       // =======================================================================
-      //  THE CARD-1 GATE.
+      //  THE GATE: "THE CURRENT CARD HAS A YEAR".
       //
-      //  It waits for card 1's lookup to **COMPLETE**, and it is now expressed as
-      //  a property of the deck -- "the first card has a year" -- rather than as
-      //  "the resolved card was the first one". The two were equivalent until
-      //  yearless cards started being dropped; they are not any more. When card 1
-      //  resolves to `null` it LEAVES, and the gate has to keep waiting for
-      //  whichever card takes its place, whose lookup has not happened yet.
+      //  It waits for the lookup of the card the player is about to see to
+      //  **COMPLETE**, and it is expressed as a property of the deck rather than
+      //  as "the resolved card was the one being waited on". The two were
+      //  equivalent until yearless cards started being dropped; they are not any
+      //  more. When the awaited card resolves to `null` it LEAVES, and the gate
+      //  has to keep waiting for whichever card takes its place, whose lookup has
+      //  not happened yet.
       //
-      //  Written against the NEXT deck for that reason. Reading `state.deck[0]`
-      //  would ask about a card that is no longer in the game.
+      //  Written against the NEXT deck and the index AFTER the shrink for that
+      //  reason. Reading `state.deck` would ask about a card that is no longer in
+      //  the game.
       //
-      //  It also self-heals: any `YEAR_RESOLVED` opens the gate once the first
-      //  card has a year, so a first card resolved out of order -- by a priority
-      //  jump, or arriving already filled in a re-dealt deck -- cannot leave the
-      //  session stuck on the loading screen. `START` has its own version of that
-      //  guard for the same reason (see above).
+      //  It is `deck[currentIndex]` and no longer `deck[0]` since 2026-09-29: a
+      //  shared mid-game link starts the player on the sender's card, so the card
+      //  on screen when the gate opens need not be card 1 -- and waiting on card 1
+      //  would either hold the loading screen for a card nobody is looking at, or
+      //  open it onto a pending year. For every other deal the current card IS
+      //  card 1 while `preparing` (nothing moves the index before the gate
+      //  opens), so for them this is the same card-1 gate it always was.
       //
-      //  Note it is card INDEX 0, not `state.currentIndex`: the gate is about the
-      //  first card of the shuffled deck specifically, which is the one the
-      //  resolver looks up first and the one the player is about to see.
+      //  It also self-heals: any `YEAR_RESOLVED` opens the gate once the current
+      //  card has a year, so a current card resolved out of order -- by a
+      //  priority jump, or arriving already filled in a re-dealt deck -- cannot
+      //  leave the session stuck on the loading screen. `START` has its own
+      //  version of that guard for the same reason (see above).
       // =======================================================================
-      const opensGate = state.status === 'preparing' && deck[0]?.year !== undefined;
+      const opensGate = state.status === 'preparing' && deck[currentIndex]?.year !== undefined;
       const status = opensGate ? 'playing' : state.status;
 
-      return { ...state, deck, currentIndex, isFlipped, status };
+      return { ...state, deck, currentIndex, startIndex, isFlipped, status };
     }
 
     case 'YEAR_LOOKUPS_UNAVAILABLE': {
@@ -297,16 +375,34 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
          slid the deck under them. Coming back to a card the player DID reveal
          costs them one tap; that is the cheaper error.
 
-         IT DOES NOT TOUCH THE CRAWL. Every card before `currentIndex` already has
-         a year (a yearless one was removed by `YEAR_RESOLVED`), and `RESUME`'s
-         "slice before the index" rule still holds because the index only ever
-         moves over resolved cards in this direction.
+         IT DOES NOT TOUCH THE CRAWL. Until 2026-09-29 this said every card before
+         `currentIndex` already had a year; that stopped being true when a shared
+         link could start the player mid-deck. Stepping back from a link's start
+         card lands on a card the rotated crawl (`resolver.ts`) reaches LAST, so
+         its year may well be pending. That is not a crash and needs nothing
+         here: the year slot renders its pending state, exactly as it does for a
+         player who outruns the crawl going forwards, and the priority jump in
+         `use-game-session.ts` moves that card to the front of the queue the
+         moment it becomes current. `RESUME`'s "count the yearless cards before
+         the index" rule is unaffected -- it counts `null`s, and an unresolved
+         card is `undefined`.
+
+         IT LOWERS `startIndex` when it steps below it, which only a link-started
+         game can do: that is how the end screen's count (`cardsPlayed`) learns
+         about the cards the player went back to.
         ===========================================================================
       */
       if (state.status !== 'playing') return state;
       if (state.currentIndex === 0) return state;
 
-      return { ...state, currentIndex: state.currentIndex - 1, isFlipped: false };
+      const currentIndex = state.currentIndex - 1;
+
+      return {
+        ...state,
+        currentIndex,
+        startIndex: Math.min(state.startIndex, currentIndex),
+        isFlipped: false,
+      };
     }
 
     case 'END': {
@@ -318,7 +414,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
     case 'RESUME': {
       // The persisted session is trusted here because `loadSession()` has already validated
-      // it -- version, shape, deck non-empty, index in range. This branch is the one place
+      // it -- version, shape, deck non-empty, both indices in range. This branch is the one place
       // that trust is spent, which is why the validation lives in `persistence.ts` and not
       // in a `useEffect` somewhere.
       const { session } = action;
@@ -344,24 +440,40 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
          `YEAR_RESOLVED`: `loadSession()` validated it against the SAVED deck, so
          after a filter it can be off the end, and it must not be left pointing at
          a different card than the player left off on.
+
+         What moves it is the count of YEARLESS cards before it, and only those.
+         Since 2026-09-29 the cards before the index are not necessarily resolved
+         -- a shared link can start the player mid-deck, and the crawl reaches the
+         cards before the start card last -- but an unresolved card is
+         `undefined`, is not filtered, and so moves nothing. `startIndex` moves by
+         the same rule and is clamped under the new `currentIndex`, so the
+         `startIndex <= currentIndex` invariant survives the filter.
         ===========================================================================
       */
       const deck = session.deck.filter((card) => card.year !== null);
-      const droppedBefore = session.deck
-        .slice(0, session.currentIndex)
-        .filter((card) => card.year === null).length;
+      const yearlessBefore = (index: number): number =>
+        session.deck.slice(0, index).filter((card) => card.year === null).length;
       const currentIndex =
         deck.length === 0
           ? 0
-          : Math.min(Math.max(session.currentIndex - droppedBefore, 0), deck.length - 1);
+          : Math.min(
+              Math.max(session.currentIndex - yearlessBefore(session.currentIndex), 0),
+              deck.length - 1,
+            );
+      const startIndex = Math.min(
+        Math.max(session.startIndex - yearlessBefore(session.startIndex), 0),
+        currentIndex,
+      );
 
       return {
         // A saved deck of nothing but yearless cards leaves nothing to resume.
         status: deck.length === 0 ? 'ended' : session.status,
         playlists: session.playlists,
         seed: session.seed,
+        shuffleVersion: session.shuffleVersion,
         deck,
         currentIndex,
+        startIndex,
         isFlipped: session.isFlipped,
         // Re-derived by the next crawl rather than restored: it describes the server's
         // configuration, not the session (see `PersistedSession`).
@@ -398,6 +510,23 @@ export function isCurrentYearPending(state: GameState): boolean {
   if (!card) return false;
 
   return card.year === undefined;
+}
+
+/**
+ * How many cards this player has had in front of them this game: from `startIndex` to the end of
+ * the deck. What the end screen reports (2026-09-29).
+ *
+ * `deck.length` was the old answer, and it is still exactly the answer for every deal that starts
+ * on card 1 -- that is `startIndex === 0`. A game started from a shared mid-game link begins partway
+ * in, and counting the cards before its start card would credit the player with cards they never
+ * saw. Stepping back past the start card with `PREVIOUS` lowers `startIndex`, so those cards count
+ * once they HAVE been seen.
+ *
+ * Meant for the end screen, i.e. after the deck ran out, which is what makes "to the end of the
+ * deck" the cards played. Like every total here it shrinks with the deck as yearless cards drop.
+ */
+export function cardsPlayed(state: GameState): number {
+  return Math.max(0, state.deck.length - state.startIndex);
 }
 
 /** How many cards are still to come AFTER the current one. Zero on the last card. */

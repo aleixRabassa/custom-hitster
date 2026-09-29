@@ -681,6 +681,8 @@ describe('App', () => {
         deck,
         currentIndex: 0,
         isFlipped: false,
+        shuffleVersion: 2,
+        startIndex: 0,
         status: 'preparing',
       } satisfies PersistedSession),
     );
@@ -729,6 +731,8 @@ describe('App', () => {
         deck: [noYearCard],
         currentIndex: 0,
         isFlipped: false,
+        shuffleVersion: 2,
+        startIndex: 0,
         status: 'playing',
       } satisfies PersistedSession),
     );
@@ -1053,6 +1057,8 @@ describe('App', () => {
       deck: [highConfidenceCard],
       currentIndex: 0,
       isFlipped: false,
+      shuffleVersion: 2,
+      startIndex: 0,
       status: 'playing',
     };
     storage.map.set(SESSION_STORAGE_KEY, JSON.stringify(session));
@@ -1087,6 +1093,8 @@ describe('App', () => {
         deck,
         currentIndex: 0,
         isFlipped: false,
+        shuffleVersion: 2,
+        startIndex: 0,
         status: 'playing',
       } satisfies PersistedSession),
     );
@@ -1111,6 +1119,51 @@ describe('App', () => {
       expect(screen.queryByTestId('hud')).not.toBeNull();
     });
     expect(screen.getByTestId('hud').textContent).toContain(COPY.hud.cardsLeft(1));
+
+    // A NEW seed (review §6, gap 5), and the CURRENT algorithm whatever dealt the game before it --
+    // which is what lets a link copied after Play again reproduce the deck (see `handleRestart`).
+    const saved = JSON.parse(storage.map.get(SESSION_STORAGE_KEY) ?? '{}') as PersistedSession;
+    expect(saved.seed).not.toBe('seed-1');
+    expect(saved.shuffleVersion).toBe(2);
+  });
+
+  it('should deal a fresh seed for the same playlist after End and Home, and after Exit', async () => {
+    // Review §6, gap 6: every path back to the picker ends in a new deal with a new seed.
+    stubYearApi();
+    const storage = memoryStorage();
+    renderApp(playlistFetch(200, playlistResult({ cards: [{ ...pendingYearCard }] })), storage);
+    const seeds: string[] = [];
+    const readSeed = () =>
+      (JSON.parse(storage.map.get(SESSION_STORAGE_KEY) ?? '{}') as PersistedSession).seed;
+
+    startPlaylist();
+    await waitFor(() => {
+      expect(screen.queryByTestId('hud')).not.toBeNull();
+    });
+    seeds.push(readSeed());
+
+    // End -> Home -> the same playlist.
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    await screen.findByText(COPY.end.heading);
+    fireEvent.click(screen.getByRole('button', { name: COPY.end.home }));
+    await screen.findByLabelText(COPY.landing.playlistLinkLabel(0));
+    startPlaylist();
+    await waitFor(() => {
+      expect(screen.queryByTestId('hud')).not.toBeNull();
+    });
+    seeds.push(readSeed());
+
+    // Exit -> the picker -> the same playlist.
+    fireEvent.click(screen.getByRole('button', { name: COPY.controls.exit }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.exitDialog.confirm }));
+    await screen.findByLabelText(COPY.landing.playlistLinkLabel(0));
+    startPlaylist();
+    await waitFor(() => {
+      expect(screen.queryByTestId('hud')).not.toBeNull();
+    });
+    seeds.push(readSeed());
+
+    expect(new Set(seeds).size).toBe(3);
   });
 
   describe('the shareable deck link', () => {
@@ -1193,38 +1246,264 @@ describe('App', () => {
       expect(vi.mocked(fetchImpl).mock.calls.length).toBeLessThanOrEqual(2);
     });
 
-    it('should resume a saved session in preference to a link', async () => {
-      // ===================================================================
-      //  STEP 8'S PRECEDENCE, AND THE ONE THAT PROTECTS A GAME IN PROGRESS.
-      //
-      //  Opening an old share link must not discard a live session. The proof
-      //  is that the resumed deck's seed survives AND no playlist request is
-      //  made -- a fetch that fails on call would also fail this test, which
-      //  is why the stub is a 500.
-      // ===================================================================
-      stubYearApi();
-      const storage = memoryStorage();
+    /**
+     * Write a saved `playing` session into the storage, as a reload would find it.
+     *
+     * `resumed-seed` by default, which no link can carry (a link's seed is 16 hex characters), so a
+     * test that wants the link to describe the saved game has to say so by passing the link's seed.
+     */
+    function writeSave(
+      storage: ReturnType<typeof memoryStorage>,
+      overrides: Partial<PersistedSession> = {},
+    ) {
       storage.map.set(
         SESSION_STORAGE_KEY,
         JSON.stringify({
           version: SESSION_VERSION,
           playlists: [PLAYLIST],
           seed: 'resumed-seed',
+          shuffleVersion: 2,
           deck: [highConfidenceCard],
           currentIndex: 0,
+          startIndex: 0,
           isFlipped: false,
           status: 'playing',
+          ...overrides,
         } satisfies PersistedSession),
       );
+    }
+
+    function savedSession(storage: ReturnType<typeof memoryStorage>): PersistedSession {
+      return JSON.parse(storage.map.get(SESSION_STORAGE_KEY) ?? '{}') as PersistedSession;
+    }
+
+    it('should ask before replacing a saved game with a different link', () => {
+      // ===================================================================
+      //  DECISION D4 (2026-09-29), WHICH REVERSED STEP 8'S SILENT PRECEDENCE.
+      //
+      //  A link opened over a saved game used to be ignored without a word. Now
+      //  the player is asked -- and ASKING changes nothing yet: no playlist
+      //  request, no game screen mounted under the prompt, and the save exactly
+      //  as it was. The 500 stub would fail the test if anything fetched.
+      // ===================================================================
+      stubYearApi();
+      const storage = memoryStorage();
+      writeSave(storage);
       const fetchImpl = playlistFetch(500, { code: 'internal-error' });
 
       render(<App storage={storage} fetchImpl={fetchImpl} search={LINK_SEARCH} />);
 
-      expect(screen.queryByTestId('hud')).not.toBeNull();
+      expect(screen.getByRole('heading', { name: COPY.replaceSession.heading })).not.toBeNull();
+      expect(screen.queryByTestId('hud')).toBeNull();
+      expect(fetchImpl).not.toHaveBeenCalled();
+      expect(savedSession(storage).seed).toBe('resumed-seed');
+    });
+
+    it('should resume the saved game when the prompt is declined', async () => {
+      stubYearApi();
+      const storage = memoryStorage();
+      writeSave(storage);
+      const fetchImpl = playlistFetch(500, { code: 'internal-error' });
+
+      render(<App storage={storage} fetchImpl={fetchImpl} search={LINK_SEARCH} />);
+      fireEvent.click(screen.getByRole('button', { name: COPY.replaceSession.keep }));
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('hud')).not.toBeNull();
+      });
+      expect(fetchImpl).not.toHaveBeenCalled();
+      expect(savedSession(storage).seed).toBe('resumed-seed');
+    });
+
+    it('should deal the shared deck when the prompt is accepted', async () => {
+      stubYearApi();
+      const storage = memoryStorage();
+      writeSave(storage);
+      const fetchImpl = playlistFetch(200, playlistResult());
+
+      render(<App storage={storage} fetchImpl={fetchImpl} search={LINK_SEARCH} />);
+      fireEvent.click(screen.getByRole('button', { name: COPY.replaceSession.replace }));
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('hud')).not.toBeNull();
+      });
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+      expect(savedSession(storage).seed).toBe(LINK_SEED);
+      expect(screen.queryByRole('heading', { name: COPY.replaceSession.heading })).toBeNull();
+    });
+
+    it('should keep the saved game intact when the shared deck fails to load', async () => {
+      // The saved game is replaced by the DEAL, never by the press -- so a fetch that fails costs the
+      // player nothing: the prompt stays up with the error, and "keep my game" still resumes it.
+      stubYearApi();
+      const storage = memoryStorage();
+      writeSave(storage);
+      const fetchImpl = playlistFetch(404, { code: 'not-found-or-private', message: 'nope' });
+
+      render(<App storage={storage} fetchImpl={fetchImpl} search={LINK_SEARCH} />);
+      fireEvent.click(screen.getByRole('button', { name: COPY.replaceSession.replace }));
+
+      await waitFor(() => {
+        expect(screen.getByRole('alert').textContent).toContain(
+          PLAYLIST_ERROR_MESSAGES['not-found-or-private'],
+        );
+      });
+      expect(savedSession(storage).seed).toBe('resumed-seed');
+
+      fireEvent.click(screen.getByRole('button', { name: COPY.replaceSession.keep }));
+      await waitFor(() => {
+        expect(screen.queryByTestId('hud')).not.toBeNull();
+      });
+      expect(savedSession(storage).seed).toBe('resumed-seed');
+    });
+
+    it('should resume with no prompt, on the same card and flip, when the link describes the saved game', async () => {
+      // ===================================================================
+      //  DECISION D2 (2026-09-29): A RELOAD NEVER MODIFIES A GAME.
+      //
+      //  This is a reload of the tab the link was opened in: the saved game's
+      //  seed and shuffle version are the link's own (a link with no `v` is
+      //  version 1), so asking "replace your game?" here would be asking on
+      //  every reload. The link also names a DIFFERENT card from the one the
+      //  player is on -- the sender's position must never move a reloader.
+      // ===================================================================
+      stubYearApi();
+      const storage = memoryStorage();
+      const secondCard = { ...highConfidenceCard, id: 'aaaaaaaaaaaaaaaaaaaaaa' };
+      writeSave(storage, {
+        seed: LINK_SEED,
+        shuffleVersion: 1,
+        deck: [highConfidenceCard, secondCard],
+        currentIndex: 1,
+        isFlipped: true,
+      });
+      const fetchImpl = playlistFetch(500, { code: 'internal-error' });
+
+      render(
+        <App
+          storage={storage}
+          fetchImpl={fetchImpl}
+          search={`${LINK_SEARCH}&card=${highConfidenceCard.id}`}
+        />,
+      );
+
+      expect(screen.queryByRole('heading', { name: COPY.replaceSession.heading })).toBeNull();
+      await waitFor(() => {
+        expect(screen.queryByTestId('hud')).not.toBeNull();
+      });
       expect(fetchImpl).not.toHaveBeenCalled();
 
-      const saved = JSON.parse(storage.map.get(SESSION_STORAGE_KEY) ?? '{}') as PersistedSession;
-      expect(saved.seed).toBe('resumed-seed');
+      const saved = savedSession(storage);
+      expect(saved.seed).toBe(LINK_SEED);
+      expect(saved.currentIndex).toBe(1);
+      expect(saved.isFlipped).toBe(true);
+    });
+
+    it('should deal the link again from card 1 on a reload after the game ended', async () => {
+      // D2's fourth rule: after End the save is cleared, so there is no game for a reload to protect,
+      // and the params still in the address bar deal the link again -- accepted, not a bug.
+      stubYearApi();
+      const storage = memoryStorage();
+      const fetchImpl = playlistFetch(200, playlistResult({ cards: [{ ...pendingYearCard }] }));
+
+      render(<App storage={storage} fetchImpl={fetchImpl} search={LINK_SEARCH} />);
+      await waitFor(() => {
+        expect(screen.queryByTestId('hud')).not.toBeNull();
+      });
+      fireEvent.keyDown(window, { key: 'ArrowRight' });
+      await screen.findByText(COPY.end.heading);
+      expect(storage.map.has(SESSION_STORAGE_KEY)).toBe(false);
+
+      // The reload: a fresh mount over the same storage and the same address bar.
+      cleanup();
+      await flushHistoryTraversal();
+      render(<App storage={storage} fetchImpl={fetchImpl} search={LINK_SEARCH} />);
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('hud')).not.toBeNull();
+      });
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+      const saved = savedSession(storage);
+      expect(saved.seed).toBe(LINK_SEED);
+      expect(saved.currentIndex).toBe(0);
+    });
+
+    it('should start on the card a mid-game link names', async () => {
+      // Decision D3: the link carries the sender's current card, and the recipient starts ON it --
+      // found by id in the recipient's own deal, so the position survives the shuffle and a
+      // different fetch alike.
+      stubYearApi();
+      const storage = memoryStorage();
+      const startCard = UNRESOLVED_DECK[2] as Card;
+      const fetchImpl = playlistFetch(200, playlistResult());
+
+      render(
+        <App
+          storage={storage}
+          fetchImpl={fetchImpl}
+          search={`${LINK_SEARCH}&v=2&card=${startCard.id}`}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('hud')).not.toBeNull();
+      });
+      const saved = savedSession(storage);
+      expect(saved.shuffleVersion).toBe(2);
+      expect(saved.deck[saved.currentIndex]?.id).toBe(startCard.id);
+      expect(saved.startIndex).toBe(saved.currentIndex);
+    });
+
+    it('should start from the top and say so when the shared card has left the playlist', async () => {
+      stubYearApi();
+      const storage = memoryStorage();
+      const fetchImpl = playlistFetch(200, playlistResult());
+
+      render(
+        <App
+          storage={storage}
+          fetchImpl={fetchImpl}
+          search={`${LINK_SEARCH}&v=2&card=zzzzzzzzzzzzzzzzzzzzzz`}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('hud')).not.toBeNull();
+      });
+      expect(savedSession(storage).currentIndex).toBe(0);
+      expect(screen.getByTestId('notice-banner').textContent).toContain(
+        COPY.notice.startCardMissing,
+      );
+    });
+
+    it('should deal a fresh shuffle for the same playlist picked after a link-dealt game', async () => {
+      // The link's seed is consumed by the one deal it asked for; exiting and picking the same
+      // playlist by hand is a new game, and gets a new order (review §6, gap 6).
+      stubYearApi();
+      const storage = memoryStorage();
+      render(
+        <App
+          storage={storage}
+          fetchImpl={playlistFetch(200, playlistResult())}
+          search={LINK_SEARCH}
+        />,
+      );
+      await waitFor(() => {
+        expect(screen.queryByTestId('hud')).not.toBeNull();
+      });
+      expect(savedSession(storage).seed).toBe(LINK_SEED);
+
+      fireEvent.click(screen.getByRole('button', { name: COPY.controls.exit }));
+      fireEvent.click(screen.getByRole('button', { name: COPY.exitDialog.confirm }));
+      await screen.findByLabelText(COPY.landing.playlistLinkLabel(0));
+
+      startPlaylist();
+      await waitFor(() => {
+        expect(screen.queryByTestId('hud')).not.toBeNull();
+      });
+      const saved = savedSession(storage);
+      expect(saved.seed).not.toBe(LINK_SEED);
+      expect(saved.shuffleVersion).toBe(2);
     });
 
     it('should show the plain welcome screen for a malformed link', async () => {
@@ -1664,9 +1943,9 @@ describe('App', () => {
       expect(saved.playlists.map((playlist) => playlist.id)).toEqual([PLAYLIST.id]);
     });
 
-    it('should ignore a share link when a game is already in progress', async () => {
-      // The existing precedence, re-run with a multi-id link: opening an old link must not discard
-      // a live session, and a link naming five playlists is five times the deck to lose.
+    it('should ask before a multi-playlist link replaces a game in progress, and deal it on yes', async () => {
+      // The D4 prompt with a multi-id link: a link naming five playlists is five times the deck to
+      // lose, so it is asked about -- and accepting deals every playlist it names.
       stubYearApi();
       const storage = memoryStorage();
       storage.map.set(
@@ -1675,13 +1954,15 @@ describe('App', () => {
           version: SESSION_VERSION,
           playlists: [PLAYLIST],
           seed: 'resumed-seed',
+          shuffleVersion: 2,
           deck: [highConfidenceCard],
           currentIndex: 0,
+          startIndex: 0,
           isFlipped: false,
           status: 'playing',
         } satisfies PersistedSession),
       );
-      const fetchImpl = playlistFetch(500, { code: 'internal-error' });
+      const fetchImpl = bothLoad();
 
       render(
         <App
@@ -1691,11 +1972,56 @@ describe('App', () => {
         />,
       );
 
-      expect(screen.queryByTestId('hud')).not.toBeNull();
+      expect(screen.queryByTestId('hud')).toBeNull();
       expect(fetchImpl).not.toHaveBeenCalled();
 
+      fireEvent.click(screen.getByRole('button', { name: COPY.replaceSession.replace }));
+      await waitFor(() => {
+        expect(screen.queryByTestId('hud')).not.toBeNull();
+      });
+
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
       const saved = JSON.parse(storage.map.get(SESSION_STORAGE_KEY) ?? '{}') as PersistedSession;
-      expect(saved.seed).toBe('resumed-seed');
+      expect(saved.seed).toBe('a1b2c3d4e5f60718');
+      expect(saved.playlists.map((playlist) => playlist.id)).toEqual([
+        PLAYLIST.id,
+        SECOND_PLAYLIST.id,
+      ]);
+    });
+
+    it('should resume with no prompt when a multi-playlist link lost a playlist for its recipient', () => {
+      // The subset rule in `linkArrivalIntent`: the recipient's saved deck names only the playlists
+      // that LOADED for them, so a reload of their tab presents a link naming one more. Same seed, so
+      // it is their game, and a reload must not ask.
+      stubYearApi();
+      const storage = memoryStorage();
+      storage.map.set(
+        SESSION_STORAGE_KEY,
+        JSON.stringify({
+          version: SESSION_VERSION,
+          playlists: [PLAYLIST],
+          seed: 'a1b2c3d4e5f60718',
+          shuffleVersion: 1,
+          deck: [highConfidenceCard],
+          currentIndex: 0,
+          startIndex: 0,
+          isFlipped: false,
+          status: 'playing',
+        } satisfies PersistedSession),
+      );
+      const fetchImpl = bothLoad();
+
+      render(
+        <App
+          storage={storage}
+          fetchImpl={fetchImpl}
+          search={`?playlist=${PLAYLIST.id},${SECOND_PLAYLIST.id}&seed=a1b2c3d4e5f60718`}
+        />,
+      );
+
+      expect(screen.queryByRole('heading', { name: COPY.replaceSession.heading })).toBeNull();
+      expect(screen.queryByTestId('hud')).not.toBeNull();
+      expect(fetchImpl).not.toHaveBeenCalled();
     });
 
     it('should save the whole set of playlists and show it on the landing screen', async () => {

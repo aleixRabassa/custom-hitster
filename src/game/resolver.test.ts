@@ -72,6 +72,8 @@ interface HarnessOptions {
   onResolved?: (resolved: ResolvedYear) => void;
   /** A lookup that never settles until the signal aborts. */
   hang?: boolean;
+  /** Passed straight through as `ResolverDeps.startIndex`. */
+  startIndex?: number;
 }
 
 function createHarness(deck: Card[], plan: Plan, options: HarnessOptions = {}): Harness {
@@ -135,6 +137,7 @@ function createHarness(deck: Card[], plan: Plan, options: HarnessOptions = {}): 
     },
     // Zero jitter, so every asserted delay is the exact number the code computed.
     random: () => 0,
+    ...(options.startIndex === undefined ? {} : { startIndex: options.startIndex }),
   });
 
   return harness;
@@ -147,7 +150,8 @@ const alwaysOk: Plan = () => OK;
 describe('createYearResolver ordering', () => {
   it('should resolve cards in deck order', async () => {
     // Deck order IS play order (`shuffle.ts` runs first), which is the whole reason the crawl is
-    // ordered at all: card 1 must be the first lookup, because Start waits on it.
+    // ordered at all: the start card -- card 1, with no `startIndex` -- must be the first lookup,
+    // because Start waits on it.
     const harness = createHarness(DECK, alwaysOk);
     harness.resolver.start();
     await harness.flush();
@@ -202,6 +206,51 @@ describe('createYearResolver ordering', () => {
     await harness.flush();
 
     expect(harness.calls).toEqual([]);
+  });
+
+  it('should look the start card up first when the deck starts mid-way', async () => {
+    // A shared mid-game link starts the player on the sender's card, and the gate waits on THAT
+    // card -- so it is the first lookup, not card 1.
+    const harness = createHarness(DECK, alwaysOk, { startIndex: 2 });
+    harness.resolver.start();
+    await harness.flush();
+
+    expect(harness.calls[0]).toBe('c');
+  });
+
+  it('should walk to the end of the deck and then wrap round to the cards before the start', async () => {
+    // Forwards first, because that is the direction the player is going; the cards before the
+    // start are only reached by stepping back, so they go last.
+    const harness = createHarness(DECK, alwaysOk, { startIndex: 2 });
+    harness.resolver.start();
+    await harness.flush();
+
+    expect(harness.calls).toEqual(['c', 'd', 'e', 'a', 'b']);
+  });
+
+  it('should still dedupe and skip resolved cards in the rotated order', async () => {
+    const deck = [
+      card('a'),
+      card('dup'),
+      card('b', { year: 1980, yearConfidence: 'high' }),
+      card('dup'),
+      card('c'),
+    ];
+    const harness = createHarness(deck, alwaysOk, { startIndex: 2 });
+    harness.resolver.start();
+    await harness.flush();
+
+    expect(harness.calls).toEqual(['dup', 'c', 'a']);
+  });
+
+  it('should fall back to deck order for a start index outside the deck', async () => {
+    for (const startIndex of [-1, 5, 99, 1.5]) {
+      const harness = createHarness(DECK, alwaysOk, { startIndex });
+      harness.resolver.start();
+      await harness.flush();
+
+      expect(harness.calls).toEqual(['a', 'b', 'c', 'd', 'e']);
+    }
   });
 
   it('should ignore a second start on the same instance', async () => {

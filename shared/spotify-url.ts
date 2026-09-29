@@ -42,8 +42,13 @@ export type ParsePlaylistUrlResult =
  * `0`-`7`). The rest are well-formed here, get forwarded to Spotify, and come back as
  * `not-found-or-private` -- one wasted round trip on a typo, which is the cheap direction
  * to be wrong in. Rejecting them here would need a BigInt decode for a better error.
+ *
+ * Exported (2026-09-29) because the rule is about Spotify ids of EVERY entity, not playlist ids
+ * alone: `src/game/deck-link.ts` validates a share link's `card` param -- a TRACK id -- against it,
+ * so one pattern owns the id shape in both places. It carries no `g` flag, so `.test()` keeps no
+ * `lastIndex` between callers; adding one would make a shared instance fail every other call.
  */
-const SPOTIFY_ID_PATTERN = /^[0-9A-Za-z]{22}$/;
+export const SPOTIFY_ID_PATTERN = /^[0-9A-Za-z]{22}$/;
 
 /**
  * Host matching is ANCHORED, never a `includes('open.spotify.com')`. A look-alike

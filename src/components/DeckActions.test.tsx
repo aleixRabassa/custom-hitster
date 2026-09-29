@@ -14,10 +14,12 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DeckActions } from './DeckActions';
+import { auditableText } from './__fixtures__/auditable-text';
 import { fixtureDeck } from './__fixtures__/cards';
 import { COPY } from '../game/copy';
 import { CATALOGUES } from '../game/i18n';
 import { pdfFileName } from '../game/pdf-text';
+import { LOCALES } from '../game/locale';
 import { LocaleContext } from '../hooks/useLocale';
 import { sheetsForDeck } from '../hooks/usePdfExport';
 import type { DeckActionsProps } from './DeckActions';
@@ -74,12 +76,27 @@ const PLAYLIST_ID = '37i9dQZF1DXcBWIGoYBM5M';
 const SECOND_PLAYLIST_ID = '2zmXlpkOMN92NlQaE2M62c';
 const SEED = 'a1b2c3d4e5f60718';
 const ORIGIN = 'https://hitster.example/';
+/** A real fixture card's id, standing in for the card the player is on mid-game. */
+const CURRENT_CARD_ID = fixtureDeck[2]?.id ?? '';
+
+/**
+ * The query of a copied link, as parameters rather than as one string.
+ *
+ * ORDER-FREE ON PURPOSE (2026-09-29). The link grew a shuffle version and, mid-game, a card, and
+ * which order `buildDeckLink` writes them in is `deck-link.ts`'s decision -- its own tests pin the
+ * exact string. What THIS component owns is which values go in, so that is what these assert.
+ */
+function linkParams(link: string | undefined): URLSearchParams {
+  return new URL(link ?? 'about:blank').searchParams;
+}
 
 function renderActions(overrides: Partial<DeckActionsProps> = {}) {
   const props: DeckActionsProps = {
     playlistIds: [PLAYLIST_ID],
     playlistName: 'Rock Classics',
     seed: SEED,
+    // The algorithm every new deal uses. A v1 deck (an old link or save) has its own test below.
+    shuffleVersion: 2,
     shareOrigin: ORIGIN,
     onSavePlaylist: vi.fn(),
     isPlaylistSaved: false,
@@ -150,6 +167,35 @@ describe('DeckActions', () => {
     }
   });
 
+  it('should render no title, artist or year even with the copy fallback holding a mid-game link', async () => {
+    // ===================================================================
+    //  THE ONE CARD-DERIVED VALUE THIS COMPONENT CAN PUT IN THE DOM.
+    //
+    //  Since 2026-09-29 a mid-game link carries the current card's TRACK
+    //  ID, and when the clipboard fails the link is rendered into an
+    //  input's `value`. That id is SUBTRACTED below by exact string, and
+    //  the subtraction is the decision, documented: the QR on the card the
+    //  player is looking at already encodes that same id, so it is not new
+    //  information on the screen, and it is not a title, an artist or a
+    //  year. The proxy stays absolute for everything else.
+    // ===================================================================
+    stubClipboard(undefined);
+    const { container } = renderActions({ deck: fixtureDeck, currentCardId: CURRENT_CARD_ID });
+
+    fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.copyLink }));
+    const field = (await screen.findByLabelText(
+      COPY.deckActions.shareLinkFieldLabel,
+    )) as HTMLInputElement;
+    expect(field.value).toContain(CURRENT_CARD_ID);
+
+    const text = auditableText(container).replaceAll(CURRENT_CARD_ID, '');
+    for (const card of fixtureDeck) {
+      expect(text).not.toContain(card.title);
+      expect(text).not.toContain(card.artist);
+      if (typeof card.year === 'number') expect(text).not.toContain(String(card.year));
+    }
+  });
+
   it('should render no track data even though it holds the deck', () => {
     // ===================================================================
     //  THE ASSERTION THE GAME SCREEN'S USE OF THIS COMPONENT RESTS ON.
@@ -187,11 +233,12 @@ describe('DeckActions', () => {
       fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.copyLink }));
 
       expect(writeText).toHaveBeenCalledTimes(1);
-      expect(writeText.mock.calls[0]?.[0]).toBe(
-        `https://hitster.example?playlist=${PLAYLIST_ID}&seed=${SEED}`,
-      );
-      // Confirmed in a live region, which is safe even beside an unflipped card: the link names a
-      // playlist and a seed.
+      const link = writeText.mock.calls[0]?.[0];
+      expect(link?.startsWith('https://hitster.example?')).toBe(true);
+      expect(linkParams(link).get('playlist')).toBe(PLAYLIST_ID);
+      expect(linkParams(link).get('seed')).toBe(SEED);
+      // Confirmed in a live region, which is safe even beside an unflipped card: the region's text
+      // is a fixed sentence, whatever the link holds.
       await waitFor(() => {
         expect(screen.getByRole('status').textContent).toBe(COPY.deckActions.linkCopied);
       });
@@ -212,9 +259,10 @@ describe('DeckActions', () => {
 
       fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.copyLink }));
 
-      expect(writeText.mock.calls[0]?.[0]).toBe(
-        `https://hitster.example?playlist=${PLAYLIST_ID},${SECOND_PLAYLIST_ID}&seed=${SEED}`,
+      expect(linkParams(writeText.mock.calls[0]?.[0]).get('playlist')).toBe(
+        `${PLAYLIST_ID},${SECOND_PLAYLIST_ID}`,
       );
+      expect(linkParams(writeText.mock.calls[0]?.[0]).get('seed')).toBe(SEED);
       await waitFor(() => {
         expect(screen.getByRole('status').textContent).toBe(COPY.deckActions.linkCopied);
       });
@@ -225,7 +273,74 @@ describe('DeckActions', () => {
       // describes. "Same playlist" over a three-playlist deck reads as a link to one of them.
       renderActions({ playlistIds: [PLAYLIST_ID, SECOND_PLAYLIST_ID] });
 
-      expect(document.body.textContent ?? '').toContain(COPY.deckActions.shareCaption(2));
+      expect(document.body.textContent ?? '').toContain(COPY.deckActions.shareCaption(2, false));
+    });
+
+    it('should carry the shuffle version: v=2 for a v2 deck, none for a v1 deck', () => {
+      // ===================================================================
+      //  A SEED DOES NOT SAY HOW TO DEAL IT (2026-09-29, D1).
+      //
+      //  Every link minted before the hash sort carries no version and must
+      //  still deal Fisher-Yates, so "no `v`" MEANS version 1 -- which is why
+      //  a v1 deck writes none rather than `v=1`, and a v2 deck must write
+      //  one or its recipient re-deals it with the wrong algorithm.
+      // ===================================================================
+      const writeText = vi.fn<(text: string) => Promise<void>>(() => Promise.resolve());
+      stubClipboard(writeText);
+      const { rerender, props } = renderActions({ shuffleVersion: 2 });
+
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.copyLink }));
+      expect(linkParams(writeText.mock.calls[0]?.[0]).get('v')).toBe('2');
+
+      rerender(<DeckActions {...props} shuffleVersion={1} />);
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.copyLink }));
+      expect(linkParams(writeText.mock.calls[1]?.[0]).get('v')).toBeNull();
+      expect(linkParams(writeText.mock.calls[1]?.[0]).get('seed')).toBe(SEED);
+    });
+
+    it('should carry the current card mid-game and no card without one', () => {
+      // D3: a mid-game link starts the recipient on the sender's card. The end screen passes no
+      // card, because after the last card a position would drop the recipient on the final card.
+      const writeText = vi.fn<(text: string) => Promise<void>>(() => Promise.resolve());
+      stubClipboard(writeText);
+      const { rerender, props } = renderActions({ currentCardId: CURRENT_CARD_ID });
+
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.copyLink }));
+      expect(linkParams(writeText.mock.calls[0]?.[0]).get('card')).toBe(CURRENT_CARD_ID);
+
+      // Built at click time, so the card is the one on screen AT THE PRESS -- a later card
+      // re-renders this with a new id, exactly as a Play again re-renders it with a new seed.
+      const nextCardId = fixtureDeck[3]?.id ?? '';
+      rerender(<DeckActions {...props} currentCardId={nextCardId} />);
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.copyLink }));
+      expect(linkParams(writeText.mock.calls[1]?.[0]).get('card')).toBe(nextCardId);
+
+      cleanup();
+      writeText.mockClear();
+      renderActions();
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.copyLink }));
+      expect(linkParams(writeText.mock.calls[0]?.[0]).get('card')).toBeNull();
+    });
+
+    it('should say when the link starts from the current card, and only then', () => {
+      // The caption is the sentence that has to be believed, so it agrees with what the link does.
+      renderActions({ currentCardId: CURRENT_CARD_ID });
+      expect(document.body.textContent ?? '').toContain(COPY.deckActions.shareCaption(1, true));
+
+      cleanup();
+      renderActions();
+      expect(document.body.textContent ?? '').toContain(COPY.deckActions.shareCaption(1, false));
+    });
+
+    it('should word the two captions differently in every language', () => {
+      // `satisfies Copy` cannot catch a translation that ignores the second parameter -- a
+      // one-parameter function is assignable to a two-parameter type -- so this does, per catalogue.
+      for (const locale of LOCALES) {
+        const { shareCaption } = CATALOGUES[locale].copy.deckActions;
+        expect(shareCaption(1, true)).not.toBe(shareCaption(1, false));
+        expect(shareCaption(2, true)).not.toBe(shareCaption(2, false));
+        expect(shareCaption(1, false)).not.toBe(shareCaption(2, false));
+      }
     });
 
     it('should build the share link from the current seed', () => {
@@ -266,7 +381,8 @@ describe('DeckActions', () => {
       const field = (await screen.findByLabelText(
         COPY.deckActions.shareLinkFieldLabel,
       )) as HTMLInputElement;
-      expect(field.value).toBe(`https://hitster.example?playlist=${PLAYLIST_ID}&seed=${SEED}`);
+      expect(linkParams(field.value).get('playlist')).toBe(PLAYLIST_ID);
+      expect(linkParams(field.value).get('seed')).toBe(SEED);
       expect(field.readOnly).toBe(true);
     });
 
@@ -329,6 +445,7 @@ describe('DeckActions', () => {
             playlistIds={[PLAYLIST_ID]}
             playlistName="Rock Classics"
             seed={SEED}
+            shuffleVersion={2}
             shareOrigin={ORIGIN}
             onSavePlaylist={vi.fn()}
             isPlaylistSaved={false}

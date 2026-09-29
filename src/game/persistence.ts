@@ -20,6 +20,7 @@
  * under the node environment with a plain in-memory stub, keeping jsdom a Phase 4 decision.
  */
 
+import type { ShuffleVersion } from './shuffle';
 import type { GameState, PersistedSession } from './types';
 import type { Card, PlaylistSummary, YearConfidence } from '../../shared/types';
 
@@ -54,6 +55,15 @@ export const SESSION_STORAGE_KEY = 'hitster:session:v1';
  *  this, because bumping it is exactly how you make those saves unreachable --
  *  which is the opposite of what the lift is for.
  * ===========================================================================
+ *
+ * `shuffleVersion` and `startIndex` (2026-09-29) did NOT bump it, deliberately. Both are
+ * OPTIONAL on read with a default that is exact rather than a guess -- a save without
+ * `shuffleVersion` was written before hash-sort dealing existed, so its deck was dealt by
+ * Fisher-Yates (`1`); a save without `startIndex` was written before a link could start a game
+ * mid-deck, so the player started on card 1 (`0`). A bump would have made every game in progress
+ * on deploy day unreadable in order to learn two facts the missing field already states. The other
+ * direction is harmless too: an OLDER build reading a new save drops both fields, because
+ * validation rebuilds the session field by field.
  */
 export const SESSION_VERSION = 2;
 
@@ -96,8 +106,10 @@ export function toPersistedSession(state: GameState): PersistedSession | null {
     // persisted shape is mutable and structurally separate on purpose (see `PersistedSession`).
     playlists: [...state.playlists],
     seed: state.seed,
+    shuffleVersion: state.shuffleVersion,
     deck: state.deck,
     currentIndex: state.currentIndex,
+    startIndex: state.startIndex,
     isFlipped: state.isFlipped,
     status: state.status,
   };
@@ -206,6 +218,17 @@ function validateSession(value: unknown): PersistedSession | null {
   if (typeof currentIndex !== 'number' || !Number.isInteger(currentIndex)) return null;
   if (currentIndex < 0 || currentIndex >= deck.length) return null;
 
+  // Both optional, both with an EXACT default (see `SESSION_VERSION` for why neither bumped it).
+  // A v1 payload predates both fields by months, so its values are fixed rather than read: a
+  // v1-shaped payload that somehow carried them would be describing something no build wrote.
+  const isLegacy = version === SESSION_VERSION_LEGACY;
+
+  const shuffleVersion = isLegacy ? 1 : validateShuffleVersion(record['shuffleVersion']);
+  if (shuffleVersion === null) return null;
+
+  const startIndex = isLegacy ? 0 : validateStartIndex(record['startIndex'], currentIndex);
+  if (startIndex === null) return null;
+
   const isFlipped = record['isFlipped'];
   if (typeof isFlipped !== 'boolean') return null;
 
@@ -220,11 +243,46 @@ function validateSession(value: unknown): PersistedSession | null {
     version: SESSION_VERSION,
     playlists,
     seed,
+    shuffleVersion,
     deck,
     currentIndex,
+    startIndex,
     isFlipped,
     status,
   };
+}
+
+/**
+ * The algorithm that dealt the saved deck. ABSENT MEANS `1`, NEVER THE CURRENT VERSION.
+ *
+ * A save written before 2026-09-29 was dealt by Fisher-Yates. Defaulting it to the current version
+ * would not change the resumed deck (the save stores the dealt cards, not the recipe), but it would
+ * change every link SHARED from that resumed game: the link would name hash-sort dealing, and its
+ * recipient would get a different order from the one on the sharer's screen. Any other value is a
+ * payload this code did not write, and is rejected like every other bad field.
+ */
+function validateShuffleVersion(value: unknown): ShuffleVersion | null {
+  if (value === undefined) return 1;
+  if (value === 1 || value === 2) return value;
+
+  return null;
+}
+
+/**
+ * The lowest index the player has been on. ABSENT MEANS `0` -- a save written before a link could
+ * start a game mid-deck started on card 1.
+ *
+ * Present, it must be an integer in `[0, currentIndex]`: that is the invariant the reducer keeps,
+ * so anything outside it did not come from this code. Out of range it would not crash anything --
+ * it feeds only the end screen's count -- but a count below zero or above the deck is a visible
+ * wrong number, and the module's rule is to reject what it cannot account for.
+ */
+function validateStartIndex(value: unknown, currentIndex: number): number | null {
+  if (value === undefined) return 0;
+  if (typeof value !== 'number' || !Number.isInteger(value)) return null;
+  if (value < 0 || value > currentIndex) return null;
+
+  return value;
 }
 
 /**

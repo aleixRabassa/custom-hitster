@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  *
- * The notices are five independent conditions in one banner, and the common case is that none of
+ * The notices are six independent conditions in one banner, and the common case is that none of
  * them applies -- so "renders nothing" is as much a requirement as any of the messages.
  */
 
@@ -10,6 +10,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { NoticeBanner } from './NoticeBanner';
 import { COPY } from '../game/copy';
+import { CATALOGUES } from '../game/i18n';
+import { LOCALES } from '../game/locale';
+import { LocaleContext } from '../hooks/useLocale';
 import { MAX_EMBED_TRACKS } from '../../shared/constants';
 
 function renderBanner(props: Partial<Parameters<typeof NoticeBanner>[0]> = {}) {
@@ -24,6 +27,7 @@ function renderBanner(props: Partial<Parameters<typeof NoticeBanner>[0]> = {}) {
       // container passes the real count; a test that does not care gets no line.
       loadedPlaylistCount={props.loadedPlaylistCount ?? 0}
       yearLookupsUnavailable={props.yearLookupsUnavailable ?? false}
+      startCardMissing={props.startCardMissing ?? false}
       onDismiss={onDismiss}
     />,
   );
@@ -88,10 +92,58 @@ describe('NoticeBanner', () => {
     );
   });
 
-  it('should render all five notices together', () => {
-    // They are independent, so all five can apply at once and the banner must not pick one. A
-    // five-playlist deck with a dead playlist, a truncated one and no year lookups is the worst
-    // realistic case, and it is still a list of footnotes rather than a blocker.
+  it("should say when a shared link's starting card is missing, and only then", () => {
+    // A mid-game link (`&card=`) promised a position. When the recipient's deck does not hold that
+    // card the game starts at the top, and saying so is what keeps it from reading as a broken link.
+    renderBanner({ startCardMissing: true });
+
+    const lines = Array.from(
+      screen.getByTestId('notice-banner').querySelectorAll('li'),
+      (item) => item.textContent,
+    );
+    expect(lines).toEqual([COPY.notice.startCardMissing]);
+
+    // Off by default: only a link-dealt deck can set it, so every other deal renders nothing.
+    cleanup();
+    const { container } = render(
+      <NoticeBanner
+        truncated={false}
+        skippedCount={0}
+        yearLookupsUnavailable={false}
+        onDismiss={vi.fn()}
+      />,
+    );
+    expect(container.firstChild).toBeNull();
+  });
+
+  it('should word the missing starting card in every language', () => {
+    // `satisfies Copy` guarantees the key exists in each catalogue; this checks the banner reads the
+    // ACTIVE one rather than English.
+    for (const locale of LOCALES) {
+      const { unmount } = render(
+        <LocaleContext.Provider value={{ locale, ...CATALOGUES[locale], setLocale: () => {} }}>
+          <NoticeBanner
+            truncated={false}
+            skippedCount={0}
+            yearLookupsUnavailable={false}
+            startCardMissing
+            onDismiss={vi.fn()}
+          />
+        </LocaleContext.Provider>,
+      );
+
+      expect(screen.getByTestId('notice-banner').textContent).toContain(
+        CATALOGUES[locale].copy.notice.startCardMissing,
+      );
+      unmount();
+    }
+  });
+
+  it('should render all six notices together', () => {
+    // They are independent, so all six can apply at once and the banner must not pick one. A
+    // five-playlist deck with a dead playlist, a truncated one, no year lookups and a shared link
+    // whose card is gone is the worst realistic case, and it is still a list of footnotes rather
+    // than a blocker.
     renderBanner({
       truncated: true,
       skippedCount: 2,
@@ -99,9 +151,10 @@ describe('NoticeBanner', () => {
       deckSize: 240,
       loadedPlaylistCount: 4,
       yearLookupsUnavailable: true,
+      startCardMissing: true,
     });
 
-    expect(screen.getByTestId('notice-banner').querySelectorAll('li')).toHaveLength(5);
+    expect(screen.getByTestId('notice-banner').querySelectorAll('li')).toHaveLength(6);
   });
 
   it('should report one playlist that could not be loaded', () => {
@@ -215,6 +268,7 @@ describe('NoticeBanner', () => {
       deckSize: 240,
       loadedPlaylistCount: 4,
       yearLookupsUnavailable: true,
+      startCardMissing: true,
     });
 
     const names = screen

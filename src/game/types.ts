@@ -9,16 +9,19 @@
  * state.
  */
 
+import type { ShuffleVersion } from './shuffle';
 import type { Card, PlaylistSummary, YearConfidence } from '../../shared/types';
 
 /**
  * Where a session is in its life cycle.
  *
  * - `idle`:      nothing started. The landing screen's state (Phase 6).
- * - `preparing`: THE CARD-1 GATE. `START` has run and the deck is shuffled, but card 1's
- *                year lookup has not come back yet. **The only status Phase 6 may render a
- *                loading screen for** -- a wait here is one lookup (1.3-3.6 s cold), never
- *                the whole deck (minutes; see `resolver.ts` for the measurements).
+ * - `preparing`: THE CARD-1 GATE. `START` has run and the deck is shuffled, but the START
+ *                card's year lookup has not come back yet -- card 1, except for a deal from a
+ *                shared mid-game link, which starts on the sender's card (2026-09-29).
+ *                **The only status Phase 6 may render a loading screen for** -- a wait here is
+ *                one lookup (1.3-3.6 s cold), never the whole deck (minutes; see `resolver.ts`
+ *                for the measurements).
  * - `playing`:   playable. Cards 2..n may still be unresolved; that is normal, not a wait.
  * - `ended`:     the deck ran out, or the player hit Exit. The resolver is stopped and the
  *                saved session is cleared.
@@ -29,8 +32,8 @@ export type GameStatus = 'idle' | 'preparing' | 'playing' | 'ended';
  * The whole client-side session.
  *
  * Derived values are NOT fields here on purpose -- `currentCard`, `isCurrentYearPending`,
- * `cardsRemaining` and `resolvedCount` are exported as functions beside the reducer, so
- * they cannot go stale against the deck they describe.
+ * `cardsRemaining`, `cardsPlayed`, `resolvedCount` and `pendingYearCount` are exported as
+ * functions beside the reducer, so they cannot go stale against the deck they describe.
  */
 export interface GameState {
   status: GameStatus;
@@ -61,10 +64,18 @@ export interface GameState {
   playlists: readonly PlaylistSummary[];
   /**
    * The shuffle seed this deck was dealt with. Persisted, and accepted as an override on
-   * `START`, so a Phase 8 shareable URL (playlist id + seed) is a caller change rather than
-   * a reducer change. Empty string while `idle`.
+   * `START`, which is what made Phase 8's shareable URL (playlist id + seed) a caller change. It
+   * stopped being the whole link on 2026-09-29: a seed needs `shuffleVersion` beside it to say how to
+   * deal it, and a mid-game link adds the start card. Empty string while `idle`.
    */
   seed: string;
+  /**
+   * Which algorithm dealt `deck` from `seed` (see `ShuffleVersion` in `shuffle.ts`). It travels with
+   * the seed into the save and into the share link, because a seed alone does not say how to deal
+   * it: a deck dealt from a pre-2026-09-29 link is version 1, and a link shared from that deck must
+   * say so. `CURRENT_SHUFFLE_VERSION` while `idle`.
+   */
+  shuffleVersion: ShuffleVersion;
   /**
    * The SHUFFLED deck. Years are filled in place as the resolver reports them, which is why
    * `Card.year` is three-state: `undefined` = not looked up, `null` = looked up and nothing
@@ -91,6 +102,14 @@ export interface GameState {
   deck: Card[];
   /** Index into `deck`. Clamped to the last card when the deck ends -- never out of bounds. */
   currentIndex: number;
+  /**
+   * The LOWEST index the player has been on this game (2026-09-29). Zero for every deal except one
+   * that starts from a shared link's `card` param, where it is that card's index; `PREVIOUS` lowers
+   * it, and dropped yearless cards before it move it back exactly as they move `currentIndex`.
+   * Always `<= currentIndex`. It exists so the end screen counts the cards this player actually
+   * played (`cardsPlayed` in `reducer.ts`) rather than the whole deck.
+   */
+  startIndex: number;
   /** Whether the current card is showing its revealed side. Reset by `NEXT`. */
   isFlipped: boolean;
   /**
@@ -118,9 +137,19 @@ export type GameAction =
   /**
    * Deal a new deck. Shuffles synchronously (decision 15: shuffle first, then resolve), so
    * the resolver is only ever handed an already-shuffled deck and "card 1" always means the
-   * first card of the SHUFFLED deck. `seed` is generated when omitted.
+   * first card of the SHUFFLED deck. `seed` is generated when omitted, `shuffleVersion` defaults
+   * to `CURRENT_SHUFFLE_VERSION`, and `startCardId` (a shared link's `card` param) starts the
+   * player on that card instead of card 1 -- looked up in the SHUFFLED deck, and ignored when no
+   * card there has that id.
    */
-  | { type: 'START'; cards: Card[]; playlists: readonly PlaylistSummary[]; seed?: string }
+  | {
+      type: 'START';
+      cards: Card[];
+      playlists: readonly PlaylistSummary[];
+      seed?: string;
+      shuffleVersion?: ShuffleVersion;
+      startCardId?: string;
+    }
   /**
    * One completed lookup. Matched onto the deck BY CARD ID, never by index (decision 13):
    * the resolver's priority jump makes its ordering and the deck's ordering diverge
@@ -162,9 +191,18 @@ export interface PersistedSession {
    */
   playlists: PlaylistSummary[];
   seed: string;
+  /**
+   * Which algorithm dealt the deck. OPTIONAL IN STORAGE, required here: a save written before
+   * 2026-09-29 has no such field and was dealt by Fisher-Yates, so `loadSession` reads its absence
+   * as `1` -- never as the current version, which would make a link shared from that resumed game
+   * deal a different order.
+   */
+  shuffleVersion: ShuffleVersion;
   /** The shuffled deck INCLUDING every year already resolved -- so a reload costs zero lookups. */
   deck: Card[];
   currentIndex: number;
+  /** See `GameState.startIndex`. Optional in storage (absent = 0), required here. */
+  startIndex: number;
   isFlipped: boolean;
   /** Never `idle`: there would be nothing to save. */
   status: GameStatus;

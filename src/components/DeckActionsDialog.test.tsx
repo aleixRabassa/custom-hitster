@@ -19,6 +19,7 @@ function renderDialog(overrides: Partial<DeckActionsDialogProps> = {}) {
     playlistIds: ['37i9dQZF1DXcBWIGoYBM5M'],
     playlistName: 'Rock Classics',
     seed: 'a1b2c3d4e5f60718',
+    shuffleVersion: 2,
     shareOrigin: 'https://hitster.example/',
     onSavePlaylist: vi.fn(),
     isPlaylistSaved: false,
@@ -150,8 +151,10 @@ describe('DeckActionsDialog', () => {
 
   it('should render no card data', () => {
     // It mounts OVER an unflipped card, so this is the same rule `CardControls` and
-    // `ExitConfirmDialog` keep -- and here the component genuinely holds the deck.
-    const { container } = renderDialog();
+    // `ExitConfirmDialog` keep -- and here the component genuinely holds the deck. The current
+    // card's id is passed as the game screen passes it; it can reach the DOM only after a failed
+    // copy, which `DeckActions.test.tsx` and `GameScreen.test.tsx` cover.
+    const { container } = renderDialog({ currentCardId: fixtureDeck[0]?.id ?? '' });
     const text = container.textContent ?? '';
 
     for (const card of fixtureDeck) {

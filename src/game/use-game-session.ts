@@ -21,6 +21,7 @@ import { useCallback, useEffect, useReducer, useRef } from 'react';
 
 import { clearSession, loadSession, saveSession } from './persistence';
 import {
+  cardsPlayed,
   cardsRemaining,
   currentCard,
   gameReducer,
@@ -33,8 +34,23 @@ import { createYearResolver } from './resolver';
 import { lookupYear } from './year-client';
 import type { StorageLike } from './persistence';
 import type { YearResolver } from './resolver';
-import type { GameState } from './types';
+import type { ShuffleVersion } from './shuffle';
+import type { GameAction, GameState } from './types';
 import type { Card, PlaylistSummary } from '../../shared/types';
+
+/**
+ * How a deal differs from a fresh one. Every field is optional and an empty object (or none at all)
+ * is a fresh, randomly seeded deal on card 1 with the current algorithm -- the picker's case.
+ *
+ * A share link fills all three: its `seed`, its `shuffleVersion` (`1` for a link minted before
+ * 2026-09-29, which carries no version), and -- for a link shared mid-game -- its `card` param as
+ * `startCardId`. See `START` in `types.ts` for what each one does in the reducer.
+ */
+export interface StartOptions {
+  seed?: string;
+  shuffleVersion?: ShuffleVersion;
+  startCardId?: string;
+}
 
 export interface UseGameSessionOptions {
   /**
@@ -64,13 +80,22 @@ export interface GameSession {
    */
   pendingYearCount: number;
   /**
+   * How many cards this player has played this game -- the end screen's count. Not `deck.length`,
+   * which over-counts a game started mid-deck from a shared link (see the selector in `reducer.ts`).
+   */
+  cardsPlayed: number;
+  /**
    * Deal a deck.
    *
    * `playlists` is the 1..5 playlists it came from, in row order, already merged into `cards` by
    * `deck-merge.ts`. The resolver takes the DECK rather than the playlist, so a five-playlist
    * crawl needs no new code here -- only more time (see `resolver.ts` for the per-lookup cost).
+   *
+   * `options` is empty for a fresh deal (a generated seed, the current algorithm, card 1). A share
+   * link passes its seed and shuffle version so the recipient gets the sender's order, and a
+   * mid-game link its card id so they start on the sender's card -- see `StartOptions`.
    */
-  start: (cards: Card[], playlists: readonly PlaylistSummary[], seed?: string) => void;
+  start: (cards: Card[], playlists: readonly PlaylistSummary[], options?: StartOptions) => void;
   flip: () => void;
   next: () => void;
   /** Step back one card (2026-09-18). A no-op on card 1 -- the reducer decides, not the caller. */
@@ -134,6 +159,11 @@ export function useGameSession(options: UseGameSessionOptions = {}): GameSession
     if (!isActive) return;
 
     const resolver = createYearResolver(stateRef.current.deck, {
+      // Crawl from the card the player is on, not from card 1: a shared mid-game link starts them
+      // partway in, and a resumed session is wherever they left it (see `order` in `resolver.ts`).
+      // Safe to read here because the `stateRef` effect is declared first and so has already
+      // stored this commit's state by the time this effect runs.
+      startIndex: stateRef.current.currentIndex,
       // `fetch` BOUND to the global: the native one is brand-checked, so handing it over
       // unbound and having it called as `options.fetchImpl(...)` threw "Illegal invocation"
       // and every year lookup came back `network`. See `playlist-client.ts`.
@@ -189,15 +219,19 @@ export function useGameSession(options: UseGameSessionOptions = {}): GameSession
   }, [state, storage]);
 
   const start = useCallback(
-    (cards: Card[], playlists: readonly PlaylistSummary[], seed?: string) => {
+    (cards: Card[], playlists: readonly PlaylistSummary[], options: StartOptions = {}) => {
       // Cleared before the new session is dealt, so a failure between here and the first save
       // cannot leave the previous game resumable.
       clearSession(storage);
-      dispatch(
-        seed === undefined
-          ? { type: 'START', cards, playlists }
-          : { type: 'START', cards, playlists, seed },
-      );
+
+      // Built without `undefined` properties: an absent field is what tells the reducer to use
+      // its default (a generated seed, the current algorithm, card 1).
+      const action: Extract<GameAction, { type: 'START' }> = { type: 'START', cards, playlists };
+      if (options.seed !== undefined) action.seed = options.seed;
+      if (options.shuffleVersion !== undefined) action.shuffleVersion = options.shuffleVersion;
+      if (options.startCardId !== undefined) action.startCardId = options.startCardId;
+
+      dispatch(action);
       bumpSessionId();
     },
     [storage],
@@ -226,6 +260,7 @@ export function useGameSession(options: UseGameSessionOptions = {}): GameSession
     cardsRemaining: cardsRemaining(state),
     resolvedCount: resolvedCount(state),
     pendingYearCount: pendingYearCount(state),
+    cardsPlayed: cardsPlayed(state),
     start,
     flip,
     next,

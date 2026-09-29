@@ -5,9 +5,21 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { PLAYLIST_PARAM, SEED_PARAM, buildDeckLink, parseDeckLink } from './deck-link';
+import {
+  CARD_PARAM,
+  PLAYLIST_PARAM,
+  SEED_PARAM,
+  SHUFFLE_VERSION_PARAM,
+  buildDeckLink,
+  linkArrivalIntent,
+  parseDeckLink,
+  type DeckLink,
+  type DeckLinkOptions,
+  type LinkArrival,
+} from './deck-link';
 import { MAX_DECK_PLAYLISTS } from './deck-merge';
 import { generateSeed } from './shuffle';
+import type { PlaylistSummary } from '../../shared/types';
 
 /** A real 22-character base62 id, and the shape `parsePlaylistUrl` accepts bare. */
 const PLAYLIST_ID = '37i9dQZF1DXcBWIGoYBM5M';
@@ -24,11 +36,28 @@ function ids(count: number): string[] {
 /** 16 lowercase hex characters — exactly what `generateSeed()` mints. */
 const SEED = 'a1b2c3d4e5f60718';
 
+/** Another one, for "a different deck". */
+const OTHER_SEED = '0f1e2d3c4b5a6978';
+
+/**
+ * A real-shaped 22-character track id, MIXED CASE on purpose: base62 is case-sensitive, so a
+ * lowercased copy of it names a different track, and the case-preservation assertions need a value
+ * where lowercasing would change something.
+ */
+const TRACK_ID = '4uLU6hMCjMI75M1A2tKUQC';
+
+/** The options every link from a version-1 deck carries -- and the byte-identical pre-`v` shape. */
+const V1: DeckLinkOptions = { shuffleVersion: 1 };
+/** The options every link from a new deck carries. */
+const V2: DeckLinkOptions = { shuffleVersion: 2 };
+
 describe('parseDeckLink', () => {
   it('should parse a link carrying a playlist id and a seed', () => {
     expect(parseDeckLink(`?${PLAYLIST_PARAM}=${PLAYLIST_ID}&${SEED_PARAM}=${SEED}`)).toEqual({
       playlistIds: [PLAYLIST_ID],
       seed: SEED,
+      shuffleVersion: 1,
+      cardId: null,
     });
   });
 
@@ -48,6 +77,8 @@ describe('parseDeckLink', () => {
     expect(parseDeckLink(`?${PLAYLIST_PARAM}=${encoded}&${SEED_PARAM}=${SEED}`)).toEqual({
       playlistIds: [PLAYLIST_ID],
       seed: SEED,
+      shuffleVersion: 1,
+      cardId: null,
     });
   });
 
@@ -130,7 +161,7 @@ describe('parseDeckLink', () => {
       parseDeckLink(
         `?utm_source=whatsapp&${PLAYLIST_PARAM}=${PLAYLIST_ID}&${SEED_PARAM}=${SEED}&x=1`,
       ),
-    ).toEqual({ playlistIds: [PLAYLIST_ID], seed: SEED });
+    ).toEqual({ playlistIds: [PLAYLIST_ID], seed: SEED, shuffleVersion: 1, cardId: null });
   });
 });
 
@@ -149,7 +180,12 @@ describe('parseDeckLink with several playlists', () => {
         `?${PLAYLIST_PARAM}=${PLAYLIST_ID},${SECOND_ID},${THIRD_ID}&${SEED_PARAM}=${SEED}`,
       ),
       // In LINK order, which is row order, which is the order the merge concatenates in.
-    ).toEqual({ playlistIds: [PLAYLIST_ID, SECOND_ID, THIRD_ID], seed: SEED });
+    ).toEqual({
+      playlistIds: [PLAYLIST_ID, SECOND_ID, THIRD_ID],
+      seed: SEED,
+      shuffleVersion: 1,
+      cardId: null,
+    });
   });
 
   it('should still parse a single-id link', () => {
@@ -158,6 +194,8 @@ describe('parseDeckLink with several playlists', () => {
     expect(parseDeckLink(`?${PLAYLIST_PARAM}=${PLAYLIST_ID}&${SEED_PARAM}=${SEED}`)).toEqual({
       playlistIds: [PLAYLIST_ID],
       seed: SEED,
+      shuffleVersion: 1,
+      cardId: null,
     });
   });
 
@@ -168,7 +206,12 @@ describe('parseDeckLink with several playlists', () => {
       parseDeckLink(
         `?${PLAYLIST_PARAM}=${PLAYLIST_ID}&${PLAYLIST_PARAM}=${SECOND_ID}&${SEED_PARAM}=${SEED}`,
       ),
-    ).toEqual({ playlistIds: [PLAYLIST_ID, SECOND_ID], seed: SEED });
+    ).toEqual({
+      playlistIds: [PLAYLIST_ID, SECOND_ID],
+      seed: SEED,
+      shuffleVersion: 1,
+      cardId: null,
+    });
   });
 
   it('should accept full playlist URLs inside the list', () => {
@@ -177,7 +220,12 @@ describe('parseDeckLink with several playlists', () => {
 
     expect(
       parseDeckLink(`?${PLAYLIST_PARAM}=${PLAYLIST_ID},${encoded}&${SEED_PARAM}=${SEED}`),
-    ).toEqual({ playlistIds: [PLAYLIST_ID, SECOND_ID], seed: SEED });
+    ).toEqual({
+      playlistIds: [PLAYLIST_ID, SECOND_ID],
+      seed: SEED,
+      shuffleVersion: 1,
+      cardId: null,
+    });
   });
 
   it('should reject a link whose list holds an album link', () => {
@@ -194,7 +242,12 @@ describe('parseDeckLink with several playlists', () => {
     // A trailing or doubled comma is punctuation, not a playlist somebody meant to name.
     expect(
       parseDeckLink(`?${PLAYLIST_PARAM}=${PLAYLIST_ID},,${SECOND_ID},&${SEED_PARAM}=${SEED}`),
-    ).toEqual({ playlistIds: [PLAYLIST_ID, SECOND_ID], seed: SEED });
+    ).toEqual({
+      playlistIds: [PLAYLIST_ID, SECOND_ID],
+      seed: SEED,
+      shuffleVersion: 1,
+      cardId: null,
+    });
     // ...but a value of NOTHING but commas names no playlist at all.
     expect(parseDeckLink(`?${PLAYLIST_PARAM}=,,,&${SEED_PARAM}=${SEED}`)).toBeNull();
   });
@@ -239,7 +292,7 @@ describe('buildDeckLink', () => {
   it('should build a link joining the ids with commas', () => {
     // A comma is a legal query-value character, so nothing is escaped and the link stays readable
     // in the chat clients these get pasted into.
-    expect(buildDeckLink('https://hitster.example', [PLAYLIST_ID, SECOND_ID], SEED)).toBe(
+    expect(buildDeckLink('https://hitster.example', [PLAYLIST_ID, SECOND_ID], SEED, V1)).toBe(
       `https://hitster.example?${PLAYLIST_PARAM}=${PLAYLIST_ID},${SECOND_ID}&${SEED_PARAM}=${SEED}`,
     );
   });
@@ -248,13 +301,18 @@ describe('buildDeckLink', () => {
     // The pair together: whatever the build format is, the parser must read it back exactly. These
     // two functions are the only pair in the app that has to agree.
     const playlistIds = [PLAYLIST_ID, SECOND_ID, THIRD_ID];
-    const url = buildDeckLink('https://hitster.example/', playlistIds, SEED);
+    const url = buildDeckLink('https://hitster.example/', playlistIds, SEED, V1);
 
-    expect(parseDeckLink(url.slice(url.indexOf('?')))).toEqual({ playlistIds, seed: SEED });
+    expect(parseDeckLink(url.slice(url.indexOf('?')))).toEqual({
+      playlistIds,
+      seed: SEED,
+      shuffleVersion: 1,
+      cardId: null,
+    });
   });
 
   it('should build a link that round-trips through the parser', () => {
-    const url = buildDeckLink('https://hitster.example', [PLAYLIST_ID], SEED);
+    const url = buildDeckLink('https://hitster.example', [PLAYLIST_ID], SEED, V1);
 
     expect(url).toBe(
       `https://hitster.example?${PLAYLIST_PARAM}=${PLAYLIST_ID}&${SEED_PARAM}=${SEED}`,
@@ -262,32 +320,300 @@ describe('buildDeckLink', () => {
     // The round trip is the assertion that matters: whatever the build format is, the parser must
     // read it back. These two functions are the only pair in the app that has to agree exactly.
     const search = url.slice(url.indexOf('?'));
-    expect(parseDeckLink(search)).toEqual({ playlistIds: [PLAYLIST_ID], seed: SEED });
+    expect(parseDeckLink(search)).toEqual({
+      playlistIds: [PLAYLIST_ID],
+      seed: SEED,
+      shuffleVersion: 1,
+      cardId: null,
+    });
   });
 
   it('should round-trip a freshly generated seed', () => {
     // Pins the two halves together: `generateSeed()` is the only producer of seeds in the app, and
     // `SEED_PATTERN` is the only consumer that can reject one. If either changes alone, this fails.
     const seed = generateSeed();
-    const search = buildDeckLink('https://hitster.example/', [PLAYLIST_ID], seed);
+    const search = buildDeckLink('https://hitster.example/', [PLAYLIST_ID], seed, V1);
 
     expect(parseDeckLink(search.slice(search.indexOf('?')))).toEqual({
       playlistIds: [PLAYLIST_ID],
       seed,
+      shuffleVersion: 1,
+      cardId: null,
     });
   });
 
   it('should normalise a trailing slash on the origin', () => {
     // `location.origin + location.pathname` produces one for a root-served app, so this is the
     // ordinary input rather than an edge case.
-    expect(buildDeckLink('https://hitster.example/', [PLAYLIST_ID], SEED)).toBe(
+    expect(buildDeckLink('https://hitster.example/', [PLAYLIST_ID], SEED, V1)).toBe(
       `https://hitster.example?${PLAYLIST_PARAM}=${PLAYLIST_ID}&${SEED_PARAM}=${SEED}`,
     );
   });
 
   it('should keep a sub-path so an app served from one stays reachable', () => {
-    expect(buildDeckLink('https://example.com/hitster/', [PLAYLIST_ID], SEED)).toBe(
+    expect(buildDeckLink('https://example.com/hitster/', [PLAYLIST_ID], SEED, V1)).toBe(
       `https://example.com/hitster?${PLAYLIST_PARAM}=${PLAYLIST_ID}&${SEED_PARAM}=${SEED}`,
     );
+  });
+});
+
+// ===========================================================================
+//  THE SHUFFLE VERSION (`v`) AND THE START CARD (`card`), 2026-09-29.
+//
+//  Decisions D1 and D3 of the shuffle-system review. `v` absent is version 1
+//  FOREVER, because every link minted before this date carries no `v` and must
+//  still deal the order its sender saw. Both are optional, and both follow the
+//  module's one-bad-element rule: present-and-malformed rejects the whole link.
+// ===========================================================================
+
+describe('parseDeckLink with a shuffle version', () => {
+  const base = `?${PLAYLIST_PARAM}=${PLAYLIST_ID}&${SEED_PARAM}=${SEED}`;
+
+  it('should read a link minted before 2026-09-29 (no v) as version 1', () => {
+    // The exact shape every old build minted. Reading it as the CURRENT version would deal every
+    // link already in the wild with the wrong algorithm -- a confident, different order.
+    expect(parseDeckLink(base)).toEqual({
+      playlistIds: [PLAYLIST_ID],
+      seed: SEED,
+      shuffleVersion: 1,
+      cardId: null,
+    });
+  });
+
+  it('should read an explicit v=1 and v=2', () => {
+    expect(parseDeckLink(`${base}&${SHUFFLE_VERSION_PARAM}=1`)?.shuffleVersion).toBe(1);
+    expect(parseDeckLink(`${base}&${SHUFFLE_VERSION_PARAM}=2`)?.shuffleVersion).toBe(2);
+  });
+
+  it('should reject a link whose version this build cannot deal', () => {
+    // A future version dealt by today's algorithm would be a wrong order that looks deliberate, so
+    // it is the plain landing screen instead -- identical to every other rejection here.
+    for (const value of ['3', '0', '', 'two', '2.0', '02', '0x2', 'constructor', '__proto__']) {
+      expect(parseDeckLink(`${base}&${SHUFFLE_VERSION_PARAM}=${value}`)).toBeNull();
+    }
+  });
+
+  it('should reject a bare v with no value', () => {
+    // `?...&v` is `v=` to `URLSearchParams`: present, and empty.
+    expect(parseDeckLink(`${base}&${SHUFFLE_VERSION_PARAM}`)).toBeNull();
+  });
+});
+
+describe('parseDeckLink with a start card', () => {
+  const base = `?${PLAYLIST_PARAM}=${PLAYLIST_ID}&${SEED_PARAM}=${SEED}&${SHUFFLE_VERSION_PARAM}=2`;
+
+  it('should read the card param as a track id', () => {
+    expect(parseDeckLink(`${base}&${CARD_PARAM}=${TRACK_ID}`)).toEqual({
+      playlistIds: [PLAYLIST_ID],
+      seed: SEED,
+      shuffleVersion: 2,
+      cardId: TRACK_ID,
+    });
+  });
+
+  it('should report null when the link carries no card', () => {
+    // An end-screen link, and every link minted before 2026-09-29.
+    expect(parseDeckLink(base)?.cardId).toBeNull();
+  });
+
+  it('should preserve the case of the card id', () => {
+    // The seed is lowercased and this must NOT be: base62 is case-sensitive, so a lowercased track
+    // id is a different track or none at all.
+    expect(parseDeckLink(`${base}&${CARD_PARAM}=${TRACK_ID}`)?.cardId).toBe(TRACK_ID);
+    expect(parseDeckLink(`${base}&${CARD_PARAM}=${TRACK_ID.toUpperCase()}`)?.cardId).toBe(
+      TRACK_ID.toUpperCase(),
+    );
+  });
+
+  it('should trim whitespace around the card id', () => {
+    expect(parseDeckLink(`${base}&${CARD_PARAM}=%20${TRACK_ID}+`)?.cardId).toBe(TRACK_ID);
+  });
+
+  it('should reject the whole link when the card is malformed', () => {
+    // The one-bad-element rule: a mangled position must not quietly deal from card 1, as if the
+    // sender had sent none.
+    for (const value of [
+      '',
+      'tooshort',
+      `${TRACK_ID}X`,
+      TRACK_ID.slice(1),
+      `${TRACK_ID.slice(0, 21)}-`,
+      encodeURIComponent(`https://open.spotify.com/track/${TRACK_ID}`),
+    ]) {
+      expect(parseDeckLink(`${base}&${CARD_PARAM}=${value}`)).toBeNull();
+    }
+  });
+
+  it('should accept a card on a version-1 link', () => {
+    // `v` and `card` are independent: a mid-game link from a version-1 deck omits `v` and carries
+    // a card.
+    expect(
+      parseDeckLink(
+        `?${PLAYLIST_PARAM}=${PLAYLIST_ID}&${SEED_PARAM}=${SEED}&${CARD_PARAM}=${TRACK_ID}`,
+      ),
+    ).toEqual({ playlistIds: [PLAYLIST_ID], seed: SEED, shuffleVersion: 1, cardId: TRACK_ID });
+  });
+});
+
+describe('buildDeckLink with a shuffle version and a start card', () => {
+  const origin = 'https://hitster.example';
+
+  it('should write no v for a version-1 deck, byte-identical to a pre-2026-09-29 link', () => {
+    // So a link from a version-1 deck also deals correctly on a stale cached build.
+    expect(buildDeckLink(origin, [PLAYLIST_ID], SEED, V1)).toBe(
+      `${origin}?${PLAYLIST_PARAM}=${PLAYLIST_ID}&${SEED_PARAM}=${SEED}`,
+    );
+  });
+
+  it('should append v=2 for a version-2 deck', () => {
+    expect(buildDeckLink(origin, [PLAYLIST_ID, SECOND_ID], SEED, V2)).toBe(
+      `${origin}?${PLAYLIST_PARAM}=${PLAYLIST_ID},${SECOND_ID}&${SEED_PARAM}=${SEED}&${SHUFFLE_VERSION_PARAM}=2`,
+    );
+  });
+
+  it('should append the card last, and only when given', () => {
+    expect(
+      buildDeckLink(origin, [PLAYLIST_ID], SEED, { shuffleVersion: 2, cardId: TRACK_ID }),
+    ).toBe(
+      `${origin}?${PLAYLIST_PARAM}=${PLAYLIST_ID}&${SEED_PARAM}=${SEED}&${SHUFFLE_VERSION_PARAM}=2&${CARD_PARAM}=${TRACK_ID}`,
+    );
+    expect(
+      buildDeckLink(origin, [PLAYLIST_ID], SEED, { shuffleVersion: 1, cardId: TRACK_ID }),
+    ).toBe(
+      `${origin}?${PLAYLIST_PARAM}=${PLAYLIST_ID}&${SEED_PARAM}=${SEED}&${CARD_PARAM}=${TRACK_ID}`,
+    );
+  });
+
+  it('should round-trip every combination of version and card exactly', () => {
+    const playlistIds = [PLAYLIST_ID, SECOND_ID, THIRD_ID];
+
+    for (const shuffleVersion of [1, 2] as const) {
+      for (const cardId of [undefined, TRACK_ID]) {
+        const url = buildDeckLink(`${origin}/`, playlistIds, SEED, { shuffleVersion, cardId });
+
+        expect(parseDeckLink(url.slice(url.indexOf('?')))).toEqual({
+          playlistIds,
+          seed: SEED,
+          shuffleVersion,
+          cardId: cardId ?? null,
+        });
+      }
+    }
+  });
+
+  it('should round-trip a freshly generated seed on a version-2 link', () => {
+    const seed = generateSeed();
+    const url = buildDeckLink(origin, [PLAYLIST_ID], seed, { shuffleVersion: 2, cardId: TRACK_ID });
+
+    expect(parseDeckLink(url.slice(url.indexOf('?')))).toEqual({
+      playlistIds: [PLAYLIST_ID],
+      seed,
+      shuffleVersion: 2,
+      cardId: TRACK_ID,
+    });
+  });
+});
+
+// ===========================================================================
+//  WHAT A LINK DOES ON ARRIVAL (D2 and D4).
+//
+//  A reload of a link-opened tab arrives with the saved game AND the link at
+//  once, and must resume silently -- "si el enlace es el mismo, nunca se debe
+//  modificar la partida". Only a link to a DIFFERENT deck asks.
+// ===========================================================================
+
+describe('linkArrivalIntent', () => {
+  const playlist = (id: string): PlaylistSummary => ({
+    id,
+    name: `Playlist ${id}`,
+    owner: 'Spotify',
+  });
+
+  const link: DeckLink = {
+    playlistIds: [PLAYLIST_ID, SECOND_ID],
+    seed: SEED,
+    shuffleVersion: 2,
+    cardId: TRACK_ID,
+  };
+
+  type Session = Parameters<typeof linkArrivalIntent>[1];
+
+  /** The saved game this link dealt: same playlists, seed and version. */
+  const sameDeck: Session = {
+    status: 'playing',
+    playlists: [playlist(PLAYLIST_ID), playlist(SECOND_ID)],
+    seed: SEED,
+    shuffleVersion: 2,
+  };
+
+  const cases: [label: string, session: Session, expected: LinkArrival][] = [
+    [
+      'idle: there is no game at all',
+      { ...sameDeck, status: 'idle', playlists: [], seed: '' },
+      'deal',
+    ],
+    // After End or Exit the save is cleared and the game no longer exists (D2, rule 4), so even
+    // the link's own deck is dealt again from the top.
+    [
+      'ended: the game no longer exists, even for the same deck',
+      { ...sameDeck, status: 'ended' },
+      'deal',
+    ],
+    ['the same deck, playing: a reload of the link-opened tab', sameDeck, 'resume'],
+    ['the same deck, still preparing', { ...sameDeck, status: 'preparing' }, 'resume'],
+    [
+      'a subset of the ids: one of the linked playlists failed to load',
+      { ...sameDeck, playlists: [playlist(SECOND_ID)] },
+      'resume',
+    ],
+    [
+      'the same ids in another order',
+      { ...sameDeck, playlists: [playlist(SECOND_ID), playlist(PLAYLIST_ID)] },
+      'resume',
+    ],
+    ['a different seed', { ...sameDeck, seed: OTHER_SEED }, 'ask'],
+    [
+      'a different version: the same seed deals another order',
+      { ...sameDeck, shuffleVersion: 1 },
+      'ask',
+    ],
+    [
+      'a playlist in the saved game that the link does not name',
+      { ...sameDeck, playlists: [playlist(PLAYLIST_ID), playlist(SECOND_ID), playlist(THIRD_ID)] },
+      'ask',
+    ],
+    [
+      'a saved game from playlists the link does not name at all',
+      { ...sameDeck, playlists: [playlist(THIRD_ID)] },
+      'ask',
+    ],
+  ];
+
+  it.each(cases)('should answer %s', (_label, session, expected) => {
+    expect(linkArrivalIntent(link, session)).toBe(expected);
+  });
+
+  it('should resume the same deck whatever card the link names, including none', () => {
+    // The sender's card is where THEY were. A reloader has moved on since, and honouring it would
+    // move them off their own card -- so it cannot change the answer.
+    for (const cardId of [null, TRACK_ID, '1111111111111111111111']) {
+      expect(linkArrivalIntent({ ...link, cardId }, sameDeck)).toBe('resume');
+    }
+  });
+
+  it('should still ask about a different deck whatever card the link names', () => {
+    for (const cardId of [null, TRACK_ID]) {
+      expect(linkArrivalIntent({ ...link, cardId }, { ...sameDeck, seed: OTHER_SEED })).toBe('ask');
+    }
+  });
+
+  it('should resume a version-1 game reloaded from a version-1 link', () => {
+    // A game dealt from a pre-2026-09-29 link: no `v` in the address bar, version 1 in the save.
+    expect(
+      linkArrivalIntent(
+        { ...link, shuffleVersion: 1, cardId: null },
+        { ...sameDeck, shuffleVersion: 1 },
+      ),
+    ).toBe('resume');
   });
 });
