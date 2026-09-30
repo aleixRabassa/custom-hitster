@@ -156,6 +156,14 @@ from "Top Gun"`).
         ways runs the tokenised query twice, which is up to two extra recording requests. That is
         **accepted**: it only happens on a double total miss, which is rare and already the most
         expensive path. Record it in the fallback's comment. Do not add a flag to suppress it.
+
+  > **Later, 2026-10-01: the tokenised rung was removed**, from the primary ladder and the remix
+  > fallback, together with its `low` cap (the developer's decision). A live diff over 782 cards
+  > showed it answered 5, all five also answered by Deezer, and rescued 0 inside the remix fallback.
+  > The same change reordered the ladder to duration-bounded → artist-guess → unbounded, which cut
+  > MusicBrainz requests by 15.7%, and took the cache to `v6`. The boxes above stay ticked as the
+  > record of what was built. See [`agent_findings.md`](../agent_findings.md) (2026-10-01).
+
 - [x] **Step 5: stop degrading silently (P6).** In `api/_lib/musicbrainz.ts`:
   - [x] Where the release-group request fails (≈ lines 255–258), return the failed result as
         `upstream-unavailable` (or `unexpected-payload` for a non-JSON 200) instead of falling back to

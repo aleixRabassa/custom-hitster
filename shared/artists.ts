@@ -19,8 +19,9 @@
  * ============================================================================
  *
  * `primaryArtistGuess()` below exists for exactly one caller -- building a MusicBrainz
- * query in plan.phase-2-year.md -- and is deliberately lossy. It is safe only because
- * of the query ORDER that plan commits to; see the note on the function itself.
+ * query in `api/_lib/musicbrainz.ts` -- and is deliberately lossy. How much that lossiness
+ * costs depends on WHERE in the adapter's query ladder the guess sits, and since 2026-10-01
+ * it sits second rather than last; see the note on the function itself.
  */
 
 /**
@@ -52,12 +53,35 @@ const FEATURED_TAIL_PATTERN = /[\s([]+(?:feat\.?|ft\.?|featuring|with)\s+\S.*$/i
  *
  * KNOWN-WRONG for artists whose own name contains a comma: this returns "Earth" for
  * "Earth, Wind & Fire" and "Tyler" for "Tyler, The Creator". That is not a bug to be
- * fixed here -- it cannot be fixed without a lookup -- and it is harmless because
- * plan.phase-2-year.md commits to querying the FULL joined string first and falling
- * back to this guess only when that returns zero results. "Earth, Wind & Fire"
- * matches on the full string and never reaches this function's output.
+ * fixed here -- it cannot be fixed without a lookup.
  *
- * If that ordering is ever reversed, this function becomes a source of wrong years.
+ * ============================================================================
+ *  THE GUESS IS QUERIED SECOND, AND THAT HAS A MEASURED, ACCEPTED COST.
+ *
+ *  Since 2026-10-01 `api/_lib/musicbrainz.ts` asks: (1) the FULL string with a
+ *  `dur:` bound, when a duration is known; (2) this guess, unbounded, when it
+ *  differs from the full string; (3) the full string unbounded. So the full
+ *  string still goes first whenever there is a duration, but the guess is now
+ *  reached before the full string has been asked WITHOUT a bound -- and on a
+ *  track with no duration, before it has been asked at all.
+ *
+ *  WHY: of the cards that reach each query, the guess finds 68% and the
+ *  unbounded full string 5%, because Spotify's ", " join rarely matches
+ *  MusicBrainz's joinphrase. Over 782 cards that saved 15.7% of MusicBrainz
+ *  requests and corrected four years (docs/agent_findings.md 2026-10-01).
+ *
+ *  THE COST: a probe of 13 comma-in-name artists with no duration found ONE
+ *  wrong year -- "Teach Your Children" (Crosby, Stills, Nash & Young) 1970 ->
+ *  1969, because the "Crosby" pool holds a Crosby, Stills & Nash recording
+ *  that the exact artist matcher admits. It is reached only when the bounded
+ *  query misses. The "Earth, Wind & Fire" shape this note used to guard
+ *  against -- a guess pool that is non-empty but scores no year, pre-empting a
+ *  full-string query that would have answered -- happened 0 times in 782.
+ *
+ *  Moving the guess EARLIER still (ahead of the bounded full-string query) is
+ *  UNMEASURED and would put the truncation in front of every comma-in-name
+ *  artist that has a duration -- measure it before making it.
+ * ============================================================================
  *
  * Never throws, and never returns an empty string for a non-empty input.
  */

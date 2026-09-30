@@ -8,8 +8,6 @@ import {
   noWomanNoCryReleaseGroups,
   noWomanNoCrySearch,
   olvidarnosPhraseSearches,
-  olvidarnosReleaseGroups,
-  olvidarnosTokenisedSearch,
   undatedSearch,
 } from './__fixtures__/musicbrainz-payloads.js';
 import { HIGH_CONFIDENCE_TTL_SECONDS, NO_YEAR_TTL_SECONDS, createMemoryCache } from './cache.js';
@@ -656,7 +654,12 @@ describe('resolveYear remix fallback', () => {
 });
 
 // ===========================================================================
-//  THE TOKENISED RUNG'S CAP
+//  THE PINNED MISS
+//
+//  The track the adapter's `tokenised` rung was built for, and which it found,
+//  capped at `low`. The rung and its cap were removed on 2026-10-01: every one
+//  of its measured hits was a year Deezer already had, so under the provider
+//  vote no shown year changes. MusicBrainz alone now answers `none` here.
 // ===========================================================================
 
 /**
@@ -682,48 +685,17 @@ function queryRoutedFetch(
   return { fetch, queries };
 }
 
-describe('resolveYear tokenised rung', () => {
-  it('should cap a tokenised hit at low', async () => {
-    // Every phrase rung misses and the tokenised one returns the No Woman No Cry pool, which
-    // on its own scores `high` off the release group. The cap is the loose-artist precedent:
-    // weaker evidence may turn a null into a year, never into a `high` one.
-    const cache = recordingCache();
-    const { fetch } = queryRoutedFetch(
-      (query) => (query.startsWith('recording:(') ? noWomanNoCrySearch : emptySearch),
-      noWomanNoCryReleaseGroups,
-    );
-
-    const outcome = await resolveYear(TRACK, {
-      cache,
-      fetchImpl: fetch,
-      gate: countingGate(),
-      userAgent: USER_AGENT,
-    });
-
-    expect(outcome.ok).toBe(true);
-    if (!outcome.ok) return;
-
-    expect(outcome.result).toMatchObject({
-      year: NO_WOMAN_NO_CRY.expectedYear,
-      confidence: 'low',
-      source: 'release-group',
-    });
-    // No `viaTitle`: the query asked about the card's own words, not a rewritten title.
-    expect(outcome.result.viaTitle).toBeUndefined();
-    // And the CACHED value is capped too, so a hit reports what the miss did.
-    expect(cache.writes[0]?.value).toMatchObject({ confidence: 'low' });
-  });
-
-  it('should resolve the captured tokenised track', async () => {
+describe('resolveYear pinned miss', () => {
+  it('should resolve the captured Olvidarnos track to no year and cache the negative', async () => {
     // End to end over the live capture, from the RAW Spotify title. Any query outside the
-    // captured five answers 404, so a drift in the cleaner or in a rung's query text fails
-    // here instead of quietly resolving against a request the capture never saw.
+    // captured three answers 404, so a drift in the cleaner or in a rung's query text or order
+    // fails here instead of quietly resolving against a request the capture never saw. The
+    // release-group double is `undefined` for the same reason: nothing may ask for one.
     const cache = recordingCache();
     const { fetch, queries } = queryRoutedFetch((query) => {
       const index = OLVIDARNOS_QUERIES.indexOf(query);
-      if (index === 3) return olvidarnosTokenisedSearch;
-      return index >= 0 && index < 3 ? olvidarnosPhraseSearches[index] : undefined;
-    }, olvidarnosReleaseGroups);
+      return index >= 0 ? olvidarnosPhraseSearches[index] : undefined;
+    }, undefined);
 
     const outcome = await resolveYear(OLVIDARNOS, {
       cache,
@@ -732,18 +704,21 @@ describe('resolveYear tokenised rung', () => {
       userAgent: USER_AGENT,
     });
 
+    // Exactly the three phrase queries: no fourth rung, no release-group request, and no
+    // remix fallback (the title has no remix tail to strip).
     expect(queries).toEqual(OLVIDARNOS_QUERIES);
     expect(outcome.ok).toBe(true);
     if (!outcome.ok) return;
 
     expect(outcome.result).toMatchObject({
-      year: OLVIDARNOS.expectedYear,
-      confidence: 'low',
-      source: 'release-group',
+      year: null,
+      confidence: 'none',
+      reason: 'no-candidates',
       cached: false,
     });
     expect(outcome.result.viaTitle).toBeUndefined();
     expect(cache.writes).toHaveLength(1);
     expect(cache.writes[0]?.key).toBe(yearCacheKey(OLVIDARNOS.artist, outcome.result.cleanedTitle));
+    expect(cache.writes[0]?.ttl).toBe(NO_YEAR_TTL_SECONDS);
   });
 });

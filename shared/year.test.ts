@@ -523,11 +523,12 @@ describe('normalizeForCacheKey', () => {
     expect(key).toBe(`mbyear:${YEAR_CACHE_SCHEMA_VERSION}:queen|bohemian rhapsody`);
   });
 
-  it('should key the cache under v5', () => {
+  it('should key the cache under v6', () => {
     // Pinned literally, so a bump has to be a DELIBERATE two-line change rather than
     // something that slips through because every assertion interpolated the constant.
-    // v5 is plan.year-fetch-rework-mb-fixes.md: the cleaner fix, the tokenised rung and P6.
-    expect(yearCacheKey('Queen', 'Bohemian Rhapsody').startsWith('mbyear:v5:')).toBe(true);
+    // v6 is the 2026-10-01 query ladder: duration-bounded, artist guess, unbounded, and the
+    // tokenised rung removed.
+    expect(yearCacheKey('Queen', 'Bohemian Rhapsody').startsWith('mbyear:v6:')).toBe(true);
   });
 });
 

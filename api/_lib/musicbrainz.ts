@@ -126,13 +126,17 @@ export type MusicBrainzErrorCode =
   | 'unexpected-payload';
 
 /**
- * Which rung of `buildAttempts()`'s query ladder returned the recordings.
+ * Which rung of `buildAttempts()`'s query ladder returned the recordings, listed in ladder
+ * order.
  *
  * Reported, never acted on: the adapter makes no scoring decisions (see the module header),
- * so it only says which query found the pool, and `api/_lib/resolve-year.ts` decides what
- * that is worth. Today the one consumer is the `low` cap on a `tokenised` hit.
+ * so it only says which query found the pool. Today NOTHING in production reads it -- its one
+ * consumer was `api/_lib/resolve-year.ts`'s `low` cap on a `tokenised` hit, and that rung was
+ * removed on 2026-10-01 (see `buildAttempts()`). It stays because it is cheap, because the
+ * tests pin which rung answered, and because it is the first thing a measurement of the ladder
+ * needs to read.
  */
-export type MusicBrainzAttempt = 'duration-bounded' | 'unbounded' | 'artist-guess' | 'tokenised';
+export type MusicBrainzAttempt = 'duration-bounded' | 'artist-guess' | 'unbounded';
 
 export type MusicBrainzResult =
   | {
@@ -260,10 +264,34 @@ export async function fetchYearCandidates(
  * rung returned zero results -- so a card the first rung finds still costs exactly two
  * requests, however long the ladder grows.
  *
- *   1. `duration-bounded` -- quoted title, full artist, `dur:` bound
- *   2. `unbounded`        -- the same, no bound
- *   3. `artist-guess`     -- quoted title, the primary-artist guess
- *   4. `tokenised`        -- every title word quoted and ANDed, the last phrase rung's artist
+ *   1. `duration-bounded` -- quoted title, full artist, `dur:` bound (only with a duration)
+ *   2. `artist-guess`     -- quoted title, the primary-artist guess, no bound (only when the
+ *                            guess differs from the full string)
+ *   3. `unbounded`        -- quoted title, full artist, no bound
+ *
+ * ===========================================================================
+ *  THE ORDER IS MEASURED, NOT PRINCIPLED (developer's decision, 2026-10-01).
+ *
+ *  Until 2026-10-01 the ladder was duration-bounded, unbounded, artist-guess,
+ *  tokenised. Over 782 real cards (the spike's 542 plus the soundtrack decks),
+ *  this order spends 15.7% fewer MusicBrainz requests -- 2.735 -> 2.306 a
+ *  card -- because the guess finds 68% of the cards that reach it and the
+ *  unbounded full-artist query only 5%. On MusicBrainz alone 774 answers are
+ *  unchanged, 3 lost and 5 moved: the 3 lost are all ex-`tokenised` hits that
+ *  Deezer already answers, so under the provider vote no shown year changes;
+ *  4 of the 5 moves are corrections (Get Lucky x2 2021 -> 2013, Up Where We
+ *  Belong 1997 -> 1982, You're The One That I Want 2021 -> 1978) and 1 is
+ *  wrong both ways (Somebody That I Used To Know -- an artist-matcher defect,
+ *  not a ladder one). See docs/agent_findings.md 2026-10-01.
+ * ===========================================================================
+ *
+ * WHY THE `tokenised` RUNG WAS REMOVED. Every title word quoted and ANDed, it was spike §3.3's
+ * most productive rewrite for broken phrases (an emoticon's stray `)`, a reordered or
+ * re-apostrophed title). In the measured run it answered 5 cards, all `low`, and every one of
+ * them was a year Deezer already had -- so under the provider vote it changed no shown year
+ * while costing a request on every total miss. Inside the remix fallback it rescued 0. With it
+ * went the `low` cap `api/_lib/resolve-year.ts` applied to its hits. The captured track it was
+ * built for is now pinned as a miss (`OLVIDARNOS` in `__fixtures__/musicbrainz-payloads.ts`).
  */
 function buildAttempts(input: YearLookupInput): { kind: MusicBrainzAttempt; query: string }[] {
   const title = escapePhrase(input.title);
@@ -285,82 +313,42 @@ function buildAttempts(input: YearLookupInput): { kind: MusicBrainzAttempt; quer
     attempts.push({ kind: 'duration-bounded', query: `${base} AND ${durationBound}` });
   }
 
-  // 2. Unbounded, for a track whose Spotify duration disagrees with every MusicBrainz
-  //    length (a radio edit in the playlist, say), and for tracks with no duration at all.
-  attempts.push({ kind: 'unbounded', query: base });
-
-  // 3. The lossy single-artist guess, LAST — which is what makes its lossiness harmless.
-  //    "Earth, Wind & Fire" matches on the full string at rung 2 and never reaches a guess
-  //    that would truncate it to "Earth". Reversing this order makes the guess a source of
-  //    wrong years (see `shared/artists.ts`).
+  // 2. The lossy single-artist guess, SECOND -- ahead of the unbounded full-artist query, and
+  //    behind the duration-bounded one. Spotify joins collaborators with ", " and MusicBrainz
+  //    with a joinphrase ("Cano & Justin Quiles", "Daft Punk feat. Pharrell Williams"), so a
+  //    multi-artist phrase that missed WITH the bound rarely matches WITHOUT it either: of the
+  //    cards that reach each query, the guess finds 68% and the unbounded full string 5%. And
+  //    when the full string does match unbounded, it is often an unofficial remix credited in
+  //    Spotify's own comma form -- which is how Get Lucky and You're The One That I Want used
+  //    to read 2021.
+  //
+  //    THE KNOWN COST of putting it here: an artist whose OWN name contains a comma
+  //    (`shared/artists.ts`) is now queried under a truncation of that name before the full
+  //    string is asked without a bound. A probe of 13 comma-in-name artists run WITH NO
+  //    DURATION -- so query 1 never ran, the worst case -- found one wrong year: "Teach Your
+  //    Children" (Crosby, Stills, Nash & Young) 1970 -> 1969, because the "Crosby" guess pool
+  //    holds a Crosby, Stills & Nash recording that the exact artist matcher admits. It is
+  //    reached only when query 1 misses (or there is no duration). The feared "Earth, Wind &
+  //    Fire" shape -- a guess pool that is non-empty yet scores no year, stealing the stop from
+  //    a full-string query that would have answered -- happened 0 times in 782.
+  //
+  //    Still UNBOUNDED, deliberately: the duration was already asked about at rung 1, and a
+  //    `dur:`-bounded guess, measured in the same run, lost 6 answers to this order's 3 and
+  //    moved 9 to this order's 5 -- including the one real steal of the run, The Imperial
+  //    March, whose bounded guess pool was non-empty and scored no year. `pickBestRecording()`
+  //    still filters the pool against the FULL artist, whichever query found it.
   const guess = primaryArtistGuess(input.artist);
-  const hasGuess = guess !== '' && guess !== input.artist;
-  if (hasGuess) {
+  if (guess !== '' && guess !== input.artist) {
     attempts.push({
       kind: 'artist-guess',
       query: `recording:"${title}" AND artist:"${escapePhrase(guess)}"`,
     });
   }
 
-  // 4. Tokenised, LAST, so it runs only after every phrase rung has returned nothing. The
-  //    quoted phrase fails on titles whose words MusicBrainz holds in a different shape: an
-  //    emoticon (`Olvidarnos De To' :)` leaves a stray `)` inside the phrase), a different
-  //    word order, an apostrophe variant. An AND of the words tolerates all three -- spike
-  //    §3.3's most productive rewrite, 6 of the 115 yearless tracks recovered, 0 of them
-  //    disagreeing with a store.
-  //
-  //    Looser evidence than a phrase, so `api/_lib/resolve-year.ts` caps a hit at `low`.
-  //    Reporting `matchedAttempt` is what lets it do so while this module decides nothing.
-  //
-  //    Four choices, each measured or forced:
-  //
-  //    - EVERY WORD IS QUOTED, so a word that is a Lucene keyword (`AND`, `OR`, `NOT`) or
-  //      carries an operator (`(`, `)`, `?`, `!`, `-`, `/`) is a literal, not query syntax.
-  //    - A TOKEN WITH NO LETTER OR DIGIT IS DROPPED before quoting. `")"` analyses to an
-  //      empty phrase, and the stray `)` is exactly what broke the phrase rungs for the
-  //      track this rung was built for. The two-word minimum is counted AFTER the drop.
-  //    - FEWER THAN TWO WORDS SKIPS THE RUNG. A one-word AND is the one-word phrase rung 2
-  //      already asked, so it would spend a request on a guaranteed repeat.
-  //    - THE ARTIST IS THE LAST PHRASE RUNG'S: the guess when there is one, else the full
-  //      string -- ratified by the developer on 2026-09-30 ("must search for the primary
-  //      artist"), so the full string is the edit to refuse. Measured 2026-09-30 on the spike's six recoveries (five distinct queries):
-  //      with the FULL artist string the rung found 1 of 5 (La Nieve, the one single-artist
-  //      track); with the guess it found 5 of 5. Spotify joins collaborators with ", " and
-  //      MusicBrainz with a joinphrase, so a multi-artist phrase rarely matches -- which is
-  //      also why the spike's own variant queried the first artist only. The guess's
-  //      lossiness is harmless here for the reason it is harmless at rung 3: this runs
-  //      only after the full string has missed, and `pickBestRecording()` still filters
-  //      the pool against the FULL artist.
-  //
-  //    THE `dur:` BOUND IS CARRIED when a duration is known. Measured 2026-09-30, live, one
-  //    process at 1 req/s, in the adapter's request shape, on the same six tracks:
-  //
-  //      track                       with dur:            without dur:
-  //      Olvidarnos De To' )         2026 high (pool 1)   2026 high (pool 1)
-  //      La Nieve                    2026 high (pool 1)   2026 high (pool 1)
-  //      La Plena - W Sound 05 (x2)  2025 high (pool 1)   2025 high (pool 1)
-  //      Tumbando el Club            2019 low  (pool 1)   2019 low  (pool 3)
-  //      Macacoa 2000                2026 high (pool 1)   2026 high (pool 1)
-  //
-  //    (The years are before the cap; the rung's own answers are all `low`.) Zero
-  //    difference, so the tiebreak is structural. By the time this rung runs, rung 2 has
-  //    already asked WITHOUT the bound and missed, so the duration is not the suspect --
-  //    the phrase is. And this is the loosest title match in the ladder while
-  //    `pickBestRecording()` compares no titles at all, so the length is the only identity
-  //    signal left in the query besides the artist. What the bound costs is a track that is
-  //    BOTH phrase-broken AND duration-mismatched: a double failure, unmeasured, accepted,
-  //    in the "deliberately stingy" spirit of the loose artist fallback. The remix fallback
-  //    passes no duration, so there this rung is unbounded anyway.
-  const words = title.split(' ').filter((word) => /[\p{L}\p{N}]/u.test(word));
-  if (words.length >= 2) {
-    const tokens = `recording:(${words.map((word) => `"${word}"`).join(' AND ')})`;
-    const tokenArtist = hasGuess ? escapePhrase(guess) : artist;
-    const query = `${tokens} AND artist:"${tokenArtist}"`;
-    attempts.push({
-      kind: 'tokenised',
-      query: durationBound === undefined ? query : `${query} AND ${durationBound}`,
-    });
-  }
+  // 3. Unbounded full artist, LAST: for a track whose Spotify duration disagrees with every
+  //    MusicBrainz length (a radio edit in the playlist, say), for a track with no duration at
+  //    all, and for a single-artist track, which has no guess -- for which this is rung 2.
+  attempts.push({ kind: 'unbounded', query: base });
 
   return attempts;
 }

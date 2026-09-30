@@ -10,8 +10,6 @@ import {
   noWomanNoCryReleaseGroups,
   noWomanNoCrySearch,
   olvidarnosPhraseSearches,
-  olvidarnosReleaseGroups,
-  olvidarnosTokenisedSearch,
   undatedSearch,
 } from './__fixtures__/musicbrainz-payloads.js';
 import { SPENT_LOOKUP_MAX_WAIT_MS, fetchYearCandidates } from './musicbrainz.js';
@@ -66,13 +64,18 @@ function queryOf(url: string): string {
   return new URL(url).searchParams.get('query') ?? '';
 }
 
+/** Every decoded query a double was asked, in order. */
+function queriesOf(urls: readonly string[]): string[] {
+  return urls.map(queryOf);
+}
+
 /**
  * A fetch double that answers `recording` and `release-group` requests from the given
  * payloads and records every URL it was asked for.
  *
  * `recording` may also be a function of the decoded query text, which is how a test tells
- * the rungs of the query ladder apart: the phrase rungs and the tokenised rung all hit the
- * same endpoint, and only the query says which one is asking.
+ * the rungs of the query ladder apart: every rung hits the same endpoint, and only the query
+ * says which one is asking.
  */
 function stubFetch(
   responses: { recording?: unknown; releaseGroup?: unknown },
@@ -368,23 +371,74 @@ describe('fetchYearCandidates', () => {
     }
   });
 
-  it('should retry with the primary-artist guess when the full artist string returns zero results', async () => {
-    // The ordering that makes `primaryArtistGuess()`'s known lossiness harmless.
+  it('should ask the artist guess before the unbounded full artist when both exist', async () => {
+    // The 2026-10-01 order: duration-bounded, artist guess, unbounded. The guess finds 68% of
+    // the cards that reach it and the unbounded full string 5%, so it goes first of the two
+    // (docs/agent_findings.md 2026-10-01). The full string is still asked FIRST whenever a
+    // duration is known -- which is what keeps the guess's truncation of a comma-in-name
+    // artist ("Crosby, Stills, Nash & Young" -> "Crosby") behind a bounded full-string query.
     const { fetch, urls } = stubFetch({ recording: emptySearch });
 
-    await fetchYearCandidates(
-      { title: 'September', artist: 'Earth, Wind & Fire feat. Someone' },
+    const result = await fetchYearCandidates(
+      { title: 'September', artist: 'Earth, Wind & Fire feat. Someone', durationMs: 215_000 },
       deps(fetch),
     );
 
-    const queries = urls.map((url) =>
-      decodeURIComponent(new URL(url).searchParams.get('query') ?? ''),
+    expect(queriesOf(urls)).toEqual([
+      'recording:"September" AND artist:"Earth, Wind & Fire feat. Someone" AND dur:[205000 TO 225000]',
+      'recording:"September" AND artist:"Earth"',
+      'recording:"September" AND artist:"Earth, Wind & Fire feat. Someone"',
+    ]);
+    // Every rung missed, so nothing is reported as having matched, and nothing was enriched.
+    expect(result).toEqual({ ok: true, candidates: [], requestCount: 3 });
+  });
+
+  it('should ask the guess FIRST when there is no duration to bound the full string', async () => {
+    // The known cost of the order, pinned rather than hidden: with no `dur:` rung, the lossy
+    // guess is the first query a comma-in-name artist gets. Measured on 13 such artists with
+    // no duration: one wrong year ("Teach Your Children" 1970 -> 1969, via the "Crosby" pool).
+    const { fetch, urls } = stubFetch({ recording: emptySearch });
+
+    await fetchYearCandidates({ title: 'September', artist: 'Earth, Wind & Fire' }, deps(fetch));
+
+    expect(queriesOf(urls)).toEqual([
+      'recording:"September" AND artist:"Earth"',
+      'recording:"September" AND artist:"Earth, Wind & Fire"',
+    ]);
+  });
+
+  it('should go duration-bounded then unbounded for a single-artist track', async () => {
+    // No guess to ask: `&` does not split in `primaryArtistGuess()`, so "Bob Marley & The
+    // Wailers" IS its own guess and the rung is not built -- a guaranteed repeat otherwise.
+    const { fetch, urls } = stubFetch({ recording: emptySearch });
+
+    const result = await fetchYearCandidates(NWNC_INPUT, deps(fetch));
+
+    expect(queriesOf(urls)).toEqual([
+      'recording:"No Woman No Cry" AND artist:"Bob Marley & The Wailers" AND dur:[245000 TO 265000]',
+      'recording:"No Woman No Cry" AND artist:"Bob Marley & The Wailers"',
+    ]);
+    expect(result).toEqual({ ok: true, candidates: [], requestCount: 2 });
+  });
+
+  it('should report which rung matched when the guess answers', async () => {
+    // Rung 1 (bounded full string) misses; the guess hits; the unbounded full string is never
+    // asked. Three requests: two recording searches and the release-group enrichment.
+    const { fetch, urls } = stubFetch({
+      recording: (query: string) =>
+        query.includes('artist:"Bob Marley"') ? noWomanNoCrySearch : emptySearch,
+      releaseGroup: noWomanNoCryReleaseGroups,
+    });
+
+    const result = await fetchYearCandidates(
+      { ...NWNC_INPUT, artist: 'Bob Marley, The Wailers' },
+      deps(fetch),
     );
 
-    // The FULL string is tried first -- which is why "Earth, Wind & Fire" never gets
-    // truncated to "Earth" on any track that MusicBrainz actually knows.
-    expect(queries[0]).toContain('artist:"Earth, Wind & Fire feat. Someone"');
-    expect(queries.at(-1)).toContain('artist:"Earth"');
+    expect(result.ok && result.matchedAttempt).toBe('artist-guess');
+    expect(result.ok && result.requestCount).toBe(3);
+    expect(queriesOf(urls).filter((query) => query.startsWith('recording:'))).toHaveLength(2);
+    expect(urls.at(-1)).toContain('/release-group?');
   });
 
   it('should not retry with the guess when the full string returned candidates', async () => {
@@ -548,7 +602,7 @@ describe('fetchYearCandidates release-group failures', () => {
 // ===========================================================================
 //  A SPENT LOOKUP WAITS LONGER, AND NEVER ANSWERS A FREE 429
 //
-//  A busy gate before rung 2, 3 or 4 used to return `rate-limited`, which the
+//  A busy gate before rung 2 or 3 used to return `rate-limited`, which the
 //  client re-asks for free -- from rung 1, re-spending every rung that had
 //  already come back empty. Only the lookup's FIRST permit may still be
 //  refused as `rate-limited`; every later one waits `SPENT_LOOKUP_MAX_WAIT_MS`
@@ -586,20 +640,17 @@ describe('fetchYearCandidates permits after a spent request', () => {
   });
 
   it('should take the first permit with the gate default and every later one with the longer wait', async () => {
-    // The whole ladder misses: four recording rungs, no release-group request.
+    // The whole ladder misses: three recording rungs -- the most a lookup can spend on
+    // recordings since the tokenised rung went on 2026-10-01 -- and no release-group request.
     const missing = openGate();
     await fetchYearCandidates(
       { title: 'A Song Title', artist: 'A Band, Someone Else', durationMs: 200_000 },
       deps(stubFetch({ recording: emptySearch }).fetch, missing),
     );
-    expect(missing.calls).toEqual([
-      [],
-      [SPENT_LOOKUP_MAX_WAIT_MS],
-      [SPENT_LOOKUP_MAX_WAIT_MS],
-      [SPENT_LOOKUP_MAX_WAIT_MS],
-    ]);
+    expect(missing.calls).toEqual([[], [SPENT_LOOKUP_MAX_WAIT_MS], [SPENT_LOOKUP_MAX_WAIT_MS]]);
 
-    // Rung 1 misses, rung 2 hits, then the release-group request -- which waits longer too.
+    // Rung 1 misses and the unbounded rung hits -- the second rung here, since a single artist
+    // has no guess -- then the release-group request, which waits longer too.
     const hitOnRungTwo = openGate();
     const { fetch, urls } = stubFetch({
       recording: (query: string) => (query.includes('dur:[') ? emptySearch : noWomanNoCrySearch),
@@ -650,84 +701,20 @@ describe('fetchYearCandidates permits after a spent request', () => {
 });
 
 // ===========================================================================
-//  THE TOKENISED RUNG
+//  THE PINNED MISS
+//
+//  The track the removed `tokenised` rung was built for. Without that rung,
+//  MusicBrainz alone finds nothing: all three phrase queries come back empty.
+//  Accepted on 2026-10-01 because Deezer already has its year.
 // ===========================================================================
 
-/** Every decoded query a double was asked, in order. */
-function queriesOf(urls: readonly string[]): string[] {
-  return urls.map(queryOf);
-}
-
-const isTokenised = (query: string): boolean => query.startsWith('recording:(');
-
-describe('fetchYearCandidates tokenised rung', () => {
-  it('should append the tokenised attempt last and only once', async () => {
-    // Every rung misses, so the whole ladder runs: the two full-artist phrase rungs, the
-    // artist-guess phrase rung, and then -- once, last -- the tokenised one.
-    const { fetch, urls } = stubFetch({ recording: emptySearch });
-
-    const result = await fetchYearCandidates(
-      { title: 'A Song Title', artist: 'A Band, Someone Else', durationMs: 200_000 },
-      deps(fetch),
-    );
-
-    const queries = queriesOf(urls);
-    expect(queries).toHaveLength(4);
-    expect(queries.filter(isTokenised)).toHaveLength(1);
-    expect(isTokenised(queries.at(-1) ?? '')).toBe(true);
-    expect(queries.slice(0, -1).every((query) => query.startsWith('recording:"'))).toBe(true);
-    // Nothing matched, so nothing is reported as having matched.
-    expect(result).toEqual({ ok: true, candidates: [], requestCount: 4 });
-  });
-
-  it('should quote every token and skip the rung under two tokens', async () => {
-    // Quoted, so a word that is a Lucene keyword or carries an operator is a literal; the
-    // stray `)` has no letter or digit and is dropped rather than quoted into an empty phrase.
-    // No duration here, so the rung carries no `dur:` bound.
-    const quoted = stubFetch({ recording: emptySearch });
-    await fetchYearCandidates(
-      { title: 'Love AND Hate / Why? )', artist: 'A Band' },
-      deps(quoted.fetch),
-    );
-    expect(queriesOf(quoted.urls).at(-1)).toBe(
-      'recording:("Love" AND "AND" AND "Hate" AND "Why?") AND artist:"A Band"',
-    );
-
-    // One word, and one word left after the punctuation-only token is dropped: the rung
-    // would be a guaranteed repeat of the unbounded phrase rung, so it is not built.
-    for (const title of ['September', 'Hello )']) {
-      const { fetch, urls } = stubFetch({ recording: emptySearch });
-      await fetchYearCandidates({ title, artist: 'A Band' }, deps(fetch));
-      expect(queriesOf(urls).some(isTokenised)).toBe(false);
-    }
-  });
-
-  it('should not issue the tokenised request when an earlier rung returned recordings', async () => {
-    // The rung loop stops at the first rung with results, so a first-try card still costs
-    // exactly two requests: the recording search and the release-group enrichment.
+describe('fetchYearCandidates pinned miss', () => {
+  it('should find nothing for the captured Olvidarnos track, with exactly the captured requests', async () => {
+    // Over the live capture. The exact query list is the request shape the fixture pins, so a
+    // change to any rung's query text or order fails here rather than silently leaving the
+    // fixture describing requests the adapter no longer makes.
     const { fetch, urls } = stubFetch({
-      recording: noWomanNoCrySearch,
-      releaseGroup: noWomanNoCryReleaseGroups,
-    });
-
-    const result = await fetchYearCandidates(NWNC_INPUT, deps(fetch));
-
-    expect(urls).toHaveLength(2);
-    expect(queriesOf(urls).some(isTokenised)).toBe(false);
-    expect(result.ok && result.requestCount).toBe(2);
-    expect(result.ok && result.matchedAttempt).toBe('duration-bounded');
-  });
-
-  it('should find the captured tokenised track on the last rung, with the captured requests', async () => {
-    // Over the live capture. The exact query list is the request shape the fixture was
-    // captured WITH, so a change to any rung's query text fails here rather than silently
-    // leaving the fixture describing requests the adapter no longer makes.
-    const { fetch, urls } = stubFetch({
-      recording: (query: string) => {
-        const index = OLVIDARNOS_QUERIES.indexOf(query);
-        return index === 3 ? olvidarnosTokenisedSearch : olvidarnosPhraseSearches[index];
-      },
-      releaseGroup: olvidarnosReleaseGroups,
+      recording: (query: string) => olvidarnosPhraseSearches[OLVIDARNOS_QUERIES.indexOf(query)],
     });
 
     const result = await fetchYearCandidates(
@@ -741,19 +728,9 @@ describe('fetchYearCandidates tokenised rung', () => {
     );
 
     expect(queriesOf(urls)).toEqual(OLVIDARNOS_QUERIES);
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-
-    expect(result.matchedAttempt).toBe('tokenised');
-    expect(result.requestCount).toBe(5);
-    // The adapter reports; it does not score. The pool itself is good enough for `high` --
-    // capping it is `api/_lib/resolve-year.ts`'s decision, not this module's.
-    expect(
-      pickBestRecording(result.candidates, {
-        artist: OLVIDARNOS.artist,
-        durationMs: OLVIDARNOS.durationMs,
-        tier: 'official-release',
-      }),
-    ).toEqual({ year: OLVIDARNOS.expectedYear, confidence: 'high', source: 'release-group' });
+    // Three recording searches, no release-group request (nothing to date), and no
+    // `matchedAttempt` because no rung returned anything.
+    expect(urls.some((url) => url.includes('/release-group?'))).toBe(false);
+    expect(result).toEqual({ ok: true, candidates: [], requestCount: 3 });
   });
 });

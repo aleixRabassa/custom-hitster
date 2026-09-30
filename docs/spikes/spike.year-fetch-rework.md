@@ -433,7 +433,11 @@ of the 2026-08-05 "dropping yearless cards has a long tail" finding. Each of the
 [`plan.year-fetch-rework-mb-fixes.md`](../plans/plan.year-fetch-rework-mb-fixes.md). The `tokenised`
 rung landed as the last attempt of the adapter's query ladder, not in a stage B, and its hits are
 capped at `low`. That plan also took the cache to `v5`. The `isrc:` rung of P4, and P3 and P5, are
-not built. The measurements in this spike are unchanged.
+not built. The measurements in this spike are unchanged. **The `tokenised` rung was built on
+2026-09-30 and removed on 2026-10-01**, when the query ladder was reordered to duration-bounded →
+artist-guess → unbounded and the cache went to `v6`: over 782 live cards it answered 5, all of them
+also answered by Deezer, and rescued 0 inside the remix fallback. See
+[`agent_findings.md`](../agent_findings.md) (2026-10-01).
 
 | #   | What                                                                                                                                                                         | Needs                       | Moves                                  |
 | --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- | -------------------------------------- |

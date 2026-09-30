@@ -5592,3 +5592,84 @@ Closes the first "Not fixed, and a follow-up" item of the 2026-09-30 MusicBrainz
 - **The cost.** Idle function time, only on a cold card whose first query missed, and only under
   contention. How often contention happens is **unmeasured**: it is a row in
   [`development.md`](./development.md) §5, "The three-provider year vote", row 1.
+
+## 2026-10-01 — The recording-query ladder reordered: the artist guess before the full-artist unbounded query, and the tokenised rung removed
+
+The developer's decision, 2026-10-01, after a live diff (harness and raw responses in
+`.scratch/plan5/`, git-ignored; the summary is `.scratch/plan5/report.txt`). It reverses the
+2026-09-30 plan-1 decision to build the `tokenised` rung
+([`plan.year-fetch-rework-mb-fixes.md`](./plans/plan.year-fetch-rework-mb-fixes.md) step 4), and
+Phase 2's decision 15 that the full joined artist string is queried before the primary-artist guess.
+
+- **The change.** `buildAttempts()` went from `duration-bounded` → `unbounded` (full artist) →
+  `artist-guess` → `tokenised` to **`duration-bounded` → `artist-guess` (no `dur:` bound) →
+  `unbounded` (full artist)**. The `tokenised` rung is gone everywhere, the primary ladder and the
+  remix fallback, and its `low` cap in `resolve-year.ts` went with it. `YEAR_CACHE_SCHEMA_VERSION`
+  went `v5` → `v6`, because the reorder changes answers already cached (Get Lucky was cached at
+  2021 `low` from the unbounded query). P6, the ~3.5 s `SPENT_LOOKUP_MAX_WAIT_MS` wait and the remix
+  fallback are unchanged. When the guess equals the full artist string, the guess rung is skipped as
+  before, so a single-artist card still asks `duration-bounded` → `unbounded`.
+- **Why this order.** In the spike baseline, the guess query found a year for **68%** of the cards
+  that reached it (108 of 159), against **5%** for the full-artist unbounded query (11 of 235). After
+  the bounded query, the one that answers more often now runs first, and the one that almost never
+  answers runs last.
+- **The live diff**: 782 cards (the 542 and the 240 soundtracks), run at ≤1 req/s. Figures are for
+  the shipped variant (`v1notok` in the report) against the old order.
+
+  | Cards               | Requests before → after | Per card          | Change     |
+  | ------------------- | ----------------------- | ----------------- | ---------- |
+  | The 542             | 1454 → 1255             | 2.683 → 2.315     | −13.7%     |
+  | The 240 soundtracks | 685 → 548               | 2.854 → 2.283     | −20.0%     |
+  | **All 782**         | **2139 → 1803**         | **2.735 → 2.306** | **−15.7%** |
+
+  | MusicBrainz's own answer, all 782 | Cards |
+  | --------------------------------- | ----- |
+  | Unchanged                         | 774   |
+  | Lost (a year became null)         | 3     |
+  | Moved (a year became another)     | 5     |
+
+- **The 3 lost are ex-tokenised hits that Deezer already has**: Olvidarnos De To' :) and La Plena
+  (W Sound 05), twice. The old tokenised rung answered 5 cards in the primary ladder; the other two
+  (Cuando No Era Cantante - Remix, Vuelta a la Luna - Remix) end on the same year under the new
+  order. **Under the provider vote 0 shown years change**: Olvidarnos is still confirmed by iTunes
+  and Deezer, and La Plena drops from confirmed (MusicBrainz + Deezer) to a lone Deezer year whose
+  two years agree.
+- **The 5 moved: 4 better, 1 wrong both ways.**
+
+  | Track                              | Old (unbounded) | New (guess) | Truth |
+  | ---------------------------------- | --------------- | ----------- | ----- |
+  | Get Lucky (Radio Edit), Daft Punk  | 2021 `low`      | 2013 `high` | 2013  |
+  | Get Lucky, Daft Punk (second card) | 2021 `low`      | 2013 `high` | 2013  |
+  | Up Where We Belong                 | 1997 `low`      | 1982 `high` | 1982  |
+  | You're The One That I Want         | 2021 `low`      | 1978 `high` | 1978  |
+  | Somebody That I Used To Know       | 2012 `low`      | 2017 `high` | 2011  |
+
+  The five share a shape: the full-artist unbounded query matched only one to three stray
+  recordings credited with Spotify's comma list, mostly remixes and refixes, and the guess pool holds the original. In
+  all five iTunes and Deezer already name the true year, so under the vote the four better ones
+  turn a MusicBrainz dissent into agreement rather than change a shown year.
+
+- **Inside the remix fallback the tokenised rung rescued 0**, on either set.
+- **The known cost of the order**: a probe of 13 artists with a comma in the name, run with **no
+  duration** (so the guess is the first query), found 1 wrong year. "Teach Your Children" by Crosby,
+  Stills, Nash & Young reads **1969** instead of 1970, through a Crosby, Stills & Nash recording the
+  exact artist matcher admits. The other 12 are unchanged: Earth, Wind & Fire ×3 (plus Boogie
+  Wonderland with The Emotions), Tyler, The Creator ×3, Our House, Suite: Judy Blue Eyes, Lucky Man,
+  Spinning Wheel, Leaving on a Jet Plane. Boogie Wonderland (2013) and Leaving on a Jet Plane (1972)
+  are wrong under **both** orders, so they are not the reorder's. This replaces the Phase 2 "Earth,
+  Wind & Fire" argument for keeping the guess last: that band resolves correctly either way.
+- **The steal that was feared did not happen.** The strict case, a non-empty guess pool that scores
+  no year while the old order would have answered elsewhere, occurred 0 times in 782.
+- **Rejected: V2, a duration-bounded guess.** Same request count as the shipped order, but 6 lost
+  and 9 moved, and the one real steal: The Imperial March. The `dur:` bound cut its guess pool to two
+  recordings, neither of which scores, and because the pool was not empty the ladder stopped
+  there, so 2017 `low` became null.
+- **Moot by removal**: the 2026-09-30 entry's open follow-up, "the tokeniser splits on whitespace
+  only", no longer describes any code.
+- **OPEN, and not fixed by this change: the exact artist matcher rejects "Gotye feat. Kimbra" for
+  "Gotye, Kimbra".** Somebody That I Used To Know is wrong in both orders (2012 old, 2017 new,
+  truth 2011): the guess pool holds 7 recordings credited "Gotye feat. Kimbra", and the exact rule
+  does not admit them for the card's "Gotye, Kimbra", so a later recording answers. It is a matcher
+  defect, separate from the ladder. Under the vote the card still shows 2011, because iTunes and
+  Deezer agree on it; the wrong MusicBrainz year shows on the stage-less legacy path, and would
+  show on the staged one wherever the stores are silent.

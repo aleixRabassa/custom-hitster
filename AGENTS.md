@@ -35,7 +35,7 @@ Several decisions in this repo look like mistakes and are not. If something seem
 | [`docs/plans/plan.google-play-shell.md`](./docs/plans/plan.google-play-shell.md)                   | Google Play, plan 1 — the Bubblewrap TWA shell, asset links, the listing, the store tracks. **Steps 1–5 built 2026-09-19**; `android/` and the store work outstanding                                                                                                                                                                                                                                                                                |
 | [`docs/plans/plan.google-play-back-button.md`](./docs/plans/plan.google-play-back-button.md)       | Google Play, plan 2 — Android back as an in-app control. **Built 2026-08-12**; device rows wait on plan 1. **Frozen 2026-09-19** — its rows run from plan 3                                                                                                                                                                                                                                                                                          |
 | [`docs/plans/plan.play-store-todo.md`](./docs/plans/plan.play-store-todo.md)                       | Google Play, plan 3 — **THE ONLY EXECUTABLE GOOGLE PLAY FILE.** Everything from the trademark relabel to a staged production rollout. Steps 2, 3 and 8 built 2026-09-19                                                                                                                                                                                                                                                                              |
-| [`docs/plans/plan.year-fetch-rework-mb-fixes.md`](./docs/plans/plan.year-fetch-rework-mb-fixes.md) | Year-fetch rework, plan 1 — the last-segment-first title cleaner and its new families, the `tokenised` rescue rung capped at `low`, a failed release-group request as `upstream-unavailable`, the cache at `v5`. **Built 2026-09-30**                                                                                                                                                                                                                |
+| [`docs/plans/plan.year-fetch-rework-mb-fixes.md`](./docs/plans/plan.year-fetch-rework-mb-fixes.md) | Year-fetch rework, plan 1 — the last-segment-first title cleaner and its new families, the `tokenised` rescue rung capped at `low`, a failed release-group request as `upstream-unavailable`, the cache at `v5`. **Built 2026-09-30**; the `tokenised` rung **removed 2026-10-01**, when the query ladder was reordered and the cache went to `v6`                                                                                                   |
 | [`docs/plans/plan.year-fetch-rework-server.md`](./docs/plans/plan.year-fetch-rework-server.md)     | Year-fetch rework, plan 2 — the provider vote in `shared/` (Deezer beside MusicBrainz, then iTunes; two agreeing providers confirm a year), the Deezer and iTunes adapters, a gate and a cache per provider, `/api/year` split into `resolve` and `verify` stages. **Built 2026-09-30**; step 15's preview smoke test outstanding                                                                                                                    |
 | [`docs/plans/plan.year-fetch-rework-game.md`](./docs/plans/plan.year-fetch-rework-game.md)         | Year-fetch rework, plan 3 — the game layer: provisional years, `keepYearless`, the two-lane resolver, persistence, the PDF gate. **Built 2026-09-30**; step 11's preview smoke test outstanding                                                                                                                                                                                                                                                      |
 | [`docs/plans/plan.year-fetch-rework-ui.md`](./docs/plans/plan.year-fetch-rework-ui.md)             | Year-fetch rework, plan 4 — the reveal's provisional-year slot, the picker's "Keep cards with no year found" checkbox and its remembered choice, copy in three languages, the blank PDF year. **Built 2026-09-30**; step 10's preview checks outstanding                                                                                                                                                                                             |
@@ -430,9 +430,11 @@ already-fetched pool, so a lookup still costs exactly two MusicBrainz requests. 
 before touching any of it. **`isOfficialStudioAlbum` is now `isOfficialOriginalRelease`** and is
 still the one predicate shared with `api/_lib/musicbrainz.ts`. **The 50-id cap on request 2 now sorts
 Album → EP → Single before truncating**, which is what makes the widening non-regressive by
-construction. **`YEAR_CACHE_SCHEMA_VERSION` is `v5`** — it went to `v4` with this change, necessarily
-rather than ceremonially, because the change altered answers cached at `high` for 30 days, and to `v5`
-with the fixes below. And **all 22 fixtures were RE-CAPTURED**, because the
+construction. **`YEAR_CACHE_SCHEMA_VERSION` is `v6`** — it went to `v4` with this change, necessarily
+rather than ceremonially, because the change altered answers cached at `high` for 30 days, to `v5`
+with the fixes below, and to `v6` on 2026-10-01 with the query-ladder reorder below, necessarily
+again: a card that used to stop at the unbounded full-artist query now stops at the guess, so its
+cached answer changes (Get Lucky was cached at 2021 `low` and now reads 2013 `high`). And **all 22 fixtures were RE-CAPTURED**, because the
 old ones carried Single candidates with no `releaseGroupFirstReleaseDate` (nothing had ever fetched
 one) — so the 14-track suite passed both before and after the code change while being structurally
 incapable of testing it. Measured 21 of 22 exact live. **Since 2026-09-30 that `high` is ONE VOTER,
@@ -441,23 +443,39 @@ not the card's answer** (the provider-vote block below): on the staged `/api/yea
 UNCONFIRMED answer — `low` on the wire. Everything above is still true of MusicBrainz's own scorer
 and of the stage-less legacy path, which returns the ladder's answer as it always did.
 
-**AND AS OF 2026-09-30 THE CLEANER READS THE LAST TRAILING SEGMENT FIRST, AND A LOOKUP THAT MISSES
-EVERY PHRASE RUNG GETS ONE MORE TRY** ([`plan.year-fetch-rework-mb-fixes.md`](./docs/plans/plan.year-fetch-rework-mb-fixes.md)).
+**AND AS OF 2026-09-30 THE CLEANER READS THE LAST TRAILING SEGMENT FIRST, AND AS OF 2026-10-01 THE
+QUERY LADDER ASKS THE ARTIST GUESS BEFORE THE UNBOUNDED FULL ARTIST** ([`plan.year-fetch-rework-mb-fixes.md`](./docs/plans/plan.year-fetch-rework-mb-fixes.md)).
 Three things. **`TRAILING_SEGMENT_PATTERN` had a lazy head**, so `X (REMIX) (feat. Y)` was read as one
 unclassifiable segment and left whole; the head is now greedy, so the LAST segment is examined first,
 and when that segment is unrecognised `cleanTrackTitle` retries with the old lazy pattern — so it
 **never strips less than it used to**, by construction (`Song - Live at Wembley - 1986` and nested
-brackets are the two cases that need the fallback). **`buildAttempts` gained a fourth rung,
-`tokenised`** — every title word quoted and ANDed, the primary-artist guess when there is one, the
-`dur:` bound when a duration is known — and like every rung it runs only when the one before returned
-nothing, so it fires only on a **total** miss and a first-try card still costs exactly two requests.
-A hit from it is **capped at `low`** in `resolve-year.ts`, beside the loose-artist cap and for the same
-reason: looser evidence. The adapter only REPORTS `matchedAttempt`; the cap is the scoring layer's.
-And **a failed release-group request, or a busy gate before it, is now `upstream-unavailable`, never a
+brackets are the two cases that need the fallback). **The recording-query ladder is THREE rungs
+as of 2026-10-01, and the primary-artist guess comes BEFORE the unbounded full-artist query:
+`duration-bounded` (full artist, `dur:` bound) → `artist-guess` (no bound, only when the guess
+differs from the full string) → `unbounded` (full artist).** Each runs only when the one before
+returned nothing, so a first-try card still costs exactly two requests. The `tokenised` rung that
+plan 1 built on 2026-09-30 is **gone**, from the primary ladder and the remix fallback, and its `low`
+cap in `resolve-year.ts` with it: over 782 live cards it answered 5, all five already answered by
+Deezer, and rescued 0 inside the remix fallback. **Putting the full-artist unbounded query back
+before the guess is the edit to refuse**, and it is the order Phase 2 chose (its decision 15) and
+this block used to describe: in the spike baseline the guess found a year for **68%** of the cards
+that reached it (108 of 159) against **5%** for the unbounded full string (11 of 235), because
+Spotify's `", "` join rarely matches MusicBrainz's joinphrase. The reorder cut MusicBrainz requests by
+**15.7%** (2.735 → 2.306 per card), lost 3 MusicBrainz years that Deezer already had (0 shown years
+changed under the vote), and moved 5: four to the right year (Get Lucky ×2, Up Where We Belong,
+You're The One That I Want) and one wrong both ways, an artist-matcher defect (Somebody That I Used
+To Know, open). **The cost is known and accepted**: on a comma-in-name artist with no duration, or
+whose bounded query misses, the lossy guess is asked before the full name is asked unbounded. A 13-artist probe found
+**one** wrong year from it — "Teach Your Children" (Crosby, Stills, Nash & Young) 1970 → 1969, via a
+Crosby, Stills & Nash recording the exact matcher admits. That replaces the old "Earth, Wind & Fire"
+argument for keeping the guess last: the band resolves correctly in both orders, and the feared
+steal (a non-empty guess pool that scores no year) happened 0 times in 782. A duration-bounded guess
+was measured and rejected (6 lost, 9 moved, and one real steal, The Imperial March). Full tables in
+[`docs/agent_findings.md`](./docs/agent_findings.md) (2026-10-01). And **a failed release-group request, or a busy gate before it, is now `upstream-unavailable`, never a
 silent degrade** to the lower rungs — that used to cache a `low` year drawn from reissue dates on a
 card that would have been `high` a second later. It is deliberately not `rate-limited`: the client
 treats a 429 as free and would re-spend request 1 in a loop. **As of 2026-10-01 the same rule covers
-EVERY permit after the lookup's first request** — query rungs 2–4, the release-group request and the
+EVERY permit after the lookup's first request** — query rungs 2–3, the release-group request and the
 remix fallback's first query all run only after something was spent, so they wait up to ~3.5 s
 (`SPENT_LOOKUP_MAX_WAIT_MS`, about three other lookups queued ahead at the gate's 1.1 s spacing)
 and, if still refused, return `upstream-unavailable`. Only query 1 keeps the gate's 1.5 s default and
@@ -492,7 +510,7 @@ turn a null into a year. `year.test.ts` pins that with a two-candidate exact-199
 one vote among three** (the provider-vote block below): a MusicBrainz null no longer drops a card on
 the staged path, it only leaves the vote to Deezer and iTunes, and a MusicBrainz `high` is no longer
 final alone. **The ceiling also does a second job now**: `UNCONFIRMED_TRUST` ranks MusicBrainz twice,
-`high` above iTunes and `low` below it, so a loose-artist or `tokenised` hit capped at `low` also
+`high` above iTunes and `low` below it, so a loose-artist hit capped at `low` also
 drops BELOW a lone iTunes year when nobody agrees. That is the cap working as intended — looser
 evidence ranks lower — not a regression to fix by raising it.
 **Why it exists**: Spotify joins collaborators with `", "` and MusicBrainz uses a joinphrase, so they

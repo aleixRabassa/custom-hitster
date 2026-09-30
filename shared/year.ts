@@ -450,8 +450,21 @@ export function stripRemixSuffix(title: string): string | undefined {
  * failed release-group request now reports `upstream-unavailable` instead of caching the
  * degraded `low` answer the relaxed rungs used to give. Bumped by the unconditional rule, as
  * v2 and v4 were, rather than because any one of the four strictly needed it.
+ *
+ * **v6 (2026-10-01):** the adapter's recording-query ladder was reordered and cut to three
+ * rungs -- duration-bounded, then the primary-artist guess, then the unbounded full artist --
+ * and the `tokenised` rung (with its `low` cap in `api/_lib/resolve-year.ts`) was removed.
+ * NECESSARY rather than merely required by the rule: a card that used to stop at the unbounded
+ * full-artist query now stops at the guess, so its answer changes. Measured over 782 cards,
+ * five moved: four to the right year (Get Lucky x2 2021 -> 2013, Up Where We Belong
+ * 1997 -> 1982, You're The One That I Want 2021 -> 1978) -- wrong answers otherwise served
+ * from the cache for up to 7 days -- and one wrong both ways (Somebody That I Used To Know, an
+ * artist-matcher defect). And the three ex-tokenised `low` entries now resolve to `none`
+ * (Deezer still answers them under the vote), which a warm v5 key would have hidden for a
+ * week. The four corrections now come back `high`, cached for 30 days. See
+ * docs/agent_findings.md 2026-10-01.
  */
-export const YEAR_CACHE_SCHEMA_VERSION = 'v5';
+export const YEAR_CACHE_SCHEMA_VERSION = 'v6';
 
 /**
  * Lowercase, de-accent, drop punctuation, collapse whitespace.

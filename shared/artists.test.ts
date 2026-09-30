@@ -24,10 +24,11 @@ describe('primaryArtistGuess', () => {
 
     // KNOWN LIMITATION, asserted rather than fixed: a comma inside a real artist name
     // is indistinguishable from Spotify's own multi-artist join, so the guess truncates
-    // these. It is harmless only because plan.phase-2-year.md queries the FULL joined
-    // string first and reaches the guess only after that returns zero results --
-    // "Earth, Wind & Fire" matches on the full string and never gets here. If that
-    // ordering is ever reversed, these two lines become wrong years on real cards.
+    // these. Since 2026-10-01 the adapter asks the guess SECOND, after the duration-bounded
+    // full string and before the unbounded one, so this truncation is reached whenever the
+    // first query misses (or the duration is unknown). The measured cost is small and
+    // recorded in `shared/artists.ts` and docs/agent_findings.md (2026-10-01): one wrong
+    // year in a 13-band comma probe ("Teach Your Children", 1970 -> 1969).
     expect(primaryArtistGuess('Earth, Wind & Fire')).toBe('Earth');
     expect(primaryArtistGuess('Tyler, The Creator')).toBe('Tyler');
   });
