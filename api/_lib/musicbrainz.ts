@@ -260,7 +260,8 @@ function buildAttempts(input: YearLookupInput): { kind: MusicBrainzAttempt; quer
   //    - FEWER THAN TWO WORDS SKIPS THE RUNG. A one-word AND is the one-word phrase rung 2
   //      already asked, so it would spend a request on a guaranteed repeat.
   //    - THE ARTIST IS THE LAST PHRASE RUNG'S: the guess when there is one, else the full
-  //      string. Measured 2026-09-30 on the spike's six recoveries (five distinct queries):
+  //      string -- ratified by the developer on 2026-09-30 ("must search for the primary
+  //      artist"), so the full string is the edit to refuse. Measured 2026-09-30 on the spike's six recoveries (five distinct queries):
   //      with the FULL artist string the rung found 1 of 5 (La Nieve, the one single-artist
   //      track); with the guess it found 5 of 5. Spotify joins collaborators with ", " and
   //      MusicBrainz with a joinphrase, so a multi-artist phrase rarely matches -- which is

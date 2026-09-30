@@ -5530,3 +5530,17 @@ Built from [`docs/plans/plan.year-fetch-rework-game.md`](./plans/plan.year-fetch
   `[vitest-pool]: Failed to start forks worker … Timeout waiting for worker to respond` while other
   processes loaded the machine. `pnpm test -- --maxWorkers=4` ran clean: 70 files and 1453 tests.
   Read the error text before reading it as a failure.
+
+## 2026-09-30 — Rulings: `Re-Recorded` resolves to the original, and the tokenised rung searches the primary artist
+
+The developer ruled on two of the open items from the MusicBrainz-fixes entry above:
+
+- **A `Re-Recorded` title resolves to the ORIGINAL recording.** This is the one deliberate exception
+  to the "a card shows its recording's year" rule (spike §13.9). The cleaner's `Re-Recorded` family
+  stays. Flashdance's 2014 re-recording reading 1983 at `high` is correct, not a bug.
+- **The tokenised rung must search the primary artist** (the guess), never the full artist string.
+  The measured 5 of 5 against 1 of 5 stands as the reason.
+
+No code changed: both were already the built behaviour. The rulings are recorded in the
+`Re-Recorded` family's comment in `shared/year.ts`, the rung's comment in `api/_lib/musicbrainz.ts`,
+AGENTS.md's recording-year bullet and the plan's Open Questions.

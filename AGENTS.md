@@ -543,6 +543,10 @@ Re-adding it is a plan step, a trust tier, a `YearProviderId` member and an adap
 - **The year is the RECORDING's, not the film's or the original song's** (§13.9, the developer's
   answer). A cover dated by its own release, or a Spanish dub dated by the dub, is correct and not a
   bug to fix: it is what every provider answers, and the film's year would need a different lookup.
+  **One deliberate exception: a `Re-Recorded` title resolves to the ORIGINAL recording** (the
+  developer's ruling, 2026-09-30). The cleaner strips the tail, so Flashdance's 2014 re-recording
+  reads 1983. A re-recording stands in for the original, so the original's year is the answer.
+  A cover or a dub is a different performance and keeps its own year.
 - **`finalWhenCertain` is OFF for all three providers.** Turning Deezer's on
   (`deezerRecentSignature`, dormant but tested — `La Grange - 2005 Remaster` must not fire it) lets a
   recent Deezer answer end a card alone. That is the MusicBrainz saving §12.3 measured

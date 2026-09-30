@@ -192,6 +192,13 @@ const FAMILY_PATTERNS: { family: StripFamily; pattern: RegExp }[] = [
   // "Lose Yourself - Soundtrack Version", "Over The Rainbow - LP Soundtrack Version from
   // Wizard Of Oz", "Flashdance...What a Feeling - Re-Recorded".
   { family: 'version', pattern: /^(?:lp\s+)?soundtrack\s+version(?:\s+from\s+\S.*)?$/ },
+  //
+  // `Re-Recorded` is stripped ON PURPOSE, and it is the ONE deliberate exception to the
+  // "a card shows its RECORDING's year" rule (spike §13.9). Stripping it makes the lookup find the
+  // ORIGINAL recording: Flashdance's re-recording (MusicBrainz 309179d8, first released 2014)
+  // resolves to the 1983 original at `high`. The developer ruled that this is correct on
+  // 2026-09-30: a re-recording exists to stand in for the original, so the original's year is the
+  // answer. Do not "fix" it back to the re-recording's own year.
   { family: 'version', pattern: /^re-?recorded(?:\s+version)?$/ },
 
   // A remaster tail that runs on past "Version". Measured: "Stayin' Alive - 2007 Remastered

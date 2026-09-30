@@ -278,10 +278,13 @@ from "Top Gun"`).
       The same run settled the artist clause, which the plan left ambiguous (rungs 1–2 and rung 3
       use different artists): the rung uses the **last phrase rung's** artist, the guess when there
       is one — the full string found 1 of 5, the guess 5 of 5. Both recorded in the rung's comment.
+      **Ratified by the developer 2026-09-30:** the rung must search the primary artist.
 - [x] Does step 8's diff move any answer that resolved today? If it does, is the new answer better?
       Decide per case before merging. **Answered 2026-09-30: no.** 0 moved, 0 lost over 255 tracks;
-      17 null → year. Two recoveries still need a ruling (Flashdance Re-Recorded resolving to the
-      original, Pobres Almas 1994 vs iTunes 1989) — see `docs/agent_findings.md` (2026-09-30).
+      17 null → year. Two recoveries needed a ruling — see `docs/agent_findings.md` (2026-09-30).
+      **Ruled 2026-09-30:** Flashdance `Re-Recorded` resolving to the 1983 original is CORRECT (a
+      re-recording resolves to its original: the one exception to the recording-year rule), and
+      the tokenised rung's primary-artist guess is ratified. Pobres Almas is left as measured.
 
 ---
 
