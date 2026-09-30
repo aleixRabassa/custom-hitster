@@ -194,6 +194,11 @@ function capTokenisedHit(
  *   above passes it on uncached -- but in here it is swallowed like any other failure, so the
  *   primary pass's null is cached for a day. Left as is on purpose: making this fallback
  *   propagate its own errors is out of scope for that plan.
+ * - **So does a gate still busy after the LONGER wait.** The fallback is called with
+ *   `requestsAlreadySpent: true`, so every one of its permits -- its first rung included --
+ *   waits up to `SPENT_LOOKUP_MAX_WAIT_MS` and a refusal is `upstream-unavailable`. That
+ *   refusal is swallowed here too, and the primary pass's null is cached like any other
+ *   fallback failure: the same accepted trade as the line above, not a new one.
  */
 async function resolveViaRemixFallback(
   cleanedTitle: string,
@@ -204,7 +209,15 @@ async function resolveViaRemixFallback(
   if (stripped === undefined) return undefined;
   const baseTitle = cleanTrackTitle(stripped).title;
 
-  const fallback = await fetchYearCandidates({ title: baseTitle, artist: input.artist }, deps);
+  // `requestsAlreadySpent`: the primary ladder above has already spent at least one request
+  // of this lookup, so even the fallback's FIRST rung waits the adapter's longer
+  // `SPENT_LOOKUP_MAX_WAIT_MS` rather than the gate's short default -- a `rate-limited`
+  // bubbling out of here would be a free client retry that re-runs the primary ladder too.
+  // (It cannot bubble out today, since failures are swallowed below, but the flag keeps the
+  // adapter's own rule true whatever the caller does with the result.)
+  const fallback = await fetchYearCandidates({ title: baseTitle, artist: input.artist }, deps, {
+    requestsAlreadySpent: true,
+  });
   if (!fallback.ok) return undefined;
 
   const result = runTiers(fallback.candidates, { artist: input.artist });

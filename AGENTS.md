@@ -456,7 +456,15 @@ reason: looser evidence. The adapter only REPORTS `matchedAttempt`; the cap is t
 And **a failed release-group request, or a busy gate before it, is now `upstream-unavailable`, never a
 silent degrade** to the lower rungs — that used to cache a `low` year drawn from reissue dates on a
 card that would have been `high` a second later. It is deliberately not `rate-limited`: the client
-treats a 429 as free and would re-spend request 1 in a loop.
+treats a 429 as free and would re-spend request 1 in a loop. **As of 2026-10-01 the same rule covers
+EVERY permit after the lookup's first request** — query rungs 2–4, the release-group request and the
+remix fallback's first query all run only after something was spent, so they wait up to ~3.5 s
+(`SPENT_LOOKUP_MAX_WAIT_MS`, about three other lookups queued ahead at the gate's 1.1 s spacing)
+and, if still refused, return `upstream-unavailable`. Only query 1 keeps the gate's 1.5 s default and
+the free 429, because nothing is spent yet. The longer wait is a named exception to `rate-limit.ts`'s
+"never wait long inside a function" rule, paid in idle function time only on a cold card whose first
+query missed under contention (how often is unmeasured), and it buys the uncontended answer without a
+restart from query 1. **Returning `rate-limited` after a spent request is the edit to refuse.**
 
 **The twenty-second track is pinned as WRONG on purpose, and it is not a filtering problem.**
 `YEAR_LIMITATION_FIXTURES` holds "Personal Jesus" at ground truth 1989 with `resolvesTo: 1990`

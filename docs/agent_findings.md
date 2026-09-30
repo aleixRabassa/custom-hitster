@@ -5565,3 +5565,30 @@ vote Deezer's release year alone.
 - **The GBSMU exclusion is invisible on the spike's data**, which holds no GBSMU code. On the
   2026-09-30 captures it moves one card, Sweet Child O' Mine, from `verify` to `resolve`, saving one
   iTunes request. It changes no year.
+
+## 2026-10-01 — FIXED: a busy MusicBrainz gate inside the recording-query loop no longer returns `rate-limited`
+
+Closes the first "Not fixed, and a follow-up" item of the 2026-09-30 MusicBrainz-fixes entry above
+(the developer's decision, 2026-10-01). The tokeniser item beside it is still open.
+
+- **The bug.** `fetchYearCandidates` runs up to four recording queries (duration-bounded,
+  unbounded, artist-guess, tokenised), stopping at the first that returns anything, then one
+  release-group request. A busy gate before queries 2–4 returned `rate-limited`, and the client
+  treats a 429 as free: it re-asked without counting an attempt, and the lookup restarted from
+  query 1, spending again the queries that had already come back empty. The loop's comment ("only
+  reachable before any request has been made") stopped being true once rungs 2–4 existed. It is the
+  same re-spend loop P6 closed for the release-group request.
+- **The fix, by whether anything has been spent.** Query 1 keeps the gate's default 1.5 s wait and
+  still returns `rate-limited` on refusal: nothing was spent, so the free 429 is right. Once any
+  request of the lookup is spent, every later permit (queries 2–4, the release-group request and
+  the remix fallback's first query) waits up to ~3.5 s (`SPENT_LOOKUP_MAX_WAIT_MS`). The gate
+  spaces MusicBrainz requests 1.1 s apart, so 3.5 s tolerates about three other lookups queued
+  ahead. If even that is refused, the lookup returns `upstream-unavailable` (502, counted against
+  the client's retry budget), never `rate-limited`.
+- **Why wait instead of failing at once.** A 502 at the default 1.5 s would also stop the loop, but
+  the client's retry would still restart from query 1 and spend the empty queries again. Waiting
+  longer keeps the answer the same as an uncontended lookup. It is a deliberate exception to
+  `rate-limit.ts`'s "never wait long inside a function" rule.
+- **The cost.** Idle function time, only on a cold card whose first query missed, and only under
+  contention. How often contention happens is **unmeasured**: it is a row in
+  [`development.md`](./development.md) §5, "The three-provider year vote", row 1.

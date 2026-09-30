@@ -14,20 +14,30 @@ import {
   olvidarnosTokenisedSearch,
   undatedSearch,
 } from './__fixtures__/musicbrainz-payloads.js';
-import { fetchYearCandidates } from './musicbrainz.js';
+import { SPENT_LOOKUP_MAX_WAIT_MS, fetchYearCandidates } from './musicbrainz.js';
 import type { FetchLike, MusicBrainzDeps } from './musicbrainz.js';
+import { MIN_REQUEST_INTERVAL_MS } from './rate-limit.js';
 import type { RateLimitGate } from './rate-limit.js';
 import { pickBestRecording } from '../../shared/year.js';
 
 const USER_AGENT = 'custom-jitster/0.1.0 ( test@example.com )';
 
+/**
+ * The argument list of every `acquire()` call, in order. A rest parameter rather than a
+ * named one, so `[]` (the gate's own default) and `[3500]` stay distinguishable -- a named
+ * `maxWaitMs` would record `undefined` for both "no argument" and "explicitly undefined".
+ */
+type AcquireCalls = [maxWaitMs?: number][];
+
 /** A gate that always admits, and counts how many permits were taken. */
-function openGate(): RateLimitGate & { permits: number } {
+function openGate(): RateLimitGate & { permits: number; calls: AcquireCalls } {
   const gate = {
     kind: 'instance' as const,
     permits: 0,
-    acquire() {
+    calls: [] as AcquireCalls,
+    acquire(...args: [maxWaitMs?: number]) {
       gate.permits += 1;
+      gate.calls.push(args);
       return Promise.resolve({ ok: true as const });
     },
   };
@@ -35,12 +45,15 @@ function openGate(): RateLimitGate & { permits: number } {
 }
 
 /** A gate that admits the first `n` callers and then refuses. */
-function gateAllowing(n: number): RateLimitGate {
+function gateAllowing(n: number): RateLimitGate & { calls: AcquireCalls } {
   let taken = 0;
+  const calls: AcquireCalls = [];
   return {
     kind: 'redis',
-    acquire() {
+    calls,
+    acquire(...args: [maxWaitMs?: number]) {
       taken += 1;
+      calls.push(args);
       return Promise.resolve(
         taken <= n ? { ok: true as const } : { ok: false as const, retryAfterMs: 1100 },
       );
@@ -416,14 +429,17 @@ describe('fetchYearCandidates', () => {
 
   it('should report rate-limited when no permit is available for the first request', async () => {
     const { fetch, urls } = stubFetch({ recording: emptySearch });
+    const gate = gateAllowing(0);
 
     const result = await fetchYearCandidates(
       { title: 'A Song', artist: 'A Band' },
-      deps(fetch, gateAllowing(0)),
+      deps(fetch, gate),
     );
 
     expect(result).toEqual({ ok: false, code: 'rate-limited', retryAfterMs: 1100 });
     expect(urls).toEqual([]);
+    // Nothing spent yet, so the gate's OWN default wait: `acquire()` with no argument.
+    expect(gate.calls).toEqual([[]]);
   });
 });
 
@@ -516,10 +532,117 @@ describe('fetchYearCandidates release-group failures', () => {
         releaseGroup: noWomanNoCryReleaseGroups,
       });
 
-      const result = await fetchYearCandidates(NWNC_INPUT, deps(fetch, gateAllowing(1)));
+      const gate = gateAllowing(1);
+      const result = await fetchYearCandidates(NWNC_INPUT, deps(fetch, gate));
 
       expect(result).toEqual({ ok: false, code: 'upstream-unavailable' });
       expect(urls).toHaveLength(1);
+      // Refused only after the longer wait a spent lookup is given.
+      expect(gate.calls).toEqual([[], [SPENT_LOOKUP_MAX_WAIT_MS]]);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+});
+
+// ===========================================================================
+//  A SPENT LOOKUP WAITS LONGER, AND NEVER ANSWERS A FREE 429
+//
+//  A busy gate before rung 2, 3 or 4 used to return `rate-limited`, which the
+//  client re-asks for free -- from rung 1, re-spending every rung that had
+//  already come back empty. Only the lookup's FIRST permit may still be
+//  refused as `rate-limited`; every later one waits `SPENT_LOOKUP_MAX_WAIT_MS`
+//  and is refused as `upstream-unavailable`, which the client counts.
+// ===========================================================================
+
+describe('fetchYearCandidates permits after a spent request', () => {
+  it('should tolerate about three lookups queued ahead on the 1.1 s gate', () => {
+    // The constant's derivation, pinned: three permits' spacing fits inside the wait.
+    expect(SPENT_LOOKUP_MAX_WAIT_MS).toBe(3_500);
+    expect(SPENT_LOOKUP_MAX_WAIT_MS).toBeGreaterThan(3 * MIN_REQUEST_INTERVAL_MS);
+  });
+
+  it('should return upstream-unavailable when the gate is busy before the second recording rung', async () => {
+    // Rung 1 was spent and came back empty. `toEqual` fails on a stray `retryAfterMs`.
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const gate = gateAllowing(1);
+      const { fetch, urls } = stubFetch({ recording: emptySearch });
+
+      const result = await fetchYearCandidates(
+        { title: 'A Song Title', artist: 'A Band', durationMs: 200_000 },
+        deps(fetch, gate),
+      );
+
+      expect(result).toEqual({ ok: false, code: 'upstream-unavailable' });
+      // Exactly one recording request: the refused rung 2 sent nothing.
+      expect(urls).toHaveLength(1);
+      expect(urls[0]).toContain('/recording?');
+      // And it was refused only after the LONGER wait.
+      expect(gate.calls).toEqual([[], [SPENT_LOOKUP_MAX_WAIT_MS]]);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('should take the first permit with the gate default and every later one with the longer wait', async () => {
+    // The whole ladder misses: four recording rungs, no release-group request.
+    const missing = openGate();
+    await fetchYearCandidates(
+      { title: 'A Song Title', artist: 'A Band, Someone Else', durationMs: 200_000 },
+      deps(stubFetch({ recording: emptySearch }).fetch, missing),
+    );
+    expect(missing.calls).toEqual([
+      [],
+      [SPENT_LOOKUP_MAX_WAIT_MS],
+      [SPENT_LOOKUP_MAX_WAIT_MS],
+      [SPENT_LOOKUP_MAX_WAIT_MS],
+    ]);
+
+    // Rung 1 misses, rung 2 hits, then the release-group request -- which waits longer too.
+    const hitOnRungTwo = openGate();
+    const { fetch, urls } = stubFetch({
+      recording: (query: string) => (query.includes('dur:[') ? emptySearch : noWomanNoCrySearch),
+      releaseGroup: noWomanNoCryReleaseGroups,
+    });
+    const result = await fetchYearCandidates(NWNC_INPUT, deps(fetch, hitOnRungTwo));
+    expect(result.ok && result.matchedAttempt).toBe('unbounded');
+    expect(urls.at(-1)).toContain('/release-group?');
+    expect(hitOnRungTwo.calls).toEqual([
+      [],
+      [SPENT_LOOKUP_MAX_WAIT_MS],
+      [SPENT_LOOKUP_MAX_WAIT_MS],
+    ]);
+
+    // A first-rung hit: the release-group request is still a spent lookup's second permit.
+    const hitFirst = openGate();
+    await fetchYearCandidates(
+      NWNC_INPUT,
+      deps(
+        stubFetch({ recording: noWomanNoCrySearch, releaseGroup: noWomanNoCryReleaseGroups }).fetch,
+        hitFirst,
+      ),
+    );
+    expect(hitFirst.calls).toEqual([[], [SPENT_LOOKUP_MAX_WAIT_MS]]);
+  });
+
+  it('should treat the first rung as spent when the caller says requests were already spent', async () => {
+    // The remix fallback's case: the primary ladder has already been spent, so a free 429
+    // here would re-run it. Longer wait, then `upstream-unavailable`, never `rate-limited`.
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const gate = gateAllowing(0);
+      const { fetch, urls } = stubFetch({ recording: emptySearch });
+
+      const result = await fetchYearCandidates(
+        { title: 'A Song', artist: 'A Band' },
+        deps(fetch, gate),
+        { requestsAlreadySpent: true },
+      );
+
+      expect(result).toEqual({ ok: false, code: 'upstream-unavailable' });
+      expect(urls).toEqual([]);
+      expect(gate.calls).toEqual([[SPENT_LOOKUP_MAX_WAIT_MS]]);
     } finally {
       warn.mockRestore();
     }

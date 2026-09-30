@@ -76,15 +76,50 @@ const RELEASE_GROUP_PRIORITY: Record<string, number> = { album: 0, ep: 1, single
 /** MusicBrainz answers 503 for rate-limit rejection; one retry, after a pause. */
 const RETRY_DELAY_MS = 1_200;
 
+/**
+ * How long a permit may be waited for once this lookup has ALREADY SPENT a MusicBrainz
+ * request -- every recording rung after the first, the release-group request, and the remix
+ * fallback's first rung. The first request of a lookup keeps the gate's own 1.5 s default.
+ *
+ * ===========================================================================
+ *  A REFUSAL IS FREE BEFORE THE FIRST REQUEST AND EXPENSIVE AFTER IT.
+ *
+ *  The client treats a 429 as free: it re-asks without counting an attempt,
+ *  and the re-ask starts the lookup again FROM RUNG 1. Before anything has
+ *  been spent that is exactly right, so the first permit keeps the short
+ *  default and a refusal there is still `rate-limited` + `retryAfterMs`.
+ *  After a rung has come back empty it is a loop: every free retry re-spends
+ *  the requests that already missed, for as long as the gate stays busy --
+ *  the same loop spike §8 P6 closed for the release-group request. So a
+ *  spent lookup waits LONGER for its next permit instead, and if even that
+ *  is refused it fails as `upstream-unavailable` with no `retryAfterMs`,
+ *  which the client counts against its retry budget.
+ * ===========================================================================
+ *
+ * WHY 3.5 s. The gate spaces permits `MIN_REQUEST_INTERVAL_MS` (1.1 s) apart, so 3.5 s
+ * tolerates about three other lookups queued ahead of this one before giving up. The wait is
+ * idle time inside the function, far below its 300 s timeout, and it is paid only by a COLD
+ * card whose first query missed (or whose second request is due), and only while other
+ * lookups are contending for the gate -- an uncontended gate admits immediately.
+ *
+ * Passed to `acquire(maxWaitMs)` rather than set on the gate: `rate-limit.ts`'s default stays
+ * 1.5 s for every first request and for the two stores' gates.
+ */
+export const SPENT_LOOKUP_MAX_WAIT_MS = 3_500;
+
 export type MusicBrainzErrorCode =
   /** `MUSICBRAINZ_USER_AGENT` is unset. A deployment fault, surfaced at the boundary. */
   | 'not-configured'
-  /** The 1 req/s gate is busy. Carries `retryAfterMs`. */
+  /**
+   * The 1 req/s gate is busy before the lookup's FIRST request. Carries `retryAfterMs`. Only
+   * ever returned while nothing has been spent -- see `SPENT_LOOKUP_MAX_WAIT_MS`.
+   */
   | 'rate-limited'
   /**
    * Network failure, or a non-200 that survived the 503 retry -- on EITHER request. Also a
-   * busy gate before the release-group request, once request 1 has been spent (see
-   * `attachReleaseGroupDates()`). Transient.
+   * gate still busy after `SPENT_LOOKUP_MAX_WAIT_MS` once any request of the lookup has been
+   * spent: before a later recording rung, or before the release-group request (see
+   * `attachReleaseGroupDates()`). Never carries `retryAfterMs`. Transient.
    */
   | 'upstream-unavailable'
   /** A 200 whose body was not the shape we parse. NOT transient — the adapter needs updating. */
@@ -142,6 +177,20 @@ export interface YearLookupInput {
   durationMs?: number;
 }
 
+/** How this call relates to the rest of the lookup it belongs to. */
+export interface FetchYearCandidatesOptions {
+  /**
+   * `true` when the SAME lookup has already spent MusicBrainz requests before this call --
+   * today only `api/_lib/resolve-year.ts`'s remix fallback, which re-enters this function
+   * after the primary title's ladder came back empty. It makes the FIRST rung wait up to
+   * `SPENT_LOOKUP_MAX_WAIT_MS` like every later one, and fail as `upstream-unavailable`
+   * rather than `rate-limited`, because a free client retry would re-run the primary ladder
+   * too. Absent or `false`: this call is the lookup's first, and its first rung keeps the
+   * gate's default wait and the free 429.
+   */
+  requestsAlreadySpent?: boolean;
+}
+
 /**
  * Fetch and normalize the candidate pool for one track.
  *
@@ -151,6 +200,7 @@ export interface YearLookupInput {
 export async function fetchYearCandidates(
   input: YearLookupInput,
   deps: MusicBrainzDeps,
+  options: FetchYearCandidatesOptions = {},
 ): Promise<MusicBrainzResult> {
   if (deps.userAgent.trim() === '') return { ok: false, code: 'not-configured' };
 
@@ -162,11 +212,23 @@ export async function fetchYearCandidates(
   // Attempts run in order and stop at the first one that returns ANYTHING. Each costs a
   // request against the global budget, so each exists only to rescue a total miss.
   for (const { kind, query } of attempts) {
-    const permit = await deps.gate.acquire();
+    const spent = options.requestsAlreadySpent === true || requestCount > 0;
+    // The first request calls `acquire()` with NO argument, so it keeps whatever default the
+    // gate was built with -- not a copy of 1.5 s that could drift from `rate-limit.ts`.
+    const permit = spent
+      ? await deps.gate.acquire(SPENT_LOOKUP_MAX_WAIT_MS)
+      : await deps.gate.acquire();
     if (!permit.ok) {
-      // Only reachable before any request has been made, because a later attempt only runs
-      // when the earlier one returned zero results — so nothing is half-done here.
-      return { ok: false, code: 'rate-limited', retryAfterMs: permit.retryAfterMs };
+      if (!spent) {
+        // Nothing has been spent, so nothing is half-done: the client's free retry costs
+        // MusicBrainz nothing it has not already been asked.
+        return { ok: false, code: 'rate-limited', retryAfterMs: permit.retryAfterMs };
+      }
+      // An earlier rung (or, for the remix fallback, the primary ladder) has been spent and
+      // came back empty. `upstream-unavailable` with no `retryAfterMs`, for the reason given
+      // at `SPENT_LOOKUP_MAX_WAIT_MS`: a free 429 would re-spend those misses in a loop.
+      console.warn(`[musicbrainz] gate busy before the ${kind} rung; failing the lookup`);
+      return { ok: false, code: 'upstream-unavailable' };
     }
 
     const response = await getJson(searchUrl('recording', query), deps);
@@ -360,13 +422,15 @@ async function attachReleaseGroupDates(
     );
   }
 
-  const permit = await deps.gate.acquire();
+  // Always a spent lookup by now -- at least one recording rung has run -- so the longer wait.
+  const permit = await deps.gate.acquire(SPENT_LOOKUP_MAX_WAIT_MS);
   if (!permit.ok) {
     // `upstream-unavailable`, NOT `rate-limited`, and deliberately with no `retryAfterMs`.
     // The client treats a 429 as free -- it re-asks without counting an attempt -- which is
     // right for a refusal that cost nothing and wrong here: request 1 has been spent, and a
     // free retry would spend it again, in a loop, for as long as the gate stays busy. A
-    // transient failure is counted, so the client's retry budget bounds it.
+    // transient failure is counted, so the client's retry budget bounds it. Reached only
+    // after `SPENT_LOOKUP_MAX_WAIT_MS` of waiting, not the gate's 1.5 s default.
     console.warn('[musicbrainz] gate busy before the release-group request; failing the lookup');
     return { ok: false, code: 'upstream-unavailable' };
   }

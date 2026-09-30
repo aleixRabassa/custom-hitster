@@ -14,6 +14,7 @@ import {
 } from './__fixtures__/musicbrainz-payloads.js';
 import { HIGH_CONFIDENCE_TTL_SECONDS, NO_YEAR_TTL_SECONDS, createMemoryCache } from './cache.js';
 import { resolveYear } from './resolve-year.js';
+import { SPENT_LOOKUP_MAX_WAIT_MS } from './musicbrainz.js';
 import type { FetchLike } from './musicbrainz.js';
 import type { RateLimitGate } from './rate-limit.js';
 import type { YearCache } from './cache.js';
@@ -32,6 +33,25 @@ function countingGate(): RateLimitGate & { permits: number } {
     },
   };
   return gate;
+}
+
+/**
+ * A gate that admits the first `admit` permits (all of them by default) and records the
+ * argument list of every `acquire()` call -- `[]` for the gate's own default wait, `[ms]` for
+ * an explicit one.
+ */
+function recordingGate(admit = Infinity): RateLimitGate & { calls: [maxWaitMs?: number][] } {
+  const calls: [maxWaitMs?: number][] = [];
+  return {
+    kind: 'redis',
+    calls,
+    acquire(...args: [maxWaitMs?: number]) {
+      calls.push(args);
+      return Promise.resolve(
+        calls.length <= admit ? { ok: true as const } : { ok: false as const, retryAfterMs: 1100 },
+      );
+    },
+  };
 }
 
 function stubFetch(responses: { recording?: unknown; releaseGroup?: unknown }): {
@@ -549,6 +569,67 @@ describe('resolveYear remix fallback', () => {
     expect(call).toBeGreaterThan(1);
     expect(outcome).toMatchObject({ ok: true });
     expect(outcome.ok && outcome.result.year).toBeNull();
+  });
+
+  it("should take the fallback's first permit with the longer wait", async () => {
+    // The primary ladder has already spent requests by the time the fallback runs, so even
+    // the fallback's FIRST rung is a spent lookup's permit. Every request here takes exactly
+    // one permit (no 503s), so `gate.calls[i]` is the permit behind `urls[i]`.
+    const gate = recordingGate();
+    const { fetch, urls } = titleAwareFetch();
+
+    const outcome = await resolveYear(
+      { title: REMIX_TITLE, artist: NO_WOMAN_NO_CRY.artist },
+      { cache: createMemoryCache(), fetchImpl: fetch, gate, userAgent: USER_AGENT },
+    );
+    expect(outcome.ok && outcome.result.viaTitle).toBe(NO_WOMAN_NO_CRY.title);
+
+    const fallbackFirst = urls.findIndex((url) =>
+      url.includes(encodedRecordingPhrase(NO_WOMAN_NO_CRY.title)),
+    );
+    expect(fallbackFirst).toBeGreaterThan(0);
+    expect(gate.calls).toHaveLength(urls.length);
+    // The primary ladder's first permit keeps the gate default; every other one waits longer.
+    expect(gate.calls[0]).toEqual([]);
+    expect(gate.calls[fallbackFirst]).toEqual([SPENT_LOOKUP_MAX_WAIT_MS]);
+    expect(gate.calls.slice(1).every((call) => call[0] === SPENT_LOOKUP_MAX_WAIT_MS)).toBe(true);
+  });
+
+  it('should swallow a gate still busy after the longer wait in the fallback', async () => {
+    // First, count the primary ladder's permits with a gate that admits everything.
+    const counting = recordingGate();
+    const probe = titleAwareFetch();
+    await resolveYear(
+      { title: REMIX_TITLE, artist: NO_WOMAN_NO_CRY.artist },
+      { cache: createMemoryCache(), fetchImpl: probe.fetch, gate: counting, userAgent: USER_AGENT },
+    );
+    const primaryPermits = probe.urls.findIndex((url) =>
+      url.includes(encodedRecordingPhrase(NO_WOMAN_NO_CRY.title)),
+    );
+    expect(primaryPermits).toBeGreaterThan(0);
+
+    // Then refuse the fallback's first permit. The primary null stands and is cached, as for
+    // any other fallback failure -- the swallowing is accepted behaviour, not new.
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const gate = recordingGate(primaryPermits);
+      const cache = recordingCache();
+      const { fetch, urls } = titleAwareFetch();
+
+      const outcome = await resolveYear(
+        { title: REMIX_TITLE, artist: NO_WOMAN_NO_CRY.artist },
+        { cache, fetchImpl: fetch, gate, userAgent: USER_AGENT },
+      );
+
+      expect(outcome.ok && outcome.result.year).toBeNull();
+      expect(outcome.ok && outcome.result.viaTitle).toBeUndefined();
+      expect(urls).toHaveLength(primaryPermits);
+      expect(gate.calls.at(-1)).toEqual([SPENT_LOOKUP_MAX_WAIT_MS]);
+      expect(cache.writes).toHaveLength(1);
+      expect(cache.writes[0]?.ttl).toBe(NO_YEAR_TTL_SECONDS);
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it('should carry viaTitle through the cache', async () => {
