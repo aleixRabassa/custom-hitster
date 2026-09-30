@@ -129,25 +129,29 @@
 
       <h2>What stays on your device</h2>
       <p>
-        The app uses your browser's <code>localStorage</code> under exactly two keys, and neither is
+        The app uses your browser's <code>localStorage</code> under exactly three keys, and none is
         ever transmitted anywhere:
       </p>
       <ul>
         <li>
-          <code>hitster:session:v1</code> — the game in progress: the playlists it was dealt from,
+          <code>jitster:session:v1</code> — the game in progress: the playlists it was dealt from,
           the shuffled deck with the years already resolved, and which card you are on. It lets you
           reload or come back later and carry on.
         </li>
         <li>
-          <code>hitster:library:v1</code> — playlists you chose to keep, stored as a name and a list
+          <code>jitster:library:v1</code> — playlists you chose to keep, stored as a name and a list
           of Spotify playlist ids so they can be offered again on the start screen.
+        </li>
+        <li>
+          <code>jitster:locale:v1</code> — the language you picked (English, Spanish or Catalan), so
+          the app opens in it next time.
         </li>
       </ul>
       <p>
-        Both are written and read by your browser only. There is no account, no sync and no server
-        copy of either. Deck PDFs and share links are also produced entirely on your device: a share
-        link is just playlist ids plus a shuffle seed placed on your clipboard, and a printable deck
-        is generated in the browser and never uploaded.
+        All three are written and read by your browser only. There is no account, no sync and no
+        server copy of any of them. Deck PDFs and share links are also produced entirely on your
+        device: a share link is just playlist ids plus a shuffle seed placed on your clipboard, and
+        a printable deck is generated in the browser and never uploaded.
       </p>
 
       <h2>What our server receives</h2>

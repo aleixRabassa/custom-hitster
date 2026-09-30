@@ -15,7 +15,7 @@ import type { YearCache } from './cache.js';
 import type { YearResult } from '../../shared/types.js';
 import { yearCacheKey } from '../../shared/year.js';
 
-const USER_AGENT = 'custom-hitster/0.1.0 ( test@example.com )';
+const USER_AGENT = 'custom-jitster/0.1.0 ( test@example.com )';
 
 function countingGate(): RateLimitGate & { permits: number } {
   const gate = {

@@ -188,7 +188,7 @@ exports `type Copy` (its keys and signatures with every literal widened to `stri
 (`Record<StartFailureCode, string>`), so **a key or a failure code added in English and forgotten in a
 translation fails the typecheck**. `src/game/i18n.ts` is the one `Record<Locale, Catalogue>` table and
 `src/game/locale.ts` the pure decisions (`LOCALES`, `matchLocale` on the primary subtag, the stored
-choice under the NEW key `hitster:locale:v1`, validated on read). Components read the active catalogue
+choice under the NEW key `jitster:locale:v1`, validated on read). Components read the active catalogue
 through **`useCopy()` / `useLocale()`** (`src/hooks/useLocale.ts`), and **the context's default value
 is English** — a component rendered without a provider, i.e. in every existing test, gets exactly the
 `COPY` object the test asserts against. Pure modules take the slice they need as a parameter defaulting
@@ -601,11 +601,11 @@ redirect from the old origin: a TWA whose origin redirects has left the verified
 bar.
 
 **The TWA shares `localStorage` with the browser hosting it** — a Chrome TWA runs in Chrome's own
-profile, so `hitster:session:v1` and `hitster:library:v1` on the origin are **one store seen from two
+profile, so `jitster:session:v1` and `jitster:library:v1` on the origin are **one store seen from two
 launchers**: a game started in the installed app resumes in the browser, and the reverse. **That is the
 persistence design doing its job, not a defect**, and it is what makes the back-press block's "a relaunch
 resumes" true at all. Namespacing the keys per launcher to "fix" it breaks that, and a renamed key is not
-read — see the rename block. Unverified on a device; it is step 9.
+read — the 2026-09-30 `hitster:*` → `jitster:*` rename (see the rename block) paid exactly that cost once, on purpose. Unverified on a device; it is step 9.
 
 **The origin `https://playlistjitster.vercel.app` is load-bearing and permanent**, and
 `public/.well-known/assetlinks.json` is fetched from it by the **Android system verifier**, not by the
@@ -849,13 +849,20 @@ now subtract `COPYRIGHT_NOTICE` by exact string rather than loosening the patter
 **The app is "Playlist Jitster" as of 2026-08-11 — and the RENAME'S BOUNDARY is the part to know.**
 Renamed: `index.html`'s `<title>`, `manifest.name`/`short_name`, `LandingScreen`'s `<h1>`, README's
 heading, and `pdfFileName`'s prefix (`hitster-*.pdf` → `jitster-*.pdf`, because a downloads list is
-user-visible). **Never rename:** `hitster:session:v1` and `hitster:library:v1` (a renamed key is not
-read, so it silently discards a saved game and a curated library); every "Hitster" that means the
-BOARD GAME (`pdf-sheet.ts`'s header, which since 2026-09-21 explains why the board game's 65 mm card
-size was DROPPED, `reducer.ts` and `messages.ts` on dropping a yearless card,
-`CardRevealSide`, README's "shop-bought Hitster cards") — renaming those corrupts the reasoning; and
-`custom-hitster` as the package/repo name, in `MUSICBRAINZ_USER_AGENT`, in `api/hello`'s message and in
-the `https://hitster.example` test origins. **The PWA ARTWORK was NOT unaffected, and this line used to
+user-visible). **Never rename** every "Hitster" that means the BOARD GAME (`pdf-sheet.ts`'s header,
+which since 2026-09-21 explains why the board game's 65 mm card size was DROPPED, `reducer.ts` and
+`messages.ts` on dropping a yearless card, `CardRevealSide`, the trademark guards in
+`LandingScreen.test.tsx` and `i18n.test.ts`) — renaming those corrupts the reasoning. **The internal
+identifiers followed on 2026-09-30, at the developer's request, and that reverses this block's old
+"never rename the keys" rule**: the three `localStorage` keys are `jitster:session:v1`,
+`jitster:library:v1` and `jitster:locale:v1` — a **hard rename with NO migration**, so anything saved
+under `hitster:*` is abandoned, knowingly — and the package name, `MUSICBRAINZ_USER_AGENT`,
+`api/hello`'s message, the `https://jitster.example` test origins, `useBackNavigation`'s
+`customJitsterBackEntry` history state and `docs/plans/custom-jitster-mockup.png` all read
+`jitster`. **What still says `custom-hitster` is not this repo's to rename**: the checkout directory,
+the Vercel project name, the old `custom-hitster.vercel.app` alias, and the dated provenance comments
+on the MusicBrainz fixtures (they record the User-Agent those captures were actually taken with).
+`docs/plans/` and existing `docs/agent_findings.md` entries keep the old names as history. **The PWA ARTWORK was NOT unaffected, and this line used to
 claim it was**: the icons did carry a "PLAYLIST HITSTER" wordmark — nobody opened the image, because the
 rename was reasoned about as a string change. New artwork reading "PLAYLIST JITSTER" landed on
 2026-08-12 and the whole set was regenerated from it, so "one identity everywhere" now holds by
@@ -873,10 +880,9 @@ past the picker (2026-09-24)**: `src/game/playlist-display-name.ts` maps that id
 `deckLabel()`, the end screen's list and `loadLibrary` read through it — so the HUD, the PDF filename
 and saved-library rows no longer render the fetched "Hitser". It is applied ON READ, which is what
 heals sessions and library entries saved before it; a write-time rename would have left them. The
-`LandingScreen` row reads its label from that module, so picker and HUD cannot disagree. **Nothing in the
-never-rename list above moved**: the two storage keys, the package name and every internal "Hitster"
-that means the board game are untouched, and a store rule about visible text is not a reason to touch
-one of them.
+`LandingScreen` row reads its label from that module, so picker and HUD cannot disagree. Every
+internal "Hitster" that means the board game is untouched, and a store rule about visible text is not
+a reason to touch one of them.
 
 **Five developer decisions landed on 2026-08-05, after Phase 7 plan 1. Two of them reverse
 something `plan.md` had already resolved, so read these before "fixing" the code back:**

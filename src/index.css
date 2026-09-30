@@ -179,7 +179,7 @@
    * ===========================================================================
    *  THE PHASE 8 REDESIGN, AND IT IS A SECOND ACCENT FAMILY ON PURPOSE.
    *
-   *  Drawn from `docs/plans/custom-hitster-mockup.png`: a green -> cyan ->
+   *  Drawn from `docs/plans/custom-jitster-mockup.png`: a green -> cyan ->
    *  magenta gradient border on a near-black card, with a soft bloom outside it.
    *  Consumed ONLY by the `card-ring` and `card-ring-dim` utilities at the bottom
    *  of this file -- which is exactly why the block this sits in has to stay

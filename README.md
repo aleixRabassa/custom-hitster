@@ -147,7 +147,7 @@ Then check the one thing **no local tool can verify**:
 
 ```bash
 curl https://<your-deployment>/api/hello
-# {"ok":true,"message":"custom-hitster api is alive","maxEmbedTracks":100}
+# {"ok":true,"message":"custom-jitster api is alive","maxEmbedTracks":100}
 ```
 
 `maxEmbedTracks: 100` is the meaningful part. It proves a deployed function can import from `shared/` and have the specifier resolve in Vercel's real bundle — and that is checkable **only** on a deployment. An extensionless relative import (`'../shared/constants'` instead of `'../shared/constants.js'`) type-checks locally, builds with no error, passes all four local checks, and then fails at runtime with `FUNCTION_INVOCATION_FAILED`. Same for an `@/` alias under `api/`, which Vercel does not support. Both were learned from real deploys; see [`AGENTS.md`](./AGENTS.md) and [`docs/agent_findings.md`](./docs/agent_findings.md).

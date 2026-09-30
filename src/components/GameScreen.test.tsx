@@ -79,7 +79,7 @@ function renderScreen(props: {
       // what this file cares about is that opening the panel suspends the game's own controls.
       playlistIds={['37i9dQZF1DXcBWIGoYBM5M']}
       seed={props.seed ?? 'a1b2c3d4e5f60718'}
-      shareOrigin="https://hitster.example/"
+      shareOrigin="https://jitster.example/"
       onSavePlaylist={props.onSavePlaylist ?? vi.fn()}
       isPlaylistSaved={false}
       pendingYearCount={props.pendingYearCount ?? 0}

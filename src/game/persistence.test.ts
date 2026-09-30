@@ -541,6 +541,6 @@ describe('clearSession', () => {
 
   it('should use a versioned key', () => {
     // Same deliberate invalidation lever as the `mbyear:v1:` prefix in `api/_lib/cache.ts`.
-    expect(SESSION_STORAGE_KEY).toBe('hitster:session:v1');
+    expect(SESSION_STORAGE_KEY).toBe('jitster:session:v1');
   });
 });

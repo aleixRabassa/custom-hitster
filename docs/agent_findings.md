@@ -5349,3 +5349,20 @@ times. That covers 44% of a real deck at ~0.25 s a card.
   loss of precision.
 - Every remaining `high` error is a MusicBrainz `high` kept final by the developer's
   never-correct-a-certain-year rule.
+
+## 2026-09-30 — The internal `hitster` identifiers were renamed to `jitster`, keys included, with no migration
+
+At the developer's request, reversing the 2026-08-11 rename boundary (entry above) for identifiers
+that mean THIS app. Renamed: the three `localStorage` keys (`jitster:session:v1`,
+`jitster:library:v1`, `jitster:locale:v1`), the package name (`custom-jitster`), the
+`MUSICBRAINZ_USER_AGENT` example and test values, `api/hello`'s message, the `https://jitster.example`
+test origins, `useBackNavigation`'s `customJitsterBackEntry` history state, and
+`docs/plans/custom-hitster-mockup.png` → `custom-jitster-mockup.png`. **The key rename is a hard one,
+chosen over a read-old-key fallback**: anything saved under `hitster:*` — a game in progress, a
+curated library, a language choice — is no longer read. Kept, on purpose: every "Hitster" that means
+the board game, the trademark guards, the MusicBrainz fixtures' provenance comments (they record the
+User-Agent the captures were actually taken with), and names this repo does not own (the checkout
+directory, the Vercel project, the old `custom-hitster.vercel.app` alias). `docs/plans/` and earlier
+entries in this log still show the old names as history — including the mockup's old path, which no
+longer resolves. The deployed `MUSICBRAINZ_USER_AGENT` in Vercel is set outside the repo and was not
+changed by this.

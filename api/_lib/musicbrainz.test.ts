@@ -14,7 +14,7 @@ import type { FetchLike, MusicBrainzDeps } from './musicbrainz.js';
 import type { RateLimitGate } from './rate-limit.js';
 import { pickBestRecording } from '../../shared/year.js';
 
-const USER_AGENT = 'custom-hitster/0.1.0 ( test@example.com )';
+const USER_AGENT = 'custom-jitster/0.1.0 ( test@example.com )';
 
 /** A gate that always admits, and counts how many permits were taken. */
 function openGate(): RateLimitGate & { permits: number } {

@@ -28,7 +28,7 @@ import { shuffleDeck } from './shuffle';
 import type { GameState } from './types';
 import type { Card, PlaylistSummary } from '../../shared/types';
 
-const ORIGIN = 'https://hitster.example/';
+const ORIGIN = 'https://jitster.example/';
 
 /** 16 lowercase hex characters -- the shape `generateSeed()` mints and `parseDeckLink` accepts. */
 const SEED = 'a1b2c3d4e5f60718';

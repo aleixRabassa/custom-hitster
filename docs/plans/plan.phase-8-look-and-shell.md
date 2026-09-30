@@ -462,7 +462,7 @@ carries the values that follow from them._
 
 ### 1. The target palette, written before any CSS (step 1)
 
-The reference the redesign is drawn from is **`docs/plans/custom-hitster-mockup.png`**, which was
+The reference the redesign is drawn from is **`docs/plans/custom-jitster-mockup.png`**, which was
 already in the repo — a green → cyan → magenta gradient ring on a near-black card, on a near-black
 page. Reading it is what turned "take cues from the reference repo's neon-ring aesthetic" into the
 value table below.
@@ -560,7 +560,7 @@ silent about the artwork, so nothing recorded that the brand had changed.
 Escalated rather than guessed, because a home-screen icon is an identity decision. **The developer
 chose one identity everywhere** (2026-08-06): all four PWA icons _and_ a regenerated `logo.webp` come
 from the recovered 1254×1254 source, which is also the mark the redesign's own reference —
-`docs/plans/custom-hitster-mockup.png` — draws in its header. The favicon came out **smaller** than
+`docs/plans/custom-jitster-mockup.png` — draws in its header. The favicon came out **smaller** than
 the file it replaced (10,376 vs 20,610 bytes).
 
 The maskable variant was sized by measurement rather than by a guessed padding: the artwork's content

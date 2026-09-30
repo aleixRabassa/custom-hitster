@@ -19,7 +19,7 @@ import type { PlaylistSummary } from '../../shared/types';
 
 const PLAYLIST_ID = '37i9dQZF1DXcBWIGoYBM5M';
 const SEED = 'a1b2c3d4e5f60718';
-const ORIGIN = 'https://hitster.example/';
+const ORIGIN = 'https://jitster.example/';
 
 /**
  * Replace `navigator.clipboard` -- see the same helper in `DeckActions.test.tsx`. `undefined` is the

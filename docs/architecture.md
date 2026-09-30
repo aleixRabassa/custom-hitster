@@ -1,6 +1,6 @@
 # Architecture
 
-Custom Hitster is a **client-heavy single-page app with a thin serverless backend**. The game itself — shuffle, flip, swipe, audio, progress — runs entirely in the browser. The backend exists only to do the three things a browser cannot: reach a CORS-blocked endpoint, set a custom `User-Agent`, and hold a cache shared across all users.
+Playlist Jitster is a **client-heavy single-page app with a thin serverless backend**. The game itself — shuffle, flip, swipe, audio, progress — runs entirely in the browser. The backend exists only to do the three things a browser cannot: reach a CORS-blocked endpoint, set a custom `User-Agent`, and hold a cache shared across all users.
 
 > **Implementation status: Phases 1–7 complete — the app is playable end to end, has a design surface, and fails legibly.** All three functions (`/api/hello`, `/api/playlist`, `/api/year`), the year cache, the client-side game layer (`src/game/`), the card UI, the gestures, and the game flow screens (landing, preparing, HUD, notices, end screen) plus the real `src/App.tsx` container all exist today. So does the **token layer** — `@theme` tokens, fluid card geometry, `prefers-reduced-motion`, focus states and the ARIA/contrast fixes ([`plans/plan.phase-7-look.md`](./plans/plan.phase-7-look.md)) — and the **failure surface**: the `offline` and `empty-playlist` codes, the collapsed-deck redirect, the error boundary, and the two chunk splits ([`plans/plan.phase-7-robustness.md`](./plans/plan.phase-7-robustness.md)). **Nothing in Phase 8 is built or planned.** Sections below are marked **[built]** or **[planned]** throughout; planned shapes come from [`plans/plan.md`](./plans/plan.md) §3 and are recorded here because they determine where new code belongs, not because they exist.
 >
@@ -409,7 +409,7 @@ The developer asked for "an explanatory, visual landing page with a big Start bu
 English, Spanish and Catalan, chosen by the player with a selector on the welcome screen or, failing that, detected from `navigator.languages`. No i18n library: `COPY` was already one typed object with every varying sentence as a function, so each language is another object of the same shape, and a key-string API (`t('hud.cardsLeft')`) would have given up the typing that makes a missing translation a compile error.
 
 - **Catalogues.** `copy.ts` (`COPY`, English, plus `type Copy`), `copy.es.ts`, `copy.ca.ts`, and the error maps `messages.ts` / `messages.es.ts` / `messages.ca.ts`. `i18n.ts` joins them as `CATALOGUES: Record<Locale, { copy, errorMessages }>`. Plurals are hand-written per language — all three distinguish only 1 from the rest, so `Intl.PluralRules` would buy nothing. Catalan's `end.cardsPlayed` elides `de` → `d'` before a vowel-initial playlist name, the one piece of logic in any catalogue.
-- **Choosing.** `locale.ts` is pure: a stored choice (`hitster:locale:v1`, validated on read) beats the browser list, matched on the primary subtag (`es-AR` → `es`), falling back to English. `LocaleProvider` computes it in `useState`'s lazy initializer, so the first paint is already in the right language, and mirrors it to `document.documentElement.lang`.
+- **Choosing.** `locale.ts` is pure: a stored choice (`jitster:locale:v1`, validated on read) beats the browser list, matched on the primary subtag (`es-AR` → `es`), falling back to English. `LocaleProvider` computes it in `useState`'s lazy initializer, so the first paint is already in the right language, and mirrors it to `document.documentElement.lang`.
 - **Reading.** `useCopy()` / `useLocale()` over a context whose default is the English catalogue, which is why the pre-existing suite did not change. Pure modules take the slice they need as a defaulted parameter. `usePdfExport`'s `exportDeck` now depends on the active `pdf` copy, so it changes identity on a language switch; `DeckActions`' `hasAutoExportedRef` already stops that from exporting twice.
 - **Mounting.** `main.tsx`: `StrictMode > LocaleProvider > ErrorBoundary > MotionConfig > App`. Outside the boundary so the crash screen is translated, which is also why the provider guards the `localStorage` getter itself.
 - **What does not change with the language.** The app name, the copyright line, the `jitster-` file names and the year-cards PDF; the manifest's `lang` (one per manifest, so it names the default) and `index.html`'s bytes; the playlist LABELS in `SUGGESTED_PLAYLISTS`, which render Spotify's own titles — only their blurbs are copy (`COPY.landing.suggestionBlurbs`, keyed by name).
@@ -464,9 +464,9 @@ Three features that add to the app without changing how a game is played, and al
   │  · the address bar is never touched: no pushState              │
   └───────────────────────────────────────────────────────────────┘
 
-  hitster:session:v1   one resumable game        (persistence.ts)
+  jitster:session:v1   one resumable game        (persistence.ts)
                        payload v2; reads v1
-  hitster:library:v1   ≤20 saved decks           (playlist-library.ts)
+  jitster:library:v1   ≤20 saved decks           (playlist-library.ts)
                        payload v2; reads v1
                        ids[] + name + savedAt only
 ```
@@ -518,8 +518,8 @@ A deck is dealt from **up to five playlists**, merged in the browser. `plan.mult
                               ▼  MergedDeck
                      start(cards, playlists, seed?)
 
-  hitster:session:v1   one resumable game, payload v2   reads v1 by lifting `playlist`
-  hitster:library:v1   ≤20 saved DECKS,   payload v2    reads v1 by lifting each `id`
+  jitster:session:v1   one resumable game, payload v2   reads v1 by lifting `playlist`
+  jitster:library:v1   ≤20 saved DECKS,   payload v2    reads v1 by lifting each `id`
                        ids[] + name + savedAt only
 ```
 
@@ -531,7 +531,7 @@ A deck is dealt from **up to five playlists**, merged in the browser. `plan.mult
 
 **A playlist that fails is dropped with a count; only a total failure blocks Start.** Same non-blocking-notice pattern as `truncated` and `skippedCount` — one dead editorial playlist must not cost a five-playlist deck. A total failure reports the **first** row's code, which is the only reason the merge insists on row order: the landing screen has one error slot, and it should describe the first thing that went wrong. **No new `StartFailureCode`** — a partial failure is a notice, and a total failure is already exactly one of the codes `fetchPlaylist` returns, so `messages.ts`'s exhaustive `Record` is untouched by the whole feature.
 
-**One `deckLabel()` names the deck everywhere**: the first playlist's name, then `"<first> +N more"`. The HUD, the end screen, the PDF filename and the library row all read it, so they cannot disagree. It is playlist-level data only — the same class of string the suggestion buttons already render. Through `pdfFileName` it slugs cleanly: `hitster-rock-classics-2-more.pdf`.
+**One `deckLabel()` names the deck everywhere**: the first playlist's name, then `"<first> +N more"`. The HUD, the end screen, the PDF filename and the library row all read it, so they cannot disagree. It is playlist-level data only — the same class of string the suggestion buttons already render. Through `pdfFileName` it slugs cleanly: `jitster-rock-classics-2-more.pdf`.
 
 **The share link's `playlist` param is a comma list, and a single id parses identically** — so every link already shared keeps working with no back-compat branch. A comma is a legal query-value character, so nothing is escaped. Repeated `playlist` params are also accepted via `getAll`, one line of tolerance for a link a chat client reshaped; the builder only ever emits the comma form, so the round trip stays exact. Every element goes through `shared/spotify-url.ts`, so an album link **in any position** rejects the whole link rather than quietly dealing a smaller deck. **Over five distinct ids is a rejection, not a truncation** (`null`, i.e. the plain landing screen with no error): truncating would deal a deck the link did not describe, with a seed that makes it look deliberate. The dedupe runs **before** the cap check, so a link repeating one id is not punished for it.
 
@@ -912,7 +912,7 @@ replaced** — see the ring subsection below and [`agent_findings.md`](./agent_f
 
 ### The neon ring (Phase 8) — built, and it is utilities rather than a component
 
-The card's visual design, drawn from `docs/plans/custom-hitster-mockup.png`: a green → cyan → magenta
+The card's visual design, drawn from `docs/plans/custom-jitster-mockup.png`: a green → cyan → magenta
 gradient border with a soft outer bloom, on the near-black faces. Ten tokens and two `@utility`
 composites in `src/index.css`, applied as class names.
 

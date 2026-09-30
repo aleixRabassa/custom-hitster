@@ -725,9 +725,9 @@ are steps 7, 12, 15 and 17 — a device and a Console.
   cadence justifies secret handling in CI.
 - **Push notifications, Play Billing, in-app updates, Play Integrity, app shortcuts.** Notification
   delegation is actively declined at step 4.
-- **Renaming `hitster:session:v1`, `hitster:library:v1`, the `custom-hitster` package or any internal
-  "Hitster" that means the board game.** The trademark rule applies to the listing and the picker's
-  visible text; a renamed storage key silently discards every saved game.
+- **Renaming any internal "Hitster" that means the board game.** The trademark rule applies to the
+  listing and the picker's visible text. (The storage keys and the package name were renamed to
+  `jitster` on 2026-09-30 at the developer's request, outside this plan, with no migration.)
 - **Closing the outstanding manual passes in `docs/development.md` §5** beyond the rows this plan
   names and whatever the pre-launch report surfaces. The screen-reader pass is still owed and is not
   this plan's deliverable.

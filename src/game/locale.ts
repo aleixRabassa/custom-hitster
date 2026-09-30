@@ -37,10 +37,10 @@ export const LANGUAGE_NAMES: Record<Locale, string> = {
 };
 
 /**
- * The stored choice. A NEW key, so the `hitster:` prefix is kept for consistency with the two
- * existing ones -- and those two are never renamed (see `AGENTS.md`).
+ * The stored choice. Shares the `jitster:` prefix with the session and library keys (all three
+ * were `hitster:*` until 2026-09-30).
  */
-export const LOCALE_STORAGE_KEY = 'hitster:locale:v1';
+export const LOCALE_STORAGE_KEY = 'jitster:locale:v1';
 
 export function isLocale(value: unknown): value is Locale {
   return typeof value === 'string' && (LOCALES as readonly string[]).includes(value);

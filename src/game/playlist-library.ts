@@ -4,7 +4,7 @@
  * ===========================================================================
  *  IT SAVES PLAYLISTS, NOT SESSIONS (decision 5).
  *
- *  The obvious alternative was to generalise `hitster:session:v1` into a keyed
+ *  The obvious alternative was to generalise `jitster:session:v1` into a keyed
  *  collection of full mid-game decks -- "multiple decks" read literally. That
  *  reopens persistence validation, `RESUME`, and the localStorage quota (a deck
  *  holds every card, with every resolved year), and it makes the known two-tab
@@ -43,11 +43,11 @@ import { PLAYLIST_NAME_OVERRIDES } from './playlist-display-name';
 import type { StorageLike } from './persistence';
 
 /**
- * The storage key, versioned for the same reason `hitster:session:v1` is: when the shape changes
+ * The storage key, versioned for the same reason `jitster:session:v1` is: when the shape changes
  * incompatibly, bumping this makes every existing entry unreachable in one edit rather than
  * half-loadable months later.
  */
-export const LIBRARY_STORAGE_KEY = 'hitster:library:v1';
+export const LIBRARY_STORAGE_KEY = 'jitster:library:v1';
 
 /**
  * Current payload version. Bump together with any incompatible shape change.

@@ -30,7 +30,7 @@ Paste playlist URL
 
 **Visual mockup:**
 
-![Custom Hitster mockup — landing page, hidden QR card, reveal, and end screen](./custom-hitster-mockup.png)
+![Custom Hitster mockup — landing page, hidden QR card, reveal, and end screen](./custom-jitster-mockup.png)
 
 Left-to-right/top-to-bottom: desktop landing page (URL input + suggested playlists from Phase 6), desktop card view showing the hidden QR side, then the mobile flow — landing, hidden side (QR + Exit/Play-Pause/Restart), revealed side (title/artist/year), the CSS 3D flip mid-transition, a second revealed card, and the end-of-deck screen.
 
@@ -540,7 +540,7 @@ what makes the game's payoff audible at all.
     for.
 - [x] **Card visual design (take cues from the reference repo's neon-ring aesthetic)** — built
       2026-08-06, [`plan.phase-8-look-and-shell.md`](./plan.phase-8-look-and-shell.md) steps 1–8. The
-      reference turned out to be **in the repo already**: `docs/plans/custom-hitster-mockup.png`, a
+      reference turned out to be **in the repo already**: `docs/plans/custom-jitster-mockup.png`, a
       green → cyan → magenta gradient ring with a soft bloom on near-black faces. **Phase 7's bet paid
       off** — the redesign cost ten tokens, two `@utility` composites and **four class-string edits
       across three components**, with no component gaining logic and **no surface value moving at all**.

@@ -413,8 +413,7 @@ export const COPY = {
   pdf: {
     /**
      * The download's filename. `jitster-` followed the app's rename because a downloads list is
-     * USER-VISIBLE -- which is exactly what separates it from the two `localStorage` keys, which
-     * keep their `hitster:` names on purpose.
+     * USER-VISIBLE.
      */
     fileName: (slug: string) => `jitster-${slug === '' ? 'deck' : slug}.pdf`,
   },

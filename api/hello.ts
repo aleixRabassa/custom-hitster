@@ -25,7 +25,7 @@ import { MAX_EMBED_TRACKS } from '../shared/constants.js';
 export default function handler(_req: VercelRequest, res: VercelResponse) {
   res.status(200).json({
     ok: true,
-    message: 'custom-hitster api is alive',
+    message: 'custom-jitster api is alive',
     // Echoed back to prove the shared constant genuinely resolved and bundled
     // from the Node side, rather than merely type-checking.
     maxEmbedTracks: MAX_EMBED_TRACKS,

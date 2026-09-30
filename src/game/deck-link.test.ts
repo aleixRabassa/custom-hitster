@@ -278,8 +278,8 @@ describe('buildDeckLink', () => {
   it('should build a link joining the ids with commas', () => {
     // A comma is a legal query-value character, so nothing is escaped and the link stays readable
     // in the chat clients these get pasted into.
-    expect(buildDeckLink('https://hitster.example', [PLAYLIST_ID, SECOND_ID], SEED)).toBe(
-      `https://hitster.example?${PLAYLIST_PARAM}=${PLAYLIST_ID},${SECOND_ID}&${SEED_PARAM}=${SEED}`,
+    expect(buildDeckLink('https://jitster.example', [PLAYLIST_ID, SECOND_ID], SEED)).toBe(
+      `https://jitster.example?${PLAYLIST_PARAM}=${PLAYLIST_ID},${SECOND_ID}&${SEED_PARAM}=${SEED}`,
     );
   });
 
@@ -287,7 +287,7 @@ describe('buildDeckLink', () => {
     // The pair together: whatever the build format is, the parser must read it back exactly. These
     // two functions are the only pair in the app that has to agree.
     const playlistIds = [PLAYLIST_ID, SECOND_ID, THIRD_ID];
-    const url = buildDeckLink('https://hitster.example/', playlistIds, SEED);
+    const url = buildDeckLink('https://jitster.example/', playlistIds, SEED);
 
     expect(parseDeckLink(url.slice(url.indexOf('?')))).toEqual({
       playlistIds,
@@ -297,10 +297,10 @@ describe('buildDeckLink', () => {
   });
 
   it('should build a link that round-trips through the parser', () => {
-    const url = buildDeckLink('https://hitster.example', [PLAYLIST_ID], SEED);
+    const url = buildDeckLink('https://jitster.example', [PLAYLIST_ID], SEED);
 
     expect(url).toBe(
-      `https://hitster.example?${PLAYLIST_PARAM}=${PLAYLIST_ID}&${SEED_PARAM}=${SEED}`,
+      `https://jitster.example?${PLAYLIST_PARAM}=${PLAYLIST_ID}&${SEED_PARAM}=${SEED}`,
     );
     // The round trip is the assertion that matters: whatever the build format is, the parser must
     // read it back. These two functions are the only pair in the app that has to agree exactly.
@@ -316,7 +316,7 @@ describe('buildDeckLink', () => {
     // Pins the two halves together: `generateSeed()` is the only producer of seeds in the app, and
     // `SEED_PATTERN` is the only consumer that can reject one. If either changes alone, this fails.
     const seed = generateSeed();
-    const search = buildDeckLink('https://hitster.example/', [PLAYLIST_ID], seed);
+    const search = buildDeckLink('https://jitster.example/', [PLAYLIST_ID], seed);
 
     expect(parseDeckLink(search.slice(search.indexOf('?')))).toEqual({
       playlistIds: [PLAYLIST_ID],
@@ -328,14 +328,14 @@ describe('buildDeckLink', () => {
   it('should normalise a trailing slash on the origin', () => {
     // `location.origin + location.pathname` produces one for a root-served app, so this is the
     // ordinary input rather than an edge case.
-    expect(buildDeckLink('https://hitster.example/', [PLAYLIST_ID], SEED)).toBe(
-      `https://hitster.example?${PLAYLIST_PARAM}=${PLAYLIST_ID}&${SEED_PARAM}=${SEED}`,
+    expect(buildDeckLink('https://jitster.example/', [PLAYLIST_ID], SEED)).toBe(
+      `https://jitster.example?${PLAYLIST_PARAM}=${PLAYLIST_ID}&${SEED_PARAM}=${SEED}`,
     );
   });
 
   it('should keep a sub-path so an app served from one stays reachable', () => {
-    expect(buildDeckLink('https://example.com/hitster/', [PLAYLIST_ID], SEED)).toBe(
-      `https://example.com/hitster?${PLAYLIST_PARAM}=${PLAYLIST_ID}&${SEED_PARAM}=${SEED}`,
+    expect(buildDeckLink('https://example.com/jitster/', [PLAYLIST_ID], SEED)).toBe(
+      `https://example.com/jitster?${PLAYLIST_PARAM}=${PLAYLIST_ID}&${SEED_PARAM}=${SEED}`,
     );
   });
 });
@@ -419,7 +419,7 @@ describe('parseDeckLink with a start card', () => {
 });
 
 describe('buildDeckLink with a start card', () => {
-  const origin = 'https://hitster.example';
+  const origin = 'https://jitster.example';
 
   it('should never write a v param', () => {
     // One algorithm, so there is nothing for it to say (see the module header).

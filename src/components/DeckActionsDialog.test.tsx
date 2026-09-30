@@ -19,7 +19,7 @@ function renderDialog(overrides: Partial<DeckActionsDialogProps> = {}) {
     playlistIds: ['37i9dQZF1DXcBWIGoYBM5M'],
     playlistName: 'Rock Classics',
     seed: 'a1b2c3d4e5f60718',
-    shareOrigin: 'https://hitster.example/',
+    shareOrigin: 'https://jitster.example/',
     onSavePlaylist: vi.fn(),
     isPlaylistSaved: false,
     deck: fixtureDeck,

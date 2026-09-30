@@ -30,11 +30,10 @@ Console carrying it is a defect to fix before upload, whatever it was quoting.
 **The internal uses of the word stay, and renaming them is the mistake.** The board-game reasoning
 behind the card geometry in `src/game/pdf-sheet.ts` (which since 2026-09-21 explains why the 65 mm
 shop-bought size was DROPPED), the dropped-card reasoning in `src/game/reducer.ts` and
-`src/game/messages.ts`, `src/components/CardRevealSide.tsx`, the `hitster:session:v1` and
-`hitster:library:v1` storage keys, `useBackNavigation.ts`'s `customHitsterBackEntry` history-state
-key, and the `custom-hitster` package/repo name. Every one of those is either a comment explaining
-the board game the rules come from, or an identifier no player reads — and renaming a storage key
-silently discards a player's saved game and their whole saved-playlist library. Verified
+`src/game/messages.ts` and `src/components/CardRevealSide.tsx`. Every one of those is a comment
+explaining the board game the rules come from. (The internal identifiers that used to be listed here
+— the storage keys, the history-state key and the package name — were renamed to `jitster` on
+2026-09-30 at the developer's request.) Verified
 2026-09-19 over `src/` **and `index.html`** (which is shipped bytes on the critical path and
 carries the `<title>` and `<meta description>` a crawler reads — it is clean): every hit except the
 one below is a comment or an identifier, never a rendered string.

@@ -75,7 +75,7 @@ vi.mock('jspdf', () => {
 const PLAYLIST_ID = '37i9dQZF1DXcBWIGoYBM5M';
 const SECOND_PLAYLIST_ID = '2zmXlpkOMN92NlQaE2M62c';
 const SEED = 'a1b2c3d4e5f60718';
-const ORIGIN = 'https://hitster.example/';
+const ORIGIN = 'https://jitster.example/';
 /** A real fixture card's id, standing in for the card the player is on mid-game. */
 const CURRENT_CARD_ID = fixtureDeck[2]?.id ?? '';
 
@@ -232,7 +232,7 @@ describe('DeckActions', () => {
 
       expect(writeText).toHaveBeenCalledTimes(1);
       const link = writeText.mock.calls[0]?.[0];
-      expect(link?.startsWith('https://hitster.example?')).toBe(true);
+      expect(link?.startsWith('https://jitster.example?')).toBe(true);
       expect(linkParams(link).get('playlist')).toBe(PLAYLIST_ID);
       expect(linkParams(link).get('seed')).toBe(SEED);
       expect(linkParams(link).has('v')).toBe(false);

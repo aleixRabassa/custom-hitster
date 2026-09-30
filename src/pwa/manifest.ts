@@ -62,9 +62,9 @@ export const manifest: Partial<ManifestOptions> = {
    * and `id` are untouched — so this is the same installed app under a
    * new label rather than a second entry on the home screen. (`id` was implicit when this was
    * written, defaulting to `start_url`; it is written out below as of 2026-09-19, which changes the
-   * wording here and nothing about the argument.) What it does NOT touch is anything
-   * persisted: `hitster:session:v1` and `hitster:library:v1` keep their names deliberately, because
-   * renaming a storage key silently empties a player's saved game and curated library.
+   * wording here and nothing about the argument.) It did NOT touch anything
+   * persisted at the time; the `localStorage` keys were renamed `hitster:*` -> `jitster:*` separately
+   * on 2026-09-30, with no migration, which discarded any game or library saved under the old keys.
    */
   name: 'Playlist Jitster',
 

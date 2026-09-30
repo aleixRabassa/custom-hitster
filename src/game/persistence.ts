@@ -32,7 +32,7 @@ import type { Card, PlaylistSummary, YearConfidence } from '../../shared/types';
  * a resume path months later. `version` inside the payload is the belt to this braces: it
  * catches a shape change someone forgot to bump the key for.
  */
-export const SESSION_STORAGE_KEY = 'hitster:session:v1';
+export const SESSION_STORAGE_KEY = 'jitster:session:v1';
 
 /**
  * Current payload version. Must be bumped together with any incompatible shape change.

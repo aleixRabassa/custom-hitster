@@ -174,11 +174,10 @@ export function sanitizeForPdf(text: string): string {
  *  playlist silently missing. Measured by this module's own test.
  * ===========================================================================
  *
- * The `jitster-` prefix followed the app's rename on 2026-08-11 (it was `hitster-`). It is renamed
- * because it is USER-VISIBLE -- it is the first thing in a downloads list -- which is exactly what
- * separates it from the two `localStorage` keys, `hitster:session:v1` and `hitster:library:v1`, which
- * keep their old names on purpose: a renamed key is not read, so it silently discards a saved game
- * and a curated library. A filename has no such continuity to break.
+ * The `jitster-` prefix followed the app's rename on 2026-08-11 (it was `hitster-`), because it is
+ * USER-VISIBLE -- it is the first thing in a downloads list. The `localStorage` keys followed on
+ * 2026-09-30 (`hitster:*` -> `jitster:*`) with no migration, at the developer's request; a filename
+ * has no continuity to break, whereas that rename abandoned whatever was saved under the old keys.
  *
  * `pdfCopy` is the active language's `pdf` catalogue, passed in by `usePdfExport` (this module is
  * pure and cannot read a hook); it defaults to English.

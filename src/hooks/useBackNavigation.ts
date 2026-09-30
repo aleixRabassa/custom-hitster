@@ -127,7 +127,7 @@ import type { BackNavigationState } from '../game/back-navigation';
  * on the marker would then ignore a genuine press -- the frozen-back-button failure. The
  * behaviour is driven by `pendingCleanupTraversals` and by nothing else.
  */
-const BACK_ENTRY_STATE = { customHitsterBackEntry: true } as const;
+const BACK_ENTRY_STATE = { customJitsterBackEntry: true } as const;
 
 /**
  * Traversals this hook queued in a cleanup and has not yet seen land.
