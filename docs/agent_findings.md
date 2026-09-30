@@ -5398,3 +5398,52 @@ free-tier Gemini key.
 - **Thinking at `low` billed zero tokens** on this task (`totalTokenCount` = prompt + output).
 - The Windows `node` assertion `!(handle->flags & UV_HANDLE_CLOSING)` after `process.exit()` with a
   fetch body still open is harmless noise from the harness, not a result.
+
+## 2026-09-30 — MusicBrainz fixes built: the cleaner's lazy head, the tokenised rung's artist and `dur:` bound, and the live acceptance diff
+
+Built from [`docs/plans/plan.year-fetch-rework-mb-fixes.md`](./plans/plan.year-fetch-rework-mb-fixes.md)
+(commit `4197322`).
+
+- **The lazy head was the bug.** `TRAILING_SEGMENT_PATTERN`'s head was lazy, so
+  `X (REMIX) (feat. Y)` matched as ONE segment, `(REMIX) (feat. Y)`, which no family recognised,
+  and the title went through unchanged. The head is now greedy with bracket-free alternatives, so
+  the LAST segment is examined first. The old lazy pattern stays as a private fallback, and the
+  whole old loop runs as a floor that keeps the shorter result: without the floor,
+  `Song (Live) Foo (Mono)` would strip LESS than before, because the old lazy read swallowed
+  " Foo" inside the live tail.
+- **`stripRemixSuffix` changed too, silently, through the same constant**: `A - B - Remix` used to
+  strip to `A` and now strips to `A - B`.
+- **The 22 accuracy fixtures cannot see the cleaner at all**: `pickBestRecording` reads
+  `fixture.candidates` and never calls `cleanTrackTitle`. What guards the cleaner is its own tests,
+  the new "keep" negatives, and the live diff below.
+- **The tokenised rung must query the primary-artist guess, not the full artist string.** Measured
+  live on the spike's six recovered tracks (five distinct queries; La Plena twice): 5 of 5 found
+  with the guess, 1 of 5 with the full string (only La Nieve, a single-artist track). The rung uses
+  the last phrase rung's artist. **The `dur:` bound made no measured difference** (same answer on all
+  five, with and without). It is kept because it is the last identity signal besides the artist, on
+  the loosest title match in the ladder.
+- **Step 8's live acceptance diff: nothing moved.** Run in one process at ≥1.1 s per request, with
+  a fresh in-memory cache per track and no Upstash, over 255 tracks (23 whose cleaned title changes,
+  and 232 that were yearless in the CSVs). That cost 977 requests in 21 minutes, 10.6% of them 503s,
+  all absorbed by the adapter's retry or the harness's.
+  - **Moved or lost: 0.** No track that had a year changed its year or its confidence.
+  - **Null → year: 17.** 16 are caused by the code and 1 by MusicBrainz data drift (COMPA COLETO).
+    The old code re-run the same day matched the CSV on 23 of 23 cleaner-affected titles.
+  - **Soundtracks against `label_kind` original/predates**, on the 22 re-run: 0/0/22 before and
+    5 right, 2 wrong, 15 null after. On the whole labelled set of 85: 47/16/22 before, 52/18/15
+    after (the rows not re-run are taken as unchanged).
+  - **The two wrong recoveries are the scorer's, not the cleaner's.** Both are Disney titles whose
+    original recording's credit ("Julie Andrews, Dick Van Dyke and Pearlies"; "Mandy Moore and
+    Zachary Levi") fails the exact artist rule, so a later recording answers at `low`.
+  - **Two need a developer ruling.** `Flashdance...What a Feeling – Re-Recorded` now resolves to the
+    ORIGINAL (1983, `high`) because the `Re-Recorded` family strips the tail. MusicBrainz holds the
+    re-recording separately, first released 2014, so under the §13.9 recording-year rule this is the
+    wrong recording. `Pobres Almas En Desgracia – De "La Sirenita"` gives 1994 `high` from the only
+    matching Spanish recording, where iTunes says 1989.
+- **Not fixed, and a follow-up:**
+  - A busy gate INSIDE the recording-rung loop still returns `rate-limited`. Its comment ("only
+    reachable before any request has been made") is wrong once rungs 2–4 exist, so it is the same
+    free-429 re-spend loop P6 closed for the release-group request.
+  - The tokeniser splits on whitespace only, so a bracketed tail the cleaner left in place leaks
+    tokens such as `"(feat."` into the tokenised query. That did no harm in the diff.
+- Harness and raw responses: `.scratch/plan1/` (git-ignored; `inspect.ts` replays a track offline).

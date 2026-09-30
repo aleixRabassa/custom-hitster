@@ -94,32 +94,32 @@ The alternatives were rejected for these reasons:
 
 ## Implementation Steps
 
-- [ ] **Step 1: fix the lazy head (P1).** In `shared/year.ts`:
-  - [ ] Rewrite `TRAILING_SEGMENT_PATTERN` so the head is greedy and no inner alternative can contain an
+- [x] **Step 1: fix the lazy head (P1).** In `shared/year.ts`:
+  - [x] Rewrite `TRAILING_SEGMENT_PATTERN` so the head is greedy and no inner alternative can contain an
         opening or closing bracket. The last trailing segment is then matched first. Keep the "spaced
         dash only" rule that the comment above the constant describes.
-  - [ ] In `cleanTrackTitle`, loop from the last segment inward. If the last segment is unrecognised,
+  - [x] In `cleanTrackTitle`, loop from the last segment inward. If the last segment is unrecognised,
         retry once with the previous (lazy) pattern kept as a private constant, so the result is never
         a longer title than today's. Document the two cases that need the fallback:
     - `Song - Live at Wembley - 1986`: the last segment `1986` is unrecognised;
     - nested brackets such as `(From "Movie (Part 2)")`.
-  - [ ] `stripRemixSuffix` uses the new pattern with no fallback. Its test pins that `A - B - Remix`
+  - [x] `stripRemixSuffix` uses the new pattern with no fallback. Its test pins that `A - B - Remix`
         now strips to `A - B`.
-  - [ ] Rewrite the constant's comment: the lazy head was the bug, and the fallback is why the fix
+  - [x] Rewrite the constant's comment: the lazy head was the bug, and the fallback is why the fix
         cannot regress.
-- [ ] **Step 2: re-clean after the remix strip.** In `api/_lib/resolve-year.ts`'s remix fallback,
+- [x] **Step 2: re-clean after the remix strip.** In `api/_lib/resolve-year.ts`'s remix fallback,
       pass the stripped title through `cleanTrackTitle` again before querying. `Tumbando el Club (feat. …) - Remix`
       otherwise keeps its `(feat. …)` after `- Remix` is removed.
-- [ ] **Step 3: extend the cleaner (P2).** Add the families from spike §3.2 and §8, each mapped to an
+- [x] **Step 3: extend the cleaner (P2).** Add the families from spike §3.2 and §8, each mapped to an
       existing `TitleStripFlags` member:
-  - [ ] under `version`: `Sped Up`, `Slowed` (with or without `+ Reverb`), `prod.` / `prod. by` tails;
-  - [ ] under `version`: an unquoted `from …` tail **only** when it carries a hint word (film, movie,
+  - [x] under `version`: `Sped Up`, `Slowed` (with or without `+ Reverb`), `prod.` / `prod. by` tails;
+  - [x] under `version`: an unquoted `from …` tail **only** when it carries a hint word (film, movie,
         soundtrack, album, película, pel·lícula, BSO), and the `Original song from the film …` shape;
-  - [ ] under `feature`: Spanish `con` and Catalan `amb` featuring tails, **only** in the spaced-dash
+  - [x] under `feature`: Spanish `con` and Catalan `amb` featuring tails, **only** in the spaced-dash
         or bracketed form (`Sangría - con WOS`), never as a bare word inside a title;
-  - [ ] under `version`, as insurance: the Spanish and Catalan edition words (`En Vivo`, `En Directe`,
+  - [x] under `version`, as insurance: the Spanish and Catalan edition words (`En Vivo`, `En Directe`,
         `Remasterizado`, `Remasteritzat`, `Versión …`, `Versió …`, `Acústico`, `Acústic`).
-  - [ ] **The soundtrack tails of spike §13.6** (2026-09-30). The developer ruled that a card shows
+  - [x] **The soundtrack tails of spike §13.6** (2026-09-30). The developer ruled that a card shows
         the **recording's** year (§13.9), so a soundtrack title has to find its own recording, and
         these tails stop it doing so. All 22 measured titles are MusicBrainz misses today:
     - under `version`: the Spanish film tail, a spaced dash plus `de` / `del` plus a **quoted** film
@@ -137,106 +137,106 @@ from "Top Gun"`).
       it as a tail, and stripping it would eat real titles.
     - What these recover is **unmeasured**: the spike did not re-run its §3.3 variants on these
       titles. Step 8 measures it.
-  - [ ] Each family's comment says that it is insurance or cites the measured example.
-- [ ] **Step 4: add the tokenised rung.** In `api/_lib/musicbrainz.ts`:
-  - [ ] Append one attempt to `buildAttempts` that queries `recording:(…)` as an AND of the cleaned
+  - [x] Each family's comment says that it is insurance or cites the measured example.
+- [x] **Step 4: add the tokenised rung.** In `api/_lib/musicbrainz.ts`:
+  - [x] Append one attempt to `buildAttempts` that queries `recording:(…)` as an AND of the cleaned
         title's words, keeping the same artist clause as the other rungs.
-  - [ ] Quote every word, so query operators (`(`, `)`, `?`, `!`, `-`, `/`) and title words that are
+  - [x] Quote every word, so query operators (`(`, `)`, `?`, `!`, `-`, `/`) and title words that are
         Lucene keywords (AND, OR, NOT) are literals.
-  - [ ] Skip the rung when fewer than two words remain.
-  - [ ] Before choosing whether the rung carries the `dur:` bound, re-run the six tracks the spike
+  - [x] Skip the rung when fewer than two words remain.
+  - [x] Before choosing whether the rung carries the `dur:` bound, re-run the six tracks the spike
         recovered (§3.3) with a scratch harness at 1 req/s, **never against Upstash**. Record the
         result in the rung's comment.
-  - [ ] The adapter's result records which attempt matched, as a small tagged field, so the scoring
+  - [x] The adapter's result records which attempt matched, as a small tagged field, so the scoring
         layer can decide the cap without the adapter making a scoring decision (the module header
         forbids that).
-  - [ ] In `resolve-year.ts`, cap a result that came from the tokenised attempt at `low`, next to the
+  - [x] In `resolve-year.ts`, cap a result that came from the tokenised attempt at `low`, next to the
         existing rewritten-title cap, and name the loose-artist fallback as the precedent.
-  - [ ] **The remix fallback re-enters `fetchYearCandidates`**, so a remix-titled card that misses both
+  - [x] **The remix fallback re-enters `fetchYearCandidates`**, so a remix-titled card that misses both
         ways runs the tokenised query twice, which is up to two extra recording requests. That is
         **accepted**: it only happens on a double total miss, which is rare and already the most
         expensive path. Record it in the fallback's comment. Do not add a flag to suppress it.
-- [ ] **Step 5: stop degrading silently (P6).** In `api/_lib/musicbrainz.ts`:
-  - [ ] Where the release-group request fails (≈ lines 255–258), return the failed result as
+- [x] **Step 5: stop degrading silently (P6).** In `api/_lib/musicbrainz.ts`:
+  - [x] Where the release-group request fails (≈ lines 255–258), return the failed result as
         `upstream-unavailable` (or `unexpected-payload` for a non-JSON 200) instead of falling back to
         the relaxed rungs.
-  - [ ] Treat the "gate busy before the release-group request" branch (≈ lines 246–252) the same way,
+  - [x] Treat the "gate busy before the release-group request" branch (≈ lines 246–252) the same way,
         returning `upstream-unavailable` and **not** `rate-limited`. The client treats a 429 as free,
         and would spend request 1 again in a loop.
-  - [ ] Keep the single 503 retry after 1.2 s in `getJson` unchanged.
-  - [ ] Nothing new reaches the cache: `resolve-year.ts` already skips caching failures. Confirm this
+  - [x] Keep the single 503 retry after 1.2 s in `getJson` unchanged.
+  - [x] Nothing new reaches the cache: `resolve-year.ts` already skips caching failures. Confirm this
         with a test, not by reading the code.
-  - [ ] The remix fallback still swallows its own errors. Leave that as is and record it in its
+  - [x] The remix fallback still swallows its own errors. Leave that as is and record it in its
         comment: a release-group failure inside the fallback still caches a one-day null.
-- [ ] **Step 6: bump the cache version.** Set `YEAR_CACHE_SCHEMA_VERSION` to `v5`.
-  - [ ] Add a paragraph to the history comment above it: P1 and P2 change the cache key for the titles
+- [x] **Step 6: bump the cache version.** Set `YEAR_CACHE_SCHEMA_VERSION` to `v5`.
+  - [x] Add a paragraph to the history comment above it: P1 and P2 change the cache key for the titles
         they affect, the tokenised rung turns cached nulls into years, and P6 removes degraded `low`
         entries. Each would wash out within 7 days, and the bump is made by the unconditional rule, as
         v2 and v4 were.
-  - [ ] Update the literal prefix check in `shared/year.test.ts`.
-- [ ] **Step 7: capture the tokenised fixture live.** Using the adapter's exact requests, capture one
+  - [x] Update the literal prefix check in `shared/year.test.ts`.
+- [x] **Step 7: capture the tokenised fixture live.** Using the adapter's exact requests, capture one
       real §3.2 track that only the tokenised rung finds (for example `Olvidarnos De To' :)`). Capture
       the empty phrase-rung responses, the tokenised response and its release-group response, and
       trim them without inventing anything. Add a provenance header in the file's existing style,
       recording the User-Agent actually used.
-- [ ] **Step 8: live acceptance diff.** P2 changes the **first** query for every track it touches, not
+- [x] **Step 8: live acceptance diff.** P2 changes the **first** query for every track it touches, not
       just for misses. With a scratch harness, re-run the tracks in
       `docs/spikes/spike.year-fetch-rework.data.csv` **and**
       `docs/spikes/spike.year-fetch-rework.soundtracks.csv` whose cleaned title changes under the new
       cleaner (in one process at 1 req/s, with an in-memory cache).
-  - [ ] Diff their answers against the CSVs' MusicBrainz columns. For the soundtrack tracks, also
+  - [x] Diff their answers against the CSVs' MusicBrainz columns. For the soundtrack tracks, also
         check the answer against `label_year` where `label_kind` is `original` or `predates`. Those
         are the only labels that are ground truth under the recording-year rule.
-  - [ ] Any answer that moves, as opposed to a null that turns into a year, is investigated before
+  - [x] Any answer that moves, as opposed to a null that turns into a year, is investigated before
         merging.
-  - [ ] Record the counts in `docs/agent_findings.md`.
-- [ ] **Step 9: run the four checks:** `pnpm typecheck && pnpm lint && pnpm test && pnpm build`.
+  - [x] Record the counts in `docs/agent_findings.md`.
+- [x] **Step 9: run the four checks:** `pnpm typecheck && pnpm lint && pnpm test && pnpm build`.
 
 ---
 
 ## Unit Tests
 
-- [ ] `should strip both tails from a title with a bracketed remix and a bracketed featuring`: P1 in `cleanTrackTitle` (`shared/year.test.ts`).
-- [ ] `should strip the last recognised segment first`: the new pattern's order, one case per existing family.
-- [ ] `should never strip less than the previous pattern`: `Song - Live at Wembley - 1986` and `(From "Movie (Part 2)")` give today's result via the fallback.
-- [ ] `should strip only the remix tail from a title with two spaced dashes`: `stripRemixSuffix("A - B - Remix")` gives `A - B`.
-- [ ] One positive test per new P2 family: `Sped Up`, `Slowed + Reverb`, `prod.`, hinted unquoted `from`, `Original song from the film`, `con`, `amb`, each edition word.
-- [ ] One negative test per new P2 family: `Con Calma` keeps its words, `from` without a hint word is kept, `con` inside a title is kept, and `Slow` is not `Slowed`.
-- [ ] The soundtrack tails: one positive test per measured shape of spike §13.6 (the Spanish `- de "…"/Banda Sonora Original` tail, doubled-apostrophe quotes, `Soundtrack Version`, `LP Soundtrack Version from …`, `Re-Recorded`, a remaster tail with more words, `Love Theme from "…"`), and the negatives: an unquoted `- de …` without `Banda Sonora` is kept, and `You Sexy Thing - Full Monty` is kept.
-- [ ] `should set the expected strip flag for each new family`: `TitleStripFlags` mapping.
-- [ ] `should re-clean the title after stripping a remix tail`: remix fallback in `resolve-year.test.ts`.
-- [ ] `should append the tokenised attempt last and only once` and `should quote every token and skip the rung under two tokens`: `buildAttempts` (`musicbrainz.test.ts`).
-- [ ] `should not issue the tokenised request when an earlier rung returned recordings`: the request count for a first-try card stays exactly two.
-- [ ] `should cap a tokenised hit at low`: `resolve-year.test.ts`.
-- [ ] `should resolve the captured tokenised track`: end to end over the live-captured fixture, asserting the year.
-- [ ] `should return upstream-unavailable when the release-group request fails` and `should return upstream-unavailable when the gate is busy before the release-group request`: P6, over the real captured No Woman No Cry payloads with `stubFetch`'s `statuses` option. This replaces the assertion at ≈ `musicbrainz.test.ts:411` that the busy path degrades.
-- [ ] `should not cache a result when the release-group request fails`: `resolve-year.test.ts`.
-- [ ] `should key the cache under v5`: the updated literal check.
-- [ ] The 22 accuracy fixtures in `shared/__fixtures__/year-candidates.ts` pass **unchanged**. That is the regression guard, and no fixture is re-captured for it.
+- [x] `should strip both tails from a title with a bracketed remix and a bracketed featuring`: P1 in `cleanTrackTitle` (`shared/year.test.ts`).
+- [x] `should strip the last recognised segment first`: the new pattern's order, one case per existing family.
+- [x] `should never strip less than the previous pattern`: `Song - Live at Wembley - 1986` and `(From "Movie (Part 2)")` give today's result via the fallback.
+- [x] `should strip only the remix tail from a title with two spaced dashes`: `stripRemixSuffix("A - B - Remix")` gives `A - B`.
+- [x] One positive test per new P2 family: `Sped Up`, `Slowed + Reverb`, `prod.`, hinted unquoted `from`, `Original song from the film`, `con`, `amb`, each edition word.
+- [x] One negative test per new P2 family: `Con Calma` keeps its words, `from` without a hint word is kept, `con` inside a title is kept, and `Slow` is not `Slowed`.
+- [x] The soundtrack tails: one positive test per measured shape of spike §13.6 (the Spanish `- de "…"/Banda Sonora Original` tail, doubled-apostrophe quotes, `Soundtrack Version`, `LP Soundtrack Version from …`, `Re-Recorded`, a remaster tail with more words, `Love Theme from "…"`), and the negatives: an unquoted `- de …` without `Banda Sonora` is kept, and `You Sexy Thing - Full Monty` is kept.
+- [x] `should set the expected strip flag for each new family`: `TitleStripFlags` mapping.
+- [x] `should re-clean the title after stripping a remix tail`: remix fallback in `resolve-year.test.ts`.
+- [x] `should append the tokenised attempt last and only once` and `should quote every token and skip the rung under two tokens`: `buildAttempts` (`musicbrainz.test.ts`).
+- [x] `should not issue the tokenised request when an earlier rung returned recordings`: the request count for a first-try card stays exactly two.
+- [x] `should cap a tokenised hit at low`: `resolve-year.test.ts`.
+- [x] `should resolve the captured tokenised track`: end to end over the live-captured fixture, asserting the year.
+- [x] `should return upstream-unavailable when the release-group request fails` and `should return upstream-unavailable when the gate is busy before the release-group request`: P6, over the real captured No Woman No Cry payloads with `stubFetch`'s `statuses` option. This replaces the assertion at ≈ `musicbrainz.test.ts:411` that the busy path degrades.
+- [x] `should not cache a result when the release-group request fails`: `resolve-year.test.ts`.
+- [x] `should key the cache under v5`: the updated literal check.
+- [x] The 22 accuracy fixtures in `shared/__fixtures__/year-candidates.ts` pass **unchanged**. That is the regression guard, and no fixture is re-captured for it.
 
 ---
 
 ## Documentation Updates
 
-- [ ] `AGENTS.md`: change `YEAR_CACHE_SCHEMA_VERSION` is `v4` (the tier-ladder block) to `v5`. Add a
+- [x] `AGENTS.md`: change `YEAR_CACHE_SCHEMA_VERSION` is `v4` (the tier-ladder block) to `v5`. Add a
       short note that the cleaner examines the **last** trailing segment first, with a fallback so it
       never strips less, and that a tokenised hit is capped at `low` beside the loose-artist cap.
-- [ ] `AGENTS.md` Documentation Index:
-  - [ ] add four rows, one per `plan.year-fetch-rework-*.md`, in the table's style;
-  - [ ] change the spike's row from "nothing built" to point at the four plans;
-  - [ ] when each plan is built, mark its own row **Built** with the date. Plans 2–4 each carry the
+- [x] `AGENTS.md` Documentation Index:
+  - [x] add four rows, one per `plan.year-fetch-rework-*.md`, in the table's style;
+  - [x] change the spike's row from "nothing built" to point at the four plans;
+  - [x] when each plan is built, mark its own row **Built** with the date. Plans 2–4 each carry the
         same item for their row;
-  - [ ] add a pointer to these plans beside the "Current phase: 8, CODE COMPLETE" sentence.
-- [ ] `docs/architecture.md` §3 (year resolution): the rung list gains the tokenised rung, and P6
+  - [x] add a pointer to these plans beside the "Current phase: 8, CODE COMPLETE" sentence.
+- [x] `docs/architecture.md` §3 (year resolution): the rung list gains the tokenised rung, and P6
       means a failed release-group request is a transient error.
-- [ ] `docs/api.md`: `/api/year` may now return `upstream-unavailable` where it used to return a
+- [x] `docs/api.md`: `/api/year` may now return `upstream-unavailable` where it used to return a
       degraded `low`.
-- [ ] `docs/agent_findings.md`: a dated entry (2026-09-30 or the build date) with the lazy-head
+- [x] `docs/agent_findings.md`: a dated entry (2026-09-30 or the build date) with the lazy-head
       finding, the `stripRemixSuffix` side effect, the step 8 diff counts and the tokenised `dur:`
       measurement.
-- [ ] `docs/spikes/spike.year-fetch-rework.md`: a status line under §8 saying that P1, P2, P6 and the
+- [x] `docs/spikes/spike.year-fetch-rework.md`: a status line under §8 saying that P1, P2, P6 and the
       tokenised rung are built, linking to this plan. The spike's measurements stay unchanged.
-- [ ] Inline comments: `TRAILING_SEGMENT_PATTERN`, each new family, `buildAttempts`' rung list, the
+- [x] Inline comments: `TRAILING_SEGMENT_PATTERN`, each new family, `buildAttempts`' rung list, the
       P6 branches and the cache-version history, as listed in the steps.
 
 ---
@@ -268,10 +268,20 @@ from "Top Gun"`).
 
 ## Open Questions
 
-- [ ] Does the tokenised rung carry the `dur:` bound? The spike does not say. Step 4 measures it on
-      the six recovered tracks before choosing.
-- [ ] Does step 8's diff move any answer that resolved today? If it does, is the new answer better?
-      Decide per case before merging.
+- [x] Does the tokenised rung carry the `dur:` bound? The spike does not say. Step 4 measures it on
+      the six recovered tracks before choosing. **Resolved 2026-09-30: yes, when a duration is known.** Measured live
+      at 1 req/s on the six tracks (five distinct queries): the bound made **no difference** — every
+      track recovered to the same year with and without it (Olvidarnos 2026, La Nieve 2026, La Plena
+      2025 ×2, Tumbando el Club 2019, Macacoa 2000 2026). The tiebreak is structural: rung 2 has
+      already asked without the bound and missed, and the tokenised query is the loosest title match
+      while the scorer compares no titles, so the length is the last identity signal in the query.
+      The same run settled the artist clause, which the plan left ambiguous (rungs 1–2 and rung 3
+      use different artists): the rung uses the **last phrase rung's** artist, the guess when there
+      is one — the full string found 1 of 5, the guess 5 of 5. Both recorded in the rung's comment.
+- [x] Does step 8's diff move any answer that resolved today? If it does, is the new answer better?
+      Decide per case before merging. **Answered 2026-09-30: no.** 0 moved, 0 lost over 255 tracks;
+      17 null → year. Two recoveries still need a ruling (Flashdance Re-Recorded resolving to the
+      original, Pobres Almas 1994 vs iTunes 1989) — see `docs/agent_findings.md` (2026-09-30).
 
 ---
 

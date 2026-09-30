@@ -134,7 +134,7 @@ GET /api/year?title=…&artist=…&durationMs=…
 │ api/_lib/resolve-year.ts             │
 │  1. cleanTrackTitle()                │   "… - Remastered 2011" returns ZERO
 │                                      │   results verbatim, so this is mandatory
-│  2. cache.get(mbyear:v4:artist|title)│──▶ HIT: return, cached:true
+│  2. cache.get(mbyear:v5:artist|title)│──▶ HIT: return, cached:true
 │                                      │        NO gate, NO request
 │  3. MISS ▼                           │
 └──────────┬───────────────────────────┘
@@ -143,9 +143,12 @@ GET /api/year?title=…&artist=…&durationMs=…
 │ api/_lib/musicbrainz.ts              │
 │  gate.acquire() ─── busy ────────────┼──▶ 429 + retryAfterMs
 │  ① recording?query=… AND dur:[±10s]  │──▶ MusicBrainz  (limit=100)
+│     └ empty? next rung, one request  │    duration-bounded → unbounded
+│       each, until one returns any    │    → artist-guess → tokenised
 │     └ flatten rec → release → group  │
-│  gate.acquire()                      │
+│  gate.acquire() ─── busy ────────────┼──▶ 502 upstream-unavailable
 │  ② release-group?query=rgid:(a OR b) │──▶ MusicBrainz  (ONE batched call)
+│     └ failed ────────────────────────┼──▶ 502, never a degraded year
 │     └ attach first-release-date      │      — the ALBUM's original date
 └──────────┬───────────────────────────┘
            ▼
@@ -161,7 +164,9 @@ GET /api/year?title=…&artist=…&durationMs=…
 │  none of them → year: null + reason  │──▶ none
 └──────────┬───────────────────────────┘
            ▼
+   resolve-year.ts: a tokenised hit is capped at low
    cache.set(…) — ALL THREE outcomes, one TTL per tier (30d / 7d / 1d)
+   (an upstream failure is never cached)
    200 {year, confidence, source?, reason?, cached, cleanedTitle, stripped}
    + Cache-Control tiered by confidence (30d / 1d / 1h)
 ```
@@ -169,6 +174,19 @@ GET /api/year?title=…&artist=…&durationMs=…
 Three orderings in that diagram are load-bearing and easy to "tidy" into bugs. **The cache is read before the gate**, so a replayed deck costs nothing and waits for nothing. **The second MusicBrainz call is batched**, so the request count is two regardless of whether the pool held 12 candidates or 842. **The year comes from the release GROUP's `first-release-date`, never from the release date inlined in the search response** — the latter is the reissue date and is wrong by decades (Billie Jean 2012, Bohemian Rhapsody 2001).
 
 A fourth thing is load-bearing and is a 2026-08-11 reversal: **rung ① accepts `Single` and `EP`, not just `Album`.** A release group's `first-release-date` is the date of the record, so an Album-only rung reports the year a song was _included on an album_ rather than the year it came out — Creep 1993 instead of 1992, Mr. Brightside 2004 instead of 2003, and nothing at all for a song like "Hey Jude" that was never on a studio album. Widening is safe in one direction only, and that is why it is safe at all: the rung takes the **earliest** surviving date, so admitting more release groups can only move the answer earlier. A reissue single cannot beat the album it postdates, which is why Billie Jean is still 1982 despite its January 1983 single. The same change added rung ②, because before it the ladder went straight from "official original release" to **no filter at all** — that is what made `low` answers unreliable, since a live take or a bootleg dated the card whenever rung ① missed. Full measurement in [`agent_findings.md`](./agent_findings.md) (2026-08-11).
+
+Three more changes landed on 2026-09-30, from [`plans/plan.year-fetch-rework-mb-fixes.md`](./plans/plan.year-fetch-rework-mb-fixes.md) (spike §8: P1, P2, P6 and the `tokenised` rescue rung). They also moved the cache key to `v5`.
+
+- **The cleaner reads the LAST trailing segment first and works inward.** `TRAILING_SEGMENT_PATTERN` used to have a lazy head, so a title with two bracketed tails was read as one segment it could not classify: `X (REMIX) (feat. Y)` became `REMIX) (feat. Y` and was left unchanged. The same shape made `stripRemixSuffix("A - B - Remix")` return `A`. Now the head is greedy and no segment may contain a bracket. **The cleaner never strips less than before, and that holds by construction.** When a pass finds nothing it can strip, it retries with the old lazy pattern, kept as `LEGACY_TRAILING_SEGMENT_PATTERN`. Two shapes need that retry: `Song - Live at Wembley - 1986`, where the last segment is unrecognised, and nested brackets such as `(From "Movie (Part 2)")`. The whole old algorithm also runs as a floor, and the shorter answer wins. `stripRemixSuffix` uses the new pattern with **no** fallback, because there the lazy read was the bug. The same change added new families: `Sped Up`/`Slowed`, `prod.`, hinted `from …` tails, Spanish `con` and Catalan `amb` featuring tails, the soundtrack tails and the Spanish and Catalan edition words. Each one maps to an existing `TitleStripFlags` member. The remix fallback also runs `cleanTrackTitle()` again on the title it strips, so a `(feat. …)` that sat to the left of `- Remix` is removed too.
+- **The query ladder has a fourth rung, `tokenised`, and it is the last attempt of `buildAttempts()`.** The rungs, in order:
+  1. `duration-bounded`: the quoted title, the full artist and the `dur:` bound;
+  2. `unbounded`: the same query with no bound;
+  3. `artist-guess`: the quoted title and the primary-artist guess, only when the guess differs from the full string;
+  4. `tokenised`.
+
+  A rung runs only when the one before it returned no recordings. So the new rung fires only on a total miss, and a card that the first rung finds still costs exactly two requests. The query is an AND of the cleaned title's words, **each quoted**, so a Lucene keyword or an operator in a title is a literal. A token with no letter or digit is dropped before quoting. The stray `)` of `Olvidarnos De To' :)` is what broke the phrase rungs for the track this rung was built for. The rung is skipped under two words, because a one-word AND repeats rung 2. **Its artist is the last phrase rung's artist**: the primary-artist guess when it differs from the full string. Measured on the spike's recoveries, the full string found 1 of 5 and the guess 5 of 5. It carries the `dur:` bound when a duration is known. Measured, the bound made no difference on the six tracks, and it is the only identity signal left in the loosest title query. The adapter only tags which rung matched (`matchedAttempt`) and makes no scoring decision. `resolve-year.ts` caps a tokenised hit at `low`, beside the loose-artist cap and for the same reason: a weaker match may turn a null into a year, but it never reports `high`. The remix fallback calls the adapter again, so a card whose two titles both miss runs the rung twice. That cost is accepted.
+
+- **A failed release-group request is a transient error, not a degraded answer (P6).** Until 2026-09-30, a busy gate or a failed request 2 handed the candidates back without their release-group dates. Rung ① then found nothing to date, and the ladder fell through to a `low` year drawn from inlined reissue dates. That answer was cached for seven days as if it were the track's real one. Both branches now fail the lookup. The code is `upstream-unavailable`, or `unexpected-payload` for a 200 that was not JSON. `resolve-year.ts` caches neither, `/api/year` answers 502, and the client retries later. **A busy gate before request 2 is deliberately NOT `rate-limited`.** The client treats a 429 as free, and request 1 has already been spent, so a free retry would spend it again, in a loop. A counted transient failure is bounded by the client's retry budget. One gap remains: the remix fallback still swallows its own failures, so a release-group failure inside it caches the primary pass's one-day null.
 
 ### The client game layer (`src/game/`) — built
 
@@ -1187,7 +1205,7 @@ Why it exists: Spotify joins collaborators with `", "` while MusicBrainz uses a 
 
 **One limitation the ladder cannot reach, and it is structural.** Resolution is _recording_-scoped: the adapter finds recordings, then asks which release groups they appear on. That works whenever the single and the album share one master. It cannot work when the single is a **different recording** — Depeche Mode's "Personal Jesus" is 4:55 on Violator while the correctly-dated 1989 single carries a 3:46 edit, so no filter widening and no duration bound puts the two in one pool, and the card reads 1990. Reaching it needs work-level resolution (MusicBrainz `work` relationships group every recording of one song), which is a much larger change. It is pinned as `YEAR_LIMITATION_FIXTURES` in `shared/__fixtures__/year-candidates.ts` rather than left to be rediscovered.
 
-**Cache keys carry a schema segment** (`mbyear:v4:{artist}|{title}`) precisely so a change to any of the above can invalidate every previously cached year in one edit. Without it, improved scoring would be masked indefinitely by entries computed under the old logic — and a `high` entry lives 30 days, so the masking would outlast anyone's patience for checking whether a fix worked.
+**Cache keys carry a schema segment** (`mbyear:v5:{artist}|{title}`) precisely so a change to any of the above can invalidate every previously cached year in one edit. Without it, improved scoring would be masked indefinitely by entries computed under the old logic — and a `high` entry lives 30 days, so the masking would outlast anyone's patience for checking whether a fix worked.
 
 Full measurements are in [`plans/plan.md`](./plans/plan.md) §5 Phase 0 and [`agent_findings.md`](./agent_findings.md) (2026-08-04 and 2026-08-11).
 

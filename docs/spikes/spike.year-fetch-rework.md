@@ -429,6 +429,12 @@ of the 2026-08-05 "dropping yearless cards has a long tail" finding. Each of the
 
 ## 8. Proposals, in the order they could land
 
+**Status (2026-09-30): P1, P2, P6 and the `tokenised` rung are built**, in
+[`plan.year-fetch-rework-mb-fixes.md`](../plans/plan.year-fetch-rework-mb-fixes.md). The `tokenised`
+rung landed as the last attempt of the adapter's query ladder, not in a stage B, and its hits are
+capped at `low`. That plan also took the cache to `v5`. The `isrc:` rung of P4, and P3 and P5, are
+not built. The measurements in this spike are unchanged.
+
 | #   | What                                                                                                                                                                         | Needs                       | Moves                                  |
 | --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- | -------------------------------------- |
 | P1  | Fix the lazy-head bug in `TRAILING_SEGMENT_PATTERN` (§3.1), with a test                                                                                                      | nothing                     | 1–2 titles in this sample              |
