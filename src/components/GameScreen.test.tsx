@@ -15,7 +15,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GameScreen } from './GameScreen';
 import { COPY } from '../game/copy';
-import { highConfidenceCard, lowConfidenceCard, noPreviewCard } from './__fixtures__/cards';
+import {
+  highConfidenceCard,
+  lowConfidenceCard,
+  noPreviewCard,
+  noYearCard,
+} from './__fixtures__/cards';
 import { auditableText } from './__fixtures__/auditable-text';
 import { clearQrCache } from '../game/qr-cache';
 import { resetBackNavigationTraversals } from '../hooks/useBackNavigation';
@@ -57,6 +62,7 @@ function renderScreen(props: {
   onPrevious?: () => void;
   onSavePlaylist?: () => void;
   pendingYearCount?: number;
+  keepYearless?: boolean;
   isPlayable?: boolean;
 }) {
   const element = (
@@ -64,7 +70,7 @@ function renderScreen(props: {
       deck={[props.card ?? highConfidenceCard]}
       currentIndex={0}
       isFlipped={props.isFlipped ?? false}
-      isYearPending={false}
+
       onFlip={props.onFlip ?? vi.fn()}
       onNext={props.onNext ?? vi.fn()}
       onPrevious={props.onPrevious ?? vi.fn()}
@@ -83,6 +89,7 @@ function renderScreen(props: {
       onSavePlaylist={props.onSavePlaylist ?? vi.fn()}
       isPlaylistSaved={false}
       pendingYearCount={props.pendingYearCount ?? 0}
+      keepYearless={props.keepYearless ?? false}
     />
   );
 
@@ -554,6 +561,20 @@ describe('GameScreen', () => {
     // And the game is untouched behind it: cancelling puts the three actions back.
     fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.cancel }));
     expect(screen.queryByRole('button', { name: COPY.deckActions.copyLink })).not.toBeNull();
+  });
+
+  it("should hand the session's keepYearless to DeckActions", () => {
+    // Through the mid-game dialog, and observed through the sheet count -- `sheetsForDeck(deck,
+    // keepYearless)`, on screen before any press, so no export runs. A deck of one kept yearless
+    // card is one sheet with the option on and nothing to print with it off.
+    render(renderScreen({ card: noYearCard, keepYearless: true }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.controls.keepDeck }));
+    expect(document.body.textContent ?? '').toContain(COPY.deckActions.sheetSummary(1));
+
+    cleanup();
+    render(renderScreen({ card: noYearCard, keepYearless: false }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.controls.keepDeck }));
+    expect(document.body.textContent ?? '').toContain(COPY.deckActions.sheetSummary(0));
   });
 
   it('should leave the audio element sourceless for a card with no preview', () => {

@@ -149,8 +149,10 @@ export interface DeckActionsProps {
    *  So a press with lookups outstanding does not export and does not refuse: it
    *  WAITS, on a screen shaped like the one that dealt the deck, and exports
    *  itself the moment the last year lands. `pendingYearCount === 0` is exactly
-   *  "every card in this deck can be printed", because a lookup that finds
-   *  nothing removes its card rather than leaving it yearless.
+   *  "nothing printed can still change": a PROVISIONAL year counts as pending
+   *  there, so the wait also covers verification (plan.year-fetch-rework-game.md),
+   *  and a final "no year" either removes its card or -- when the session keeps
+   *  yearless cards -- is itself final.
    *
    *  The wait offers "PRINT SO FAR" (2026-08-07), which is the informed version
    *  of the thing the gate rules out: it exports the resolved cards NOW, says how
@@ -161,6 +163,16 @@ export interface DeckActionsProps {
    * ===========================================================================
    */
   pendingYearCount: number;
+  /**
+   * Whether this SESSION keeps cards with no year found, from `state.keepYearless`.
+   *
+   * The session's value, never the picker's current preference: a player who changes the checkbox
+   * after dealing has not changed the deck they are holding, and the sheet count above the press
+   * has to describe the file the press produces. On, a final `year: null` card is printed with its
+   * year left blank (`usePdfExport`'s `drawBack`); off, it is left out and counted like any other
+   * excluded card. A provisional year is left out either way.
+   */
+  keepYearless: boolean;
 }
 
 /**
@@ -184,11 +196,13 @@ type CopyState = 'idle' | 'copied' | 'failed';
  *  describe the same `PdfExportState` in two different sets of words.
  *
  *  The `excludedCount` and `nothing-to-print` branches survived the year gate
- *  and are NOT dead code: the gate waits for `year === undefined` to clear,
- *  while `selectPrintableCards` also drops `year === null`. A live deck holds no
- *  null years since the 2026-08-05 reversal, but a RESUMED pre-reversal save
- *  does -- so the two conditions are not the same condition. Under "Print so
- *  far" both are ordinary rather than residual.
+ *  and are NOT dead code: the gate waits for pending AND provisional years to
+ *  clear, while `selectPrintableCards` also drops `year === null` unless the
+ *  session keeps yearless cards. With the option off a live deck holds no null
+ *  years since the 2026-08-05 reversal, but a RESUMED pre-reversal save does --
+ *  so the two conditions are not the same condition. Under "Print so far" both
+ *  are ordinary rather than residual, and a provisional card is always among
+ *  the excluded.
  * ===========================================================================
  */
 function ExportMessage({ state }: { state: PdfExportState }) {
@@ -229,10 +243,11 @@ export function DeckActions({
   isPlaylistSaved,
   deck,
   pendingYearCount,
+  keepYearless,
 }: DeckActionsProps) {
   const copy = useCopy();
-  const { state: pdf, exportDeck } = usePdfExport();
-  const sheets = sheetsForDeck(deck);
+  const { state: pdf, exportDeck } = usePdfExport(keepYearless);
+  const sheets = sheetsForDeck(deck, keepYearless);
   const isDeckResolved = pendingYearCount === 0;
 
   /**
@@ -525,8 +540,8 @@ export function DeckActions({
         is usable at all -- `pdf-sheet.ts` mirrors the columns for LONG-edge binding, and short-edge
         would invert the correction, so it is named here rather than guessed at in code.
 
-        PENDING: no sheet count at all. `sheetsForDeck` counts only the cards that already have a
-        year, so mid-crawl it is a number that would climb while the player read it -- and since the
+        PENDING: no sheet count at all. `sheetsForDeck` counts only the cards that are already
+        printable -- a final year, or a kept yearless card -- so mid-crawl it is a number that would climb while the player read it -- and since the
         press now WAITS for the rest, it would also be describing a deck nobody is going to print.
         Saying what the press will do is more useful than a figure that is about to be wrong.
       */}

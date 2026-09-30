@@ -339,9 +339,10 @@ describe('pdf-sheet', () => {
     //  one screen that is a press away from re-dealing the same deck.
     //
     //  `undefined` is the case that actually happens -- the resolver had not
-    //  reached that card when the player pressed export. `null` cannot reach a
-    //  live deck since the 2026-08-05 reversal, and is excluded anyway: a
-    //  printed card with no year cannot be placed on a timeline.
+    //  reached that card when the player pressed export. With the option OFF
+    //  `null` cannot reach a live deck since the 2026-08-05 reversal, and is
+    //  excluded anyway: a printed card with no year cannot be placed on a
+    //  timeline. (With it ON it is printed -- see below.)
     // ===================================================================
     const deck = [
       { year: 1975 },
@@ -351,7 +352,7 @@ describe('pdf-sheet', () => {
       {}, // no `year` key at all, which is what `JSON.parse` of a save produces
     ];
 
-    const { cards, excludedCount } = selectPrintableCards(deck);
+    const { cards, excludedCount } = selectPrintableCards(deck, { keepYearless: false });
 
     expect(cards).toEqual([{ year: 1975 }, { year: 1999 }]);
     expect(excludedCount).toBe(3);
@@ -361,12 +362,60 @@ describe('pdf-sheet', () => {
     // The printed sheet is in deck order, so cutting it produces a stack in the order played.
     const deck = [{ year: 2001 }, { year: undefined }, { year: 1969 }, { year: 1984 }];
 
-    expect(selectPrintableCards(deck).cards.map((card) => card.year)).toEqual([2001, 1969, 1984]);
+    expect(
+      selectPrintableCards(deck, { keepYearless: false }).cards.map((card) => card.year),
+    ).toEqual([2001, 1969, 1984]);
   });
 
   it('should report nothing excluded for a fully resolved deck', () => {
     const deck = [{ year: 1975 }, { year: 1976 }];
 
-    expect(selectPrintableCards(deck)).toEqual({ cards: deck, excludedCount: 0 });
+    expect(selectPrintableCards(deck, { keepYearless: false })).toEqual({
+      cards: deck,
+      excludedCount: 0,
+    });
+  });
+
+  it('should leave provisional cards out and count them', () => {
+    // The developer's decision (plan.year-fetch-rework-game.md, decision 5): a provisional year
+    // is shown on screen but NEVER printed, "Print so far" included, so nothing on paper can still
+    // change. In both modes.
+    const deck = [
+      { year: 1975 },
+      { year: 1980, yearProvisional: true as const },
+      { year: 1999 },
+      { year: 2001, yearProvisional: true as const },
+    ];
+
+    for (const keepYearless of [false, true]) {
+      const { cards, excludedCount } = selectPrintableCards(deck, { keepYearless });
+
+      expect(cards).toEqual([{ year: 1975 }, { year: 1999 }]);
+      expect(excludedCount).toBe(2);
+    }
+  });
+
+  it('should keep null-year cards only when keepYearless is true', () => {
+    // A kept null is a card the player asked to keep, so it is printed (with a blank year).
+    // Pending cards stay out in both modes.
+    const deck = [{ year: 1975 }, { year: null }, { year: undefined }, { year: null }];
+
+    expect(selectPrintableCards(deck, { keepYearless: true })).toEqual({
+      cards: [{ year: 1975 }, { year: null }, { year: null }],
+      excludedCount: 1,
+    });
+    expect(selectPrintableCards(deck, { keepYearless: false })).toEqual({
+      cards: [{ year: 1975 }],
+      excludedCount: 3,
+    });
+  });
+
+  it('should print nothing from a deck of kept nulls only when the option is off', () => {
+    // `nothing-to-print` is the hook's branch for an empty result; with the option off it is
+    // unchanged, and with it on a deck of kept nulls prints.
+    const deck = [{ year: null }, { year: null }];
+
+    expect(selectPrintableCards(deck, { keepYearless: false }).cards).toHaveLength(0);
+    expect(selectPrintableCards(deck, { keepYearless: true }).cards).toHaveLength(2);
   });
 });

@@ -62,6 +62,12 @@ export const SESSION_STORAGE_KEY = 'jitster:session:v1';
  * other direction is harmless too: an OLDER build reading a new save drops the field, because
  * validation rebuilds the session field by field.
  *
+ * `keepYearless` and `Card.yearProvisional` (plan.year-fetch-rework-game.md, 2026-09-30) did not
+ * bump it either, for the same reason. Both are additive and both have an exact reading when
+ * absent: a save without `keepYearless` was written before the option existed, when every session
+ * dropped its yearless cards (`false`), and a card without `yearProvisional` was written before
+ * the `resolve` stage existed, so its year is final.
+ *
  * A save written on 2026-09-29 may also carry a `shuffleVersion` field, from the one day the
  * shuffle had two algorithms. It is IGNORED on read, never rejected: the save stores the dealt
  * cards rather than the recipe, so the field changes nothing about the resumed deck, and field-by-
@@ -113,6 +119,7 @@ export function toPersistedSession(state: GameState): PersistedSession | null {
     startIndex: state.startIndex,
     isFlipped: state.isFlipped,
     status: state.status,
+    keepYearless: state.keepYearless,
   };
 }
 
@@ -235,6 +242,12 @@ function validateSession(value: unknown): PersistedSession | null {
   // means the payload did not come from this code.
   if (status !== 'preparing' && status !== 'playing' && status !== 'ended') return null;
 
+  // Optional, with an EXACT default, fixed for a v1 payload exactly as `startIndex` is: a v1 save
+  // predates the option by months, so it dropped its yearless cards.
+  const keepYearless =
+    version === SESSION_VERSION_LEGACY ? false : validateKeepYearless(record['keepYearless']);
+  if (keepYearless === null) return null;
+
   // Always reported as the CURRENT version, whichever version came in: a lifted v1 payload is a
   // valid v2 session, and the next `saveSession` writes it back as one.
   return {
@@ -246,7 +259,22 @@ function validateSession(value: unknown): PersistedSession | null {
     startIndex,
     isFlipped,
     status,
+    keepYearless,
   };
+}
+
+/**
+ * Whether the saved session keeps its yearless cards. ABSENT MEANS `false` -- a save written
+ * before the option existed dropped them, as every session did then.
+ *
+ * Present, it must be a boolean. Anything else did not come from this code, and reading it either
+ * way would be a guess about whether this deck's nulls should be dropped on resume -- which is
+ * exactly the kind of guess that silently deletes a third of somebody's game.
+ */
+function validateKeepYearless(value: unknown): boolean | null {
+  if (value === undefined) return false;
+
+  return typeof value === 'boolean' ? value : null;
 }
 
 /**
@@ -337,7 +365,17 @@ function validateCard(value: unknown): Card | null {
   const record = asRecord(value);
   if (!record) return null;
 
-  const { id, title, artist, durationMs, isPlayable, previewUrl, year, yearConfidence } = record;
+  const {
+    id,
+    title,
+    artist,
+    durationMs,
+    isPlayable,
+    previewUrl,
+    year,
+    yearConfidence,
+    yearProvisional,
+  } = record;
 
   if (typeof id !== 'string' || id === '') return null;
   if (typeof title !== 'string' || typeof artist !== 'string') return null;
@@ -350,10 +388,25 @@ function validateCard(value: unknown): Card | null {
   if (year !== undefined && year !== null && typeof year !== 'number') return null;
   if (yearConfidence !== undefined && !isConfidence(yearConfidence)) return null;
 
+  /*
+    `yearProvisional` is legal ONLY as `true` and ONLY beside a numeric year -- the one shape the
+    reducer writes (plan.year-fetch-rework-game.md). Anything else is REJECTED, not ignored.
+
+    Copied explicitly because this function rebuilds a card field by field: without these lines a
+    resumed provisional card would come back without its flag, read as FINAL, and never be
+    verified -- a `resolve`-stage guess promoted to a settled answer by a reload, with nothing on
+    screen to say so. That silent promotion is why an absent flag is exact (a card saved without
+    one is final) while a malformed one cannot be read either way.
+  */
+  if (yearProvisional !== undefined && (yearProvisional !== true || typeof year !== 'number')) {
+    return null;
+  }
+
   const card: Card = { id, title, artist, durationMs, isPlayable };
   if (previewUrl !== undefined) card.previewUrl = previewUrl;
   if (year !== undefined) card.year = year;
   if (yearConfidence !== undefined) card.yearConfidence = yearConfidence;
+  if (yearProvisional === true) card.yearProvisional = true;
 
   return card;
 }

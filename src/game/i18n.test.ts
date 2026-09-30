@@ -95,6 +95,21 @@ describe.each(LOCALES)('the %s catalogue', (locale) => {
     expect(catalogue.copy.welcome.enter).not.toBe(catalogue.copy.landing.start);
   });
 
+  it('should keep the three year-slot notices distinct', () => {
+    // They share one slot under the year (plan.year-fetch-rework-ui.md): "confirming" is
+    // progress, "unconfirmed" a warning, "pending" no year yet. A translation that collapsed two
+    // of them would tell a player a year is final when it is not, or the reverse.
+    const { yearProvisional, yearUnconfirmed, yearPending } = catalogue.copy.card;
+
+    expect(new Set([yearProvisional, yearUnconfirmed, yearPending]).size).toBe(3);
+  });
+
+  it('should keep the keep-yearless label distinct from its hint', () => {
+    // The hint is tied to the checkbox with `aria-describedby`; reading the label twice would
+    // leave a screen-reader player without the reason to tick it.
+    expect(catalogue.copy.landing.keepYearless).not.toBe(catalogue.copy.landing.keepYearlessHint);
+  });
+
   it('should give each of the five playlist rows a distinct label', () => {
     const labels = [0, 1, 2, 3, 4].map((index) => catalogue.copy.landing.playlistLinkLabel(index));
 

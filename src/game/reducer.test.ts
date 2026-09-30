@@ -9,6 +9,7 @@ import {
   isCurrentYearPending,
   pendingYearCount,
   resolvedCount,
+  yearStateOf,
 } from './reducer';
 import { shuffleDeck } from './shuffle';
 import type { GameState, PersistedSession } from './types';
@@ -40,14 +41,33 @@ const CARDS = Array.from({ length: 20 }, (_, i) => card(`t${i}`));
 
 const SEED = 'reducer-test-seed';
 
+/**
+ * The two values of `keepYearless` (plan.year-fetch-rework-game.md), named so a test that depends
+ * on one says which. Every drop and index-shift test passes `DROPS_YEARLESS` explicitly, and each
+ * shape has a `KEEPS_YEARLESS` counterpart; the helpers default to dropping, which is what every
+ * session did before the option existed.
+ */
+const DROPS_YEARLESS = false;
+const KEEPS_YEARLESS = true;
+
 /** A dealt but ungated session: `preparing`, deck shuffled, nothing resolved. */
-function preparing(cards: Card[] = CARDS, seed = SEED): GameState {
-  return gameReducer(initialGameState, { type: 'START', cards, playlists: [PLAYLIST], seed });
+function preparing(cards: Card[] = CARDS, seed = SEED, keepYearless = DROPS_YEARLESS): GameState {
+  return gameReducer(initialGameState, {
+    type: 'START',
+    cards,
+    playlists: [PLAYLIST],
+    seed,
+    keepYearless,
+  });
 }
 
-/** A session past the card-1 gate: card 1 resolved, everything else still `undefined`. */
-function playing(cards: Card[] = CARDS, seed = SEED): GameState {
-  const state = preparing(cards, seed);
+/**
+ * A session past the card-1 gate: card 1 resolved, everything else still `undefined`. With
+ * `KEEPS_YEARLESS` there is no gate -- `START` already went to `playing` -- and card 1 is resolved
+ * anyway, so both modes hand a test the same deck.
+ */
+function playing(cards: Card[] = CARDS, seed = SEED, keepYearless = DROPS_YEARLESS): GameState {
+  const state = preparing(cards, seed, keepYearless);
 
   return gameReducer(state, {
     type: 'YEAR_RESOLVED',
@@ -80,6 +100,7 @@ function preparingFrom(startCardId: string, cards: Card[] = CARDS, seed = SEED):
     playlists: [PLAYLIST],
     seed,
     startCardId,
+    keepYearless: DROPS_YEARLESS,
   });
 }
 
@@ -115,6 +136,7 @@ describe('gameReducer transitions', () => {
       type: 'START',
       cards: CARDS,
       playlists: [PLAYLIST],
+      keepYearless: DROPS_YEARLESS,
     });
 
     expect(state.seed).toMatch(/^[0-9a-f]{16}$/);
@@ -124,7 +146,12 @@ describe('gameReducer transitions', () => {
     // Requirement 2 of the shuffle review ("a different order every game") rests on this, and the
     // format check above cannot see it: a seed cached anywhere between two deals would pass it.
     const deal = () =>
-      gameReducer(initialGameState, { type: 'START', cards: CARDS, playlists: [PLAYLIST] }).seed;
+      gameReducer(initialGameState, {
+        type: 'START',
+        cards: CARDS,
+        playlists: [PLAYLIST],
+        keepYearless: DROPS_YEARLESS,
+      }).seed;
 
     expect(deal()).not.toBe(deal());
   });
@@ -150,6 +177,7 @@ describe('gameReducer transitions', () => {
       cards: [...CARDS].reverse(),
       playlists: [PLAYLIST],
       seed: SEED,
+      keepYearless: DROPS_YEARLESS,
     });
 
     expect(state.deck).toEqual(shuffleDeck(CARDS, SEED));
@@ -189,6 +217,7 @@ describe('gameReducer transitions', () => {
       cards: otherCards,
       playlists: [{ id: 'other', name: 'Other', owner: 'Someone' }],
       seed: 'second',
+      keepYearless: DROPS_YEARLESS,
     });
 
     expect(second.status).toBe('preparing');
@@ -206,6 +235,7 @@ describe('gameReducer transitions', () => {
       cards: CARDS,
       playlists: [PLAYLIST, SECOND_PLAYLIST, THIRD_PLAYLIST],
       seed: SEED,
+      keepYearless: DROPS_YEARLESS,
     });
 
     expect(state.playlists).toEqual([PLAYLIST, SECOND_PLAYLIST, THIRD_PLAYLIST]);
@@ -219,6 +249,7 @@ describe('gameReducer transitions', () => {
       cards: CARDS,
       playlists: [PLAYLIST, SECOND_PLAYLIST, THIRD_PLAYLIST],
       seed: SEED,
+      keepYearless: DROPS_YEARLESS,
     });
 
     const second = gameReducer(first, {
@@ -226,6 +257,7 @@ describe('gameReducer transitions', () => {
       cards: [card('other-1')],
       playlists: [SECOND_PLAYLIST],
       seed: 'second',
+      keepYearless: DROPS_YEARLESS,
     });
 
     expect(second.playlists).toEqual([SECOND_PLAYLIST]);
@@ -293,7 +325,7 @@ describe('gameReducer transitions', () => {
     //  year, so a card without one has nothing to play; the QR working is
     //  not enough to make it a card.
     // ===================================================================
-    const state = playing();
+    const state = playing(CARDS, SEED, DROPS_YEARLESS);
     const targetId = state.deck[5]?.id ?? '';
 
     const next = gameReducer(state, {
@@ -337,7 +369,7 @@ describe('gameReducer transitions', () => {
     // The mirror of "should update every copy": the resolver looks a duplicated id up once, so
     // dropping only the first copy would leave a yearless card in the deck for the rest of the
     // game -- the exact thing the reversal removes.
-    const state = playing([card('dup'), card('dup'), card('other')], 'dup-seed');
+    const state = playing([card('dup'), card('dup'), card('other')], 'dup-seed', DROPS_YEARLESS);
 
     const next = gameReducer(state, {
       type: 'YEAR_RESOLVED',
@@ -352,7 +384,7 @@ describe('gameReducer transitions', () => {
   it('should move the current index back when a dropped card sits behind the player', () => {
     // The player must stay on the same CARD, not on the same index. Without the shift, dropping a
     // card from behind them silently skips the one they were about to see.
-    let state = playing();
+    let state = playing(CARDS, SEED, DROPS_YEARLESS);
     state = gameReducer(state, { type: 'NEXT' });
     state = gameReducer(state, { type: 'NEXT' });
 
@@ -374,7 +406,7 @@ describe('gameReducer transitions', () => {
   it('should leave the current index alone when a dropped card is still ahead', () => {
     // The common case by far: the crawl runs ahead of the player, so almost every drop happens to
     // a card nobody has reached.
-    let state = playing();
+    let state = playing(CARDS, SEED, DROPS_YEARLESS);
     state = gameReducer(state, { type: 'NEXT' });
 
     const currentId = currentCard(state)?.id;
@@ -401,7 +433,7 @@ describe('gameReducer transitions', () => {
     //  that just left. Carried over, the incoming card would mount already
     //  revealed and hand the player its year for free.
     // ===================================================================
-    let state = playing();
+    let state = playing(CARDS, SEED, DROPS_YEARLESS);
     state = gameReducer(state, { type: 'NEXT' });
     state = gameReducer(state, { type: 'FLIP' });
 
@@ -426,7 +458,7 @@ describe('gameReducer transitions', () => {
     // played without their asking -- stepping back is the player's move (`PREVIOUS`, since
     // 2026-09-18), never the resolver's. `NEXT` past the last card ends the session; so does losing
     // the last card.
-    let state = playing([card('a'), card('b')], 'two');
+    let state = playing([card('a'), card('b')], 'two', DROPS_YEARLESS);
     state = gameReducer(state, { type: 'NEXT' });
 
     const lastId = currentCard(state)?.id ?? '';
@@ -446,7 +478,7 @@ describe('gameReducer transitions', () => {
     // A whole deck of tracks MusicBrainz knows nothing about. Rare, not impossible -- and there is
     // nothing to play, so `ended` is the only honest destination. Left in `preparing` it would be a
     // loading screen waiting on a lookup that can never arrive.
-    const state = preparing([card('only')], 'one');
+    const state = preparing([card('only')], 'one', DROPS_YEARLESS);
     const preparedId = state.deck[0]?.id ?? '';
 
     const next = gameReducer(state, {
@@ -598,6 +630,7 @@ describe('gameReducer transitions', () => {
       startIndex: 1,
       isFlipped: true,
       status: 'playing',
+      keepYearless: DROPS_YEARLESS,
     };
 
     const state = gameReducer(initialGameState, { type: 'RESUME', session });
@@ -610,6 +643,7 @@ describe('gameReducer transitions', () => {
       currentIndex: 2,
       startIndex: 1,
       isFlipped: true,
+      keepYearless: DROPS_YEARLESS,
       // Re-derived by the next crawl rather than restored: it describes the server's
       // configuration, not the session.
       yearLookupsUnavailable: false,
@@ -628,6 +662,7 @@ describe('gameReducer transitions', () => {
       startIndex: 0,
       isFlipped: false,
       status: 'playing',
+      keepYearless: DROPS_YEARLESS,
     };
 
     const state = gameReducer(initialGameState, { type: 'RESUME', session });
@@ -669,6 +704,7 @@ describe('gameReducer transitions', () => {
       startIndex: 0,
       isFlipped: false,
       status: 'playing',
+      keepYearless: DROPS_YEARLESS,
     };
 
     const state = gameReducer(initialGameState, { type: 'RESUME', session });
@@ -689,6 +725,7 @@ describe('gameReducer transitions', () => {
       startIndex: 0,
       isFlipped: false,
       status: 'playing',
+      keepYearless: DROPS_YEARLESS,
     };
 
     const state = gameReducer(initialGameState, { type: 'RESUME', session });
@@ -853,6 +890,7 @@ describe('gameReducer startIndex', () => {
       startIndex: 3,
       isFlipped: false,
       status: 'playing',
+      keepYearless: DROPS_YEARLESS,
     };
 
     const state = gameReducer(initialGameState, { type: 'RESUME', session });
@@ -874,6 +912,7 @@ describe('gameReducer startIndex', () => {
       startIndex: 1,
       isFlipped: false,
       status: 'playing',
+      keepYearless: DROPS_YEARLESS,
     };
 
     const state = gameReducer(initialGameState, { type: 'RESUME', session });
@@ -911,7 +950,7 @@ describe('gameReducer card-1 gate', () => {
     //  Expressed as a property of the deck instead: the gate opens when the
     //  first card HAS a year.
     // ===================================================================
-    const state = preparing();
+    const state = preparing(CARDS, SEED, DROPS_YEARLESS);
     const droppedId = firstCardId(state);
 
     const next = gameReducer(state, {
@@ -928,7 +967,7 @@ describe('gameReducer card-1 gate', () => {
 
   it('should open the gate once the replacement first card resolves', () => {
     // The other half: the wait after a dropped card 1 is one more lookup, not an indefinite one.
-    let state = preparing();
+    let state = preparing(CARDS, SEED, DROPS_YEARLESS);
 
     state = gameReducer(state, {
       type: 'YEAR_RESOLVED',
@@ -971,20 +1010,21 @@ describe('gameReducer card-1 gate', () => {
     expect(next.status).toBe('playing');
   });
 
-  it('should skip preparing entirely when card 1 is already resolved', () => {
+  it('should skip preparing entirely when card 1 is already final', () => {
     // ===================================================================
     //  THE RESTART CASE, and it was a hang before this branch existed.
     //
     //  Phase 6's Restart re-deals `state.deck`, and a session can only have
-    //  LEFT `preparing` because card 1 resolved -- so every restart arrives
-    //  with a resolved card 1. `resolver.ts` correctly refuses to look up a
-    //  card that already has a year (it goes straight into `settled`), which
-    //  means no `YEAR_RESOLVED` is ever dispatched and nothing else can open
-    //  the gate. The loading screen stayed up forever.
+    //  LEFT `preparing` because card 1's answer arrived -- so most restarts
+    //  arrive with a resolved card 1. The resolver correctly refuses to look
+    //  up a card whose answer is already final, which means no `YEAR_RESOLVED`
+    //  is ever dispatched and nothing else can open the gate. The loading
+    //  screen stayed up forever. Found 2026-08-05 via `App.test.tsx`'s
+    //  restart test.
     //
-    //  `year !== undefined` IS a completed lookup -- that is what the three
-    //  states of `Card.year` mean -- so there is nothing for the gate to wait
-    //  for. Found 2026-08-05 via `App.test.tsx`'s restart test.
+    //  The premise is narrower since the provider vote: a FINAL year means
+    //  there is nothing to wait for; a PROVISIONAL one does not (see "should
+    //  keep gating while the start card is only provisional").
     // ===================================================================
     const resolved = CARDS.map((c) => ({ ...c, year: 1975, yearConfidence: 'high' as const }));
 
@@ -998,7 +1038,7 @@ describe('gameReducer card-1 gate', () => {
     // and left `playing` it would be a game screen with no card to render.
     const resolved = CARDS.map((c) => ({ ...c, year: null, yearConfidence: 'none' as const }));
 
-    const state = preparing(resolved);
+    const state = preparing(resolved, SEED, DROPS_YEARLESS);
 
     expect(state.deck).toHaveLength(0);
     expect(state.status).toBe('ended');
@@ -1016,7 +1056,7 @@ describe('gameReducer card-1 gate', () => {
       card('drop-2', { year: null, yearConfidence: 'none' }),
     ];
 
-    const state = preparing(mixed, 'mixed-seed');
+    const state = preparing(mixed, 'mixed-seed', DROPS_YEARLESS);
 
     expect(state.deck.map((c) => c.id).sort()).toEqual(['keep-1', 'keep-2']);
     // Card 1 of the filtered deck is resolved, so there is nothing to gate on.
@@ -1207,17 +1247,18 @@ describe('gameReducer card-1 gate', () => {
     // "Not looked up yet" (`undefined`) versus "looked up, nothing found" (`null`). Collapsing the
     // two would spin the pending slot forever on a card that has its final answer.
     //
-    // Built as a state LITERAL rather than by dispatching a null result, because since the
-    // 2026-08-05 reversal a dispatch cannot produce this deck -- the card is dropped instead. The
-    // selector's contract is unchanged and still worth pinning: `CardRevealSide` keeps its third
-    // state, and this is the shape it renders for.
-    const base = playing();
-    const state: GameState = {
-      ...base,
-      deck: [card('yearless', { year: null, yearConfidence: 'none' })],
-      currentIndex: 0,
-    };
+    // Dispatched through a session that KEEPS yearless cards, which is how a live deck comes to
+    // hold one again (plan.year-fetch-rework-game.md). Between the 2026-08-05 reversal and the
+    // option this had to be a state literal, since every null result dropped its card.
+    let state = gameReducer(playing(CARDS, SEED, KEEPS_YEARLESS), { type: 'NEXT' });
+    state = gameReducer(state, {
+      type: 'YEAR_RESOLVED',
+      cardId: currentCard(state)?.id ?? '',
+      year: null,
+      confidence: 'none',
+    });
 
+    expect(currentCard(state)?.year).toBeNull();
     expect(isCurrentYearPending(state)).toBe(false);
   });
 });
@@ -1265,7 +1306,7 @@ describe('gameReducer selectors', () => {
     // The selector still treats a `null` year as a completed lookup -- that is its contract, and a
     // deck holding one would count it. But since the 2026-08-05 reversal a null result REMOVES the
     // card, so the count does not move and the deck shrinks by one instead.
-    const state = playing();
+    const state = playing(CARDS, SEED, DROPS_YEARLESS);
 
     const next = gameReducer(state, {
       type: 'YEAR_RESOLVED',
@@ -1297,7 +1338,7 @@ describe('gameReducer selectors', () => {
   it('should reach zero pending when a lookup finds nothing, because the card leaves', () => {
     // The case that makes the gate terminate. A null result does not linger as a pending card --
     // it takes the card with it -- so a deck MusicBrainz can only partly place still finishes.
-    let state = playing([card('a'), card('b')], 'two');
+    let state = playing([card('a'), card('b')], 'two', DROPS_YEARLESS);
     expect(pendingYearCount(state)).toBe(1);
 
     // By POSITION, not by id: `playing` resolves whichever card the shuffle put first, and which
@@ -1352,5 +1393,578 @@ describe('gameReducer selectors', () => {
     expect(cardsPlayed(initialGameState)).toBe(0);
     expect(resolvedCount(initialGameState)).toBe(0);
     expect(pendingYearCount(initialGameState)).toBe(0);
+  });
+});
+
+// ===========================================================================
+//  PROVISIONAL YEARS (plan.year-fetch-rework-game.md)
+//
+//  `/api/year`'s `resolve` stage may answer before its `verify` stage. The
+//  reducer shows that year, flags it `yearProvisional`, and lets the final
+//  answer replace it -- on every card, the current and revealed one included.
+// ===========================================================================
+
+/** The provisional arm of `YEAR_RESOLVED`: always a number, always `low`. */
+function provisional(cardId: string, year: number) {
+  return { type: 'YEAR_RESOLVED', cardId, year, confidence: 'low', provisional: true } as const;
+}
+
+describe('gameReducer provisional years', () => {
+  it('should write a provisional year and mark it provisional', () => {
+    const state = playing();
+    const targetId = idAt(state, 5);
+
+    const next = gameReducer(state, provisional(targetId, 1969));
+
+    expect(next.deck.find((c) => c.id === targetId)).toMatchObject({
+      year: 1969,
+      yearConfidence: 'low',
+      yearProvisional: true,
+    });
+  });
+
+  it('should not drop a card on a provisional answer', () => {
+    // A provisional answer always carries a year, so it can never take a card away -- only the
+    // final answer can. Nothing else moves either: no index, no flip, no status.
+    let state = gameReducer(playing(CARDS, SEED, DROPS_YEARLESS), { type: 'NEXT' });
+    state = gameReducer(state, { type: 'FLIP' });
+
+    const next = gameReducer(state, provisional(idAt(state, 1), 1984));
+
+    expect(next.deck).toHaveLength(state.deck.length);
+    expect(next.currentIndex).toBe(state.currentIndex);
+    expect(next.isFlipped).toBe(true);
+    expect(next.status).toBe('playing');
+  });
+
+  it('should update every copy of a duplicated id with the provisional year', () => {
+    const state = playing([card('dup'), card('dup'), card('other')], 'dup-seed');
+
+    const next = gameReducer(state, provisional('dup', 1991));
+
+    expect(
+      next.deck.filter((c) => c.id === 'dup').every((c) => c.year === 1991 && c.yearProvisional),
+    ).toBe(true);
+  });
+
+  it('should replace a provisional year with a different final year on the current card', () => {
+    // The revealed case: the player flipped a card showing its provisional year, and verification
+    // then disagreed. The year changes in front of them -- plan 4's "confirming" line is what
+    // warns them it might -- and the flip survives, because the card did not change.
+    let state = gameReducer(playing(), { type: 'NEXT' });
+    const currentId = currentCard(state)?.id ?? '';
+    state = gameReducer(state, provisional(currentId, 1983));
+    state = gameReducer(state, { type: 'FLIP' });
+
+    const next = gameReducer(state, {
+      type: 'YEAR_RESOLVED',
+      cardId: currentId,
+      year: 1982,
+      confidence: 'high',
+    });
+
+    expect(currentCard(next)?.id).toBe(currentId);
+    expect(currentCard(next)?.year).toBe(1982);
+    expect(currentCard(next)?.yearConfidence).toBe('high');
+    expect(currentCard(next)).not.toHaveProperty('yearProvisional');
+    expect(next.isFlipped).toBe(true);
+  });
+
+  it('should replace a provisional year with the same final year and clear the flag', () => {
+    const base = playing();
+    const targetId = idAt(base, 4);
+    const state = gameReducer(base, provisional(targetId, 1977));
+
+    const next = gameReducer(state, {
+      type: 'YEAR_RESOLVED',
+      cardId: targetId,
+      year: 1977,
+      confidence: 'low',
+    });
+
+    const updated = next.deck.find((c) => c.id === targetId);
+    expect(updated).toMatchObject({ year: 1977, yearConfidence: 'low' });
+    // Absent, not `false`: the flag exists only as `true`, which is what a save validates.
+    expect(updated).not.toHaveProperty('yearProvisional');
+    expect(yearStateOf(updated)).toBe('final');
+  });
+
+  it('should ignore a provisional answer for a card that is already final', () => {
+    // The two stages run in separate lanes, and after a resume or a retry their answers can land in
+    // either order. A late provisional year must never un-verify a card -- and declining returns the
+    // SAME object, so it costs no re-render.
+    const state = playing();
+
+    expect(gameReducer(state, provisional(firstCardId(state), 1999))).toBe(state);
+  });
+
+  it('should ignore a provisional answer for a card whose kept null is final', () => {
+    let state = playing(CARDS, SEED, KEEPS_YEARLESS);
+    const targetId = idAt(state, 3);
+    state = gameReducer(state, {
+      type: 'YEAR_RESOLVED',
+      cardId: targetId,
+      year: null,
+      confidence: 'none',
+    });
+
+    expect(gameReducer(state, provisional(targetId, 1999))).toBe(state);
+  });
+
+  it('should ignore a provisional answer for an unknown card id or after END', () => {
+    const state = playing();
+    expect(gameReducer(state, provisional('not-in-this-deck', 1999))).toBe(state);
+
+    const ended = gameReducer(state, { type: 'END' });
+    expect(gameReducer(ended, provisional(idAt(ended, 2), 1999))).toBe(ended);
+  });
+});
+
+// ===========================================================================
+//  THE CARD-1 GATE WAITS FOR A FINAL ANSWER (option OFF)
+// ===========================================================================
+
+describe('gameReducer card-1 gate and provisional years', () => {
+  it('should keep gating while the start card is only provisional', () => {
+    // A provisional year may still turn into a final null and take the card away, so the player
+    // must not land on it yet. This is the premise the old "skip preparing when card 1 is already
+    // resolved" test no longer has: a year is not enough, it has to be final.
+    const state = preparing(CARDS, SEED, DROPS_YEARLESS);
+
+    const next = gameReducer(state, provisional(firstCardId(state), 1975));
+
+    expect(next.status).toBe('preparing');
+    expect(currentCard(next)?.year).toBe(1975);
+  });
+
+  it('should keep gating a re-dealt deck whose start card is still provisional', () => {
+    // Restart re-deals `state.deck`, and a card still awaiting `verify` keeps its flag on the way
+    // through START. Without this, a restart would skip the gate onto a card that may yet drop.
+    const firstId = firstCardId(preparing());
+    const redealt = CARDS.map((c) =>
+      c.id === firstId
+        ? { ...c, year: 1975, yearConfidence: 'low' as const, yearProvisional: true as const }
+        : { ...c, year: 1980, yearConfidence: 'high' as const },
+    );
+
+    const state = preparing(redealt, SEED, DROPS_YEARLESS);
+
+    expect(firstCardId(state)).toBe(firstId);
+    expect(state.status).toBe('preparing');
+  });
+
+  it("should open the gate when the start card's answer becomes final", () => {
+    let state = preparing(CARDS, SEED, DROPS_YEARLESS);
+    const firstId = firstCardId(state);
+    state = gameReducer(state, provisional(firstId, 1975));
+
+    const next = gameReducer(state, {
+      type: 'YEAR_RESOLVED',
+      cardId: firstId,
+      year: 1975,
+      confidence: 'high',
+    });
+
+    expect(next.status).toBe('playing');
+  });
+
+  it("should move the gate to the next card when the start card's final answer is null", () => {
+    let state = preparing(CARDS, SEED, DROPS_YEARLESS);
+    const firstId = firstCardId(state);
+    const secondId = idAt(state, 1);
+    state = gameReducer(state, provisional(firstId, 1975));
+
+    state = gameReducer(state, {
+      type: 'YEAR_RESOLVED',
+      cardId: firstId,
+      year: null,
+      confidence: 'none',
+    });
+
+    // Verification found nothing after all: the card leaves and the gate waits on its successor.
+    expect(state.status).toBe('preparing');
+    expect(firstCardId(state)).toBe(secondId);
+
+    state = gameReducer(state, provisional(secondId, 1990));
+    expect(state.status).toBe('preparing');
+
+    state = gameReducer(state, {
+      type: 'YEAR_RESOLVED',
+      cardId: secondId,
+      year: 1990,
+      confidence: 'low',
+    });
+    expect(state.status).toBe('playing');
+  });
+});
+
+// ===========================================================================
+//  keepYearless (plan.year-fetch-rework-game.md, spike §12.8)
+//
+//  The picker's "Keep cards with no year found". ON: nothing gates, and a
+//  final null keeps its card. Most tests here are the ON counterpart of a
+//  drop or index-shift shape above.
+// ===========================================================================
+
+describe('gameReducer with keepYearless', () => {
+  it('should record keepYearless on START, both ways', () => {
+    expect(preparing(CARDS, SEED, KEEPS_YEARLESS).keepYearless).toBe(true);
+    expect(preparing(CARDS, SEED, DROPS_YEARLESS).keepYearless).toBe(false);
+    expect(initialGameState.keepYearless).toBe(false);
+  });
+
+  it('should go straight to playing when keepYearless is true', () => {
+    // The gate exists so the player never lands on a card about to be dropped. Nothing is ever
+    // dropped here, so there is nothing to wait for -- the year slot shows its pending state.
+    const state = preparing(CARDS, SEED, KEEPS_YEARLESS);
+
+    expect(state.status).toBe('playing');
+    expect(currentCard(state)?.year).toBeUndefined();
+  });
+
+  it('should go straight to playing from a link start card when keepYearless is true', () => {
+    const state = gameReducer(initialGameState, {
+      type: 'START',
+      cards: CARDS,
+      playlists: [PLAYLIST],
+      seed: SEED,
+      startCardId: dealtIdAt(6),
+      keepYearless: KEEPS_YEARLESS,
+    });
+
+    expect(state.status).toBe('playing');
+    expect(state.currentIndex).toBe(6);
+  });
+
+  it('should keep a card whose final answer is null when keepYearless is true', () => {
+    const state = playing(CARDS, SEED, KEEPS_YEARLESS);
+    const targetId = idAt(state, 5);
+
+    const next = gameReducer(state, {
+      type: 'YEAR_RESOLVED',
+      cardId: targetId,
+      year: null,
+      confidence: 'none',
+    });
+
+    expect(next.deck).toHaveLength(state.deck.length);
+    expect(next.deck.find((c) => c.id === targetId)).toMatchObject({
+      year: null,
+      yearConfidence: 'none',
+    });
+    expect(next.currentIndex).toBe(state.currentIndex);
+  });
+
+  it('should keep a provisional card whose final answer is null, and clear its flag', () => {
+    let state = playing(CARDS, SEED, KEEPS_YEARLESS);
+    const targetId = idAt(state, 5);
+    state = gameReducer(state, provisional(targetId, 1988));
+
+    const next = gameReducer(state, {
+      type: 'YEAR_RESOLVED',
+      cardId: targetId,
+      year: null,
+      confidence: 'none',
+    });
+
+    const kept = next.deck.find((c) => c.id === targetId);
+    expect(kept?.year).toBeNull();
+    expect(kept).not.toHaveProperty('yearProvisional');
+    expect(yearStateOf(kept)).toBe('final');
+  });
+
+  it('should keep every copy of a duplicated id whose final answer is null', () => {
+    const state = playing([card('dup'), card('dup'), card('other')], 'dup-seed', KEEPS_YEARLESS);
+
+    const next = gameReducer(state, {
+      type: 'YEAR_RESOLVED',
+      cardId: 'dup',
+      year: null,
+      confidence: 'none',
+    });
+
+    const copies = next.deck.filter((c) => c.id === 'dup');
+    expect(copies).toHaveLength(2);
+    expect(copies.every((c) => c.year === null)).toBe(true);
+  });
+
+  it('should leave the current index alone when a null lands behind the player', () => {
+    let state = playing(CARDS, SEED, KEEPS_YEARLESS);
+    state = gameReducer(state, { type: 'NEXT' });
+    state = gameReducer(state, { type: 'NEXT' });
+    const currentId = currentCard(state)?.id;
+
+    const next = gameReducer(state, {
+      type: 'YEAR_RESOLVED',
+      cardId: idAt(state, 0),
+      year: null,
+      confidence: 'none',
+    });
+
+    expect(next.currentIndex).toBe(2);
+    expect(currentCard(next)?.id).toBe(currentId);
+  });
+
+  it('should keep the current card and its flip when its final answer is null', () => {
+    // With the option off, this card leaves and the flip is reset so the incoming card is not
+    // revealed for free. With it on, the card stays: the player keeps looking at it, revealed, now
+    // saying no year was found.
+    let state = playing(CARDS, SEED, KEEPS_YEARLESS);
+    state = gameReducer(state, { type: 'NEXT' });
+    state = gameReducer(state, { type: 'FLIP' });
+    const currentId = currentCard(state)?.id ?? '';
+
+    const next = gameReducer(state, {
+      type: 'YEAR_RESOLVED',
+      cardId: currentId,
+      year: null,
+      confidence: 'none',
+    });
+
+    expect(currentCard(next)?.id).toBe(currentId);
+    expect(currentCard(next)?.year).toBeNull();
+    expect(next.isFlipped).toBe(true);
+  });
+
+  it('should keep playing when the current last card gets a null', () => {
+    let state = playing([card('a'), card('b')], 'two', KEEPS_YEARLESS);
+    state = gameReducer(state, { type: 'NEXT' });
+
+    const next = gameReducer(state, {
+      type: 'YEAR_RESOLVED',
+      cardId: currentCard(state)?.id ?? '',
+      year: null,
+      confidence: 'none',
+    });
+
+    expect(next.status).toBe('playing');
+    expect(next.deck).toHaveLength(2);
+  });
+
+  it('should not end a one-card deck whose only card gets a null', () => {
+    const state = preparing([card('only')], 'one', KEEPS_YEARLESS);
+
+    const next = gameReducer(state, {
+      type: 'YEAR_RESOLVED',
+      cardId: 'only',
+      year: null,
+      confidence: 'none',
+    });
+
+    expect(next.deck).toHaveLength(1);
+    expect(next.status).toBe('playing');
+  });
+
+  it('should leave startIndex alone when a card before it gets a null', () => {
+    let state = gameReducer(initialGameState, {
+      type: 'START',
+      cards: CARDS,
+      playlists: [PLAYLIST],
+      seed: SEED,
+      startCardId: dealtIdAt(5),
+      keepYearless: KEEPS_YEARLESS,
+    });
+    state = gameReducer(state, {
+      type: 'YEAR_RESOLVED',
+      cardId: idAt(state, 2),
+      year: null,
+      confidence: 'none',
+    });
+
+    expect(state.startIndex).toBe(5);
+    expect(state.currentIndex).toBe(5);
+  });
+
+  it('should deal yearless cards rather than filtering them when keepYearless is true', () => {
+    // The START counterpart of "should filter yearless cards out of a re-dealt deck": a Restart of a
+    // session that kept its nulls re-deals them.
+    const mixed = [
+      card('keep-1', { year: 1975, yearConfidence: 'high' }),
+      card('null-1', { year: null, yearConfidence: 'none' }),
+      card('keep-2', { year: 1969, yearConfidence: 'low' }),
+    ];
+
+    const state = preparing(mixed, 'mixed-seed', KEEPS_YEARLESS);
+
+    expect(state.deck.map((c) => c.id).sort()).toEqual(['keep-1', 'keep-2', 'null-1']);
+    expect(state.status).toBe('playing');
+  });
+
+  it('should deal a deck of nothing but yearless cards when keepYearless is true', () => {
+    const yearless = CARDS.map((c) => ({ ...c, year: null, yearConfidence: 'none' as const }));
+
+    const state = preparing(yearless, SEED, KEEPS_YEARLESS);
+
+    expect(state.deck).toHaveLength(CARDS.length);
+    expect(state.status).toBe('playing');
+  });
+
+  it("should restart with the session's keepYearless", () => {
+    // `App.tsx`'s `handleRestart` re-deals `state.deck` with `state.keepYearless`. The option must
+    // survive (a kept null stays kept), and so must a provisional flag, or every card still
+    // awaiting `verify` would turn final on a restart and never be verified.
+    let state = playing(CARDS, SEED, KEEPS_YEARLESS);
+    const keptId = idAt(state, 2);
+    const provisionalId = idAt(state, 3);
+    state = gameReducer(state, {
+      type: 'YEAR_RESOLVED',
+      cardId: keptId,
+      year: null,
+      confidence: 'none',
+    });
+    state = gameReducer(state, provisional(provisionalId, 1966));
+
+    const restarted = gameReducer(state, {
+      type: 'START',
+      cards: state.deck,
+      playlists: state.playlists,
+      keepYearless: state.keepYearless,
+    });
+
+    expect(restarted.keepYearless).toBe(true);
+    expect(restarted.deck).toHaveLength(state.deck.length);
+    expect(restarted.deck.find((c) => c.id === keptId)?.year).toBeNull();
+    expect(restarted.deck.find((c) => c.id === provisionalId)?.yearProvisional).toBe(true);
+
+    // And the other way round: a dropping session restarts as a dropping session.
+    const dropping = playing(CARDS, SEED, DROPS_YEARLESS);
+    const redealt = gameReducer(dropping, {
+      type: 'START',
+      cards: dropping.deck,
+      playlists: dropping.playlists,
+      keepYearless: dropping.keepYearless,
+    });
+    expect(redealt.keepYearless).toBe(false);
+  });
+});
+
+describe('gameReducer RESUME and keepYearless', () => {
+  /** A save holding a null before the player's card, and a provisional card. */
+  function savedSession(keepYearless: boolean): PersistedSession {
+    return {
+      version: 2,
+      playlists: [PLAYLIST],
+      seed: 'persisted-seed',
+      deck: [
+        card('a', { year: 1975, yearConfidence: 'high' }),
+        card('kept', { year: null, yearConfidence: 'none' }),
+        card('maybe', { year: 1980, yearConfidence: 'low', yearProvisional: true }),
+        card('here'),
+      ],
+      currentIndex: 3,
+      startIndex: 0,
+      isFlipped: false,
+      status: 'playing',
+      keepYearless,
+    };
+  }
+
+  it('should keep yearless cards on resume when the save keeps them', () => {
+    const state = gameReducer(initialGameState, {
+      type: 'RESUME',
+      session: savedSession(KEEPS_YEARLESS),
+    });
+
+    expect(state.keepYearless).toBe(true);
+    expect(state.deck.map((c) => c.id)).toEqual(['a', 'kept', 'maybe', 'here']);
+    expect(state.currentIndex).toBe(3);
+    expect(currentCard(state)?.id).toBe('here');
+  });
+
+  it('should drop yearless cards on resume when the save drops them, keeping provisional ones', () => {
+    const state = gameReducer(initialGameState, {
+      type: 'RESUME',
+      session: savedSession(DROPS_YEARLESS),
+    });
+
+    expect(state.keepYearless).toBe(false);
+    expect(state.deck.map((c) => c.id)).toEqual(['a', 'maybe', 'here']);
+    expect(currentCard(state)?.id).toBe('here');
+    // Resumed exactly as saved, so the resolver sends it straight to `verify`.
+    expect(state.deck.find((c) => c.id === 'maybe')?.yearProvisional).toBe(true);
+  });
+
+  it('should read a save without keepYearless as false', () => {
+    // `loadSession()` supplies the default; this pins that the reducer lands on the same side when
+    // handed a session that lacks the field anyway.
+    const legacy: Record<string, unknown> = { ...savedSession(KEEPS_YEARLESS) };
+    delete legacy['keepYearless'];
+
+    const state = gameReducer(initialGameState, {
+      type: 'RESUME',
+      session: legacy as unknown as PersistedSession,
+    });
+
+    expect(state.keepYearless).toBe(false);
+    expect(state.deck.some((c) => c.year === null)).toBe(false);
+  });
+
+  it('should not end a resumed all-yearless session that keeps its yearless cards', () => {
+    const session: PersistedSession = {
+      ...savedSession(KEEPS_YEARLESS),
+      deck: [card('x', { year: null, yearConfidence: 'none' })],
+      currentIndex: 0,
+    };
+
+    const state = gameReducer(initialGameState, { type: 'RESUME', session });
+
+    expect(state.deck).toHaveLength(1);
+    expect(state.status).toBe('playing');
+  });
+});
+
+describe('yearStateOf and the year selectors', () => {
+  it('should read all three states', () => {
+    expect(yearStateOf(card('a'))).toBe('pending');
+    expect(
+      yearStateOf(card('b', { year: 1980, yearConfidence: 'low', yearProvisional: true })),
+    ).toBe('provisional');
+    expect(yearStateOf(card('c', { year: 1980, yearConfidence: 'high' }))).toBe('final');
+    // A kept null is final: every provider was asked.
+    expect(yearStateOf(card('d', { year: null, yearConfidence: 'none' }))).toBe('final');
+    // A missing card is pending, which is what keeps an empty slot from opening a gate.
+    expect(yearStateOf(undefined)).toBe('pending');
+  });
+
+  it('should count a provisional card as pending, but not report the current card pending', () => {
+    // ===================================================================
+    //  THE TWO SELECTORS DISAGREE HERE ON PURPOSE.
+    //
+    //  The year slot SHOWS a provisional year, so it is not pending there;
+    //  the PDF must wait for verification, so it is pending in the count.
+    // ===================================================================
+    let state = gameReducer(playing(), { type: 'NEXT' });
+    const currentId = currentCard(state)?.id ?? '';
+    const before = pendingYearCount(state);
+
+    state = gameReducer(state, provisional(currentId, 1988));
+
+    expect(isCurrentYearPending(state)).toBe(false);
+    expect(pendingYearCount(state)).toBe(before);
+    expect(resolvedCount(state)).toBe(1);
+
+    state = gameReducer(state, {
+      type: 'YEAR_RESOLVED',
+      cardId: currentId,
+      year: 1988,
+      confidence: 'high',
+    });
+
+    expect(pendingYearCount(state)).toBe(before - 1);
+    expect(resolvedCount(state)).toBe(2);
+  });
+
+  it('should count a kept null as resolved', () => {
+    let state = playing(CARDS, SEED, KEEPS_YEARLESS);
+
+    state = gameReducer(state, {
+      type: 'YEAR_RESOLVED',
+      cardId: idAt(state, 7),
+      year: null,
+      confidence: 'none',
+    });
+
+    expect(resolvedCount(state)).toBe(2);
+    expect(pendingYearCount(state)).toBe(CARDS.length - 2);
   });
 });

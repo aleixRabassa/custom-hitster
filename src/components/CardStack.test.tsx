@@ -59,7 +59,7 @@ function stackElement(deck: Card[], currentIndex: number) {
       deck={deck}
       currentIndex={currentIndex}
       isFlipped={false}
-      isYearPending={false}
+
       onFlip={vi.fn()}
       onNext={vi.fn()}
       onPrevious={vi.fn()}
@@ -348,7 +348,7 @@ describe('CardStack', () => {
         deck={deck}
         currentIndex={1}
         isFlipped={false}
-        isYearPending={false}
+
         onFlip={vi.fn()}
         onNext={vi.fn()}
         onPrevious={vi.fn()}
@@ -388,7 +388,7 @@ describe('CardStack', () => {
         deck={[highConfidenceCard, lowConfidenceCard]}
         currentIndex={1}
         isFlipped={false}
-        isYearPending={false}
+
         onFlip={vi.fn()}
         onNext={vi.fn()}
         onPrevious={vi.fn()}
@@ -549,7 +549,7 @@ describe('CardStack', () => {
         deck={[highConfidenceCard, duplicateIdCardA, duplicateIdCardB]}
         currentIndex={2}
         isFlipped={false}
-        isYearPending={false}
+
         onFlip={vi.fn()}
         onNext={vi.fn()}
         onPrevious={vi.fn()}

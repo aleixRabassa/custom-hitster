@@ -98,7 +98,8 @@ export const PLAYLIST_ERROR_MESSAGES: ErrorMessages = {
   /**
    * The deck was dealt, every year lookup came back empty, and the deck emptied.
    *
-   * A card whose lookup finds nothing is REMOVED (`gameReducer`, `YEAR_RESOLVED`), because a Hitster
+   * With the session's `keepYearless` off, a card whose FINAL answer is no year is REMOVED
+   * (`gameReducer`, `YEAR_RESOLVED`; with it on the card stays, so this cannot fire), because a Hitster
    * card is placed on a timeline by its year and there is nothing to play without one. When that
    * happens to every card there is no game, so the player is returned here rather than shown an end
    * screen reading "Deck finished — 0 cards", which is what they got before and which reads as a

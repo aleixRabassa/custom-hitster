@@ -17,6 +17,7 @@ const SUCCESS: YearLookupResult = {
   cached: false,
   cleanedTitle: 'Bohemian Rhapsody',
   stripped: { remaster: true, live: false, feature: false, version: false },
+  final: true,
 };
 
 /** No `Headers` class in the node environment, and none needed: the client only reads `get`. */
@@ -86,7 +87,7 @@ describe('lookupYear', () => {
   it('should build the query from title, artist and durationMs', () => {
     const { fetchImpl, urls } = stubFetch();
 
-    return lookupYear(TRACK, { fetchImpl }).then(() => {
+    return lookupYear(TRACK, { fetchImpl, stage: 'resolve' }).then(() => {
       const url = urls[0] ?? '';
 
       expect(url.startsWith('/api/year?')).toBe(true);
@@ -96,11 +97,24 @@ describe('lookupYear', () => {
     });
   });
 
+  it('should send the stage', async () => {
+    // ALWAYS sent (plan.year-fetch-rework-game.md step 3): a stage-less request reaches the
+    // server's legacy MusicBrainz-only path, whose body has no `final`, so this client must never
+    // make one. Both values, so neither is hard-coded.
+    for (const stage of ['resolve', 'verify'] as const) {
+      const { fetchImpl, urls } = stubFetch();
+
+      await lookupYear(TRACK, { fetchImpl, stage });
+
+      expect(queryOf(urls[0] ?? '').get('stage')).toBe(stage);
+    }
+  });
+
   it('should not call fetch with the options object as its receiver', async () => {
     // The regression test for the browser-only "Illegal invocation" failure. Going back to
     // `options.fetchImpl(...)` here would silently disable every year lookup in the app while
-    // leaving all sixteen tests below green.
-    expect(await lookupYear(TRACK, { fetchImpl: brandCheckedFetch() })).toEqual({
+    // leaving every other test in this file green.
+    expect(await lookupYear(TRACK, { fetchImpl: brandCheckedFetch(), stage: 'resolve' })).toEqual({
       ok: true,
       result: SUCCESS,
     });
@@ -117,7 +131,7 @@ describe('lookupYear', () => {
         artist: 'Simon & Garfunkel',
         durationMs: 0,
       },
-      { fetchImpl },
+      { fetchImpl, stage: 'resolve' },
     );
 
     const url = urls[0] ?? '';
@@ -133,7 +147,7 @@ describe('lookupYear', () => {
     const { fetchImpl, urls } = stubFetch();
     const artist = 'Bob Marley & The Wailers, Peter Tosh';
 
-    await lookupYear({ ...TRACK, artist }, { fetchImpl });
+    await lookupYear({ ...TRACK, artist }, { fetchImpl, stage: 'resolve' });
 
     expect(queryOf(urls[0] ?? '').get('artist')).toBe(artist);
   });
@@ -143,7 +157,7 @@ describe('lookupYear', () => {
     // bound rather than failing the request.
     const { fetchImpl, urls } = stubFetch();
 
-    await lookupYear({ ...TRACK, durationMs: 0 }, { fetchImpl });
+    await lookupYear({ ...TRACK, durationMs: 0 }, { fetchImpl, stage: 'resolve' });
 
     expect(queryOf(urls[0] ?? '').has('durationMs')).toBe(false);
   });
@@ -151,14 +165,15 @@ describe('lookupYear', () => {
   it('should return the parsed result on 200', async () => {
     const { fetchImpl } = stubFetch();
 
-    const outcome = await lookupYear(TRACK, { fetchImpl });
+    const outcome = await lookupYear(TRACK, { fetchImpl, stage: 'resolve' });
 
     expect(outcome).toEqual({ ok: true, result: SUCCESS });
   });
 
   it('should accept a resolved null year with none confidence', async () => {
-    // A `confidence: 'none'` card stays in the deck and is playable (decision 5), so this is a
-    // SUCCESS, not an error.
+    // A valid SUCCESS body, not an error: the client's job ends at "this is a final no-year".
+    // Whether the card is then dropped or kept yearless is the reducer's decision, made from the
+    // session's `keepYearless` -- never this module's.
     const body: YearLookupResult = {
       year: null,
       confidence: 'none',
@@ -166,10 +181,14 @@ describe('lookupYear', () => {
       cached: true,
       cleanedTitle: 'Some Obscure Track',
       stripped: { remaster: false, live: false, feature: false, version: false },
+      final: true,
     };
     const { fetchImpl } = stubFetch({ body });
 
-    expect(await lookupYear(TRACK, { fetchImpl })).toEqual({ ok: true, result: body });
+    expect(await lookupYear(TRACK, { fetchImpl, stage: 'resolve' })).toEqual({
+      ok: true,
+      result: body,
+    });
   });
 
   it('should surface retryAfterMs from a 429 body', async () => {
@@ -184,7 +203,7 @@ describe('lookupYear', () => {
       },
     });
 
-    expect(await lookupYear(TRACK, { fetchImpl })).toEqual({
+    expect(await lookupYear(TRACK, { fetchImpl, stage: 'resolve' })).toEqual({
       ok: false,
       code: 'rate-limited',
       retryAfterMs: 1_100,
@@ -200,7 +219,7 @@ describe('lookupYear', () => {
       headerValues: { 'Retry-After': '2' },
     });
 
-    expect(await lookupYear(TRACK, { fetchImpl })).toEqual({
+    expect(await lookupYear(TRACK, { fetchImpl, stage: 'resolve' })).toEqual({
       ok: false,
       code: 'rate-limited',
       retryAfterMs: 2_000,
@@ -211,7 +230,10 @@ describe('lookupYear', () => {
     // Inventing a default here would put the same number in two places.
     const { fetchImpl } = stubFetch({ status: 429, body: { code: 'rate-limited', message: '' } });
 
-    expect(await lookupYear(TRACK, { fetchImpl })).toEqual({ ok: false, code: 'rate-limited' });
+    expect(await lookupYear(TRACK, { fetchImpl, stage: 'resolve' })).toEqual({
+      ok: false,
+      code: 'rate-limited',
+    });
   });
 
   it('should map each error status onto its typed code', async () => {
@@ -225,7 +247,7 @@ describe('lookupYear', () => {
 
     for (const [status, bodyCode, expected] of cases) {
       const { fetchImpl } = stubFetch({ status, body: { code: bodyCode, message: '' } });
-      const outcome = await lookupYear(TRACK, { fetchImpl });
+      const outcome = await lookupYear(TRACK, { fetchImpl, stage: 'resolve' });
 
       expect(outcome.ok).toBe(false);
       expect(outcome.ok ? undefined : outcome.code).toBe(expected);
@@ -238,7 +260,7 @@ describe('lookupYear', () => {
     // the body -- guessing it from the status would let one unexpected 500 blank a whole deck.
     const { fetchImpl } = stubFetch({ status: 500, body: { code: 'internal-error', message: '' } });
 
-    expect(await lookupYear(TRACK, { fetchImpl })).toEqual({
+    expect(await lookupYear(TRACK, { fetchImpl, stage: 'resolve' })).toEqual({
       ok: false,
       code: 'upstream-unavailable',
     });
@@ -249,10 +271,48 @@ describe('lookupYear', () => {
     // server-side: the endpoint is not answering what we parse.
     const { fetchImpl } = stubFetch({ body: { hello: 'world' } });
 
-    expect(await lookupYear(TRACK, { fetchImpl })).toEqual({
+    expect(await lookupYear(TRACK, { fetchImpl, stage: 'resolve' })).toEqual({
       ok: false,
       code: 'unexpected-payload',
     });
+  });
+
+  it('should reject a 200 without a boolean final as unexpected-payload', async () => {
+    // `final` is the ONLY field that tells pending, provisional and final apart. The body most
+    // likely to lack it is the stage-less legacy one, and guessing either way is wrong: "true"
+    // turns every cached null into a dropped card, "false" verifies a card for ever.
+    const legacy: Record<string, unknown> = { ...SUCCESS };
+    delete legacy['final'];
+
+    for (const body of [legacy, { ...SUCCESS, final: 'true' }, { ...SUCCESS, final: null }]) {
+      const { fetchImpl } = stubFetch({ body });
+
+      expect(await lookupYear(TRACK, { fetchImpl, stage: 'resolve' })).toEqual({
+        ok: false,
+        code: 'unexpected-payload',
+      });
+    }
+  });
+
+  it('should pass final, agreedBy and skipped through', async () => {
+    // Untouched: the resolver reads `final`, and nothing below React branches on the other two,
+    // but they are part of the response contract and must not be stripped on the way.
+    const body: YearLookupResult = {
+      ...SUCCESS,
+      source: 'vote',
+      agreedBy: ['deezer', 'musicbrainz'],
+      skipped: ['itunes'],
+    };
+    const provisional: YearLookupResult = { ...SUCCESS, confidence: 'low', final: false };
+
+    for (const expected of [body, provisional]) {
+      const { fetchImpl } = stubFetch({ body: expected });
+
+      expect(await lookupYear(TRACK, { fetchImpl, stage: 'verify' })).toEqual({
+        ok: true,
+        result: expected,
+      });
+    }
   });
 
   it('should reject an impossible year and confidence combination', async () => {
@@ -262,7 +322,7 @@ describe('lookupYear', () => {
       body: { ...SUCCESS, confidence: 'none' },
     });
 
-    expect(await lookupYear(TRACK, { fetchImpl })).toEqual({
+    expect(await lookupYear(TRACK, { fetchImpl, stage: 'resolve' })).toEqual({
       ok: false,
       code: 'unexpected-payload',
     });
@@ -273,7 +333,10 @@ describe('lookupYear', () => {
     // a rejected promise mid-crawl is a far worse shape to program against than a union.
     const fetchImpl: YearFetch = () => Promise.reject(new Error('Failed to fetch'));
 
-    expect(await lookupYear(TRACK, { fetchImpl })).toEqual({ ok: false, code: 'network' });
+    expect(await lookupYear(TRACK, { fetchImpl, stage: 'resolve' })).toEqual({
+      ok: false,
+      code: 'network',
+    });
   });
 
   it('should pass the abort signal through to fetch', async () => {
@@ -292,7 +355,7 @@ describe('lookupYear', () => {
       });
     };
 
-    await lookupYear(TRACK, { fetchImpl, signal: controller.signal });
+    await lookupYear(TRACK, { fetchImpl, stage: 'resolve', signal: controller.signal });
 
     expect(seen).toBe(controller.signal);
   });
@@ -309,7 +372,7 @@ describe('lookupYear', () => {
         });
       });
 
-    const pending = lookupYear(TRACK, { fetchImpl, signal: controller.signal });
+    const pending = lookupYear(TRACK, { fetchImpl, stage: 'resolve', signal: controller.signal });
     controller.abort();
 
     expect(await pending).toEqual({ ok: false, code: 'network' });

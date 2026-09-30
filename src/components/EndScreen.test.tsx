@@ -13,7 +13,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { EndScreen } from './EndScreen';
 import { COPY } from '../game/copy';
-import { fixtureDeck } from './__fixtures__/cards';
+import { fixtureDeck, noYearCard } from './__fixtures__/cards';
 import type { EndScreenProps } from './EndScreen';
 import type { PlaylistSummary } from '../../shared/types';
 
@@ -61,6 +61,7 @@ function renderEnd(overrides: Partial<EndScreenProps> = {}) {
     // A resolved deck, so the export has something to print.
     deck: fixtureDeck.filter((card) => typeof card.year === 'number'),
     pendingYearCount: 0,
+    keepYearless: false,
     ...overrides,
   };
 
@@ -156,6 +157,18 @@ describe('EndScreen', () => {
     expect(screen.queryByRole('button', { name: COPY.deckActions.copyLink })).not.toBeNull();
     expect(screen.queryByRole('button', { name: COPY.deckActions.save })).not.toBeNull();
     expect(screen.queryByRole('button', { name: COPY.deckActions.print })).not.toBeNull();
+  });
+
+  it("should hand the session's keepYearless to DeckActions", () => {
+    // Observed through the sheet count, which is `sheetsForDeck(deck, keepYearless)` and is on
+    // screen before any press -- so no export runs and nothing here needs a jsPDF double. A deck of
+    // one kept yearless card is one sheet with the option on and nothing to print with it off.
+    const { container } = renderEnd({ deck: [noYearCard], keepYearless: true });
+    expect(container.textContent ?? '').toContain(COPY.deckActions.sheetSummary(1));
+
+    cleanup();
+    const off = renderEnd({ deck: [noYearCard], keepYearless: false });
+    expect(off.container.textContent ?? '').toContain(COPY.deckActions.sheetSummary(0));
   });
 
   it('should give every action a focus-visible style', () => {

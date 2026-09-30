@@ -173,6 +173,9 @@ export const COPY = {
     /** 1-based, because it names the box's position on screen. */
     removeRow: (position: number) => `Remove playlist ${position}`,
     addRow: 'Add another playlist',
+    /** The picker's checkbox (spike §12.8). The developer's own wording. */
+    keepYearless: 'Keep cards with no year found',
+    keepYearlessHint: 'Useful to print the whole deck and write missing years by hand',
     atMaxRows: (maxPlaylists: number) => `${maxPlaylists} playlists is the maximum for one deck.`,
     start: 'Start',
     starting: 'Loading…',
@@ -244,6 +247,11 @@ export const COPY = {
     yearUnknown: 'Year unknown',
     yearUnknownDetail: 'Check this one yourself',
     yearUnconfirmed: 'Unconfirmed year',
+    /**
+     * Beside a PROVISIONAL year (the `resolve` stage answered, `verify` has not). Progress, not a
+     * warning: it pairs with `yearUnconfirmed` and disappears when the answer turns final.
+     */
+    yearProvisional: 'Confirming year',
   },
 
   qr: {

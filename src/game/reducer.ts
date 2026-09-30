@@ -17,7 +17,7 @@
  */
 
 import { generateSeed, shuffleDeck } from './shuffle';
-import type { GameAction, GameState } from './types';
+import type { GameAction, GameState, YearResolvedAction } from './types';
 import type { Card } from '../../shared/types';
 
 /** A session that has not started. Phase 6's landing screen renders against this. */
@@ -29,6 +29,7 @@ export const initialGameState: GameState = {
   currentIndex: 0,
   startIndex: 0,
   isFlipped: false,
+  keepYearless: false,
   yearLookupsUnavailable: false,
 };
 
@@ -48,8 +49,10 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
       /*
         Yearless cards are filtered at ALL THREE entry points -- here, `YEAR_RESOLVED` and
-        `RESUME` -- so "no card in a live deck holds `year: null`" is an invariant rather than a
-        tendency (see `GameState.deck`).
+        `RESUME` -- so, WHILE THE SESSION DROPS THEM (`keepYearless` false), "no card in a live
+        deck holds `year: null`" is an invariant rather than a tendency (see `GameState.deck`).
+        A session that keeps them (plan.year-fetch-rework-game.md) filters nothing anywhere: a
+        final null is a card it chose to keep.
 
         This one is the belt to the other two's braces: `action.cards` comes either from
         `/api/playlist`, where no card has a year yet, or from `state.deck` on a Restart, which
@@ -57,13 +60,14 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         per game and removes the question entirely.
       */
       const deck = shuffleDeck(
-        action.cards.filter((card) => card.year !== null),
+        action.keepYearless ? action.cards : action.cards.filter((card) => card.year !== null),
         seed,
       );
 
-      // Nothing left to deal. Reachable two ways -- an empty `cards` argument, and a deck whose
-      // every card was already known to be yearless -- and `preparing` would be a loading screen
-      // waiting on a lookup that can never be dispatched.
+      // Nothing left to deal. Reachable two ways -- an empty `cards` argument, and (only while
+      // yearless cards are dropped) a deck whose every card was already known to be yearless --
+      // and `preparing` would be a loading screen waiting on a lookup that can never be
+      // dispatched.
       if (deck.length === 0) {
         return {
           status: 'ended',
@@ -73,6 +77,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           currentIndex: 0,
           startIndex: 0,
           isFlipped: false,
+          keepYearless: action.keepYearless,
           yearLookupsUnavailable: false,
         };
       }
@@ -97,27 +102,39 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
             );
 
       // =======================================================================
-      //  THE GATE IS SKIPPED WHEN THE START CARD IS ALREADY RESOLVED.
+      //  THE GATE IS SKIPPED WHEN THE START CARD'S ANSWER IS ALREADY FINAL --
+      //  AND ALWAYS WHEN THE SESSION KEEPS YEARLESS CARDS.
       //
-      //  The gate waits for the CURRENT card's lookup to COMPLETE -- card 1 for
+      //  The gate waits for the CURRENT card's answer to be FINAL -- card 1 for
       //  every deal except one from a mid-game link, which starts the player on
-      //  the sender's card (2026-09-29; see the `YEAR_RESOLVED` gate below). And
-      //  `year !== undefined` IS a completed lookup -- that is exactly what the
-      //  three states of `Card.year` mean. So there is nothing to wait for and
-      //  `preparing` would be a screen shown until the heat death of the universe.
+      //  the sender's card (2026-09-29; see the `YEAR_RESOLVED` gate below).
+      //  `yearStateOf()` is the one reading of that: a number without
+      //  `yearProvisional`, or a (kept) null. When the start card already holds
+      //  one there is nothing to wait for, and `preparing` would be a screen
+      //  shown until the heat death of the universe.
       //
       //  This is not hypothetical: Phase 6's RESTART re-deals `state.deck`, and a
       //  session can only have left `preparing` in the first place BECAUSE its
-      //  start card resolved, so a re-dealt deck is mostly resolved. The resolver
-      //  correctly skips already-filled cards (`resolver.ts` adds them straight
-      //  to `settled`), which means no `YEAR_RESOLVED` is ever dispatched for
-      //  them and nothing else can open the gate. Restart hung on the loading
-      //  screen, every time, until this branch existed.
+      //  start card's answer arrived, so a re-dealt deck is mostly resolved. The
+      //  resolver correctly skips already-final cards, which means no
+      //  `YEAR_RESOLVED` is ever dispatched for them and nothing else can open
+      //  the gate. Restart hung on the loading screen, every time, until this
+      //  branch existed. Found 2026-08-05 by `App.test.tsx`'s restart test; it
+      //  was unreachable before Phase 6 because nothing could deal a
+      //  pre-resolved deck.
       //
-      //  Found 2026-08-05 by `App.test.tsx`'s restart test. It was unreachable
-      //  before Phase 6 because nothing could deal a pre-resolved deck.
+      //  PROVISIONAL IS NOT FINAL (plan.year-fetch-rework-game.md). A re-dealt
+      //  deck whose start card is still awaiting `verify` STAYS in `preparing`:
+      //  the resolver sends that card straight to verification, and its final
+      //  answer -- which may still drop it -- is what opens the gate.
+      //
+      //  WITH `keepYearless`, NOTHING GATES AT ALL. The gate exists so the player
+      //  never lands on a card that is about to be dropped; a session that keeps
+      //  yearless cards drops nothing, so it starts at once and the year slot
+      //  shows its pending state like on any card the crawl has not reached.
       // =======================================================================
-      const status = deck[startIndex]?.year === undefined ? 'preparing' : 'playing';
+      const status =
+        action.keepYearless || yearStateOf(deck[startIndex]) === 'final' ? 'playing' : 'preparing';
 
       // A wholesale replacement, deliberately: starting a new SET OF PLAYLISTS mid-game must not
       // merge into the old deck, keep the old index, or leave a stale `yearLookupsUnavailable`
@@ -131,6 +148,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         currentIndex: startIndex,
         startIndex,
         isFlipped: false,
+        keepYearless: action.keepYearless,
         yearLookupsUnavailable: false,
       };
     }
@@ -141,8 +159,21 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       // useful to go.
       if (state.status !== 'preparing' && state.status !== 'playing') return state;
 
+      // The `resolve` stage's answer, still awaiting `verify`. Its own function, because it can
+      // never drop a card, never move an index and never open the gate -- see there.
+      if ('provisional' in action) return recordProvisionalYear(state, action);
+
       // =======================================================================
-      //  A LOOKUP THAT FINDS NO YEAR REMOVES ITS CARD FROM THE DECK.
+      //  A FINAL "NO YEAR" REMOVES ITS CARD FROM THE DECK -- UNLESS THE SESSION
+      //  KEEPS YEARLESS CARDS.
+      //
+      //  `keepYearless` (plan.year-fetch-rework-game.md, spike §12.8) is the
+      //  picker's opt-out from everything below: with it on, a final null is
+      //  recorded as `year: null, confidence: 'none'`, the card stays and no
+      //  index moves. With it off, the rest of this block holds unchanged. And
+      //  only a FINAL null ever reaches here: a `resolve` that found nothing
+      //  dispatches nothing (there is no provisional null), so its card simply
+      //  stays pending until `verify` answers.
       //
       //  DECISION REVERSAL, 2026-08-05, by the developer. `plan.md`'s
       //  `confidence: 'none'` follow-on had resolved the opposite way -- the card
@@ -163,9 +194,10 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       //     will settle around 28 as the crawl catches up. That is the decision
       //     working, not a bug -- but it is why the HUD's "cards left" now falls
       //     as well as rising.
-      //  2. `null` DOES NOT ALWAYS MEAN "MUSICBRAINZ HAS NO YEAR". The resolver
-      //     also settles at `null` on a 400 and on transient failures that
-      //     survive its deferred pass, and `YEAR_RESOLVED` carries no reason. So
+      //  2. `null` DOES NOT ALWAYS MEAN "NO PROVIDER HAS A YEAR". The resolver
+      //     also settles at `null` on a 400, on transient failures that survive
+      //     its deferred pass, and on a card whose `verify` retries ran out with
+      //     nothing found -- and `YEAR_RESOLVED` carries no reason. So
       //     a network blip drops cards. That is the honest trade: an unplayable
       //     card is unplayable whatever the cause, and the alternative -- a
       //     `reason` on the action so the reducer could keep "failed" cards --
@@ -175,7 +207,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       //     hundred nulls, so a deployment with no `MUSICBRAINZ_USER_AGENT`
       //     yields a yearless deck rather than an empty one.
       // =======================================================================
-      const isYearless = action.year === null;
+      const isDropped = action.year === null && !state.keepYearless;
 
       // BY ID, never by index (decision 13). The resolver's priority jump makes its ordering
       // and the deck's ordering diverge routinely; an index write would corrupt the deck the
@@ -202,7 +234,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
         matched = true;
 
-        if (isYearless) {
+        if (isDropped) {
           if (index < state.currentIndex) droppedBeforeCurrent += 1;
           else if (index === state.currentIndex) droppedCurrent = true;
 
@@ -213,16 +245,23 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
         // Every other card keeps its identity, so a Phase 4 memoized card component
         // re-renders only for the one that actually changed.
-        deck.push({ ...card, year: action.year, yearConfidence: action.confidence });
+        //
+        // A final answer replaces a provisional one on EVERY card, the current one included --
+        // even a revealed one, whose year then changes in front of the player. The flag goes with
+        // it, so the card reads as final. A kept null lands here too, beside its `none`.
+        const updated: Card = { ...card, year: action.year, yearConfidence: action.confidence };
+        delete updated.yearProvisional;
+        deck.push(updated);
       });
 
       // A result for a card that is not in this deck -- a callback from a session that was
       // replaced by a second `START`. Dropping it is the correct answer.
       if (!matched) return state;
 
-      // Every card in the deck turned out to be yearless. Only reachable when MusicBrainz
-      // answers for every track and knows none of them, so it is rare rather than impossible --
-      // and `ended` is the only honest destination, since there is nothing left to play.
+      // Every card in the deck turned out to be yearless. Only reachable while yearless cards are
+      // dropped, and only when every provider answers for every track and knows none of them, so
+      // it is rare rather than impossible -- and `ended` is the only honest destination, since
+      // there is nothing left to play.
       if (deck.length === 0) {
         return {
           ...state,
@@ -279,15 +318,19 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       }
 
       // =======================================================================
-      //  THE GATE: "THE CURRENT CARD HAS A YEAR".
+      //  THE GATE: "THE CURRENT CARD'S ANSWER IS FINAL".
       //
-      //  It waits for the lookup of the card the player is about to see to
-      //  **COMPLETE**, and it is expressed as a property of the deck rather than
-      //  as "the resolved card was the one being waited on". The two were
-      //  equivalent until yearless cards started being dropped; they are not any
-      //  more. When the awaited card resolves to `null` it LEAVES, and the gate
-      //  has to keep waiting for whichever card takes its place, whose lookup has
-      //  not happened yet.
+      //  It waits for the answer for the card the player is about to see to be
+      //  **FINAL** -- a provisional year is not enough, because its `verify`
+      //  answer may still be null and take the card away -- and it is expressed
+      //  as a property of the deck rather than as "the resolved card was the one
+      //  being waited on". The two were equivalent until yearless cards started
+      //  being dropped; they are not any more. When the awaited card resolves to
+      //  `null` it LEAVES, and the gate has to keep waiting for whichever card
+      //  takes its place, whose lookup has not happened yet.
+      //
+      //  Only ever open while the option is OFF: a `keepYearless` session is
+      //  never `preparing`, because its `START` goes straight to `playing`.
       //
       //  Written against the NEXT deck and the index AFTER the shrink for that
       //  reason. Reading `state.deck` would ask about a card that is no longer in
@@ -301,13 +344,13 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       //  card 1 while `preparing` (nothing moves the index before the gate
       //  opens), so for them this is the same card-1 gate it always was.
       //
-      //  It also self-heals: any `YEAR_RESOLVED` opens the gate once the current
-      //  card has a year, so a current card resolved out of order -- by a
-      //  priority jump, or arriving already filled in a re-dealt deck -- cannot
-      //  leave the session stuck on the loading screen. `START` has its own
-      //  version of that guard for the same reason (see above).
+      //  It also self-heals: any final `YEAR_RESOLVED` opens the gate once the
+      //  current card's answer is final, so a current card resolved out of
+      //  order -- by a priority jump, or arriving already final in a re-dealt
+      //  deck -- cannot leave the session stuck on the loading screen. `START`
+      //  has its own version of that guard for the same reason (see above).
       // =======================================================================
-      const opensGate = state.status === 'preparing' && deck[currentIndex]?.year !== undefined;
+      const opensGate = state.status === 'preparing' && yearStateOf(deck[currentIndex]) === 'final';
       const status = opensGate ? 'playing' : state.status;
 
       return { ...state, deck, currentIndex, startIndex, isFlipped, status };
@@ -377,7 +420,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
          `use-game-session.ts` moves that card to the front of the queue the
          moment it becomes current. `RESUME`'s "count the yearless cards before
          the index" rule is unaffected -- it counts `null`s, and an unresolved
-         card is `undefined`.
+         card is `undefined` (a provisional one holds a number).
 
          IT LOWERS `startIndex` when it steps below it, which only a link-started
          game can do: that is how the end screen's count (`cardsPlayed`) learns
@@ -413,15 +456,21 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
       /*
         ===========================================================================
-         YEARLESS CARDS ARE DROPPED HERE TOO, SO THE INVARIANT IS ABSOLUTE.
+         YEARLESS CARDS ARE DROPPED HERE TOO -- WHEN THE SAVE DROPS THEM.
 
-         Since the reversal above, no card in a live deck ever holds `year: null` --
-         one is removed in the same dispatch that would have recorded it. A SAVE
-         WRITTEN BEFORE THE REVERSAL is the one way such a card can still get in,
-         and it would be permanent: the resolver marks every already-filled card
-         settled, so it is never looked up again and never dispatched again. The
-         card would sit in the deck showing "year unknown" for the rest of that
-         game.
+         A session that KEEPS yearless cards (`keepYearless`; absent from a save
+         written before the option existed, and read as false) resumes with its
+         nulls exactly as it saved them, and nothing below applies. Provisional
+         cards resume as they are in both modes: the resolver sends them straight
+         to `verify`.
+
+         Otherwise, since the reversal above, no card in a live deck ever holds
+         `year: null` -- one is removed in the same dispatch that would have
+         recorded it. A SAVE WRITTEN BEFORE THE REVERSAL is the one way such a
+         card can still get in, and it would be permanent: the resolver treats
+         every already-final card as done, so it is never looked up again and
+         never dispatched again. The card would sit in the deck showing "year
+         unknown" for the rest of that game.
 
          Filtering rather than bumping `SESSION_VERSION` keeps the resolved years,
          which is the whole point of persisting the deck -- a version bump would
@@ -442,9 +491,12 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
          `startIndex <= currentIndex` invariant survives the filter.
         ===========================================================================
       */
-      const deck = session.deck.filter((card) => card.year !== null);
+      // `=== true` rather than a truthiness read: `loadSession()` already turns an absent field into
+      // `false`, and this keeps a hand-built session that lacks it on the same side of the line.
+      const keepYearless = session.keepYearless === true;
+      const deck = keepYearless ? session.deck : session.deck.filter((card) => card.year !== null);
       const yearlessBefore = (index: number): number =>
-        session.deck.slice(0, index).filter((card) => card.year === null).length;
+        keepYearless ? 0 : session.deck.slice(0, index).filter((card) => card.year === null).length;
       const currentIndex =
         deck.length === 0
           ? 0
@@ -466,12 +518,49 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         currentIndex,
         startIndex,
         isFlipped: session.isFlipped,
+        keepYearless,
         // Re-derived by the next crawl rather than restored: it describes the server's
         // configuration, not the session (see `PersistedSession`).
         yearLookupsUnavailable: false,
       };
     }
   }
+}
+
+/**
+ * `YEAR_RESOLVED`'s provisional arm: a `resolve`-stage year that `verify` has not answered yet
+ * (plan.year-fetch-rework-game.md step 2). The status guard has already run in the caller.
+ *
+ * Written onto every copy of the id, exactly like a final answer -- with `yearProvisional: true`,
+ * and always at `low`, which is the only confidence the action can carry. Three things it never
+ * does:
+ *
+ * - **Downgrade a final answer.** A copy whose answer is already final is skipped, and when that
+ *   leaves nothing to write the SAME state object comes back. The two stages run in separate lanes
+ *   and their order is not guaranteed after a resume or a retry, so a late provisional year is
+ *   normal rather than exceptional -- and it must never un-verify a card.
+ * - **Drop a card.** There is no provisional null; a `resolve` that found nothing dispatches
+ *   nothing, so only a final answer can remove a card.
+ * - **Move the gate.** A provisional year may still turn into a final null, so the card-1 gate
+ *   keeps waiting for the final answer. No index changes, so nothing else can open it either.
+ */
+function recordProvisionalYear(
+  state: GameState,
+  action: Extract<YearResolvedAction, { provisional: true }>,
+): GameState {
+  let changed = false;
+
+  const deck = state.deck.map((card): Card => {
+    if (card.id !== action.cardId || yearStateOf(card) === 'final') return card;
+
+    changed = true;
+
+    return { ...card, year: action.year, yearConfidence: action.confidence, yearProvisional: true };
+  });
+
+  // Covers both "no card has that id" (a callback from a replaced session) and "every copy is
+  // already final" with one exit.
+  return changed ? { ...state, deck } : state;
 }
 
 // ===========================================================================
@@ -489,12 +578,43 @@ export function currentCard(state: GameState): Card | undefined {
 }
 
 /**
+ * Where one card's year stands (plan.year-fetch-rework-game.md). What `yearStateOf` returns.
+ *
+ * - `pending`:     no answer yet (`year` undefined). Nothing to show.
+ * - `provisional`: a `resolve`-stage year, SHOWN, whose `verify` answer may still change it or
+ *                  (with the option off) drop the card.
+ * - `final`:       nothing can change it any more -- a verified or unconfirmed year, or a kept
+ *                  `null`.
+ */
+export type YearState = 'pending' | 'provisional' | 'final';
+
+/**
+ * The one three-way reading of `Card.year` and `Card.yearProvisional`, so a switch over it is
+ * exhaustive and no caller re-derives the combination. A function rather than a stored
+ * `yearStatus` field for the reason this file's selectors are functions: a second stored copy of
+ * the year's state is a thing that can disagree with the first.
+ *
+ * Takes `undefined` so the gates can ask about `deck[index]` directly; a missing card reads as
+ * `pending`, which is what keeps an empty or out-of-range slot from ever opening a gate.
+ */
+export function yearStateOf(card: Card | undefined): YearState {
+  if (card?.year === undefined) return 'pending';
+  if (card.yearProvisional === true) return 'provisional';
+
+  return 'final';
+}
+
+/**
  * Whether the current card's year has not come back yet -- the ONE thing Phase 4 renders a
  * pending state for.
  *
  * `undefined` means "not looked up"; `null` means "looked up, nothing found" and is a
  * finished answer. Collapsing the two would spin a spinner forever on a `confidence: 'none'`
  * card, which is the exact bug the three-state `Card.year` exists to prevent.
+ *
+ * STILL "YEAR IS UNDEFINED", AND A PROVISIONAL CARD IS NOT PENDING HERE: it has a year to show,
+ * and showing it is the point of the `resolve` stage. That makes this selector and
+ * `pendingYearCount` disagree about a provisional card ON PURPOSE -- see there.
  */
 export function isCurrentYearPending(state: GameState): boolean {
   const card = currentCard(state);
@@ -514,7 +634,8 @@ export function isCurrentYearPending(state: GameState): boolean {
  * once they HAVE been seen.
  *
  * Meant for the end screen, i.e. after the deck ran out, which is what makes "to the end of the
- * deck" the cards played. Like every total here it shrinks with the deck as yearless cards drop.
+ * deck" the cards played. Like every total here it shrinks with the deck as yearless cards drop --
+ * when the session drops them; with `keepYearless` the deck never shrinks.
  */
 export function cardsPlayed(state: GameState): number {
   return Math.max(0, state.deck.length - state.startIndex);
@@ -526,30 +647,42 @@ export function cardsRemaining(state: GameState): number {
 }
 
 /**
- * How many cards have a completed lookup, resolved or not.
+ * How many cards have a FINAL answer, a year or (kept) not.
+ *
+ * A provisional card is NOT counted (plan.year-fetch-rework-game.md): its year may still change,
+ * so its lookup is not finished in the sense this count -- and the PDF gate built on its
+ * complement -- cares about.
  *
  * Count only, on purpose: Phase 6's `preparing` progress line may show a number but must
  * never name a track or a year, which would spoil the deck it is loading.
  */
 export function resolvedCount(state: GameState): number {
-  return state.deck.reduce((count, card) => (card.year === undefined ? count : count + 1), 0);
+  return state.deck.reduce((count, card) => (yearStateOf(card) === 'final' ? count + 1 : count), 0);
 }
 
 /**
- * How many cards are still waiting on a lookup. The complement of `resolvedCount`.
+ * How many cards are still waiting on a FINAL answer -- pending AND provisional. The complement
+ * of `resolvedCount`.
  *
  * ===========================================================================
  *  ZERO MEANS THE DECK IS PRINTABLE, AND THAT IS THE WHOLE REASON IT EXISTS.
  *
- *  A card whose lookup finds nothing is REMOVED from the deck (`YEAR_RESOLVED`),
- *  so every card that survives to a finished crawl carries a real year. That
- *  makes `pendingYearCount === 0` exactly equivalent to "every card in this deck
- *  can be printed" -- which is what the PDF export waits for (2026-08-07). A
- *  sheet exported earlier silently omits the cards whose year is still in flight,
- *  and the omission is discoverable only by counting a printed deck.
+ *  With the option off, a card whose final answer is "no year" is REMOVED from
+ *  the deck (`YEAR_RESOLVED`), so every card that survives to a finished crawl
+ *  carries a real, final year; with it on, the survivors also include kept nulls,
+ *  which `selectPrintableCards` prints with a blank year. Either way
+ *  `pendingYearCount === 0` is exactly "nothing printed can still change" --
+ *  which is what the PDF export waits for (2026-08-07). A sheet exported earlier
+ *  silently omits the cards still in flight, and the omission is discoverable
+ *  only by counting a printed deck.
  *
- *  Expressed as the complement rather than as its own reduce, so the two
- *  selectors cannot drift into disagreeing about what `undefined` means.
+ *  THIS AND `isCurrentYearPending` NOW DISAGREE ABOUT A PROVISIONAL CARD, ON
+ *  PURPOSE -- do not "fix" one to match the other. The year slot shows a
+ *  provisional year (so it is not pending THERE), while the PDF must wait for
+ *  its verification (so it is pending HERE). Two questions, two answers.
+ *
+ *  Expressed as the complement rather than as its own reduce, so this and
+ *  `resolvedCount` cannot drift into disagreeing about what "final" means.
  * ===========================================================================
  */
 export function pendingYearCount(state: GameState): number {

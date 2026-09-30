@@ -46,6 +46,9 @@ export const COPY_ES = {
     playlistLinkPlaceholder: COPY.landing.playlistLinkPlaceholder,
     removeRow: (position: number) => `Quitar playlist ${position}`,
     addRow: 'Añadir otra playlist',
+    // 2026-09-30 PROPOSALS, not yet read by a native speaker (docs/development.md §5).
+    keepYearless: 'Mantener cartas sin año',
+    keepYearlessHint: 'Útil para imprimir la baraja entera y escribir a mano los años que falten',
     atMaxRows: (maxPlaylists: number) => `El máximo son ${maxPlaylists} playlists por mazo.`,
     start: 'Empezar',
     starting: 'Cargando…',
@@ -101,6 +104,8 @@ export const COPY_ES = {
     yearUnknown: 'Año desconocido',
     yearUnknownDetail: 'Compruébalo por tu cuenta',
     yearUnconfirmed: 'Año sin confirmar',
+    // 2026-09-30 PROPOSALS, not yet read by a native speaker (docs/development.md §5).
+    yearProvisional: 'Confirmando año',
   },
 
   qr: {

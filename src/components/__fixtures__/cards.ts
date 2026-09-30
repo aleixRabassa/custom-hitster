@@ -72,8 +72,10 @@ export const lowConfidenceCard: Card = {
 /**
  * State 3: the lookup completed and found nothing.
  *
- * A third of an ordinary deck lands here (15 of 42 on the real playlist Phase 3 measured),
- * so this is a common card, not an edge case. It stays in the deck and stays playable.
+ * A third of an ordinary deck landed here when Phase 3 measured it (15 of 42). Since the
+ * 2026-08-05 reversal a live deck holds one only when the session keeps yearless cards
+ * (`GameState.keepYearless`, plan.year-fetch-rework-game.md); otherwise a final null drops the
+ * card. The fixture stays, because that is the shape the reveal renders when one is kept.
  */
 export const noYearCard: Card = {
   id: '5ghIJDpPoe3CfHMGu71E6T',

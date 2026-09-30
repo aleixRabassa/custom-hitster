@@ -42,6 +42,7 @@ import { WelcomeScreen } from './components/WelcomeScreen';
 import { linkArrivalIntent, parseDeckLink } from './game/deck-link';
 import { deckBaseName, deckLabel } from './game/deck-merge';
 import { loadLibrary, removePlaylist, savePlaylist, savedDeckKey } from './game/playlist-library';
+import { loadPrefs, savePrefs } from './game/prefs';
 import { useGameSession } from './game/use-game-session';
 import { useCopy } from './hooks/useLocale';
 import { usePlaylist } from './hooks/usePlaylist';
@@ -149,6 +150,29 @@ function shareOrigin(): string {
   return `${window.location.origin}${window.location.pathname}`;
 }
 
+/** What the preference is read from and written to when `localStorage` itself is unreachable. */
+const NO_STORAGE: StorageLike = {
+  getItem: () => null,
+  setItem: () => {},
+  removeItem: () => {},
+};
+
+/**
+ * `localStorage`, or a storage that remembers nothing -- the same guard `LocaleProvider.tsx` and
+ * `ErrorBoundary.tsx` each keep a copy of (module-private there, so repeated here rather than
+ * imported). Reading the PROPERTY can throw rather than return null (Safari private mode has
+ * historically; a browser blocking site data does today), and the preference is read in a lazy
+ * state initialiser on the first render: a throw there would be a crash screen before the front
+ * door, for a checkbox nobody has touched.
+ */
+function readLocalStorage(): StorageLike {
+  try {
+    return window.localStorage;
+  } catch {
+    return NO_STORAGE;
+  }
+}
+
 export default function App({ storage, fetchImpl, search }: AppProps = {}) {
   // The active language's copy. This container renders no sentence of its own; it reads the
   // catalogue only to name the deck, because `deckLabel()` is pure and takes the `deck` block.
@@ -156,10 +180,10 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
   const {
     state,
     currentCard,
-    isCurrentYearPending,
     cardsRemaining,
-    // The PDF export's gate. Zero means every card in the deck carries a real year, so a printed
-    // sheet is the whole deck rather than a quietly short one -- see `DeckActions`.
+    // The PDF export's gate. Zero means every card in the deck has a FINAL answer -- provisional
+    // years count as pending -- so a printed sheet is the whole deck rather than a quietly short
+    // one, and nothing on it can still change -- see `DeckActions`.
     pendingYearCount,
     // The end screen's count: the deck minus the cards before where this player started, which is
     // not the whole deck when a shared link started them mid-deck (2026-09-29).
@@ -355,6 +379,46 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
   const [savedPlaylists, setSavedPlaylists] = useState(() => loadLibrary(libraryStorage));
 
   /**
+   * The picker's "Keep cards with no year found" (plan.year-fetch-rework-ui.md step 5).
+   *
+   * ===========================================================================
+   *  THE PREFERENCE, NOT THE SESSION'S VALUE -- AND THE TWO ARE DIFFERENT THINGS.
+   *
+   *  This is what the NEXT deal uses: the picker's Start, a share link's deal
+   *  and "Play the shared deck" all reach the one `start()` in the deal effect
+   *  below, which reads it. So a share link deals with the RECIPIENT's
+   *  remembered choice; the link format never carries the sender's, and
+   *  `linkArrivalIntent` knows nothing about it.
+   *
+   *  What a game in progress uses is `state.keepYearless`, recorded by `START`
+   *  and written into the save: Restart and "Play again" re-deal with THAT, a
+   *  resumed game keeps it, and `GameScreen` / `EndScreen` get it for the PDF.
+   *  Handing this preference to any of those would let a checkbox touched since
+   *  the deal change a game that is already being played.
+   *
+   *  Seeded in a LAZY initialiser, so the first render already shows the
+   *  remembered value, through a GUARDED storage read (`readLocalStorage()`
+   *  above) -- `storage` is the tests' injection, as everywhere else here.
+   * ===========================================================================
+   */
+  const [prefsStorage] = useState<StorageLike>(() => storage ?? readLocalStorage());
+  const [keepYearless, setKeepYearless] = useState(() => loadPrefs(prefsStorage).keepYearless);
+
+  const handleKeepYearlessChange = useCallback(
+    (next: boolean) => {
+      setKeepYearless(next);
+      // `savePrefs` already swallows a throwing `setItem`; the guard here is for everything else a
+      // write can do wrong, because a failure to REMEMBER must never cost the press itself.
+      try {
+        savePrefs(prefsStorage, { keepYearless: next });
+      } catch {
+        // Applies for this page load, just not remembered.
+      }
+    },
+    [prefsStorage],
+  );
+
+  /**
    * The link the next deal comes from, or null for a fresh shuffle.
    *
    * A REF rather than state, and that is step 9's "the seed rides along, it does not become a
@@ -444,15 +508,23 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
 
     // Straight through: the merge already put the loaded playlists in row order and the cards in
     // one deduped deck, so the container adds nothing to either. One playlist is the `n = 1` case.
+    //
+    // `keepYearless` is the picker's remembered PREFERENCE on both branches (plan 4, replacing plan
+    // 3's `false` placeholder), and this is the ONLY `start()` a new deck goes through: the picker's
+    // submit, a link's deal on arrival and "Play the shared deck" all request here. So a link deals
+    // with the RECIPIENT's choice. It is a dependency, and that is safe: `dealtDeckRef` above makes a
+    // re-run for the same merged deck a no-op, and the checkbox is disabled while a request is in
+    // flight, so the value at the deal is the value at the press.
     if (link === null) {
-      start(deck.cards, deck.playlists);
+      start(deck.cards, deck.playlists, { keepYearless });
     } else {
       start(deck.cards, deck.playlists, {
         seed: link.seed,
         ...(startCardId === null ? {} : { startCardId }),
+        keepYearless,
       });
     }
-  }, [requestState, start]);
+  }, [requestState, start, keepYearless]);
 
   /**
    * Submit the playlists the player asked for by hand.
@@ -575,8 +647,15 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
     // depends only on the SET of cards: re-dealing `state.deck` with a seed gives the recipient's raw
     // fetch, dealt with that seed, the same order. The Fisher-Yates it replaced did not, because it
     // applied one permutation to a different input order.
-    if (state.playlists.length > 0) start(state.deck, state.playlists);
-  }, [start, state.deck, state.playlists]);
+    //
+    // With the SESSION's `keepYearless`, never the picker's current preference: a restart is the
+    // same game again, and a deck that kept its yearless cards must not start dropping them because
+    // somebody touched the checkbox since. The provisional flags travel on the cards, so a card
+    // still awaiting `verify` is verified after the restart rather than turning final.
+    if (state.playlists.length > 0) {
+      start(state.deck, state.playlists, { keepYearless: state.keepYearless });
+    }
+  }, [start, state.deck, state.playlists, state.keepYearless]);
 
   const handleSavePlaylist = useCallback(() => {
     // Guarded rather than assumed: `state.playlists` is empty for the whole `idle` status, and the
@@ -635,8 +714,9 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
    * ===========================================================================
    *  THE PLAYER GETS THE LANDING SCREEN AND A WARNING, NOT THE END SCREEN.
    *
-   *  A card whose year lookup finds nothing is REMOVED from the deck
-   *  (`gameReducer`, `YEAR_RESOLVED`). When that happens to every card the deck
+   *  A card whose FINAL year answer is null is REMOVED from the deck
+   *  (`gameReducer`, `YEAR_RESOLVED`; see the last paragraph for the option that
+   *  keeps it instead). When that happens to every card the deck
    *  empties and the reducer moves to `ended` -- correctly, since there is
    *  nothing left to play -- but `ended` previously meant the end screen, which
    *  then read **"Deck finished"** over `cardsPlayed={0}`. That announces a
@@ -658,6 +738,11 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
    *  it worth deriving rather than special-casing: `YEAR_RESOLVED` (the common
    *  one), `START` with nothing dealable, and `RESUME` of a pre-reversal save
    *  whose every card was yearless.
+   *
+   *  IT CAN ONLY FIRE WHILE YEARLESS CARDS ARE DROPPED (plan.year-fetch-rework-
+   *  game.md). A session with `keepYearless` keeps a card whose final answer is
+   *  null, so its deck never shrinks and the only empty deck it can have is an
+   *  empty deal. The check stays as it is: it is exact in both modes.
    * ===========================================================================
    */
   const deckCollapsed = state.status === 'ended' && state.deck.length === 0;
@@ -722,6 +807,8 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
       {...(startFailureCode ? { errorCode: startFailureCode } : {})}
       savedPlaylists={savedPlaylists}
       onRemoveSaved={handleRemoveSaved}
+      keepYearless={keepYearless}
+      onKeepYearlessChange={handleKeepYearlessChange}
     />
   );
 
@@ -831,6 +918,9 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
         onSavePlaylist={handleSavePlaylist}
         isPlaylistSaved={isPlaylistSaved}
         pendingYearCount={pendingYearCount}
+        // The SESSION's value, never the picker's preference: whether this deck's PDF prints its
+        // yearless cards with a blank year is a fact about the game that was dealt.
+        keepYearless={state.keepYearless}
       />
     );
   }
@@ -856,7 +946,6 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
         deck={state.deck}
         currentIndex={state.currentIndex}
         isFlipped={state.isFlipped}
-        isYearPending={isCurrentYearPending}
         onFlip={flip}
         onNext={next}
         onPrevious={previous}
@@ -884,6 +973,8 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
         onSavePlaylist={handleSavePlaylist}
         isPlaylistSaved={isPlaylistSaved}
         pendingYearCount={pendingYearCount}
+        // The session's value, as on the end screen -- see there.
+        keepYearless={state.keepYearless}
         notice={noticeBanner}
       />
     </Suspense>

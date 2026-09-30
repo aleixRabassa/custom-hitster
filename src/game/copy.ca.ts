@@ -53,6 +53,9 @@ export const COPY_CA = {
     playlistLinkPlaceholder: COPY.landing.playlistLinkPlaceholder,
     removeRow: (position: number) => `Treu la playlist ${position}`,
     addRow: 'Afegeix una altra playlist',
+    // 2026-09-30 PROPOSALS, not yet read by a native speaker (docs/development.md §5).
+    keepYearless: 'Mantenir cartes sense any',
+    keepYearlessHint: 'Útil per imprimir la baralla sencera i escriure a mà els anys que faltin',
     atMaxRows: (maxPlaylists: number) => `El màxim és de ${maxPlaylists} playlists per baralla.`,
     start: 'Comença',
     starting: 'Carregant…',
@@ -108,6 +111,8 @@ export const COPY_CA = {
     yearUnknown: 'Any desconegut',
     yearUnknownDetail: 'Comprova-ho pel teu compte',
     yearUnconfirmed: 'Any sense confirmar',
+    // 2026-09-30 PROPOSALS, not yet read by a native speaker (docs/development.md §5).
+    yearProvisional: "Confirmant l'any",
   },
 
   qr: {

@@ -105,6 +105,12 @@ export interface EndScreenProps {
    * finish its crawl -- but not always: a player who swipes fast can outrun the 1 req/s gate.
    */
   pendingYearCount: number;
+  /**
+   * Whether this session keeps cards with no year found, from `state.keepYearless`. Straight
+   * through to `DeckActions`, for the PDF export -- the SESSION's value, never the picker's current
+   * preference, so "Play again" and this screen's export agree with the deck that was played.
+   */
+  keepYearless: boolean;
 }
 
 export function EndScreen({
@@ -120,6 +126,7 @@ export function EndScreen({
   isPlaylistSaved,
   deck,
   pendingYearCount,
+  keepYearless,
 }: EndScreenProps) {
   const copy = useCopy();
   return (
@@ -206,6 +213,7 @@ export function EndScreen({
           isPlaylistSaved={isPlaylistSaved}
           deck={deck}
           pendingYearCount={pendingYearCount}
+          keepYearless={keepYearless}
         />
       </section>
 

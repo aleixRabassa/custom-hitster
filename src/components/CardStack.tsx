@@ -78,8 +78,9 @@ import type { Card as CardData } from '../../shared/types';
  *  THIS USED TO BE `${card.id}:${currentIndex}` AND THAT KEYED THE EXIT
  *  ANIMATION TO THE YEAR CRAWL. DO NOT PUT THE INDEX BACK.
  *
- *  A lookup that finds no year REMOVES its card from the deck (`gameReducer`,
- *  `YEAR_RESOLVED`), and when the dropped card sat BEHIND the player the
+ *  A final "no year" REMOVES its card from the deck (`gameReducer`,
+ *  `YEAR_RESOLVED`) unless the session keeps yearless cards, and -- in the
+ *  sessions that drop them -- when the dropped card sat BEHIND the player the
  *  reducer shifts `currentIndex` back so the player keeps looking at the same
  *  card. Nothing the player can see has changed -- but a key built from the
  *  index changed, so `AnimatePresence` saw one child leave and another arrive:
@@ -177,7 +178,6 @@ export interface CardStackProps {
   /** Index of the current card, straight from `GameState.currentIndex`. */
   currentIndex: number;
   isFlipped: boolean;
-  isYearPending: boolean;
   onFlip: () => void;
   /** A right swipe. */
   onNext: () => void;
@@ -191,7 +191,6 @@ export function CardStack({
   deck,
   currentIndex,
   isFlipped,
-  isYearPending,
   onFlip,
   onNext,
   onPrevious,
@@ -451,7 +450,6 @@ export function CardStack({
           key={presenceKey}
           card={currentCard}
           isFlipped={isFlipped}
-          isYearPending={isYearPending}
           onFlip={onFlip}
           gestureProps={gestureProps}
           movement={deckMovement}

@@ -115,6 +115,12 @@ function rowErrorId(rowId: string): string {
   return `playlist-url-error-${rowId}`;
 }
 
+/**
+ * The `id` of the keep-yearless checkbox's hint, which its input points `aria-describedby` at. A
+ * constant: there is exactly one checkbox, and the picker is mounted at most once.
+ */
+const KEEP_YEARLESS_HINT_ID = 'keep-yearless-hint';
+
 /** One suggested playlist: its Spotify id, its (untranslated) label and its blurb's copy key. */
 export interface SuggestedPlaylist {
   readonly id: string;
@@ -236,6 +242,16 @@ export interface LandingScreenProps {
    * sentence source (`messages.ts`).
    */
   errorCode?: StartFailureCode;
+  /**
+   * The "Keep cards with no year found" checkbox (spike §12.8), CONTROLLED.
+   *
+   * A value and a change callback rather than a wider `onSubmit`, because the same value has to
+   * reach a deal that never passes through this screen: a share link. `App.tsx` owns the state,
+   * seeds it from `prefs.ts` and remembers every change, and hands it to every `start()`. REQUIRED,
+   * like `onBack`, so no host can render a checkbox that silently does nothing.
+   */
+  keepYearless: boolean;
+  onKeepYearlessChange: (keepYearless: boolean) => void;
 }
 
 export function LandingScreen({
@@ -245,6 +261,8 @@ export function LandingScreen({
   errorCode,
   savedPlaylists = [],
   onRemoveSaved,
+  keepYearless,
+  onKeepYearlessChange,
 }: LandingScreenProps) {
   const { copy, errorMessages } = useLocale();
   const [rows, setRows] = useState<PlaylistRow[]>(() => [{ id: 'row-1', value: '' }]);
@@ -796,6 +814,52 @@ export function LandingScreen({
           {canAddRow ? null : (
             <p className="text-xs text-fg-muted">{copy.landing.atMaxRows(MAX_DECK_PLAYLISTS)}</p>
           )}
+
+          {/*
+          ===============================================================================
+           "KEEP CARDS WITH NO YEAR FOUND" (2026-09-30, spike §12.8), BETWEEN THE ROWS AND
+           START, because it qualifies the press below it rather than any one row.
+
+           CONTROLLED: the value and its change callback are `App.tsx`'s, which remembers
+           the choice (`src/game/prefs.ts`) and hands it to every deal -- including a share
+           link's, which never renders this screen. See the prop's own comment.
+
+           A NATIVE CHECKBOX INSIDE ITS `<label>`, so the caption is the accessible name
+           (WCAG 2.5.3, the same rule the row inputs above follow -- no `aria-label`) and a
+           press anywhere on the caption toggles it. `touch-target` sits on the LABEL,
+           which is the actual press area: on the input it would draw a 44px native box.
+           `focus-visible:focus-ring` sits on the input, which is what takes focus.
+
+           `text-sm` IS ON THE CAPTION `<span>` AND NOT ON THE `<label>` -- the preflight
+           trap recorded for this screen's inputs (2026-09-21): an `<input>` has
+           `font: inherit`, so a type scale on the wrapper would size the control too.
+
+           THE HINT IS OUTSIDE THE LABEL, on purpose: inside it, it would join the
+           accessible NAME. Outside, it is the DESCRIPTION, tied by `aria-describedby`,
+           and it reuses the cap hint's small-print pair above. Indented by the box's
+           width plus the gap (`size-5` + `gap-3` = `pl-8`) so it reads under the caption.
+
+           No `value` attribute: the leak audit reads `value`, and a checkbox needs none.
+          ===============================================================================
+        */}
+          <div className="flex flex-col gap-1">
+            <label className="touch-target flex items-center gap-3">
+              <input
+                type="checkbox"
+                checked={keepYearless}
+                onChange={(event) => {
+                  onKeepYearlessChange(event.target.checked);
+                }}
+                disabled={isLoading}
+                aria-describedby={KEEP_YEARLESS_HINT_ID}
+                className="size-5 shrink-0 accent-accent focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)"
+              />
+              <span className="text-sm text-fg-secondary">{copy.landing.keepYearless}</span>
+            </label>
+            <p id={KEEP_YEARLESS_HINT_ID} className="pl-8 text-xs text-fg-muted">
+              {copy.landing.keepYearlessHint}
+            </p>
+          </div>
 
           <button
             type="submit"

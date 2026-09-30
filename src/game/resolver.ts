@@ -1,8 +1,8 @@
 /**
- * The background year crawl.
+ * The background year crawl: two lanes, one request in flight PER STAGE.
  *
  * ===========================================================================
- *  WHY THIS LOOP IS SEQUENTIAL, AND WHY A 429 IS NOT AN ERROR.
+ *  WHY EACH LANE IS SEQUENTIAL, AND WHY A 429 IS NOT AN ERROR.
  *
  *  Measured in Phase 2 (docs/agent_findings.md, 2026-08-04):
  *
@@ -17,76 +17,129 @@
  *  would fire ~100 requests at a gate that admits one per second, take ~99
  *  429s, and spend the deck's whole budget on rejections.
  *
- *  A 429 from `/api/year` is therefore the DESIGNED back-pressure signal
- *  (shared/types.ts, decision 12), carrying `retryAfterMs`. On one, this loop
- *  waits and retries THE SAME CARD -- it does not mark it resolved, does not
- *  skip it, and does not count it as a failure.
+ *  Since 2026-09-30 a lookup has TWO stages (plan.year-fetch-rework-game.md,
+ *  `/api/year?stage=resolve|verify`): `resolve` answers fast and possibly
+ *  PROVISIONALLY, `verify` asks the precision provider and is final. Each stage
+ *  sits behind its own provider gates on the server, so this file runs one
+ *  LANE per stage and NEVER MORE THAN ONE REQUEST IN FLIGHT PER STAGE:
  *
- *  What makes the wait bearable is not throughput, it is ordering: the deck is
- *  crawled in PLAY order, starting from the card the player starts on, and
- *  Start waits on that card alone (`gameReducer`'s gate). Do not "optimise"
- *  this into a parallel fetch.
+ *    * one slot per stage, not one queue with two slots -- both slots of a
+ *      shared queue could take MusicBrainz work at once, and one client would
+ *      then hold two MusicBrainz lookups against a gate shared by every user;
+ *    * one resolver, not two independent workers -- the hand-off from resolve
+ *      to verify would land in the React hook (whose header forbids logic),
+ *      there would be two teardowns to get right, and nothing would push the
+ *      START card into verification while the loading screen waits on it.
+ *
+ *  A 429 from `/api/year` is the DESIGNED back-pressure signal (shared/types.ts,
+ *  decision 12), carrying `retryAfterMs`. On one, ONLY THAT LANE sleeps, and
+ *  then it PICKS AGAIN rather than blindly retrying: a player who moved on
+ *  while it slept is served first. The card is not marked resolved, not
+ *  skipped, and not counted as a failure.
+ *
+ *  What makes the wait bearable is not throughput, it is ordering: the resolve
+ *  lane crawls in PLAY order from the card the player starts on, the verify
+ *  lane serves the card the player is on and the few just ahead of it first,
+ *  and Start waits on the start card alone (`gameReducer`'s gate). Do not
+ *  "optimise" either lane into a parallel fetch.
+ * ===========================================================================
+ *
+ * ===========================================================================
+ *  EVERY CARD IS IN EXACTLY ONE OF THREE STAGE STATES.
+ *
+ *    needs-resolve -> (resolve: final)                     -> final
+ *    needs-resolve -> (resolve: provisional or nothing)    -> needs-verify
+ *    needs-verify  -> (verify: final, or retries run out)  -> final
+ *
+ *  Seeded from the deck at creation: an undefined year needs resolve, a
+ *  `yearProvisional` year needs verify (a resumed provisional card goes
+ *  STRAIGHT to verification), and anything else -- a settled year or a final
+ *  `null` -- is final. The seed used to be "has a year = done", which would
+ *  have marked a resumed provisional card final and never verified it.
+ *
+ *  A card whose verify retries run out settles FINAL at the best single answer
+ *  it has (spike §10.3): its provisional year at `low`, or `null` if resolve
+ *  found nothing either. Otherwise it would wait forever, and the PDF with it.
  * ===========================================================================
  *
  * Framework-free by construction -- it must NEVER import React. The lookup, the sleep and the
  * result callbacks are all injected, which is what makes the sequencing, the back-off and the
  * teardown guarantees assertable in `resolver.test.ts` under the node environment, with no
- * fake timers and no network.
+ * fake timers and no network. The verify lane's idle wait is a PROMISE the other lane settles,
+ * never a timer, for the same reason.
  */
 
-import type { Card, TrackRef, YearConfidence } from '../../shared/types';
+import type { Card, TrackRef, YearConfidence, YearStage } from '../../shared/types';
 import type { YearLookupOutcome } from './year-client';
 
-/** One completed lookup, in the shape `gameReducer`'s `YEAR_RESOLVED` consumes. */
-export interface ResolvedYear {
-  cardId: string;
-  year: number | null;
-  confidence: YearConfidence;
-}
+/**
+ * One report, in a shape assignable to either arm of `gameReducer`'s `YEAR_RESOLVED`
+ * (`YearResolvedAction` in `types.ts`):
+ *
+ * - the FINAL arm: a number or null, plus its confidence. No later report can change it;
+ * - the PROVISIONAL arm: a `resolve`-stage year that `verify` has not answered yet. Always a
+ *   number and always `low`. There is no provisional null -- a resolve that found nothing
+ *   reports nothing, and the card simply stays pending.
+ */
+export type ResolvedYear =
+  | { cardId: string; year: number | null; confidence: YearConfidence }
+  | { cardId: string; year: number; confidence: 'low'; provisional: true };
 
 /**
- * The single network dependency: resolve one track, never throw. `year-client.ts`'s
+ * The single network dependency: run one stage for one track, never throw. `year-client.ts`'s
  * `lookupYear` is the production implementation; the signal comes from `stop()`.
  */
-export type ResolverLookup = (track: TrackRef, signal: AbortSignal) => Promise<YearLookupOutcome>;
+export type ResolverLookup = (
+  track: TrackRef,
+  stage: YearStage,
+  signal: AbortSignal,
+) => Promise<YearLookupOutcome>;
 
 export interface ResolverDeps {
   lookup: ResolverLookup;
   /** Injected so back-off is a recorded number in a test rather than real elapsed time. */
   sleep: (ms: number) => Promise<void>;
   onResolved: (resolved: ResolvedYear) => void;
-  /** Called at most once, on `not-configured`. The crawl is over when it fires. */
+  /** Called at most once, on `not-configured`. Both lanes are over when it fires. */
   onLookupsUnavailable: () => void;
   /** Jitter source. Injectable purely so tests can assert exact delays; defaults to `Math.random`. */
   random?: () => number;
   /**
-   * The deck index the player starts on (2026-09-29); defaults to 0. The crawl walks from here to
-   * the end of the deck and THEN wraps round to the cards before it -- see `order` below. Anything
-   * that is not an integer inside the deck is treated as 0.
+   * The deck index the player starts on (2026-09-29); defaults to 0. The resolve lane walks from
+   * here to the end of the deck and THEN wraps round to the cards before it -- see `order` below
+   * -- and this card is the verify lane's first "current card". Anything that is not an integer
+   * inside the deck is treated as 0.
    */
   startIndex?: number;
 }
 
 export interface YearResolver {
-  /** Begin crawling. Idempotent: a second call on the same instance does nothing. */
+  /** Begin both lanes. Idempotent: a second call on the same instance does nothing. */
   start(): void;
   /**
-   * Resolve this card next, ahead of the ordered walk -- the player has landed on a card whose
-   * year has not arrived. A no-op for a card that is already resolved or not in this deck.
+   * The player has landed on this card. It becomes the verify lane's "current card" (served
+   * first, and the anchor of the look-ahead window); if its year has not even been resolved, it
+   * also jumps the resolve lane's ordered walk. Queues no request for a card that is already
+   * final, and ignores a card that is not in this deck.
    */
   prioritize(cardId: string): void;
-  /** Abort the request in flight and guarantee no further callbacks. Not restartable. */
+  /** Abort both lanes' requests in flight and guarantee no further callbacks. Not restartable. */
   stop(): void;
 }
+
+type StageState = 'needs-resolve' | 'needs-verify' | 'final';
 
 /**
  * How many times one card is tried per pass before it is set aside.
  *
  * Three, not more: every attempt is a second or more of a globally shared budget, and a fault
- * that survives three tries inside a few seconds is not the kind a fourth try fixes. The
- * deferred pass gives each of these cards one more chance later, when the blip may have passed.
+ * that survives three tries inside a few seconds is not the kind a fourth try fixes. Each lane
+ * gives a card that ran out one more pass later, when the blip may have passed -- so a card gets
+ * at most `MAX_ATTEMPTS_PER_PASS * PASSES_PER_STAGE` transient failures per stage, exactly the
+ * budget the one-stage crawl had.
  */
 const MAX_ATTEMPTS_PER_PASS = 3;
+const PASSES_PER_STAGE = 2;
 
 /** First transient back-off; doubles per attempt (500 -> 1000 -> 2000 ms). */
 const TRANSIENT_BASE_DELAY_MS = 500;
@@ -113,19 +166,48 @@ const DEFAULT_RETRY_AFTER_MS = 1_500;
 const JITTER_MS = 250;
 
 /**
+ * How many cards AHEAD of the current one the verify lane serves before falling back to its
+ * first-in-first-out queue (plan.year-fetch-rework-game.md, Open Question 1 -- answered
+ * 2026-09-30 with 3).
+ *
+ * Three because it is roughly how many cards a quick table plays while one cold verify round
+ * trip and its retries are outstanding: the next few cards are the ones whose provisional year
+ * the player is about to read, and anything further out has the whole of those cards' play time
+ * to be verified in FIFO order anyway. Larger buys little -- the resolve lane queues cards in
+ * play order, so FIFO is already close to "nearest first" -- and smaller stops covering a
+ * player who swipes two cards in a row. The number is a guess to be tuned on a device, not a
+ * measurement; the comment is here so nobody mistakes it for one.
+ *
+ * Counted FORWARD only, with no wrap: stepping back is rare, and a card behind the player
+ * that they did step back to is the current card, which is served first regardless.
+ */
+const VERIFY_LOOKAHEAD_CARDS = 3;
+
+/**
  * Create a resolver for ONE session's deck.
  *
  * Single-use: `stop()` is final, and the hook creates a new resolver per `START`. The deck is a
  * snapshot -- the resolver never reads game state back, which is what keeps it free of React
- * and free of the reducer.
+ * and free of the reducer. Dropping cards never reorders a deck, so positions in the snapshot
+ * stay a faithful map of "ahead of the player" for the whole session.
  */
 export function createYearResolver(deck: readonly Card[], deps: ResolverDeps): YearResolver {
   const random = deps.random ?? Math.random;
 
-  /** Every distinct card, by id. A duplicated track is looked up ONCE and reported once. */
+  /** Every distinct card, by id. A duplicated track is looked up ONCE per stage and reported once. */
   const byId = new Map<string, Card>();
+  /** Each distinct id's FIRST position in the snapshot deck -- what the look-ahead window reads. */
+  const indexById = new Map<string, number>();
+  /** Which stage each distinct card still needs. See the second block at the top of the file. */
+  const stageOf = new Map<string, StageState>();
   /**
-   * Ids still needing a lookup, in PLAY order starting from `startIndex`: deck indices
+   * The latest provisional year per card: what an exhausted verify settles at. Seeded from a
+   * resumed provisional card's own year, and updated by every provisional report.
+   */
+  const provisionalYear = new Map<string, number>();
+
+  /**
+   * Ids needing resolve, in PLAY order starting from `startIndex`: deck indices
    * `startIndex..n-1`, then `0..startIndex-1`. For every deal that starts on card 1 that is
    * plain deck order (see `shuffle.ts`).
    *
@@ -145,12 +227,20 @@ export function createYearResolver(deck: readonly Card[], deps: ResolverDeps): Y
    * ===========================================================================
    */
   const order: string[] = [];
-  /** Ids that will never be looked up again: reported, or given up on. */
-  const settled = new Set<string>();
-  /** Ids set aside by a transient failure, for one more pass after the main crawl. */
-  const deferred: string[] = [];
-  /** Ids the player is waiting on, newest last. */
-  const priority: string[] = [];
+  /** Ids the resolve lane set aside after a transient failure, for its deferred pass. */
+  const resolveDeferred: string[] = [];
+  /** Transient failures of the card's CURRENT pass, per lane. Cleared on settle and on defer. */
+  const resolveAttempts = new Map<string, number>();
+  const verifyAttempts = new Map<string, number>();
+
+  /**
+   * Ids needing verify, first in first out. Seeded with resumed provisional cards in play order;
+   * the resolve lane appends in the order it finishes, which is play order too. A card that ran
+   * out of verify attempts once is moved to the BACK -- the verify lane's deferred pass.
+   */
+  const verifyQueue: string[] = [];
+  /** Completed verify passes per card: reaching `PASSES_PER_STAGE` settles it final. */
+  const verifyPasses = new Map<string, number>();
 
   const requestedStart = deps.startIndex ?? 0;
   const startIndex =
@@ -159,197 +249,434 @@ export function createYearResolver(deck: readonly Card[], deps: ResolverDeps): Y
       : 0;
   const rotated = [...deck.slice(startIndex), ...deck.slice(0, startIndex)];
 
+  deck.forEach((card, index) => {
+    if (!indexById.has(card.id)) indexById.set(card.id, index);
+  });
+
   for (const card of rotated) {
     if (byId.has(card.id)) continue;
     byId.set(card.id, card);
 
     // A resumed session arrives with most of the deck already filled (persistence.ts keeps the
-    // years for exactly this reason). Re-resolving those would re-spend a globally shared
-    // budget on work that is already done.
-    if (card.year !== undefined) {
-      settled.add(card.id);
-      continue;
+    // years for exactly this reason), and re-running a stage already done would re-spend a
+    // globally shared budget. But "has a year" is NOT "done" any more: a provisional year still
+    // owes its verify, and marking it final here would leave it provisional for ever.
+    if (card.year === undefined) {
+      stageOf.set(card.id, 'needs-resolve');
+      order.push(card.id);
+    } else if (card.year !== null && card.yearProvisional === true) {
+      stageOf.set(card.id, 'needs-verify');
+      provisionalYear.set(card.id, card.year);
+      verifyQueue.push(card.id);
+    } else {
+      stageOf.set(card.id, 'final');
     }
-
-    order.push(card.id);
   }
+
+  /**
+   * The card the player is on: served first by BOTH lanes, and the anchor of the verify lane's
+   * look-ahead window. Seeded with the start card, because the loading screen waits on it
+   * before the hook's `prioritize` has anything to say -- and during `preparing` the current
+   * card never changes, so a `prioritize` that fired once would never fire again. Keeping the
+   * current card HERE is what closes that "card-1 gap": the moment its resolve answer lands
+   * provisional, it is the verify lane's first pick.
+   */
+  let currentId: string | undefined = rotated[0]?.id;
+  /**
+   * A one-shot jump of the resolve lane's walk, set by `prioritize` for a card still needing
+   * resolve. One-shot (cleared when the card leaves its attempt) rather than "current first
+   * forever", because a current card that keeps failing would otherwise be retried in a loop
+   * instead of being deferred like any other.
+   */
+  let resolveUrgent: string | undefined;
 
   /** Position in `order`. Never rewound -- a priority jump must not restart the crawl. */
   let cursor = 0;
+  let resolvePhase: 'main' | 'deferred' = 'main';
+  let resolveDone = false;
   let started = false;
   let stopped = false;
-  /** Set by `not-configured`: the one error that ends the whole crawl rather than one card. */
+  /** Set by `not-configured`: the one error that ends both lanes rather than one card. */
   let halted = false;
 
-  // One controller for the resolver's lifetime. `stop()` aborts it, which cancels the request
-  // in flight instead of leaving it to resolve into a reducer that has already ended.
+  /** Wakes an idle verify lane. Replaced on every wake, so each wait gets a fresh promise. */
+  let wakeVerify: (() => void) | undefined;
+
+  // One controller for the resolver's lifetime, shared by both lanes. `stop()` aborts it, which
+  // cancels both requests in flight instead of leaving them to resolve into a reducer that has
+  // already ended.
   const controller = new AbortController();
 
   function start(): void {
     // Idempotent on purpose. React 19's StrictMode invokes an effect twice; the first resolver
     // is stopped by the effect's cleanup and this guard covers a double `start()` on the same
-    // instance. Exactly one crawl runs either way.
+    // instance. Exactly one pair of lanes runs either way.
     if (started || stopped) return;
     started = true;
 
-    void crawl().catch((error: unknown) => {
-      // `crawl()` handles every outcome it knows about, so this is a genuine bug (or an
+    runLane('resolve', resolveLane);
+    runLane('verify', verifyLane);
+  }
+
+  function runLane(stage: YearStage, lane: () => Promise<void>): void {
+    void lane().catch((error: unknown) => {
+      // Each lane handles every outcome it knows about, so this is a genuine bug (or an
       // injected `sleep` that rejected). Logged rather than swallowed silently.
-      console.warn('[year-resolver] crawl stopped unexpectedly:', describe(error));
+      console.warn(`[year-resolver] ${stage} lane stopped unexpectedly:`, describe(error));
     });
   }
 
   function prioritize(cardId: string): void {
     if (stopped || halted) return;
-    // Already resolved, or not part of this deck: nothing to jump the queue for. This is the
-    // COMMON case, not an edge case -- the crawl usually stays ahead of the player.
-    if (settled.has(cardId) || !byId.has(cardId)) return;
-    if (priority.includes(cardId)) return;
+    // Not part of this deck: nothing to serve.
+    const stage = stageOf.get(cardId);
+    if (stage === undefined) return;
 
-    priority.push(cardId);
+    // The anchor moves even for a FINAL card -- the COMMON case, since the lanes usually stay
+    // ahead of the player -- because the look-ahead window is "the cards ahead of wherever the
+    // player is". A final card still queues no request of its own.
+    currentId = cardId;
+
+    // A card needing verify needs nothing more: "current card first" is the verify lane's own
+    // first rule, and that lane is only ever idle when there is no verify work at all.
+    if (stage === 'needs-resolve') resolveUrgent = cardId;
   }
 
   function stop(): void {
     stopped = true;
     controller.abort();
+    notifyVerify();
   }
 
-  async function crawl(): Promise<void> {
-    // ---- Main pass: the whole deck, in play order from the start card ----------
-    while (!stopped && !halted) {
-      const cardId = takePriority() ?? takeNext();
-      if (cardId === undefined) break;
-
-      await attempt(cardId, false);
-    }
-
-    // ---- Deferred pass: one more try for cards a blip took out -------------------
-    // Run ONCE, after the crawl, so a MusicBrainz hiccup does not permanently blank a third of
-    // the deck. Only here does a failing card settle at `null` / `none`.
-    while (!stopped && !halted) {
-      const cardId = takePriority() ?? deferred.shift();
-      if (cardId === undefined) break;
-
-      await attempt(cardId, true);
-    }
+  function halt(): void {
+    // `not-configured`: plan 2 returns it only when EVERY provider is unconfigured, so it fails
+    // identically for every remaining card in BOTH stages. Hammering the rest of the deck with
+    // guaranteed 500s helps nobody, so this is the ONE error that ends both lanes. The deck
+    // stays playable, just yearless. The other lane's request in flight is aborted with it.
+    if (halted) return;
+    halted = true;
+    controller.abort();
+    notifyVerify();
+    report(() => {
+      deps.onLookupsUnavailable();
+    });
   }
 
-  /** The next card the player is actually waiting on, skipping any that resolved meanwhile. */
-  function takePriority(): string | undefined {
-    while (priority.length > 0) {
-      const cardId = priority.shift();
-      if (cardId === undefined || settled.has(cardId)) continue;
-
-      // If it was waiting in the deferred queue, take it out: it is being attempted right now.
-      const waiting = deferred.indexOf(cardId);
-      if (waiting !== -1) deferred.splice(waiting, 1);
-
-      return cardId;
-    }
-
-    return undefined;
+  function isOver(): boolean {
+    return stopped || halted;
   }
 
-  /** The next card in `order` (play order from the start card). `cursor` only ever moves forward. */
-  function takeNext(): string | undefined {
-    while (cursor < order.length) {
-      const cardId = order[cursor++];
-      if (cardId === undefined) continue;
-      // Serviced out of turn by a priority jump, or already set aside for the deferred pass.
-      if (settled.has(cardId) || deferred.includes(cardId)) continue;
+  // ---- Resolve lane -----------------------------------------------------------
 
-      return cardId;
+  async function resolveLane(): Promise<void> {
+    try {
+      while (!isOver()) {
+        const cardId = pickResolve();
+        if (cardId === undefined) break;
+
+        await resolveOnce(cardId);
+      }
+    } finally {
+      // However the lane ended, an idle verify lane must learn that no more work is coming --
+      // otherwise it waits on a promise nobody will ever settle.
+      resolveDone = true;
+      notifyVerify();
     }
-
-    return undefined;
   }
 
   /**
-   * Resolve one card, retrying in place.
-   *
-   * `final` marks the deferred pass: a card that has run out of attempts settles at
-   * `null` / `none` there, whereas in the main pass it is deferred instead.
+   * The next card to resolve: the urgent card, then the ordered walk, then -- once the walk is
+   * exhausted -- the deferred pass. Re-evaluated before EVERY request, so a card interrupted by a
+   * 429 is simply picked again unless the player has moved to one that needs resolving.
    */
-  async function attempt(cardId: string, final: boolean): Promise<void> {
+  function pickResolve(): string | undefined {
+    if (resolveUrgent !== undefined) {
+      // A deferred card that is urgent is attempted now but deliberately LEFT in the deferred
+      // queue: if a 429 interrupts it and the player then moves on, the queue is what still
+      // remembers it -- taken out, it would sit behind the cursor and in no queue at all, pending
+      // for ever. Running out again leaves it deferred (or, in the deferred pass, settles it).
+      if (stageOf.get(resolveUrgent) === 'needs-resolve') return resolveUrgent;
+
+      resolveUrgent = undefined;
+    }
+
+    if (resolvePhase === 'main') {
+      while (cursor < order.length) {
+        const cardId = order[cursor];
+        // Serviced out of turn by a priority jump, or already set aside for the deferred pass.
+        // `cursor` only advances past a card once it is no longer this pass's business, so a
+        // card interrupted mid-attempt is picked again rather than skipped.
+        if (
+          cardId !== undefined &&
+          stageOf.get(cardId) === 'needs-resolve' &&
+          !resolveDeferred.includes(cardId)
+        ) {
+          return cardId;
+        }
+        cursor++;
+      }
+
+      // ---- Deferred pass: one more try for cards a blip took out -------------------
+      // Run ONCE, after the crawl, so a hiccup does not permanently blank a third of the deck.
+      // Only here does a failing card settle at `null` / `none`.
+      resolvePhase = 'deferred';
+    }
+
+    while (resolveDeferred.length > 0) {
+      const cardId = resolveDeferred[0];
+      if (cardId !== undefined && stageOf.get(cardId) === 'needs-resolve') return cardId;
+      resolveDeferred.shift();
+    }
+
+    return undefined;
+  }
+
+  /** One `resolve` request for one card, and what it means for that card's stage. */
+  async function resolveOnce(cardId: string): Promise<void> {
     const card = byId.get(cardId);
     if (!card) return;
 
-    let attempts = 0;
+    const outcome = await lookupOnce(card, 'resolve');
+    // Checked immediately after every await: `stop()` may have fired while the request was in
+    // flight, and nothing may be reported into a dead reducer.
+    if (isOver()) return;
 
-    while (!stopped && !halted) {
-      const outcome = await lookupOnce(card);
-      // Checked immediately after every await: `stop()` may have fired while the request was in
-      // flight, and nothing may be reported into a dead reducer.
-      if (stopped) return;
+    if (outcome.ok) {
+      resolveAttempts.delete(cardId);
+      const { result } = outcome;
 
-      if (outcome.ok) {
-        settle(cardId, outcome.result.year, outcome.result.confidence);
+      if (result.final) {
+        // Settled on the first try: this card NEVER enters verify, and so is never delayed.
+        settleFinal(cardId, result.year, result.confidence);
         return;
       }
 
-      switch (outcome.code) {
-        case 'rate-limited':
-          // BACK-PRESSURE, NOT FAILURE. Same card, no attempt consumed, nothing settled -- see
-          // the block comment at the top of this file.
-          await deps.sleep(retryAfterDelay(outcome.retryAfterMs));
-          continue;
+      // Not final: a provisional year, or nothing yet. Either way the card owes a verify, and it
+      // is marked so BEFORE the verify lane is woken -- that lane's first rule is "current card
+      // first", which is how the start card goes straight to the front during `preparing`.
+      if (result.year !== null) reportProvisional(cardId, result.year);
+      // A resolve that found nothing reports NOTHING: there is no provisional null, and the card
+      // stays pending until verify answers.
+      stageOf.set(cardId, 'needs-verify');
+      verifyQueue.push(cardId);
+      notifyVerify();
+      return;
+    }
 
-        case 'not-configured':
-          // A deployment fault (`MUSICBRAINZ_USER_AGENT` unset) that will fail identically for
-          // every remaining card. Hammering the other 99 with guaranteed 500s helps nobody, so
-          // this is the ONE error that ends the crawl. The deck stays playable, just yearless.
-          halted = true;
-          report(() => {
-            deps.onLookupsUnavailable();
-          });
-          return;
+    switch (outcome.code) {
+      case 'rate-limited':
+        // BACK-PRESSURE, NOT FAILURE. Only this lane sleeps; no attempt is consumed and nothing
+        // is settled, and the next pick may serve a card the player moved to meanwhile -- see
+        // the block comment at the top of this file.
+        await deps.sleep(retryAfterDelay(outcome.retryAfterMs));
+        return;
 
-        case 'invalid-request':
-          // The request itself is wrong, so every retry produces the identical 400. Settle this
-          // card and carry on with the deck.
-          settle(cardId, null, 'none');
-          return;
+      case 'not-configured':
+        halt();
+        return;
 
-        default: {
-          // `upstream-unavailable`, `unexpected-payload`, `network`: transient enough to be
-          // worth a retry, systematic enough not to be worth many.
-          attempts++;
-          if (attempts < MAX_ATTEMPTS_PER_PASS) {
-            await deps.sleep(transientDelay(attempts));
-            continue;
-          }
+      case 'invalid-request':
+        // The request itself is wrong, so every retry -- and the verify stage's request, which
+        // carries the same track -- produces the identical 400. Settle this card and carry on.
+        settleFinal(cardId, null, 'none');
+        return;
 
-          if (final) settle(cardId, null, 'none');
-          else defer(cardId);
+      default: {
+        // `upstream-unavailable`, `unexpected-payload`, `network`: transient enough to be
+        // worth a retry, systematic enough not to be worth many.
+        const attempts = (resolveAttempts.get(cardId) ?? 0) + 1;
+        if (attempts < MAX_ATTEMPTS_PER_PASS) {
+          resolveAttempts.set(cardId, attempts);
+          await deps.sleep(transientDelay(attempts));
           return;
         }
+
+        resolveAttempts.delete(cardId);
+        if (resolveUrgent === cardId) resolveUrgent = undefined;
+
+        if (resolvePhase === 'deferred') settleFinal(cardId, null, 'none');
+        else if (!resolveDeferred.includes(cardId)) resolveDeferred.push(cardId);
+        return;
       }
     }
   }
 
+  // ---- Verify lane ------------------------------------------------------------
+
+  async function verifyLane(): Promise<void> {
+    while (!isOver()) {
+      const cardId = pickVerify();
+
+      if (cardId === undefined) {
+        // Nothing to verify yet. Done only once the resolve lane can queue nothing more;
+        // otherwise wait for it to queue something (or to finish). No timer: the resolve lane
+        // settles this promise, so the wait is exact and node-testable.
+        if (resolveDone) return;
+
+        await new Promise<void>((resolve) => {
+          wakeVerify = resolve;
+        });
+        continue;
+      }
+
+      await verifyOnce(cardId);
+    }
+  }
+
+  function notifyVerify(): void {
+    const wake = wakeVerify;
+    wakeVerify = undefined;
+    wake?.();
+  }
+
+  /**
+   * The next card to verify, re-evaluated before EVERY request:
+   *
+   * 1. the current card, if it needs verify -- the player is reading its provisional year;
+   * 2. the nearest card needing verify within `VERIFY_LOOKAHEAD_CARDS` ahead of it, by position
+   *    in the resolver's own deck snapshot (matched by id, never by the live deck's index);
+   * 3. otherwise the head of the first-in-first-out queue.
+   */
+  function pickVerify(): string | undefined {
+    if (currentId !== undefined && stageOf.get(currentId) === 'needs-verify') return currentId;
+
+    const currentIndex = currentId === undefined ? undefined : indexById.get(currentId);
+    if (currentIndex !== undefined) {
+      for (let offset = 1; offset <= VERIFY_LOOKAHEAD_CARDS; offset++) {
+        const cardId = deck[currentIndex + offset]?.id;
+        // A card already on its deferred pass waits its turn at the back of the queue: picking it
+        // through the window again at once would make the deferral a no-op for exactly the cards
+        // nearest the player, and one blip would then hold up the rest of the window.
+        if (
+          cardId !== undefined &&
+          stageOf.get(cardId) === 'needs-verify' &&
+          !verifyPasses.has(cardId)
+        ) {
+          return cardId;
+        }
+      }
+    }
+
+    while (verifyQueue.length > 0) {
+      const cardId = verifyQueue[0];
+      if (cardId !== undefined && stageOf.get(cardId) === 'needs-verify') return cardId;
+      verifyQueue.shift();
+    }
+
+    return undefined;
+  }
+
+  /** One `verify` request for one card. Every path either settles it, retries it, or defers it. */
+  async function verifyOnce(cardId: string): Promise<void> {
+    const card = byId.get(cardId);
+    if (!card) return;
+
+    const outcome = await lookupOnce(card, 'verify');
+    if (isOver()) return;
+
+    if (outcome.ok && outcome.result.final) {
+      verifyAttempts.delete(cardId);
+      settleFinal(cardId, outcome.result.year, outcome.result.confidence);
+      return;
+    }
+
+    if (outcome.ok) {
+      // A NON-final verify: the server's "a provider failed transiently, so this is not the last
+      // word" (plan.year-fetch-rework-server.md step 10). Its year, if it has one, is the best
+      // answer so far and is shown provisionally; the card is then retried like any transient.
+      if (outcome.result.year !== null && provisionalYear.get(cardId) !== outcome.result.year) {
+        reportProvisional(cardId, outcome.result.year);
+      }
+    } else {
+      switch (outcome.code) {
+        case 'rate-limited':
+          // Only this lane sleeps, and then it picks again -- the resolve lane keeps crawling.
+          await deps.sleep(retryAfterDelay(outcome.retryAfterMs));
+          return;
+
+        case 'not-configured':
+          halt();
+          return;
+
+        case 'invalid-request':
+          // Every retry would be the identical 400: settle at the best answer there is.
+          settleExhausted(cardId);
+          return;
+
+        default:
+          // `upstream-unavailable`, `unexpected-payload`, `network`: counted below.
+          break;
+      }
+    }
+
+    const attempts = (verifyAttempts.get(cardId) ?? 0) + 1;
+    if (attempts < MAX_ATTEMPTS_PER_PASS) {
+      verifyAttempts.set(cardId, attempts);
+      await deps.sleep(transientDelay(attempts));
+      return;
+    }
+
+    verifyAttempts.delete(cardId);
+    const passes = (verifyPasses.get(cardId) ?? 0) + 1;
+    verifyPasses.set(cardId, passes);
+
+    if (passes >= PASSES_PER_STAGE) {
+      settleExhausted(cardId);
+      return;
+    }
+
+    // The verify lane's deferred pass: to the back of the queue, behind every card that is
+    // waiting, so a blip on one card does not hold up the rest. (The CURRENT card is picked first
+    // regardless, so a player sitting on it spends its second pass straight away.)
+    const queued = verifyQueue.indexOf(cardId);
+    if (queued !== -1) verifyQueue.splice(queued, 1);
+    verifyQueue.push(cardId);
+  }
+
+  /**
+   * A card whose verify will never answer: final at the best single answer it has -- its
+   * provisional year at `low`, or a final null if resolve found nothing either.
+   */
+  function settleExhausted(cardId: string): void {
+    const year = provisionalYear.get(cardId);
+    if (year === undefined) settleFinal(cardId, null, 'none');
+    else settleFinal(cardId, year, 'low');
+  }
+
+  // ---- Shared -----------------------------------------------------------------
+
   /** One round trip. An injected lookup that rejects is treated as the network failure it is. */
-  async function lookupOnce(card: Card): Promise<YearLookupOutcome> {
+  async function lookupOnce(card: Card, stage: YearStage): Promise<YearLookupOutcome> {
     try {
       // A `Card` is structurally a valid `TrackRef` (shared/types.ts), so it goes straight in.
-      return await deps.lookup(card, controller.signal);
+      return await deps.lookup(card, stage, controller.signal);
     } catch {
       return { ok: false, code: 'network' };
     }
   }
 
-  function settle(cardId: string, year: number | null, confidence: YearConfidence): void {
-    settled.add(cardId);
+  function settleFinal(cardId: string, year: number | null, confidence: YearConfidence): void {
+    stageOf.set(cardId, 'final');
+    // A null is always `none`, whatever the body said: the final arm must never carry a
+    // null with a confidence the reveal would read as a year.
+    const resolved: ResolvedYear =
+      year === null ? { cardId, year: null, confidence: 'none' } : { cardId, year, confidence };
     report(() => {
-      deps.onResolved({ cardId, year, confidence });
+      deps.onResolved(resolved);
     });
   }
 
-  function defer(cardId: string): void {
-    if (!deferred.includes(cardId)) deferred.push(cardId);
+  function reportProvisional(cardId: string, year: number): void {
+    provisionalYear.set(cardId, year);
+    // `low` LITERALLY, never the body's confidence: plan 2 never marks a provisional answer
+    // `high`, and if it ever did, a provisional card must still not read as confirmed.
+    report(() => {
+      deps.onResolved({ cardId, year, confidence: 'low', provisional: true });
+    });
   }
 
   /**
-   * Invoke a consumer callback without letting it kill the crawl.
+   * Invoke a consumer callback without letting it kill a lane.
    *
    * A `dispatch` that throws is a bug in the consumer, and the honest response is to log it and
    * keep resolving the other 99 cards -- silently losing the rest of the deck to someone else's

@@ -16,8 +16,10 @@ import type { Card, PlaylistSummary, YearConfidence } from '../../shared/types';
  *
  * - `idle`:      nothing started. The landing screen's state (Phase 6).
  * - `preparing`: THE CARD-1 GATE. `START` has run and the deck is shuffled, but the START
- *                card's year lookup has not come back yet -- card 1, except for a deal from a
- *                shared mid-game link, which starts on the sender's card (2026-09-29).
+ *                card's answer is not FINAL yet -- a provisional `resolve` year does not open
+ *                it (plan.year-fetch-rework-game.md). Card 1, except for a deal from a shared
+ *                mid-game link, which starts on the sender's card (2026-09-29). Never entered
+ *                when the session keeps yearless cards (`keepYearless`): nothing waits then.
  *                **The only status Phase 6 may render a loading screen for** -- a wait here is
  *                one lookup (1.3-3.6 s cold), never the whole deck (minutes; see `resolver.ts`
  *                for the measurements).
@@ -70,22 +72,25 @@ export interface GameState {
   seed: string;
   /**
    * The SHUFFLED deck. Years are filled in place as the resolver reports them, which is why
-   * `Card.year` is three-state: `undefined` = not looked up, `null` = looked up and nothing
-   * found, a number = resolved.
+   * `Card.year` is three-state: `undefined` = not looked up, `null` = a FINAL "no year", a
+   * number = resolved -- provisionally while `yearProvisional` is set (`yearStateOf()`).
    *
    * ===========================================================================
-   *  ONLY TWO OF THOSE THREE STATES EVER APPEAR HERE (reversal, 2026-08-05).
+   *  `null` APPEARS HERE ONLY WHEN `keepYearless` IS TRUE (reversal 2026-08-05,
+   *  narrowed 2026-09-30).
    *
-   *  A card whose lookup finds no year is REMOVED from the deck instead of being
-   *  stored with `year: null` -- there is nothing to place on a timeline, so
-   *  there is nothing to play. `gameReducer`'s `YEAR_RESOLVED` branch carries the
-   *  decision and its consequences; `RESUME` filters the same way, so a save
-   *  written before the reversal cannot smuggle one back in.
+   *  With the option OFF, a card whose FINAL answer is no year is REMOVED from
+   *  the deck instead of being stored with `year: null` -- there is nothing to
+   *  place on a timeline, so there is nothing to play. `gameReducer`'s
+   *  `YEAR_RESOLVED` branch carries the decision and its consequences; `RESUME`
+   *  filters the same way, so a save written before the reversal cannot smuggle
+   *  one back in. A provisional answer never drops a card.
    *
-   *  So every card in a live deck has `year: undefined` (still crawling) or a
-   *  number. The deck also SHRINKS over a session, by roughly a third on a real
-   *  playlist -- anything deriving a total from `deck.length` should expect it to
-   *  fall as well as to be reached.
+   *  So with the option off every card in a live deck has `year: undefined`
+   *  (still crawling) or a number, and the deck SHRINKS over a session, by
+   *  roughly a third on a real playlist before the provider vote -- anything
+   *  deriving a total from `deck.length` should expect it to fall as well as to
+   *  be reached. With it ON the deck never shrinks and a yearless card plays.
    *
    *  `null` remains in `Card.year`'s type because that is the shape of the lookup
    *  RESULT, which is a different thing from the shape of a playable deck.
@@ -104,6 +109,14 @@ export interface GameState {
   startIndex: number;
   /** Whether the current card is showing its revealed side. Reset by `NEXT`. */
   isFlipped: boolean;
+  /**
+   * The picker's "Keep cards with no year found" (plan.year-fetch-rework-game.md, spike
+   * §12.8), fixed for the whole session at `START`. When true, a final null KEEPS the card
+   * with `year: null` and nothing gates on a year, so the game starts at once; when false,
+   * a final null drops the card and the start card's answer must be FINAL before play.
+   * Restart re-deals with this value, never the picker's current preference.
+   */
+  keepYearless: boolean;
   /**
    * Set when year lookups cannot work at all for this deployment (`not-configured`, i.e. no
    * `MUSICBRAINZ_USER_AGENT` on the server). A hard stop, not a retry signal: the deck stays
@@ -139,13 +152,15 @@ export type GameAction =
       playlists: readonly PlaylistSummary[];
       seed?: string;
       startCardId?: string;
+      /** See `GameState.keepYearless`. Required, so no call site can forget to decide it. */
+      keepYearless: boolean;
     }
   /**
-   * One completed lookup. Matched onto the deck BY CARD ID, never by index (decision 13):
+   * One completed lookup -- final or provisional, see `YearResolvedAction`. Matched onto the deck BY CARD ID, never by index (decision 13):
    * the resolver's priority jump makes its ordering and the deck's ordering diverge
    * routinely, and index matching would corrupt the deck the first time it did.
    */
-  | { type: 'YEAR_RESOLVED'; cardId: string; year: number | null; confidence: YearConfidence }
+  | YearResolvedAction
   | { type: 'YEAR_LOOKUPS_UNAVAILABLE' }
   | { type: 'FLIP' }
   | { type: 'NEXT' }
@@ -157,6 +172,22 @@ export type GameAction =
   | { type: 'PREVIOUS' }
   | { type: 'RESUME'; session: PersistedSession }
   | { type: 'END' };
+
+/**
+ * One completed lookup, as a union of two arms (plan.year-fetch-rework-game.md step 1).
+ *
+ * - The FINAL arm is the pre-provider-vote payload unchanged: a number or null, plus
+ *   confidence. It has no `provisional` field at all, so every existing literal still
+ *   type-checks as a final answer.
+ * - The PROVISIONAL arm is a `resolve`-stage year awaiting `verify`: always a number, always
+ *   `low` (the server never marks a provisional answer `high`).
+ *
+ * There is NO provisional null: a `resolve` that found nothing dispatches nothing and the card
+ * stays pending. That is only expressible because this action cannot carry it.
+ */
+export type YearResolvedAction =
+  | { type: 'YEAR_RESOLVED'; cardId: string; year: number | null; confidence: YearConfidence }
+  | { type: 'YEAR_RESOLVED'; cardId: string; year: number; confidence: 'low'; provisional: true };
 
 /**
  * The `localStorage` shape, kept structurally separate from `GameState` even where the two
@@ -189,4 +220,6 @@ export interface PersistedSession {
   isFlipped: boolean;
   /** Never `idle`: there would be nothing to save. */
   status: GameStatus;
+  /** See `GameState.keepYearless`. Optional in storage (absent = false), required here. */
+  keepYearless: boolean;
 }

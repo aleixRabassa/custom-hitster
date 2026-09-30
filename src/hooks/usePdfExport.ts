@@ -94,7 +94,13 @@ const INK = { text: 20, muted: 110, rule: 170 } as const;
  */
 const QR_PIXELS = 512;
 
-export function usePdfExport(): UsePdfExportResult {
+/**
+ * @param keepYearless The SESSION's "Keep cards with no year found" (`GameState.keepYearless`),
+ *   never the picker's current preference. It decides whether a final `year: null` card is printed
+ *   -- with its year left blank, see `drawBack` -- or left out and counted. A provisional year is
+ *   left out either way: `selectPrintableCards` owns that rule.
+ */
+export function usePdfExport(keepYearless: boolean): UsePdfExportResult {
   const [state, setState] = useState<PdfExportState>(IDLE);
   // The file name is the one string the document carries that is not track data -- in the ACTIVE
   // language, hence a dependency of `exportDeck` below.
@@ -127,7 +133,7 @@ export function usePdfExport(): UsePdfExportResult {
         setState(next);
       };
 
-      const { cards, excludedCount } = selectPrintableCards(deck);
+      const { cards, excludedCount } = selectPrintableCards(deck, { keepYearless });
 
       if (cards.length === 0) {
         publish({ status: 'nothing-to-print', completed: 0, total: 0, excludedCount });
@@ -206,7 +212,7 @@ export function usePdfExport(): UsePdfExportResult {
         }
       })();
     },
-    [pdfCopy],
+    [pdfCopy, keepYearless],
   );
 
   return { state, exportDeck };
@@ -262,16 +268,28 @@ function drawFront(doc: Doc, placement: CardPlacement, dataUrl: string): void {
  * The year is drawn in Helvetica-BOLD at the template's own 28 pt, centred on the card exactly as
  * the template centres its own -- see `YEAR_POINT_SIZE`. The font is put back to `normal` for the
  * title and the artist, because jsPDF's font state is per document and not per call.
+ *
+ * ## A kept yearless card prints with its year BLANK (plan.year-fetch-rework-ui.md step 6b)
+ *
+ * `selectPrintableCards` decides which cards reach this function; this one only decides what to
+ * draw. A `year: null` card gets here only when the session keeps yearless cards, and it gets the
+ * same title and artist, in the same place, with the year's `text` call skipped -- the space is
+ * left for the player to write the year by hand. No box and no rule are drawn in it: the layout is
+ * `backLayout()`'s unchanged, so a written-in year sits exactly where a printed one would. Guarding
+ * the TEXT rather than returning early is the whole change, and `String(null)` is why the guard is
+ * a type check: without it the card would print the word "null".
  */
 function drawBack(doc: Doc, placement: CardPlacement, card: Card | undefined): void {
-  if (!card || typeof card.year !== 'number') return;
+  if (!card) return;
 
   const layout = backLayout(placement);
 
   doc.setTextColor(INK.text);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(layout.yearPointSize);
-  doc.text(String(card.year), layout.centreXMm, layout.yearBaselineMm, { align: 'center' });
+  if (typeof card.year === 'number') {
+    doc.text(String(card.year), layout.centreXMm, layout.yearBaselineMm, { align: 'center' });
+  }
   doc.setFont('helvetica', 'normal');
 
   doc.setFontSize(layout.titlePointSize);
@@ -305,6 +323,8 @@ function drawBack(doc: Doc, placement: CardPlacement, card: Card | undefined): v
  * double-sided and that is a thing to know before pressing a button. Composed from the two pure
  * functions rather than reimplemented.
  */
-export function sheetsForDeck(deck: readonly Card[]): number {
-  return sheetCount(selectPrintableCards(deck).cards.length);
+export function sheetsForDeck(deck: readonly Card[], keepYearless: boolean): number {
+  // The same selection as `exportDeck`, with the same session flag: the count shown before a press
+  // has to describe the file the press produces.
+  return sheetCount(selectPrintableCards(deck, { keepYearless }).cards.length);
 }

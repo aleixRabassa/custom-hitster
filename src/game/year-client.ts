@@ -13,7 +13,7 @@
  * exception.
  */
 
-import type { TrackRef, YearErrorCode, YearLookupResult } from '../../shared/types';
+import type { TrackRef, YearErrorCode, YearLookupResult, YearStage } from '../../shared/types';
 
 /**
  * `YearErrorCode` plus the one failure that has no HTTP status: the request never completed.
@@ -51,6 +51,13 @@ export interface YearFetchResponse {
 
 export interface YearLookupOptions {
   fetchImpl: YearFetch;
+  /**
+   * Which half of the lookup to run (plan.year-fetch-rework-game.md step 3). REQUIRED, and always
+   * sent: a request with no `stage` reaches the server's legacy MusicBrainz-only path, whose body
+   * has no `final` and which an old client answers by dropping every null -- this client must
+   * never make one. `resolver.ts` decides which stage a card needs; this module only carries it.
+   */
+  stage: YearStage;
   /**
    * Aborts the request in flight. Ending a session must cancel outstanding lookups rather than
    * let them resolve into a dead reducer -- `resolver.stop()` is what fires this.
@@ -90,11 +97,11 @@ const SERVER_ERROR_CODES: readonly string[] = [
 ];
 
 /**
- * Resolve one track's year.
+ * Run one stage of one track's year lookup.
  *
- * ONE TRACK PER CALL, mirroring the endpoint (decision 4). The sequencing, the pacing and the
- * retries all belong to `resolver.ts`; this function does a single round trip and describes
- * what came back.
+ * ONE TRACK AND ONE STAGE PER CALL, mirroring the endpoint (decision 4). The sequencing, the
+ * pacing, the retries and the hand-off from `resolve` to `verify` all belong to `resolver.ts`;
+ * this function does a single round trip and describes what came back.
  */
 export async function lookupYear(
   track: TrackRef,
@@ -106,6 +113,7 @@ export async function lookupYear(
     // split, and the server owns the cleaning and the primary-artist fallback -- doing any of
     // that here would let the client's idea of a query drift from the server's cache key.
     artist: track.artist,
+    stage: options.stage,
   });
 
   // Absent, zero or negative all mean "unknown" to the server, which drops the `dur:` bound
@@ -170,9 +178,18 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 /**
  * Validate a 200 body before handing it on.
  *
- * Only the fields Phase 3 and Phase 4 actually read are checked -- `year`, `confidence`,
- * `cached`, `cleanedTitle` -- because the point is to catch "this is not a year response at
- * all" (an HTML error page, a rewritten route), not to re-implement the server's types.
+ * Only the fields the game layer actually decides on are checked -- `year`, `confidence` and
+ * `final` -- because the point is to catch "this is not a year response at all" (an HTML error
+ * page, a rewritten route), not to re-implement the server's types. `agreedBy` and `skipped`
+ * pass through untouched with the rest of the record: nothing below React branches on them.
+ *
+ * `final` MUST be a boolean (2026-09-30). It is the only field that tells pending, provisional
+ * and final apart, so a body without it cannot be acted on at all -- and the body most likely to
+ * lack it is the stage-less legacy MusicBrainz-only one, edge-cached for 30 days, which any
+ * request that lost its `stage` on the way (a rewrite, a stale cached URL) would bring back.
+ * Treating a missing `final` as "true" would turn
+ * every such cached null into a dropped card; as "false", into a card verified forever. Neither
+ * is a guess worth making, so it is `unexpected-payload` and retried like one.
  */
 function asLookupResult(body: unknown): YearLookupResult | undefined {
   const record = asRecord(body);
@@ -189,6 +206,8 @@ function asLookupResult(body: unknown): YearLookupResult | undefined {
   // Phase 6 not to show one.
   if (year === null && confidence !== 'none') return undefined;
   if (year !== null && confidence === 'none') return undefined;
+
+  if (typeof record['final'] !== 'boolean') return undefined;
 
   return record as unknown as YearLookupResult;
 }

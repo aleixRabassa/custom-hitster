@@ -15,10 +15,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DeckActions } from './DeckActions';
 import { auditableText } from './__fixtures__/auditable-text';
-import { fixtureDeck } from './__fixtures__/cards';
+import { fixtureDeck, highConfidenceCard, noYearCard } from './__fixtures__/cards';
 import { COPY } from '../game/copy';
 import { CATALOGUES } from '../game/i18n';
-import { pdfFileName } from '../game/pdf-text';
+import { pdfFileName, sanitizeForPdf } from '../game/pdf-text';
 import { LOCALES } from '../game/locale';
 import { LocaleContext } from '../hooks/useLocale';
 import { sheetsForDeck } from '../hooks/usePdfExport';
@@ -37,10 +37,12 @@ import type { DeckActionsProps } from './DeckActions';
  * `vi.mock` intercepts by specifier rather than by import form, so the same doubles serve the
  * dynamic `import()`s in `usePdfExport` -- the finding `QrCode.test.tsx` records.
  */
-const { toDataURLMock, saveMock } = vi.hoisted(() => ({
+const { toDataURLMock, saveMock, textMock } = vi.hoisted(() => ({
   // `vi.hoisted` is required: the factories below are hoisted above ordinary `const` declarations.
   toDataURLMock: vi.fn<(text: string, options?: unknown) => Promise<string>>(),
   saveMock: vi.fn<(fileName: string) => void>(),
+  // Every string `drawBack` puts on a card's answer side, which is how the blank year is observed.
+  textMock: vi.fn<(text: string | string[], x: number, y: number, options?: unknown) => void>(),
 }));
 
 vi.mock('qrcode', () => ({ toDataURL: toDataURLMock }));
@@ -56,7 +58,10 @@ vi.mock('jspdf', () => {
     rect() {}
     addImage() {}
     addPage() {}
-    text() {}
+
+    text(text: string | string[], x: number, y: number, options?: unknown): void {
+      textMock(text, x, y, options);
+    }
 
     // The real one wraps to the card's width. One line per string is enough for a test that never
     // measures the page -- `pdf-sheet.ts` owns the geometry and has its own tests.
@@ -103,6 +108,8 @@ function renderActions(overrides: Partial<DeckActionsProps> = {}) {
     deck: fixtureDeck.filter((card) => typeof card.year === 'number'),
     // A finished crawl, which is the state the export's own tests want. The gate has its own block.
     pendingYearCount: 0,
+    // The option off, which is the default a fresh profile deals with. Its own block turns it on.
+    keepYearless: false,
     ...overrides,
   };
 
@@ -134,6 +141,7 @@ describe('DeckActions', () => {
       Promise.resolve(`data:image/png;base64,QR(${text})`),
     );
     saveMock.mockReset();
+    textMock.mockReset();
   });
 
   afterEach(() => {
@@ -431,6 +439,7 @@ describe('DeckActions', () => {
             isPlaylistSaved={false}
             deck={fixtureDeck.filter((card) => typeof card.year === 'number')}
             pendingYearCount={0}
+            keepYearless={false}
           />
         </LocaleContext.Provider>,
       );
@@ -450,7 +459,7 @@ describe('DeckActions', () => {
       const { container, props } = renderActions();
 
       expect(container.textContent ?? '').toContain(
-        COPY.deckActions.sheetSummary(sheetsForDeck(props.deck)),
+        COPY.deckActions.sheetSummary(sheetsForDeck(props.deck, props.keepYearless)),
       );
     });
 
@@ -593,7 +602,9 @@ describe('DeckActions', () => {
       const text = container.textContent ?? '';
 
       expect(text).toContain(COPY.deckActions.printWaitsForYears(7));
-      expect(text).not.toContain(COPY.deckActions.sheetSummary(sheetsForDeck(props.deck)));
+      expect(text).not.toContain(
+        COPY.deckActions.sheetSummary(sheetsForDeck(props.deck, props.keepYearless)),
+      );
     });
 
     it('should keep copy and save available while years are pending', () => {
@@ -640,6 +651,88 @@ describe('DeckActions', () => {
         expect(text).not.toContain(card.title);
         expect(text).not.toContain(card.artist);
       }
+    });
+  });
+
+  describe('keeping yearless cards', () => {
+    /**
+     * ===================================================================
+     *  THE SESSION'S "KEEP CARDS WITH NO YEAR FOUND" REACHES THE PDF
+     *  (plan.year-fetch-rework-ui.md step 6).
+     *
+     *  On, a final `year: null` card is PRINTED, with its year left blank
+     *  for the player to write in; off, it is left out and counted. The
+     *  pending card in the fixture deck (`year` absent) is left out either
+     *  way -- only a final "no year" is kept.
+     * ===================================================================
+     */
+
+    /** The first argument of every `text` call `usePdfExport` made, in order. */
+    function drawnTexts(): (string | string[])[] {
+      return textMock.mock.calls.map((call) => call[0]);
+    }
+
+    it('should pass keepYearless through to selectPrintableCards', async () => {
+      // ON: the null-year card is printed, so only the pending card is left out.
+      const { container } = renderActions({ deck: fixtureDeck, keepYearless: true });
+      expect(container.textContent ?? '').toContain(
+        COPY.deckActions.sheetSummary(sheetsForDeck(fixtureDeck, true)),
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
+      await waitFor(() => {
+        expect(screen.queryByText(COPY.deckActions.exportDonePartial(1))).not.toBeNull();
+      });
+      expect(toDataURLMock).toHaveBeenCalledTimes(7);
+
+      // OFF: the same deck, and the null-year card is counted with the pending one.
+      cleanup();
+      toDataURLMock.mockClear();
+      renderActions({ deck: fixtureDeck, keepYearless: false });
+
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
+      await waitFor(() => {
+        expect(screen.queryByText(COPY.deckActions.exportDonePartial(2))).not.toBeNull();
+      });
+      expect(toDataURLMock).toHaveBeenCalledTimes(6);
+    });
+
+    it('should draw title and artist but no year for a kept yearless card', async () => {
+      renderActions({ deck: [noYearCard], keepYearless: true });
+
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
+      await waitFor(() => {
+        expect(screen.queryByText(COPY.deckActions.exportDone)).not.toBeNull();
+      });
+
+      // `splitTextToSize` returns lines, so the title and the artist arrive as one-line arrays.
+      const texts = drawnTexts();
+      expect(texts).toContainEqual([sanitizeForPdf(noYearCard.title)]);
+      expect(texts).toContainEqual([sanitizeForPdf(noYearCard.artist)]);
+      expect(texts).toHaveLength(2);
+      // `String(null)` is what a missed guard draws, so the word itself is asserted absent, beside
+      // anything year-shaped.
+      for (const text of texts.flat()) {
+        expect(text).not.toBe('null');
+        expect(text).not.toMatch(/^\d{4}$/);
+      }
+      expect(toDataURLMock).toHaveBeenCalledTimes(1);
+      expect(saveMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('should draw the year for a final card as before', async () => {
+      renderActions({ deck: [highConfidenceCard], keepYearless: true });
+
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
+      await waitFor(() => {
+        expect(screen.queryByText(COPY.deckActions.exportDone)).not.toBeNull();
+      });
+
+      expect(drawnTexts()).toEqual([
+        String(highConfidenceCard.year),
+        [sanitizeForPdf(highConfidenceCard.title)],
+        [sanitizeForPdf(highConfidenceCard.artist)],
+      ]);
     });
   });
 

@@ -36,9 +36,11 @@
  *  The input to the deal is still not reproducible, for THREE independent
  *  reasons, and they cost CARDS rather than the ORDER:
  *
- *  1. A card whose year lookup finds nothing is REMOVED from the deck
- *     (`gameReducer`, `YEAR_RESOLVED`, 2026-08-05), and which cards those are
- *     depends on what MusicBrainz answers at play time.
+ *  1. A card whose FINAL year answer is null is REMOVED from the deck
+ *     (`gameReducer`, `YEAR_RESOLVED`, 2026-08-05) unless the session keeps
+ *     yearless cards, and which cards those are depends on what the year
+ *     providers answer at play time. (The option is the player's own, so a
+ *     sender and a recipient can differ here too.)
  *  2. An editorial playlist has its tracks refreshed by Spotify periodically, so
  *     even the fetched list can differ between two opens of the same link.
  *  3. A link can name up to five playlists, and one that has gone private or

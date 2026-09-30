@@ -339,8 +339,6 @@ export const CARD_VARIANTS = {
 export interface CardProps {
   card: CardData;
   isFlipped: boolean;
-  /** True only for `year === undefined` — see `CardRevealSide`. */
-  isYearPending: boolean;
   /**
    * Part of the contract, and deliberately NOT read in this file.
    *
@@ -456,7 +454,6 @@ export interface CardProps {
 export function Card({
   card,
   isFlipped,
-  isYearPending,
   gestureProps,
   movement,
   entranceFromProgress,
@@ -572,7 +569,7 @@ export function Card({
           data-testid="card-reveal-face"
           className="card-ring absolute inset-0 overflow-hidden rounded-card bg-surface-raised backface-hidden rotate-y-180"
         >
-          {isFlipped ? <CardRevealSide card={card} isYearPending={isYearPending} /> : null}
+          {isFlipped ? <CardRevealSide card={card} /> : null}
         </div>
       </div>
     </motion.div>

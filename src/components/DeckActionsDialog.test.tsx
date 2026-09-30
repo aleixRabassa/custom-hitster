@@ -24,6 +24,7 @@ function renderDialog(overrides: Partial<DeckActionsDialogProps> = {}) {
     isPlaylistSaved: false,
     deck: fixtureDeck,
     pendingYearCount: 0,
+    keepYearless: false,
     onClose: vi.fn(),
     ...overrides,
   };

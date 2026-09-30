@@ -43,6 +43,7 @@ import { clearQrCache } from './game/qr-cache';
 import { resetBackNavigationTraversals } from './hooks/useBackNavigation';
 import { SESSION_STORAGE_KEY, SESSION_VERSION } from './game/persistence';
 import { LIBRARY_STORAGE_KEY, LIBRARY_VERSION } from './game/playlist-library';
+import { PREFS_STORAGE_KEY } from './game/prefs';
 import type { PlaylistFetch } from './game/playlist-client';
 import type { StorageLike } from './game/persistence';
 import type { PersistedSession } from './game/types';
@@ -229,6 +230,7 @@ function stubYearApi(): void {
             cached: true,
             cleanedTitle: 'x',
             stripped: { remaster: false, live: false, feature: false, version: false },
+            final: true,
           }),
       }),
     ),
@@ -258,6 +260,7 @@ function stubDroppingYearApi(): void {
             cached: true,
             cleanedTitle: 'x',
             stripped: { remaster: false, live: false, feature: false, version: false },
+            final: true,
           }),
       }),
     ),
@@ -693,6 +696,7 @@ describe('App', () => {
         isFlipped: false,
         startIndex: 0,
         status: 'preparing',
+        keepYearless: false,
       } satisfies PersistedSession),
     );
     // A 500, so any playlist request a resume wrongly made would fail the test rather than pass it.
@@ -742,6 +746,7 @@ describe('App', () => {
         isFlipped: false,
         startIndex: 0,
         status: 'playing',
+        keepYearless: false,
       } satisfies PersistedSession),
     );
 
@@ -777,6 +782,7 @@ describe('App', () => {
               cached: true,
               cleanedTitle: 'x',
               stripped: { remaster: false, live: false, feature: false, version: false },
+              final: true,
             }),
         });
       }),
@@ -833,6 +839,7 @@ describe('App', () => {
               cached: true,
               cleanedTitle: 'x',
               stripped: { remaster: false, live: false, feature: false, version: false },
+              final: true,
             }),
         });
       }),
@@ -1067,6 +1074,7 @@ describe('App', () => {
       isFlipped: false,
       startIndex: 0,
       status: 'playing',
+      keepYearless: false,
     };
     storage.map.set(SESSION_STORAGE_KEY, JSON.stringify(session));
 
@@ -1102,6 +1110,7 @@ describe('App', () => {
         isFlipped: false,
         startIndex: 0,
         status: 'playing',
+        keepYearless: false,
       } satisfies PersistedSession),
     );
 
@@ -1158,6 +1167,7 @@ describe('App', () => {
         isFlipped: false,
         startIndex: 0,
         status: 'playing',
+        keepYearless: false,
       } satisfies PersistedSession),
     );
 
@@ -1323,6 +1333,7 @@ describe('App', () => {
           startIndex: 0,
           isFlipped: false,
           status: 'playing',
+          keepYearless: false,
           ...overrides,
         } satisfies PersistedSession),
       );
@@ -2010,6 +2021,7 @@ describe('App', () => {
           startIndex: 0,
           isFlipped: false,
           status: 'playing',
+          keepYearless: false,
         } satisfies PersistedSession),
       );
       const fetchImpl = bothLoad();
@@ -2056,6 +2068,7 @@ describe('App', () => {
           startIndex: 0,
           isFlipped: false,
           status: 'playing',
+          keepYearless: false,
         } satisfies PersistedSession),
       );
       const fetchImpl = bothLoad();
@@ -2148,6 +2161,257 @@ describe('App', () => {
         expect(screen.queryByTestId('hud')).not.toBeNull();
       });
       expect(fetchImpl).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('the keep-yearless option', () => {
+    /**
+     * `?playlist=…&seed=…`, as in the share-link block above. Redeclared rather than hoisted, so
+     * this block reads on its own.
+     */
+    const LINK_SEED = 'a1b2c3d4e5f60718';
+    const LINK_SEARCH = `?playlist=${PLAYLIST.id}&seed=${LINK_SEED}`;
+
+    /** The picker's checkbox, by its visible caption. */
+    function keepYearlessBox(): HTMLInputElement {
+      return screen.getByRole('checkbox', { name: COPY.landing.keepYearless }) as HTMLInputElement;
+    }
+
+    function savedSession(storage: ReturnType<typeof memoryStorage>): PersistedSession {
+      return JSON.parse(storage.map.get(SESSION_STORAGE_KEY) ?? '{}') as PersistedSession;
+    }
+
+    function storedPrefs(storage: ReturnType<typeof memoryStorage>): unknown {
+      return JSON.parse(storage.map.get(PREFS_STORAGE_KEY) ?? 'null');
+    }
+
+    it('should deal with keepYearless from the checkbox', async () => {
+      // Every lookup finds nothing. With the option OFF that is the collapse to the picker's
+      // `no-years-found` warning (asserted above); ON, every card stays and the game plays on.
+      stubDroppingYearApi();
+      const storage = memoryStorage();
+      renderApp(playlistFetch(200, playlistResult()), storage);
+
+      enterPicker();
+      fireEvent.click(keepYearlessBox());
+      startPlaylist();
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('hud')).not.toBeNull();
+      });
+      expect(savedSession(storage).keepYearless).toBe(true);
+
+      // Let every lookup come back empty, then check nothing left the deck.
+      const deckSize = distinctCardCount(UNRESOLVED_DECK);
+      await waitFor(() => {
+        expect(savedSession(storage).deck.every((card) => card.year === null)).toBe(true);
+      });
+      expect(savedSession(storage).deck).toHaveLength(deckSize);
+      expect(cardsLeftInHud()).toBe(deckSize - 1);
+      expect(screen.queryByText(PLAYLIST_ERROR_MESSAGES['no-years-found'])).toBeNull();
+    });
+
+    it('should remember the checkbox across a remount', () => {
+      const storage = memoryStorage();
+      const fetchImpl = playlistFetch(500, { code: 'internal-error' });
+
+      renderApp(fetchImpl, storage);
+      enterPicker();
+      expect(keepYearlessBox().checked).toBe(false);
+
+      fireEvent.click(keepYearlessBox());
+      expect(keepYearlessBox().checked).toBe(true);
+      expect(storedPrefs(storage)).toEqual({ keepYearless: true });
+
+      // A reload: a fresh mount over the same storage shows the remembered value on its first
+      // render of the picker.
+      cleanup();
+      renderApp(fetchImpl, storage);
+      enterPicker();
+      expect(keepYearlessBox().checked).toBe(true);
+
+      // And turning it off is remembered too.
+      fireEvent.click(keepYearlessBox());
+      expect(storedPrefs(storage)).toEqual({ keepYearless: false });
+      cleanup();
+      renderApp(fetchImpl, storage);
+      enterPicker();
+      expect(keepYearlessBox().checked).toBe(false);
+    });
+
+    it("should deal a share link with the recipient's remembered choice", async () => {
+      // The link carries no option (its format is unchanged), and the recipient never sees the
+      // picker on the way in -- so the only place their choice can come from is the preference.
+      // With every lookup empty, reading anything else would collapse the deck to the warning.
+      stubDroppingYearApi();
+      const storage = memoryStorage();
+      storage.map.set(PREFS_STORAGE_KEY, JSON.stringify({ keepYearless: true }));
+
+      render(
+        <App
+          storage={storage}
+          fetchImpl={playlistFetch(200, playlistResult())}
+          search={LINK_SEARCH}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('hud')).not.toBeNull();
+      });
+      expect(savedSession(storage).keepYearless).toBe(true);
+      expect(savedSession(storage).seed).toBe(LINK_SEED);
+      await waitFor(() => {
+        expect(savedSession(storage).deck.every((card) => card.year === null)).toBe(true);
+      });
+      expect(screen.queryByTestId('hud')).not.toBeNull();
+      expect(screen.queryByText(PLAYLIST_ERROR_MESSAGES['no-years-found'])).toBeNull();
+    });
+
+    it("should restart with the session's keepYearless even after the checkbox changed", async () => {
+      // ===================================================================
+      //  THE PREFERENCE AND THE SESSION DISAGREE, AND THE SESSION WINS.
+      //
+      //  A restartable game never shows the picker, so the only way to reach
+      //  "the checkbox changed since the deal" is a RESUMED game: its save says
+      //  ON, the preference now says OFF. Every card is a final `year: null`,
+      //  which only an ON session keeps -- so a restart that read the
+      //  preference would filter all three out and collapse to the warning.
+      //  The resume itself is also the "a resumed game uses the save's value"
+      //  check: an OFF read there would collapse before the HUD ever showed.
+      // ===================================================================
+      stubDroppingYearApi();
+      const storage = memoryStorage();
+      storage.map.set(PREFS_STORAGE_KEY, JSON.stringify({ keepYearless: false }));
+      const deck = [
+        noYearCard,
+        { ...noYearCard, id: 'aaaaaaaaaaaaaaaaaaaaaa' },
+        { ...noYearCard, id: 'bbbbbbbbbbbbbbbbbbbbbb' },
+      ];
+      storage.map.set(
+        SESSION_STORAGE_KEY,
+        JSON.stringify({
+          version: SESSION_VERSION,
+          playlists: [PLAYLIST],
+          seed: 'seed-1',
+          deck,
+          currentIndex: 1,
+          isFlipped: false,
+          startIndex: 0,
+          status: 'playing',
+          keepYearless: true,
+        } satisfies PersistedSession),
+      );
+
+      renderApp(playlistFetch(500, { code: 'internal-error' }), storage);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('hud').textContent).toContain(COPY.hud.cardsLeft(1));
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: COPY.controls.exit }));
+      fireEvent.click(screen.getByRole('button', { name: COPY.exitDialog.restart }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('hud').textContent).toContain(COPY.hud.cardsLeft(2));
+      });
+      const saved = savedSession(storage);
+      expect(saved.seed).not.toBe('seed-1');
+      expect(saved.keepYearless).toBe(true);
+      expect(saved.deck).toHaveLength(3);
+      expect(screen.queryByText(PLAYLIST_ERROR_MESSAGES['no-years-found'])).toBeNull();
+      // And the preference was left alone.
+      expect(storedPrefs(storage)).toEqual({ keepYearless: false });
+    });
+
+    it('should start straight on the game screen when keepYearless is on', async () => {
+      // No lookup ever answers. OFF, that holds the session in `preparing` for good (the card-1
+      // gate); ON, nothing waits for a year, so `START` goes straight to `playing`.
+      stubHangingYearApi();
+      const storage = memoryStorage();
+      renderApp(playlistFetch(200, playlistResult()), storage);
+
+      enterPicker();
+      fireEvent.click(keepYearlessBox());
+      startPlaylist();
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('hud')).not.toBeNull();
+      });
+      expect(savedSession(storage).status).toBe('playing');
+      expect(savedSession(storage).deck.every((card) => card.year === undefined)).toBe(true);
+    });
+
+    it('should show a provisional year and change it on a revealed card when the final answer differs', async () => {
+      // ===================================================================
+      //  PLAN 3'S END-TO-END CASE (plan.year-fetch-rework-game.md), through the
+      //  REAL resolver and year client: `stage=resolve` answers a provisional
+      //  1990, `stage=verify` answers a final 1985 -- held back until the card
+      //  is on screen, flipped, and showing the provisional year.
+      //
+      //  Run with the option ON so the subject can be card 1: OFF, the gate
+      //  holds `preparing` until the start card is FINAL, so a provisional year
+      //  is never on screen for it. The years are distinct from every other
+      //  stub's 1975, and the assertion is on the YEAR TEXT alone -- the
+      //  "Confirming year" line beside it is `CardRevealSide`'s own test.
+      // ===================================================================
+      let releaseVerify: () => void = () => {};
+      const verifyGate = new Promise<void>((resolve) => {
+        releaseVerify = resolve;
+      });
+      const answer = (body: Record<string, unknown>) => ({
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        json: () =>
+          Promise.resolve({
+            source: 'release-group',
+            cached: true,
+            cleanedTitle: 'x',
+            stripped: { remaster: false, live: false, feature: false, version: false },
+            ...body,
+          }),
+      });
+      const stages: (string | null)[] = [];
+      vi.stubGlobal(
+        'fetch',
+        vi.fn((url: string) => {
+          const stage = new URL(String(url), 'http://jitster.example').searchParams.get('stage');
+          stages.push(stage);
+
+          if (stage === 'verify') {
+            return verifyGate.then(() => answer({ year: 1985, confidence: 'high', final: true }));
+          }
+
+          return Promise.resolve(answer({ year: 1990, confidence: 'low', final: false }));
+        }),
+      );
+
+      renderApp(playlistFetch(200, playlistResult()));
+      enterPicker();
+      fireEvent.click(keepYearlessBox());
+      startPlaylist();
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('hud')).not.toBeNull();
+      });
+      fireEvent.keyDown(window, { key: ' ' });
+
+      // The provisional year, on the revealed card.
+      expect(await screen.findByText('1990')).not.toBeNull();
+      expect(screen.queryByText('1985')).toBeNull();
+      // Verification has been asked for and is being held; every request named its stage.
+      await waitFor(() => {
+        expect(stages).toContain('verify');
+      });
+      expect(stages.every((stage) => stage === 'resolve' || stage === 'verify')).toBe(true);
+
+      releaseVerify();
+
+      // The final answer replaces it on the SAME revealed card.
+      expect(await screen.findByText('1985')).not.toBeNull();
+      expect(screen.queryByText('1990')).toBeNull();
+      const inners = screen.getAllByTestId('card-inner');
+      expect(inners.some((inner) => inner.getAttribute('data-flipped') === 'true')).toBe(true);
     });
   });
 });

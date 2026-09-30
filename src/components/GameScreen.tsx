@@ -114,8 +114,6 @@ export interface GameScreenProps {
   /** Index of the current card, straight from `GameState.currentIndex`. */
   currentIndex: number;
   isFlipped: boolean;
-  /** True only for `year === undefined` — from `isCurrentYearPending`. */
-  isYearPending: boolean;
   onFlip: () => void;
   /** Advance: a right swipe or ArrowRight. */
   onNext: () => void;
@@ -175,6 +173,12 @@ export interface GameScreenProps {
    */
   pendingYearCount: number;
   /**
+   * Whether this session keeps cards with no year found, from `state.keepYearless`. Straight
+   * through to `DeckActionsDialog`, for the PDF export -- the SESSION's value, never the picker's
+   * current preference. Nothing here renders it.
+   */
+  keepYearless: boolean;
+  /**
    * The notice banner, or null.
    *
    * Passed in as a NODE rather than as three booleans, because dismissal is container state
@@ -205,7 +209,6 @@ export function GameScreen({
   deck,
   currentIndex,
   isFlipped,
-  isYearPending,
   onFlip,
   onNext,
   onPrevious,
@@ -220,6 +223,7 @@ export function GameScreen({
   onSavePlaylist,
   isPlaylistSaved,
   pendingYearCount,
+  keepYearless,
   notice,
 }: GameScreenProps) {
   const copy = useCopy();
@@ -489,7 +493,6 @@ export function GameScreen({
           deck={deck}
           currentIndex={currentIndex}
           isFlipped={isFlipped}
-          isYearPending={isYearPending}
           onFlip={onFlip}
           onNext={onNext}
           onPrevious={onPrevious}
@@ -580,6 +583,7 @@ export function GameScreen({
           // arrived by the time the player presses. Nothing from it is rendered -- see `DeckActions`.
           deck={deck}
           pendingYearCount={pendingYearCount}
+          keepYearless={keepYearless}
           onClose={() => {
             setIsDeckActionsOpen(false);
           }}

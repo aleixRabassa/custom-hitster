@@ -67,12 +67,17 @@ function fetchDeck(first: Card[], second: Card[]): MergedDeck {
   return merged.deck;
 }
 
-/** `START` over a fetched deck, the way `useGameSession.start()` dispatches it. */
+/**
+ * `START` over a fetched deck, the way `useGameSession.start()` dispatches it -- with the option
+ * OFF, as `App.tsx` deals every deck until plan 4 wires the picker's "Keep cards with no year
+ * found". The drops below (the "Play again" crawl and the mid-game link) depend on it.
+ */
 function deal(deck: MergedDeck, options: { seed?: string; startCardId?: string } = {}): GameState {
   return gameReducer(initialGameState, {
     type: 'START',
     cards: deck.cards,
     playlists: deck.playlists,
+    keepYearless: false,
     ...options,
   });
 }
@@ -162,12 +167,13 @@ describe('a share link reproduces the sender deck', () => {
       }
       expect(sender.deck.length).toBeLessThan(fetched.cards.length);
 
-      // "Play again" exactly as `App.tsx`'s `handleRestart` deals it: the live deck and no seed --
-      // so a fresh one.
+      // "Play again" exactly as `App.tsx`'s `handleRestart` deals it: the live deck, the session's
+      // own `keepYearless`, and no seed -- so a fresh one.
       const restarted = gameReducer(sender, {
         type: 'START',
         cards: sender.deck,
         playlists: sender.playlists,
+        keepYearless: sender.keepYearless,
       });
       expect(restarted.seed).not.toBe(sender.seed);
 

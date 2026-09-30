@@ -22,9 +22,7 @@ vi.mock('qrcode', () => ({ toString: toStringMock }));
  * pointer-up on a button inside a tappable card bubbles into the gesture handler and flips it.
  */
 function renderCard(isFlipped: boolean) {
-  return render(
-    <Card card={highConfidenceCard} isFlipped={isFlipped} isYearPending={false} onFlip={vi.fn()} />,
-  );
+  return render(<Card card={highConfidenceCard} isFlipped={isFlipped} onFlip={vi.fn()} />);
 }
 
 describe('Card', () => {
@@ -70,7 +68,7 @@ describe('Card', () => {
       <Card
         card={highConfidenceCard}
         isFlipped={false}
-        isYearPending={false}
+
         onFlip={vi.fn()}
         ref={ref}
       />,
@@ -174,7 +172,7 @@ describe('Card', () => {
       <Card
         card={highConfidenceCard}
         isFlipped={false}
-        isYearPending={false}
+
         onFlip={vi.fn()}
         movement="backward"
       />,
@@ -194,7 +192,7 @@ describe('Card', () => {
         <Card
           card={highConfidenceCard}
           isFlipped={false}
-          isYearPending={false}
+
           onFlip={vi.fn()}
           movement={movement}
         />,
@@ -235,7 +233,7 @@ describe('Card', () => {
         <Card
           card={highConfidenceCard}
           isFlipped={false}
-          isYearPending={false}
+
           onFlip={vi.fn()}
           movement="backward"
           entranceFromProgress={fromProgress}
@@ -254,7 +252,7 @@ describe('Card', () => {
       <Card
         card={highConfidenceCard}
         isFlipped={false}
-        isYearPending={false}
+
         onFlip={vi.fn()}
         movement="backward"
         entranceFromProgress={1}
@@ -273,7 +271,7 @@ describe('Card', () => {
       <Card
         card={highConfidenceCard}
         isFlipped={false}
-        isYearPending={false}
+
         onFlip={vi.fn()}
         movement="backward"
       />,
@@ -360,7 +358,7 @@ describe('Card', () => {
     // token. A class-name assertion proves the utility is present and nothing about the rendered
     // size; jsdom computes no layout, so that is the whole of what is available here.
     const { container } = render(
-      <Card card={highConfidenceCard} isFlipped={false} isYearPending={false} onFlip={vi.fn()} />,
+      <Card card={highConfidenceCard} isFlipped={false} onFlip={vi.fn()} />,
     );
 
     const outer = container.firstElementChild;
@@ -456,7 +454,7 @@ describe('Card', () => {
 
     const { container } = render(
       <MotionConfig reducedMotion="user">
-        <Card card={highConfidenceCard} isFlipped={false} isYearPending={false} onFlip={vi.fn()} />
+        <Card card={highConfidenceCard} isFlipped={false} onFlip={vi.fn()} />
       </MotionConfig>,
     );
 

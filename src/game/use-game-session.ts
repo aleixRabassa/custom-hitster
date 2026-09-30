@@ -38,15 +38,22 @@ import type { GameAction, GameState } from './types';
 import type { Card, PlaylistSummary } from '../../shared/types';
 
 /**
- * How a deal differs from a fresh one. Every field is optional and an empty object (or none at all)
- * is a fresh, randomly seeded deal on card 1 -- the picker's case.
+ * How a deal differs from a fresh one. `keepYearless` is the one REQUIRED field; with only that, the
+ * deal is a fresh, randomly seeded one on card 1 -- the picker's case.
  *
- * A share link fills both: its `seed`, and -- for a link shared mid-game -- its `card` param as
- * `startCardId`. See `START` in `types.ts` for what each one does in the reducer.
+ * A share link fills both optional fields: its `seed`, and -- for a link shared mid-game -- its
+ * `card` param as `startCardId`. See `START` in `types.ts` for what each one does in the reducer.
  */
 export interface StartOptions {
   seed?: string;
   startCardId?: string;
+  /**
+   * The picker's "Keep cards with no year found" (plan.year-fetch-rework-game.md), fixed for the
+   * session -- see `GameState.keepYearless`. REQUIRED, like `START.keepYearless`, so no call site
+   * can forget to decide it: the picker and the link deal pass the remembered preference, and
+   * Restart passes the session's own `state.keepYearless`, never the picker's current value.
+   */
+  keepYearless: boolean;
 }
 
 export interface UseGameSessionOptions {
@@ -72,8 +79,9 @@ export interface GameSession {
   cardsRemaining: number;
   resolvedCount: number;
   /**
-   * Lookups still in flight. Zero means every card in the deck carries a real year, which is what
-   * the PDF export waits for -- see the selector's own block in `reducer.ts`.
+   * Cards whose year is not FINAL yet -- still pending, or shown provisionally while their verify
+   * is outstanding. Zero means no printed year can still change, which is what the PDF export
+   * waits for -- see the selector's own block in `reducer.ts`.
    */
   pendingYearCount: number;
   /**
@@ -88,11 +96,11 @@ export interface GameSession {
    * `deck-merge.ts`. The resolver takes the DECK rather than the playlist, so a five-playlist
    * crawl needs no new code here -- only more time (see `resolver.ts` for the per-lookup cost).
    *
-   * `options` is empty for a fresh deal (a generated seed, card 1). A share link passes its seed so
-   * the recipient gets the sender's order, and a mid-game link its card id so they start on the
-   * sender's card -- see `StartOptions`.
+   * `options` carries only `keepYearless` for a fresh deal (a generated seed, card 1). A share link
+   * passes its seed so the recipient gets the sender's order, and a mid-game link its card id so
+   * they start on the sender's card -- see `StartOptions`.
    */
-  start: (cards: Card[], playlists: readonly PlaylistSummary[], options?: StartOptions) => void;
+  start: (cards: Card[], playlists: readonly PlaylistSummary[], options: StartOptions) => void;
   flip: () => void;
   next: () => void;
   /** Step back one card (2026-09-18). A no-op on card 1 -- the reducer decides, not the caller. */
@@ -164,11 +172,14 @@ export function useGameSession(options: UseGameSessionOptions = {}): GameSession
       // `fetch` BOUND to the global: the native one is brand-checked, so handing it over
       // unbound and having it called as `options.fetchImpl(...)` threw "Illegal invocation"
       // and every year lookup came back `network`. See `playlist-client.ts`.
-      lookup: (track, signal) =>
-        lookupYear(track, { fetchImpl: globalThis.fetch.bind(globalThis), signal }),
+      lookup: (track, stage, signal) =>
+        lookupYear(track, { fetchImpl: globalThis.fetch.bind(globalThis), stage, signal }),
       sleep: realSleep,
-      onResolved: ({ cardId, year, confidence }) => {
-        dispatch({ type: 'YEAR_RESOLVED', cardId, year, confidence });
+      // Either arm of `YEAR_RESOLVED` -- final, or provisional -- passed through as the resolver
+      // built it. The hook does not look inside: which arm a report is, and what it does to the
+      // deck, are the resolver's and the reducer's decisions respectively.
+      onResolved: (resolved) => {
+        dispatch({ type: 'YEAR_RESOLVED', ...resolved });
       },
       onLookupsUnavailable: () => {
         dispatch({ type: 'YEAR_LOOKUPS_UNAVAILABLE' });
@@ -179,9 +190,11 @@ export function useGameSession(options: UseGameSessionOptions = {}): GameSession
     resolver.start();
 
     // React 19's StrictMode mounts effects twice. This cleanup is what makes that harmless:
-    // the first resolver is stopped (its in-flight request aborted, its callbacks silenced)
-    // before the second is created, so exactly ONE crawl runs. Verify by counting `/api/year`
-    // requests in the network tab, not by assuming.
+    // the first resolver is stopped (BOTH lanes' in-flight requests aborted, all callbacks
+    // silenced) before the second is created, so exactly ONE resolver -- one resolve lane and
+    // one verify lane -- runs. Since 2026-09-30 this double-crawl guard covers two lanes, and it
+    // is still untested (the `docs/development.md` §5 row): verify by counting `/api/year`
+    // requests PER `stage` in the network tab, not by assuming.
     return () => {
       resolver.stop();
       resolverRef.current = null;
@@ -191,9 +204,9 @@ export function useGameSession(options: UseGameSessionOptions = {}): GameSession
   }, [isActive, sessionId]);
 
   // ---- The priority jump ----------------------------------------------------
-  // When the player outruns the crawl, the card they are looking at goes to the front of the
-  // queue. Fires on index change only; prioritizing an already-resolved card is a no-op in the
-  // resolver, so there is no need to check that here.
+  // Tells the resolver which card the player is on: it is served first by whichever lane it
+  // still needs, and it anchors the verify lane's look-ahead window. Fires on index change only;
+  // the resolver decides what a final card needs (no request), so there is no check here.
   const currentCardId = currentCard(state)?.id;
   useEffect(() => {
     if (currentCardId === undefined) return;
@@ -216,14 +229,19 @@ export function useGameSession(options: UseGameSessionOptions = {}): GameSession
   }, [state, storage]);
 
   const start = useCallback(
-    (cards: Card[], playlists: readonly PlaylistSummary[], options: StartOptions = {}) => {
+    (cards: Card[], playlists: readonly PlaylistSummary[], options: StartOptions) => {
       // Cleared before the new session is dealt, so a failure between here and the first save
       // cannot leave the previous game resumable.
       clearSession(storage);
 
       // Built without `undefined` properties: an absent field is what tells the reducer to use
-      // its default (a generated seed, card 1).
-      const action: Extract<GameAction, { type: 'START' }> = { type: 'START', cards, playlists };
+      // its default (a generated seed, card 1). `keepYearless` has no default to fall back on.
+      const action: Extract<GameAction, { type: 'START' }> = {
+        type: 'START',
+        cards,
+        playlists,
+        keepYearless: options.keepYearless,
+      };
       if (options.seed !== undefined) action.seed = options.seed;
       if (options.startCardId !== undefined) action.startCardId = options.startCardId;
 

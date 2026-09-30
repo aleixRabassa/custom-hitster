@@ -92,6 +92,7 @@ function session(): GameState {
     currentIndex: 1,
     startIndex: 0,
     isFlipped: true,
+    keepYearless: false,
     yearLookupsUnavailable: false,
   };
 }
@@ -114,6 +115,7 @@ function validPayload(overrides: Partial<PersistedSession> = {}): PersistedSessi
     startIndex: 0,
     isFlipped: false,
     status: 'playing',
+    keepYearless: false,
     ...overrides,
   };
 }
@@ -143,6 +145,7 @@ describe('saveSession / loadSession', () => {
       startIndex: state.startIndex,
       isFlipped: state.isFlipped,
       status: state.status,
+      keepYearless: state.keepYearless,
     });
     // And it re-enters through `RESUME` cleanly -- the actual point of the format.
     //
@@ -513,6 +516,7 @@ describe('the start index', () => {
       playlists: [PLAYLIST],
       seed: 'link-seed',
       startCardId: 'c',
+      keepYearless: false,
     });
     saveSession(state, storage);
 
@@ -524,6 +528,116 @@ describe('the start index', () => {
     expect(resumed.currentIndex).toBe(state.currentIndex);
     expect(resumed.startIndex).toBe(state.startIndex);
     expect(resumed.deck[resumed.currentIndex]?.id).toBe('c');
+  });
+});
+
+// ===========================================================================
+//  PROVISIONAL YEARS AND keepYearless (plan.year-fetch-rework-game.md)
+//
+//  Both additive, both with an exact reading when absent, so SESSION_VERSION
+//  stayed at 2 -- the `startIndex` precedent.
+// ===========================================================================
+
+describe('provisional years and keepYearless', () => {
+  it('should round-trip yearProvisional', () => {
+    // Without it, a reload would silently promote a `resolve`-stage guess to a final answer: the
+    // resolver treats a card with a year and no flag as done, so it would never be verified.
+    const storage = memoryStorage();
+    const state: GameState = {
+      ...session(),
+      deck: [
+        card('a', { year: 1975, yearConfidence: 'low', yearProvisional: true }),
+        card('b', { year: 1980, yearConfidence: 'high' }),
+      ],
+      currentIndex: 0,
+    };
+
+    saveSession(state, storage);
+    const deck = loadSession(storage)?.deck ?? [];
+
+    expect(deck[0]).toMatchObject({ year: 1975, yearConfidence: 'low', yearProvisional: true });
+    // Absent on a final card, never `false`.
+    expect(deck[1]).not.toHaveProperty('yearProvisional');
+  });
+
+  it('should reject yearProvisional without a numeric year', () => {
+    // The only shape the reducer writes is `true` beside a number. Anything else did not come from
+    // this code, and reading it either way would be a guess about whether the year is settled.
+    const bad = [
+      { year: null, yearConfidence: 'none', yearProvisional: true },
+      { yearProvisional: true },
+      { year: 1975, yearConfidence: 'low', yearProvisional: false },
+      { year: 1975, yearConfidence: 'low', yearProvisional: 'true' },
+    ];
+
+    for (const overrides of bad) {
+      const storage = memoryStorage();
+      const payload = validPayload();
+      seed(storage, { ...payload, deck: [payload.deck[0], { ...card('b'), ...overrides }] });
+
+      expect(loadSession(storage)).toBeNull();
+    }
+  });
+
+  it('should round-trip keepYearless', () => {
+    for (const keepYearless of [true, false]) {
+      const storage = memoryStorage();
+      saveSession({ ...session(), keepYearless }, storage);
+
+      const raw = JSON.parse(storage.data.get(SESSION_STORAGE_KEY) ?? '{}') as Record<
+        string,
+        unknown
+      >;
+
+      expect(raw['keepYearless']).toBe(keepYearless);
+      expect(loadSession(storage)?.keepYearless).toBe(keepYearless);
+    }
+  });
+
+  it('should load a save without it as false', () => {
+    // A save written before the option existed dropped its yearless cards, as every session did.
+    const storage = memoryStorage();
+    const payload: Record<string, unknown> = { ...validPayload() };
+    delete payload['keepYearless'];
+    seed(storage, payload);
+
+    const loaded = loadSession(storage);
+
+    expect(loaded?.keepYearless).toBe(false);
+    // Not rejected, and the version did not move for it.
+    expect(loaded?.version).toBe(SESSION_VERSION);
+  });
+
+  it('should fix a v1 payload at keepYearless false whatever it carries', () => {
+    const storage = memoryStorage();
+    const { playlists, ...rest } = validPayload({ keepYearless: true });
+    seed(storage, { ...rest, version: 1, playlist: playlists[0] });
+
+    expect(loadSession(storage)?.keepYearless).toBe(false);
+  });
+
+  it('should reject a keepYearless that is not a boolean', () => {
+    for (const keepYearless of ['true', 1, null, {}]) {
+      const storage = memoryStorage();
+      seed(storage, { ...validPayload(), keepYearless });
+
+      expect(loadSession(storage)).toBeNull();
+    }
+  });
+
+  it('should resume a kept session with its nulls through RESUME', () => {
+    const storage = memoryStorage();
+    saveSession({ ...session(), keepYearless: true }, storage);
+
+    const resumed = gameReducer(initialGameState, {
+      type: 'RESUME',
+      session: loadSession(storage)!,
+    });
+
+    // The null card `b` stays, and so does the player on it.
+    expect(resumed.keepYearless).toBe(true);
+    expect(resumed.deck.map((c) => c.id)).toEqual(['a', 'b', 'c']);
+    expect(resumed.deck[resumed.currentIndex]?.id).toBe('b');
   });
 });
 

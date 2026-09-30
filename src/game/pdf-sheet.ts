@@ -394,6 +394,12 @@ export function backLayout(placement: CardPlacement): BackLayout {
 /** The subset of `Card` this module needs. Structural, so the tests need no fixture deck. */
 interface PrintableCandidate {
   year?: number | null;
+  yearProvisional?: true;
+}
+
+/** How the session treats yearless cards. `GameState.keepYearless`, passed down. */
+export interface PrintableOptions {
+  keepYearless: boolean;
 }
 
 /**
@@ -405,18 +411,32 @@ interface PrintableCandidate {
  *  "3 cards had no year yet and were left out" is leak-free. "Left out: Bohemian
  *  Rhapsody, ..." is the same spoiler the whole app is built to avoid, on the one
  *  screen where the player is about to play the deck again.
- *
- *  The only exclusion this can produce in practice is a card the RESOLVER has not
- *  reached yet: a card whose lookup found nothing is already removed from the deck
- *  by `gameReducer` (2026-08-05), so `year: null` cannot reach a live deck. Both
- *  are excluded anyway -- a printed card with no year is a card that cannot be
- *  placed on a timeline, which is the whole game.
  * ===========================================================================
+ *
+ * Three rules, one per state of a card's year (plan.year-fetch-rework-game.md step 7):
+ *
+ * - **Pending** (`year` undefined): left out and counted. The card the resolver has not reached.
+ * - **Provisional**: ALSO left out and counted, "Print so far" included -- the developer's
+ *   decision, so that nothing on paper can still change. A provisional year is shown on screen,
+ *   but a printed one would be a year the `verify` stage may yet correct.
+ * - **Final null**: printed (with a blank year, plan 4) when the session KEEPS yearless cards,
+ *   because the player asked for those cards to be in the deck; left out otherwise. With the option
+ *   off a final null is already removed from the deck by `gameReducer` (2026-08-05), so it cannot
+ *   reach a live deck -- it is excluded anyway, since a card with no year cannot be placed on a
+ *   timeline.
+ *
+ * `options` is required, so no caller can forget to decide the null rule.
  */
 export function selectPrintableCards<T extends PrintableCandidate>(
   deck: readonly T[],
+  options: PrintableOptions,
 ): { cards: T[]; excludedCount: number } {
-  const cards = deck.filter((card) => typeof card.year === 'number');
+  const cards = deck.filter((card) => {
+    if (card.yearProvisional === true) return false;
+    if (card.year === null) return options.keepYearless;
+
+    return typeof card.year === 'number';
+  });
 
   return { cards, excludedCount: deck.length - cards.length };
 }
