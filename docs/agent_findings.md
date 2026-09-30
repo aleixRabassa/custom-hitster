@@ -5366,3 +5366,15 @@ directory, the Vercel project, the old `custom-hitster.vercel.app` alias). `docs
 entries in this log still show the old names as history — including the mockup's old path, which no
 longer resolves. The deployed `MUSICBRAINZ_USER_AGENT` in Vercel is set outside the repo and was not
 changed by this.
+
+## 2026-09-30 — On soundtrack decks every year provider dates the RECORDING, not the film
+
+Measured on Mejores BSO, Disney: top 100 and Openings Català with all four providers, against hand
+labels of the film's year. Today's pipeline drops 38%, 62% and 94% of those decks. The §12 provider
+rule keeps almost all of them, but only 76% (BSO) and 54% (Disney) of the years it shows match the
+film, and 52 of the 53 misses are **later**: Spanish dubs are dated by the compilation that sells
+them (iTunes dates the Peter Pan songs 2002), covers by generic ensembles by their own recording. iTunes
+and Deezer are not independent on these decks (both carry the label's release date), so their
+agreement confirmed two 2006 reissue years and 29 SX3 CD dates. The title cleaner also leaves the
+Spanish `- de "…"/Banda Sonora Original` tail and `''…''` quotes in place. Full write-up in
+[`docs/spikes/spike.year-fetch-rework.md`](./spikes/spike.year-fetch-rework.md) §13.

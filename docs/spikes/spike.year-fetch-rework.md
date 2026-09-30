@@ -14,6 +14,13 @@ number below is in [`spike.year-fetch-rework.data.csv`](./spike.year-fetch-rewor
 > **Then read [§11](#11-third-pass-discogs-latency-and-the-best-combination-licences-set-aside)**: Discogs
 > measured, per-provider latency, and the recommended combination with licences set aside (Deezer →
 > MusicBrainz → iTunes → Discogs: cards without a year 108 → 4 of 542, MusicBrainz requests halved).
+>
+> **And [§13](#13-fifth-pass-film-scores-disney-and-anime-openings-2026-09-30)** for the film-score,
+> Disney and anime-openings playlists, where the §12 rule keeps far more cards but only 54–76% of
+> the years it shows match the film, because every provider dates the recording, not the film.
+> **§13.9–13.12 then record the developer's decisions of 2026-09-30, which supersede §12.2's order:**
+> Discogs is dropped, the card shows the recording's year, and a lone answer is kept in the order
+> MusicBrainz `high` > iTunes > MusicBrainz `low` > Deezer. The summary table is at the end of §13.12.
 
 The developer's brief, verbatim in intent:
 
@@ -1207,3 +1214,398 @@ reached it, even with the option OFF, is the fix to design then.
 **Not measured and not decided:** the checkbox's exact position and wording on a 320 px screen
 (rows in `docs/development.md` §5, with the rest of the picker), and whether a printed blank year
 needs a guide to write on.
+
+---
+
+## 13. Fifth pass: film scores, Disney and anime openings (2026-09-30)
+
+The developer asked for the provider statistics on three playlists from the picker: **Mejores BSO**
+(film scores), **Disney: top 100** and **Openings Català** (anime themes). None of them looks like
+the chart and catalogue decks that §2–§12 were measured on, so the numbers there do not carry over.
+Per-track data is in
+[`spike.year-fetch-rework.soundtracks.csv`](./spike.year-fetch-rework.soundtracks.csv).
+
+### 13.1 Method
+
+- **The same harness as §1–§11**, run from a new scratchpad and not committed. MusicBrainz is the
+  real `resolveYear`, with an in-memory cache and the per-instance gate; **Upstash was not touched**.
+  Deezer, iTunes (`country=ES`) and Discogs use the same queries and verification as §4.1 and §11.1.
+- **The four providers ran in parallel**, one process each, so each stayed under its own limit.
+  There was exactly one MusicBrainz process. Nothing failed: no 429s, no Discogs errors, and no
+  MusicBrainz 503 that the retry did not absorb.
+- **Tracks:** Mejores BSO 99, Disney: top 100 100 (the embed's cap; the playlist is longer),
+  Openings Català 47. Six tracks are in both BSO and Disney, so **240 unique**. **Openings Català
+  reused its 2026-09-29 rows**: its 47 tracks are unchanged, and the numbers reproduce §2's figures
+  for it (3 `high`, 44 no year).
+- **The §12 rule** is simulated as decided: ask Deezer, MusicBrainz, iTunes, then Discogs, and stop
+  at the first year two independent providers agree on. Deezer's release date and ISRC year are one
+  voter. With no agreement, the card keeps a single source as unconfirmed (MusicBrainz, then
+  Discogs, then iTunes, then Deezer only if its two dates agree). `shared/year-providers.ts` was
+  **not** used: see §13.8.
+
+### 13.2 A new reference: the year a player expects
+
+§11's leave-one-out reference (the other providers agree) is **not enough here**, and this pass
+shows why (§13.5). So the BSO and Disney tracks were **hand-labelled** from general knowledge with
+the year a player would expect on the card: **the year of the film** the track is from. When a film
+reuses an older song in its original recording (Oh, Pretty Woman in _Pretty Woman_), the label is
+the song's year. **179 of the 193 tracks got a label**; the other 14 are unknown and are left out of
+every precision figure. Each track was also given a **kind**:
+
+| Kind       | What it is                                                                                    | BSO | Disney |
+| ---------- | --------------------------------------------------------------------------------------------- | --: | -----: |
+| `original` | The original soundtrack recording or single                                                   |  57 |     16 |
+| `predates` | An older song the film reused, in its original recording                                      |   7 |      0 |
+| `dub`      | A Spanish or Latin-American dubbed performance of a Disney song                               |   8 |     73 |
+| `cover`    | A re-recording by a generic act ("Animation Soundtrack Ensemble", "The Film Score Orchestra") |  21 |      3 |
+
+(The six shared tracks count in both columns.) Openings Català could **not** be labelled: the
+question there is when each Catalan theme **aired on TV3**, and that is not general knowledge.
+
+### 13.3 Where the pipeline stands today
+
+| Playlist      | Tracks | `high` | `low` | **No year (dropped)** | …with an empty MusicBrainz pool |
+| ------------- | -----: | -----: | ----: | --------------------: | ------------------------------: |
+| Mejores BSO   |     99 |     53 |     8 |          **38 (38%)** |                              27 |
+| Disney        |    100 |     27 |    11 |          **62 (62%)** |                              43 |
+| Openings      |     47 |      3 |     0 |          **44 (94%)** |                              36 |
+| _The 542, §2_ |    542 |    394 |    33 |             115 (21%) |                            ~109 |
+
+**These are the three worst decks measured so far.** A Disney game today loses almost two cards in
+three before it is dealt. The cards it keeps are exact against the labels in **41 of 56 (73%)** on
+BSO and **27 of 34 (79%)** on Disney.
+
+### 13.4 The four providers on these playlists
+
+**Coverage** (a verified year from that provider):
+
+| Playlist | MusicBrainz | iTunes    | Deezer   | Discogs  | Any of them |
+| -------- | ----------- | --------- | -------- | -------- | ----------- |
+| BSO      | 61 (62%)    | 70 (71%)  | 68 (69%) | 57 (58%) | 81 (82%)    |
+| Disney   | 38 (38%)    | **86**    | 61 (61%) | **8**    | 93 (93%)    |
+| Openings | 3 (6%)      | **45/47** | 39/47    | 5/47     | 46/47       |
+
+**Precision against the labels**, BSO and Disney together (exact / answers given):
+
+| Kind (tracks)   | MusicBrainz     | iTunes           | Deezer date  | Deezer ISRC  | Discogs         |
+| --------------- | --------------- | ---------------- | ------------ | ------------ | --------------- |
+| `original` (73) | 41/52 (79%)     | **57/65 (88%)**  | 24/61 (39%)  | 33/61 (54%)  | **45/51 (88%)** |
+| `predates` (7)  | 6/7             | 4/7              | 0/7          | 5/7          | **7/7**         |
+| `dub` (75)      | 20/28 (71%)     | 28/64 (44%)      | 10/43 (23%)  | 12/43 (28%)  | none answered   |
+| `cover` (24)    | 0/2             | 1/8              | 0/7          | 0/7          | 1/2             |
+| **All (179)**   | **67/89 (75%)** | **90/144 (63%)** | 34/118 (29%) | 50/118 (42%) | **53/60 (88%)** |
+
+Read by provider:
+
+- **MusicBrainz** is still the most trustworthy source that answers often. Its `high` tier is exact
+  in 40 of 49 on BSO and 21 of 25 on Disney. But it has **no answer for 63% of the dubs** and almost
+  none for the covers.
+- **iTunes** covers nearly everything, and on original recordings it is as good as Discogs (88%).
+  **On dubs it is right less than half the time (44%)**, and when it is wrong it is late: a Spanish
+  Disney song is sold on a compilation, and iTunes dates the compilation. All three of its answers
+  for Peter Pan songs, for example, read **2002**; the film is from 1953.
+- **Deezer** is worse here than anywhere else in the spike: **29%** exact. It is a catalogue of
+  editions (§4.2), and these playlists are almost all old catalogue sold on reissues. Its ISRC year
+  is better (42%), but still poor.
+- **Discogs** is the most precise (88%), and the only provider that got every `predates` song
+  right. But it catalogues physical records and has **nothing for the Spanish dubs**: 8 of 100
+  Disney tracks, 5 of 47 openings.
+
+### 13.5 The §12 rule on these playlists
+
+| Playlist | Confirmed | Unconfirmed                    | **No year** | Confirmed at (MB / iTunes / Discogs) |
+| -------- | --------: | ------------------------------ | ----------: | ------------------------------------ |
+| BSO      |        58 | 22 (MB 7, iTunes 11, Deezer 4) |      **19** | 28 / 24 / 6                          |
+| Disney   |        41 | 50 (MB 8, iTunes 39, other 3)  |       **9** | 11 / 29 / 1                          |
+| Openings |        32 | 14 (iTunes 13, Deezer 1)       |       **1** | 1 / 31 / 0                           |
+
+Exact against the labels (labelled tracks only, so the counts are smaller than above):
+
+| Playlist | Confirmed       | Unconfirmed | Every card with a year |
+| -------- | --------------- | ----------- | ---------------------- |
+| BSO      | **53/56 (95%)** | 3/18 (17%)  | 56/74 (76%)            |
+| Disney   | 29/35 (83%)     | 16/48 (33%) | **45/83 (54%)**        |
+| Openings | not labelled    | —           | —                      |
+
+What the rule does here:
+
+1. **It keeps far more cards.** Dropped cards go from 38 to 19 (BSO), from 62 to 9 (Disney) and from
+   44 to 1 (Openings). On the 542 it was 115 to 5.
+2. **But the extra cards are mostly unconfirmed, and unconfirmed is mostly wrong.** On Disney 50
+   cards end unconfirmed, 39 of them on iTunes alone, and only a third of the unconfirmed years
+   match the film. They would carry the amber "Año sin confirmar" marker. That is honest, but on
+   this deck it means "probably wrong" two times in three.
+3. **The consensus reference hides this.** Against "3 of 4 providers agree", every confirmed answer
+   on all three playlists scores 58 of 58. Against the labels, confirmed is 90% (82 of 91). The
+   consensus can only score the 58 cards it covers, and those are the easy ones.
+4. **The errors all point the same way: late.** Of the 53 answers that miss their label, **52 are
+   later** than the film. They are reissues, compilations and re-recordings, never an earlier year.
+5. **The stores are not always independent.** The rule counts iTunes and Deezer as two providers,
+   but both receive the label's release metadata.
+   - Two Disney tracks show §5.4's failure for real. `Bella` and `Asalto al castillo` are
+     **confirmed as 2006** by iTunes plus Deezer's ISRC, both taken from the 2006 special edition of
+     _La Bella y la Bestia_ (1991).
+   - On Openings Català, **29 of the 32 confirmations are iTunes plus Deezer alone** agreeing on the
+     release date of the SX3 CD that carries the theme (1992, 2001, 2002…), which is not when it
+     aired. For example, `Bola De Drac (Makafushigi Adventure)` is confirmed as **2002**, and _Bola
+     de Drac_ was on TV3 from 1990.
+   - **Decision 4 (§12.1) is measured here for the first time.** The rule overturned a MusicBrainz
+     `high` on 8 cards. **5 were corrections** (Schindler's List 2026 → 1993, I Don't Want To Miss A
+     Thing 1997 → 1998, Up 2008 → 2009, Bad Boys 1986 → 1987, The Goonies 'R' Good Enough
+     1983 → 1985), **2 broke a correct year**, and 1 is unlabelled. The two breaks are
+     `Pink Panther Theme`, 1963 → **2006** (iTunes and Deezer both list a 2006 reissue), and
+     `Legends of the Fall`, 1994 → 1995.
+6. **MusicBrainz requests do not go down.** Deezer never confirms alone, so MusicBrainz is asked for
+   every card: 637 requests for the 240, exactly as today. Letting Deezer's recent-release signature
+   confirm alone (§12.2's `finalWhenCertain`) saves only 29, because the signature needs a year from
+   2015 on and these playlists are old catalogue.
+
+### 13.6 Why these playlists fail
+
+**The year of the recording is not the year of the film.** Every provider answers "when was this
+recording released", and on these decks that is often not what the card should say:
+
+| Kind       | What the providers date                                         | Result under §12                                                            |
+| ---------- | --------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `original` | The soundtrack album, usually the film's year                   | **60/67 (90%)** exact                                                       |
+| `predates` | The original single                                             | 7/7 exact                                                                   |
+| `dub`      | The Spanish recording or, more often, a later compilation of it | **32/68 (47%)** exact; 36 of the misses are later                           |
+| `cover`    | A cheap re-recording from 1990–2013                             | 13 of 24 get **no year**; of the 11 that get one, only 1 is the film's year |
+
+A cover is the clearest case. `Theme From 2001: A Space Odyssey` by "Movie Sounds Unlimited" was
+recorded decades after 1968, so no provider can give 1968 for **that** recording: it is not from 1968. A dub is a milder case: the Spanish performance comes months or years after the film, and its
+compilations come later still.
+
+**The title cleaner leaves film tails in place.** Among the 193 BSO and Disney titles:
+
+| Shape                                                                                                    | Titles | No year from MusicBrainz |
+| -------------------------------------------------------------------------------------------------------- | -----: | -----------------------: |
+| Spanish film tail: `Bella - de "La Bella y La Bestia"/Banda Sonora Original`                             |      9 |                        9 |
+| A dash and a film name: `Take My Breath Away - Love Theme from "Top Gun"`, `You Sexy Thing - Full Monty` |      6 |                        6 |
+| Edition words: `Soundtrack Version`, `2007 Remastered Version Saturday Night Fever`, `Re-Recorded`       |      5 |                        5 |
+| Doubled apostrophes as quotes: `From Walt Disney's ''Mary Poppins''`                                     |      2 |                        2 |
+
+All 22 are MusicBrainz misses. They belong in P2 (§8). **What stripping them would recover is
+unmeasured**: the §3.3 variants were not re-run on these titles.
+
+**Cast credits instead of artists.** 13 tracks are credited to "Chorus - Peter Pan", "Coro - La
+Bella y La Bestia", "Cast - Frozen" and the like, and 12 of them get no year from MusicBrainz. The
+stores match them because they carry the same odd credit; MusicBrainz credits the real singers.
+
+### 13.7 What this changes
+
+- **§12's figures are an average over a mixed deck, and they do not hold for these playlists.** On
+  them the rule drops fewer cards but shows a wrong year far more often.
+  - Confirmed years match the film in 95% (BSO) and 83% (Disney) of cases, against §12.3's 99.7%.
+    (That figure was measured against the consensus, which §13.5 point 3 shows is the kinder
+    reference.)
+  - Counting unconfirmed years too, only 76% (BSO) and 54% (Disney) of the years shown are the
+    film's.
+- **A question for the developer: what should a soundtrack card say?** The pipeline answers "the
+  year of this recording"; a player expects "the year of the film". No provider in this spike
+  answers the second question. A fix would be a different lookup, of the film rather than the
+  recording, and that is beyond a spike. It is recorded here as the reason these decks will stay
+  imprecise.
+- **Also for the developer: the single-source fallback on these decks.** Disney's unconfirmed years
+  are right one time in three. Showing them marked or dropping them is §10.5's question, with a much
+  worse number attached.
+- **The independent fixes still stand**, and this pass adds shapes to P2: the Spanish `- de "…"`
+  tail, `Soundtrack Version`, doubled-apostrophe quotes and a trailing film name.
+
+### 13.8 A note on §12.7
+
+§12.7 lists `shared/year-providers.ts`, `api/_lib/provider-lookup.ts`, `deezer.ts`, `itunes.ts` and
+`discogs.ts` as written, and `api/_lib/rate-limit.ts` and `cache.ts` as edited. **On 2026-09-30
+none of it is in the checkout**: the five files do not exist, `rate-limit.ts` has no
+`PROVIDER_GATES`, and `cache.ts` has no per-provider cache. The working tree is clean, and no branch,
+stash or commit contains any of it. So the whole of §12.7 is stale, and the build starts from
+nothing. This pass re-implemented the §12 decision rule inside the harness (`analyze3.ts`), from
+§12.2's description.
+
+One more MusicBrainz oddity turned up: two `high` answers are **2026** (Theme From Schindler's List
+and the E.T. Flying Theme), a year that cannot be a first release for either. The rule corrected the
+first; the second stays 2026, unconfirmed, because no other provider agreed on anything.
+
+### 13.9 The developer's answers, and the provider order for these playlists (2026-09-30)
+
+The developer answered §13.7's two questions:
+
+1. **A card shows the year of the RECORDING**, not the year of the film. So a cover's own year and a
+   dub's own year are the right answers. The §13.2 film labels stay valid as ground truth only for
+   `original` and `predates` tracks (74 labelled), where the recording's year is the film's (or the
+   song's). **A dub or a cover now has no ground truth in this spike.** A compilation date is still
+   wrong for them, because a compilation is not the recording's first release, but that can no
+   longer be measured here.
+2. **Single-source years are shown, marked "Año sin confirmar"**, which is what §12 already does.
+   So a card is dropped only when no provider answers at all.
+
+Then the developer asked which order the providers should be asked in for these playlists.
+
+**The order does not decide how many cards are confirmed.** With "stop at the first agreement", a
+card is confirmed whenever some pair of providers agrees, and the rule keeps asking until one does.
+The order only decides **which year wins** when two pairs agree on different years, and **what it
+costs**. All 24 orders were simulated (`order-eval.ts`, scratchpad), with the first two providers
+asked in parallel and §12.4's per-step p50 latencies:
+
+| Order (first two in parallel)            | Soundtracks: exact, `original`+`predates` | Mean time to the final year | MB / iTunes / Discogs requests (240) | The 542: exact vs consensus | Fixtures |
+| ---------------------------------------- | ----------------------------------------: | --------------------------: | -----------------------------------: | --------------------------: | -------: |
+| **Deezer ∥ MB → iTunes → Discogs (§12)** |                                     67/74 |                       2.7 s |                      637 / 200 / 368 |                     342/343 |    21/22 |
+| Deezer ∥ MB → Discogs → iTunes           |                                 **69/74** |                       3.5 s |                      637 / 177 / 626 |                     342/343 |    21/22 |
+| MB ∥ Discogs → Deezer → iTunes           |                                 **69/74** |                       2.9 s |                      637 / 177 / 738 |                 **343/343** |    21/22 |
+| Deezer ∥ iTunes → MB → Discogs (fastest) |                                     67/74 |                   **2.3 s** |                      421 / 240 / 368 |                     339/343 |    21/22 |
+| Deezer ∥ iTunes → Discogs → MB           |                                     68/74 |                       2.6 s |                      368 / 240 / 474 |                     339/343 |    22/22 |
+
+Every order confirms the same 131 of the 240 and drops the same 27. **Only 2 of the 240 cards change
+year between orders**, both BSO originals: `Out Of Reach` (MusicBrainz and iTunes agree on 1999; the
+single is from 2001) and `Legends of the Fall` (iTunes and Deezer agree on 1995; the film is from
+1994). Putting Discogs before iTunes fixes both, at 0.8 s more per card and three times the Discogs
+requests. Throughput is ~19–21 cards a minute in every order, because MusicBrainz, iTunes and
+Discogs are all global limits of about the same size per card.
+
+**Recommendation: keep the §12 order, and do not give these playlists an order of their own.**
+
+- The best order for these playlists wins 2 cards in 74, and on one of the two the label is
+  arguable. It does not justify a second constant, and a per-deck order needs the app to know what
+  kind of deck it holds, which it does not.
+- The one order to refuse is **the two stores first** (Deezer ∥ iTunes). It is the fastest, but it
+  lets their correlated reissue dates confirm before MusicBrainz is asked: 3 more errors on the 542 than the §12 order.
+- ~~**The bigger lever is not the order but the vote**: counting iTunes and Deezer as one voter
+  raises the soundtracks to 69/74 and costs nothing on the 542.~~ **Wrong, corrected in §13.11:**
+  the consensus reference cannot see the cards it changes, and on the 542 it undoes three
+  corrections §5.3 verified by hand.
+
+### 13.10 iTunes or Discogs, if only one stays (2026-09-30)
+
+The developer asked which of the two to keep, for performance and speed. Simulated
+(`drop-eval.ts`, scratchpad) in the §12 order with the other one removed, stores counted as two
+voters. Latency is §12.4's per-step p50, summed; Discogs' figure includes its own 1.05 s spacing.
+
+| Pipeline                                   | Soundtracks: no year / 240 | …exact, originals (74) | The 542: no year | …exact vs consensus | Time to the final year, mean / p90 (240) | Discogs requests (240 / 542) |
+| ------------------------------------------ | -------------------------: | ---------------------: | ---------------: | ------------------: | ---------------------------------------: | ---------------------------: |
+| All four (§12)                             |                         27 |                     67 |                5 |             342/343 |                            2.7 s / 4.0 s |                    368 / 199 |
+| **Without Discogs** (Deezer ∥ MB → iTunes) |                     **28** |                     64 |            **5** |         **342/343** |                        **1.6 s / 1.6 s** |                        0 / 0 |
+| Without iTunes (Deezer ∥ MB → Discogs)     |                    **120** |             60 (of 65) |           **49** |             342/343 |                            3.2 s / 3.6 s |                    626 / 546 |
+
+**Keep iTunes.**
+
+- **Without iTunes the decks collapse.** Discogs has nothing for Spanish dubs, anime openings or
+  streaming-only music, so dropped cards go from 27 to 120 of 240 (Disney 9 → 55, Openings 1 → 41),
+  and from 5 to 49 on the 542. It is also the slowest provider: 2 to 4 requests a card behind its
+  1.05 s spacing.
+- **Without Discogs little is lost, but not nothing.** One more card dropped of 240 and none on the
+  542, with the same 342/343 against the consensus and the same 21/22 fixtures. But the consensus
+  cannot score the cards whose year changes (§13.11), so they were checked one by one:
+  - on the soundtracks, 3 labelled originals get worse, all to a lone MusicBrainz `low`:
+    A Whole New World 1992 → 2014, (I've Had) The Time of My Life 1987 → 2024, Bad Boys 1987 → 1986;
+  - on the 542, 3 years change, and 2 of them are known wrong: Bulls On Parade 1996 → 1992 and
+    GOSSIP 2023 → 2024.
+
+  That is about 5 known-wrong years per ~780 cards. In exchange the final year arrives **~1.1 s
+  sooner on average and ~2.4 s sooner at p90**, because Discogs was the long last step.
+
+- **Throughput does not change** (~19–21 cards a minute either way): the bound is MusicBrainz's
+  global limit, not the third provider.
+- **Dropping Discogs one: one fewer key, gate and adapter** to build and operate.
+
+**So: keep iTunes over Discogs.** Whether to drop Discogs at all is a trade-off between ~0.6% of
+cards and ~1 s. Without Discogs, counting the stores as one voter would be much worse (342 → 324 of
+343 on the 542), but §13.11 rejects that rule anyway.
+
+A cheaper patch for the three soundtrack losses was also measured: when nobody agrees, rank iTunes
+above a MusicBrainz `low`. Without Discogs it recovers A Whole New World and The Time of My Life,
+but it moves three dubs to iTunes' compilation dates (for example, La Bella y la Bestia (Dueto)
+1992 → 2006, the reissue). It is not proposed.
+
+### 13.11 Stores as one voter, keeping all four providers (2026-09-30)
+
+The developer asked whether counting iTunes and Deezer as one voter is worth its cost while keeping
+both. **No.** Measured with `voter-eval.ts` (scratchpad), all four providers in the §12 order:
+
+- **The consensus figure was blind.** "342/343 on the 542" did not change because the rule only
+  changes cards on which three providers do **not** agree, and those are exactly the cards the
+  consensus cannot score. Checked one by one instead:
+  - **The 542: 9 years change, and it gets worse.** Three are corrections §5.3 labelled as
+    confident, and the rule undoes them: H.I.E.L.O. 2020 → 2010, Happy Together 1967 → 1966 and
+    Iris 1998 → 2017. Abracadabra moves further from its 1984 (1985 → 1996). The other five cannot
+    be verified.
+  - **The soundtracks: 5 years change**, two of them to known-right years (Pink Panther Theme
+    2006 → 1963, Legends of the Fall 1995 → 1994) and three unverifiable.
+  - **Net: +2 known-right on the soundtracks, −4 known-right on the 542.**
+- **It costs requests and time.** Fewer cards stop early, so Discogs requests go 368 → 535 on the
+  240 and 199 → 446 on the 542, and the final year arrives ~0.5 s later on average.
+- **The extra markers are mostly false alarms.** 39 soundtrack cards and 54 of the 542 lose their
+  confirmation with the same year. Of the 4 that can be scored, 3 were right; most of the rest are
+  Openings Català's SX3 dates, which cannot be checked.
+
+**Keep iTunes and Deezer as two voters.** The correlated-reissue failure is real (Pink Panther,
+Bella, Asalto al castillo), but on this data this rule causes more errors than it fixes.
+
+### 13.12 Decided: Discogs is dropped, and iTunes wins a tie (2026-09-30)
+
+**The developer's decision:** remove Discogs from the plan, and when no two providers agree,
+prefer iTunes' year. The plan is now **Deezer ∥ MusicBrainz → iTunes**, stop at the first
+agreement, iTunes and Deezer counted as two voters. Two follow-ups were measured with
+`conflict-eval.ts` and `tie-eval.ts` (scratchpad), on the 240 soundtrack tracks, the 542 and the
+fixtures (804 cards). Discogs, now out of the plan, served as an **independent referee**, beside the
+hand labels: the soundtrack originals, the fixtures, §5.3's confident corrections, and six more
+labelled for this question.
+
+**Question 1: MusicBrainz and Deezer agree, iTunes says something else. Which wins?**
+The pair.
+
+- It happens on **24 of 804** cards (3%).
+- **Labelled: the pair is right 11 times, iTunes 4, and 9 cannot be verified.** iTunes was right on
+  Personal Jesus (1989), Centuries (2014), She Don't Give a FO (2017) and Lemon Tree (1995). It was
+  wrong on, for example, Unchained Melody (1955: a different recording), You Can Leave Your Hat On
+  (1972), Friday I'm in Love (1984, twice) and Men In Black (1988).
+- **Discogs sides with the pair 15 times and with iTunes 3 times.**
+- iTunes' answer is earlier in 21 of the 24. "Trust iTunes when it is exactly one year earlier" was
+  checked and is **not** a rule: it is right on Centuries, She Don't Give a FO and Personal Jesus,
+  and wrong on Iko Iko, Summer Of '69 and Fortunate Son.
+- **So the rule needs no change, and it stays cheap.** Under "stop at the first agreement", iTunes
+  is never asked once MusicBrainz and Deezer agree. That is also what spares iTunes' global
+  ~20-a-minute limit on about half of all cards.
+
+**Question 2: "iTunes wins a tie". Over a MusicBrainz `high` too?** Only over a `low`.
+
+| Lone-answer order, when nobody agrees      | Labelled cards exact | Shown years changed vs §12 |
+| ------------------------------------------ | -------------------: | -------------------------: |
+| MusicBrainz > iTunes > Deezer (§12)        |              110/125 |                          — |
+| **MB `high` > iTunes > MB `low` > Deezer** |          **112/125** |                          7 |
+| iTunes > MusicBrainz > Deezer              |              113/125 |                         18 |
+
+"iTunes first, even over a `high`" scores one more on the labelled set, but the 11 extra cards it
+changes are mostly unlabelled, and they were checked by hand:
+
+- **6 get worse:** Killing In The Name 1992 → 2001, L'Empordà 1989 → 2010, Whistle Stop
+  1973 → 2013, and three Spanish dubs moved to compilation dates. For example, La Bella y La Bestia
+  (Marta Martorell) goes 1992 → 2006 and Preparaos 1994 → 2003.
+- **2–3 get better:** As Time Goes By 1997 → 1942, Bad Boys 1986 → 1987, and probably the E.T.
+  Flying Theme, whose MusicBrainz year is an impossible 2026.
+- **2 are wrong either way:** Bulls On Parade and The Bard's Song.
+
+**Lone-answer order, ACCEPTED by the developer (2026-09-30): MusicBrainz `high`, then iTunes, then
+MusicBrainz `low`, then Deezer only if its two dates agree.** Over a `low`, iTunes recovers A Whole
+New World 2014 → 1992 and (I've Had) The Time of My Life 2024 → 1987, which are the losses §13.10
+charged to dropping Discogs. It also moves three dubs to compilation or reissue dates: Hakuna Matata
+1994 → 2003, La Bella y la Bestia (Dueto) 1992 → 2006, and Parte De Tu Mundo 2019 → 2002, where
+neither year is likely right.
+
+**The design as it now stands**, and as it is written into the plans:
+
+| Rule                  | Decided                                                                                   | Where          |
+| --------------------- | ----------------------------------------------------------------------------------------- | -------------- |
+| Providers and order   | Deezer ∥ MusicBrainz (`resolve`), then iTunes (`verify`). **No Discogs**                  | §13.10, §13.12 |
+| Confirmation          | Two independent providers agree; stop there. Deezer's two dates are one voter             | §12.1          |
+| iTunes vs Deezer      | **Two voters**                                                                            | §13.11         |
+| MB + Deezer vs iTunes | The pair stands; iTunes is not asked                                                      | §13.12         |
+| Nobody agrees         | Shown marked "Año sin confirmar": MB `high` > iTunes > MB `low` > Deezer (dates agree)    | §13.9, §13.12  |
+| What the year means   | The **recording's** year                                                                  | §13.9          |
+| Expected on the 542   | 474 confirmed, 63 unconfirmed, 5 without a year, 342/343 vs the consensus, 21/22 fixtures | §13.10         |
+
+This supersedes §12.2's four-step table and its `unconfirmedTrust` order. The plans updated on
+2026-09-30 to match are
+[`plan.year-fetch-rework-server.md`](../plans/plan.year-fetch-rework-server.md) (Discogs removed, the
+trust tiers, the two-voter rule, the new replay targets) and
+[`plan.year-fetch-rework-mb-fixes.md`](../plans/plan.year-fetch-rework-mb-fixes.md) (the soundtrack
+title tails of §13.6 added to P2, now that the recording's own title must find it).
