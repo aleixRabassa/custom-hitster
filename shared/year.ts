@@ -18,8 +18,8 @@ import type {
   RecordingCandidate,
   TitleStripFlags,
   YearFailureReason,
+  MusicBrainzYearSource,
   YearResult,
-  YearSource,
 } from './types';
 
 // ===========================================================================
@@ -675,7 +675,7 @@ interface YearTier {
   readonly accepts: (candidate: RecordingCandidate) => boolean;
   readonly dateOf: (candidate: RecordingCandidate) => string | undefined;
   readonly maxConfidence: 'high' | 'low';
-  readonly source: YearSource;
+  readonly source: MusicBrainzYearSource;
 }
 
 /**
@@ -964,8 +964,12 @@ function preferByDuration<T extends { candidate: RecordingCandidate }>(
  * that same year: "1975" means "some time in 1975", which is earlier-or-equal to
  * "1975-11-21", and treating it as later would make a coarsely-dated original lose to a
  * precisely-dated reissue from the same year.
+ *
+ * Exported (2026-09-30) because `shared/store-match.ts` needs the same "earliest verified row"
+ * order for the store adapters. SHARED NOW: a change here moves MusicBrainz's answers and the
+ * stores' at once, which is the point -- one definition of "earliest".
  */
-function compareDates(
+export function compareDates(
   a: { year: number; date: string },
   b: { year: number; date: string },
 ): number {
@@ -980,8 +984,11 @@ function compareDates(
   return a.date < b.date ? -1 : a.date > b.date ? 1 : 0;
 }
 
-/** `YYYY`, `YYYY-MM` and `YYYY-MM-DD` all yield their year; anything else yields `undefined`. */
-function parseYear(date: string): number | undefined {
+/**
+ * `YYYY`, `YYYY-MM` and `YYYY-MM-DD` all yield their year; anything else yields `undefined`.
+ * Exported (2026-09-30) and shared with the store adapters and the vote -- see `compareDates`.
+ */
+export function parseYear(date: string): number | undefined {
   const match = /^(\d{4})(?:-\d{2})?(?:-\d{2})?$/.exec(date.trim());
   if (!match?.[1]) return undefined;
   return Number.parseInt(match[1], 10);
@@ -992,8 +999,9 @@ function parseYear(date: string): number | undefined {
  *
  * The upper bound is next year rather than this one: albums are announced with a release
  * date ahead of time, and MusicBrainz carries those dates before the record ships.
+ * Exported (2026-09-30) and shared with the store adapters and the vote -- see `compareDates`.
  */
-function isPlausibleYear(year: number): boolean {
+export function isPlausibleYear(year: number): boolean {
   if (!Number.isInteger(year)) return false;
   return year >= MIN_PLAUSIBLE_YEAR && year <= new Date().getUTCFullYear() + 1;
 }

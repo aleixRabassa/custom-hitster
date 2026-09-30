@@ -82,11 +82,26 @@ export interface Card {
   /**
    * Original release year, filled in by plan.phase-2-year.md. Three states, and the
    * difference between the last two matters to Phase 3's progressive loading:
-   * `undefined` = not looked up yet, `null` = looked up and nothing found,
-   * a number = resolved (check `yearConfidence` before trusting it).
+   * `undefined` = not looked up yet, `null` = a FINAL "no year" (every provider was asked),
+   * a number = resolved (check `yearConfidence` before trusting it, and `yearProvisional`
+   * before treating it as settled).
+   *
+   * A live deck holds `null` only when the session keeps yearless cards
+   * (`GameState.keepYearless`, plan.year-fetch-rework-game.md); otherwise a final null
+   * removes the card. `yearStateOf()` in `src/game/reducer.ts` is the one three-way reading
+   * of this field and the next.
    */
   year?: number | null;
   yearConfidence?: YearConfidence;
+  /**
+   * Present ONLY as `true`, ONLY beside a numeric `year`, and written ONLY by the reducer: the
+   * year came from `/api/year`'s `resolve` stage and its `verify` stage has not answered yet,
+   * so it is shown but may still change. Stored on the card rather than beside the deck
+   * because Restart re-deals `state.deck` through `START` -- a flag kept anywhere else would
+   * turn every provisional card final on a restart, and it would never be verified. Additive,
+   * so no save-format bump (the `startIndex` precedent).
+   */
+  yearProvisional?: true;
 }
 
 /** Playlist-level metadata, for showing the player what deck they are about to play. */
@@ -180,7 +195,56 @@ export interface PlaylistErrorResult {
  *   recording without the studio-album filter. The relaxed pass; measurably off by a
  *   year or so on several tracks, which is exactly why it reports `low`.
  */
-export type YearSource = 'release-group' | 'recording';
+export type MusicBrainzYearSource = 'release-group' | 'recording';
+
+/**
+ * Where the year a player sees came from, once more than one provider can answer
+ * (plan.year-fetch-rework-server.md, 2026-09-30).
+ *
+ * - `release-group` / `recording`: MusicBrainz's own two signals, above. Also what the
+ *   stage-less legacy `/api/year` path still returns, byte for byte.
+ * - `deezer` / `itunes`: the year of that store's lone answer, kept because nobody agreed.
+ * - `vote`: two independent providers agreed on it (`agreedBy` names them).
+ */
+export type YearSource = MusicBrainzYearSource | 'deezer' | 'itunes' | 'vote';
+
+/**
+ * Every year provider the server can ask. The ORDER they are asked in is not here -- it is
+ * `YEAR_PROVIDER_PLAN` in `shared/year-providers.ts`, and only there.
+ */
+export type YearProviderId = 'deezer' | 'musicbrainz' | 'itunes';
+
+/**
+ * The two HTTP stages of `/api/year?stage=`. `resolve` answers fast (possibly
+ * provisionally); `verify` asks the precision provider(s) and is final unless a provider failed transiently.
+ */
+export type YearStage = 'resolve' | 'verify';
+
+/**
+ * One provider's answer about one track: the unit the vote in `shared/year-providers.ts`
+ * counts, and what `api/_lib/cache.ts` stores per provider.
+ *
+ * Deliberately NOT a widened `YearResult`: that type is the cached MusicBrainz value and its
+ * shape is a stored format. `year: null` means the provider was asked and found nothing
+ * verifiable -- distinct from a provider that was skipped or failed, which produces no
+ * answer at all.
+ *
+ * - Deezer carries TWO years, its release date's and its ISRC's, because the pair is one
+ *   voter's evidence and their agreement is what makes a lone Deezer answer usable.
+ * - MusicBrainz carries its tier confidence, `source` and `viaTitle`, because the
+ *   lone-answer order ranks a `high` differently from a `low`.
+ */
+export type ProviderAnswer =
+  | { provider: 'deezer'; year: number | null; isrcYear: number | null }
+  | { provider: 'itunes'; year: number | null }
+  | {
+      provider: 'musicbrainz';
+      year: number;
+      confidence: 'high' | 'low';
+      source: MusicBrainzYearSource;
+      viaTitle?: string;
+    }
+  | { provider: 'musicbrainz'; year: null; confidence: 'none' };
 
 /**
  * Why no year could be resolved. Machine-readable because the two real cases point at
@@ -206,7 +270,7 @@ export type YearResult =
   | {
       year: number;
       confidence: 'high' | 'low';
-      source: YearSource;
+      source: MusicBrainzYearSource;
       /**
        * Set only when the year was found by a FALLBACK query against a rewritten title --
        * today that means a remix suffix was dropped and the underlying song was asked about
@@ -297,12 +361,17 @@ export interface RecordingCandidate {
   releaseDate?: string;
 }
 
-/** The successful `GET /api/year` response body. */
-export interface YearLookupResult {
+/**
+ * The MusicBrainz-only lookup body: what `resolveYear()` returns and what the STAGE-LESS
+ * legacy `GET /api/year` still answers with, byte for byte, for tabs running a client from
+ * before the provider vote (the service worker waits rather than calling `skipWaiting`, so
+ * such tabs live until every tab closes). It has no `final`: that client never read one.
+ */
+export interface MusicBrainzLookupResult {
   year: number | null;
   confidence: YearConfidence;
   /** Absent when `year` is null. */
-  source?: YearSource;
+  source?: MusicBrainzYearSource;
   /** Absent when a year was resolved. */
   reason?: YearFailureReason;
   /** True when this came from the year cache and cost no MusicBrainz request. */
@@ -319,6 +388,43 @@ export interface YearLookupResult {
   stripped: TitleStripFlags;
   /** See `YearResult.viaTitle`. Absent unless a fallback query found the year. */
   viaTitle?: string;
+}
+
+/**
+ * The successful `GET /api/year?stage=resolve|verify` response body.
+ *
+ * `final` is the ONLY field the client reads to tell pending, provisional and final apart
+ * (plan.year-fetch-rework-server.md step 1) -- never `confidence`, which is saved on the card
+ * and keeps its three meanings:
+ *
+ * - `high`: final AND confirmed by two providers (`agreedBy`).
+ * - `low`:  a final unconfirmed answer (one provider's year, kept by the lone-answer order),
+ *           or a provisional one.
+ * - `none`: no year. Final means "drop or keep yearless"; not final means "still pending".
+ */
+export interface YearLookupResult {
+  year: number | null;
+  confidence: YearConfidence;
+  /** Absent when `year` is null. */
+  source?: YearSource;
+  /** Absent when a year was resolved, and optional even then: only MusicBrainz knows one. */
+  reason?: YearFailureReason;
+  /** True when this call made NO provider request -- every answer came from a cache. */
+  cached: boolean;
+  /** See `MusicBrainzLookupResult.cleanedTitle`. */
+  cleanedTitle: string;
+  stripped: TitleStripFlags;
+  /** See `YearResult.viaTitle`. Present only when the kept year is MusicBrainz's via a rewrite. */
+  viaTitle?: string;
+  /**
+   * True when no later call can change this answer. A transient provider failure never
+   * produces a final answer, so a final `null` really is "no provider has a year".
+   */
+  final: boolean;
+  /** The two providers that agreed. Present only when the year is confirmed. */
+  agreedBy?: readonly [YearProviderId, YearProviderId];
+  /** Providers skipped for configuration or failure. Present only when non-empty. */
+  skipped?: YearProviderId[];
 }
 
 /**

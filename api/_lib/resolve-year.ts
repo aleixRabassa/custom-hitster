@@ -20,7 +20,11 @@ import { ttlFor } from './cache.js';
 import { fetchYearCandidates } from './musicbrainz.js';
 import type { YearCache } from './cache.js';
 import type { MusicBrainzAttempt, MusicBrainzDeps, MusicBrainzErrorCode } from './musicbrainz.js';
-import type { RecordingCandidate, YearLookupResult, YearResult } from '../../shared/types.js';
+import type {
+  RecordingCandidate,
+  MusicBrainzLookupResult,
+  YearResult,
+} from '../../shared/types.js';
 
 export interface ResolveYearInput {
   /** The RAW title, exactly as Spotify supplied it. Cleaning happens here. */
@@ -34,7 +38,7 @@ export interface ResolveYearDeps extends MusicBrainzDeps {
 }
 
 export type ResolveYearOutcome =
-  | { ok: true; result: YearLookupResult }
+  | { ok: true; result: MusicBrainzLookupResult }
   | { ok: false; code: MusicBrainzErrorCode; retryAfterMs?: number; cleanedTitle: string };
 
 export async function resolveYear(
@@ -239,10 +243,10 @@ function runTiers(
 /** Shape a `YearResult` into the response body, adding what only the request knows. */
 function present(
   result: YearResult,
-  cleaned: { title: string; stripped: YearLookupResult['stripped'] },
+  cleaned: { title: string; stripped: MusicBrainzLookupResult['stripped'] },
   cached: boolean,
-): YearLookupResult {
-  const body: YearLookupResult = {
+): MusicBrainzLookupResult {
+  const body: MusicBrainzLookupResult = {
     year: result.year,
     confidence: result.confidence,
     cached,

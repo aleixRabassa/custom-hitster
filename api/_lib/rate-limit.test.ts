@@ -2,29 +2,32 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   MIN_REQUEST_INTERVAL_MS,
+  PROVIDER_GATES,
   createInstanceGate,
   createRateLimitGate,
   createRedisGate,
 } from './rate-limit.js';
-import type { FetchLike } from './rate-limit.js';
+import type { FetchLike, GateOptions } from './rate-limit.js';
 
 const CONFIG = { url: 'https://example.upstash.io', token: 'secret-token' };
 
 /**
- * A fetch double backing a real single-key store with an expiry, so `SET … NX PX` behaves
- * the way Redis actually does rather than the way the test wishes it would.
+ * A fetch double backing a real keyed store with per-key expiry, so `SET … NX PX` behaves the
+ * way Redis actually does rather than the way the test wishes it would -- including for two
+ * gates with different keys, which must not share one lock.
  */
 function fakeRedis(): { fetch: FetchLike; commands: unknown[][] } {
-  let heldUntil = 0;
+  const heldUntil = new Map<string, number>();
   const commands: unknown[][] = [];
 
   const fetch: FetchLike = (_url, init) => {
     const args = JSON.parse(init.body) as unknown[];
     commands.push(args);
 
+    const key = String(args[1]);
     const now = Date.now();
-    const free = heldUntil <= now;
-    if (free) heldUntil = now + Number(args[5]);
+    const free = (heldUntil.get(key) ?? 0) <= now;
+    if (free) heldUntil.set(key, now + Number(args[5]));
 
     return Promise.resolve({
       ok: true,
@@ -158,6 +161,126 @@ describe('createInstanceGate', () => {
       expect((await gate.acquire(0)).ok).toBe(false);
     } finally {
       vi.useRealTimers();
+    }
+  });
+});
+
+describe('keyed gates', () => {
+  const DEEZER = PROVIDER_GATES.deezer;
+  const ITUNES = PROVIDER_GATES.itunes;
+
+  it('should not let gates with different keys block each other', async () => {
+    // One lock per provider. A shared key would make a Deezer search wait out MusicBrainz's
+    // 1.1 s window -- and would let iTunes' 3 s window stall the whole `resolve` stage.
+    const { fetch, commands } = fakeRedis();
+    const musicbrainz = createRedisGate(CONFIG, fetch);
+    const deezer = createRedisGate(CONFIG, fetch, DEEZER);
+    const itunes = createRedisGate(CONFIG, fetch, ITUNES);
+
+    expect(await musicbrainz.acquire()).toEqual({ ok: true });
+    expect(await deezer.acquire(0)).toEqual({ ok: true });
+    expect(await itunes.acquire(0)).toEqual({ ok: true });
+
+    // ...while each still blocks a second caller on its OWN key.
+    expect((await deezer.acquire(0)).ok).toBe(false);
+    expect((await itunes.acquire(0)).ok).toBe(false);
+
+    expect(commands.map((command) => command[1])).toEqual([
+      'mbgate:v1',
+      DEEZER.key,
+      ITUNES.key,
+      DEEZER.key,
+      ITUNES.key,
+    ]);
+    // Each key's lock lives exactly as long as its own interval.
+    expect(commands[1]?.[5]).toBe(DEEZER.minIntervalMs);
+    expect(commands[2]?.[5]).toBe(ITUNES.minIntervalMs);
+  });
+
+  it('should not let two per-instance gates share one slot', async () => {
+    const musicbrainz = createInstanceGate();
+    const itunes = createInstanceGate(ITUNES);
+
+    expect(await musicbrainz.acquire()).toEqual({ ok: true });
+    expect(await itunes.acquire(0)).toEqual({ ok: true });
+  });
+
+  it('should derive the refusal retryAfterMs from the gate', async () => {
+    // The 429's `retryAfterMs` is the client's per-lane back-off. A refused iTunes permit
+    // reporting MusicBrainz's 1.1 s would have the client come back while the key is still
+    // held for another ~2 s, and spend a request to learn nothing.
+    const { fetch } = fakeRedis();
+    const itunes = createRedisGate(CONFIG, fetch, ITUNES);
+    await itunes.acquire();
+
+    expect(await itunes.acquire(0)).toEqual({ ok: false, retryAfterMs: ITUNES.minIntervalMs });
+
+    // The instance gate reports the wait until its own next slot, which is its interval.
+    vi.useFakeTimers();
+    try {
+      const instance = createInstanceGate(ITUNES);
+      await instance.acquire();
+      expect(await instance.acquire(0)).toEqual({ ok: false, retryAfterMs: ITUNES.minIntervalMs });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("should default to the gate's maximum wait when the caller passes none", async () => {
+    // A gate willing to wait longer than its interval admits a second caller after the
+    // interval, without the caller knowing anything about it.
+    const patient: GateOptions = { key: 'test:v1', minIntervalMs: 50, maxWaitMs: 1_000 };
+    vi.useFakeTimers();
+    try {
+      const gate = createInstanceGate(patient);
+      await gate.acquire();
+
+      const pending = gate.acquire();
+      await vi.advanceTimersByTimeAsync(60);
+      expect(await pending).toEqual({ ok: true });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('should keep the MusicBrainz defaults unchanged', async () => {
+    // The stage-less legacy path and the staged path share this one budget, so the defaults
+    // every factory falls back to are MusicBrainz's, and they are exactly what they were.
+    expect(PROVIDER_GATES.musicbrainz).toEqual({
+      key: 'mbgate:v1',
+      minIntervalMs: 1_100,
+      maxWaitMs: 1_500,
+    });
+    expect(MIN_REQUEST_INTERVAL_MS).toBe(1_100);
+
+    const { fetch, commands } = fakeRedis();
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      const gate = createRateLimitGate(
+        { UPSTASH_REDIS_REST_URL: CONFIG.url, UPSTASH_REDIS_REST_TOKEN: CONFIG.token },
+        fetch,
+      );
+      await gate.acquire();
+    } finally {
+      log.mockRestore();
+    }
+    expect(commands[0]).toEqual(['SET', 'mbgate:v1', '1', 'NX', 'PX', 1_100]);
+  });
+
+  it('should pin the two store gates', () => {
+    // Deezer's quota is 50 requests per 5 s; iTunes' is ~20 per minute (spike §6.3).
+    expect(DEEZER.minIntervalMs).toBe(120);
+    expect(ITUNES.minIntervalMs).toBe(3_000);
+    expect(new Set(Object.values(PROVIDER_GATES).map((gate) => gate.key)).size).toBe(3);
+  });
+
+  it('should name the gate in the per-instance fallback line', () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      expect(createRateLimitGate({}, fakeRedis().fetch, ITUNES).kind).toBe('instance');
+      expect(String(log.mock.calls[0]?.[0])).toContain(ITUNES.key);
+    } finally {
+      log.mockRestore();
     }
   });
 });
