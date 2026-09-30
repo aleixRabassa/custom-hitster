@@ -1,6 +1,6 @@
 # Spike — Year fetch rework: fewer yearless cards, without losing precision
 
-**Status: MEASURED (2026-09-29); PROVIDER ORDER DECIDED AND PARTLY BUILT, PAUSED (2026-09-30), see [§12](#12-fourth-pass-the-provider-order-as-decided-and-partly-built-2026-09-30).** A spike, not a plan: it records what the current
+**Status: MEASURED (2026-09-29); PROVIDER ORDER DECIDED (2026-09-30); BUILT 2026-09-30 from the four `plan.year-fetch-rework-*.md` plans** (see [§12](#12-fourth-pass-the-provider-order-as-decided-and-partly-built-2026-09-30) and `docs/plans/`; the preview-deployment checks are outstanding). A spike, not a plan: it records what the current
 year pipeline does on real decks, what each candidate improvement recovers, and what it would cost.
 The decisions it needs are listed in [§7](#7-decisions-for-the-developer). Per-track data for every
 number below is in [`spike.year-fetch-rework.data.csv`](./spike.year-fetch-rework.data.csv).
@@ -847,7 +847,7 @@ order and membership. The Discogs harness (`dg-lib.ts`, `dg-run.ts`), the latenc
 
 ## 12. Fourth pass: the provider order, as decided and partly built (2026-09-30)
 
-**Status: implementation STARTED and PAUSED at the developer's request.** The design below is
+**Status: implementation STARTED and PAUSED at the developer's request; the partial work was lost and the whole design was BUILT on 2026-09-30 from `docs/plans/plan.year-fetch-rework-*.md`.** The design below is
 settled; its last open questions (§12.5) were answered the same day. The server-side pieces listed in §12.7 are
 written but **not wired, not tested and not type-checked**; nothing on the client has been touched.
 
