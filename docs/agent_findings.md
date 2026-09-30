@@ -5544,3 +5544,24 @@ The developer ruled on two of the open items from the MusicBrainz-fixes entry ab
 No code changed: both were already the built behaviour. The rulings are recorded in the
 `Re-Recorded` family's comment in `shared/year.ts`, the rung's comment in `api/_lib/musicbrainz.ts`,
 AGENTS.md's recording-year bullet and the plan's Open Questions.
+
+## 2026-10-01 — Deezer's ISRC year earns its place; a GBSMU exclusion changes nothing on the recorded data
+
+Measured with `.scratch/plan2/replay/replay-noisrc.ts` (offline, over the spike's recorded answers,
+with the shipped `UNCONFIRMED_TRUST`), because the obvious simplification is to drop the ISRC and
+vote Deezer's release year alone.
+
+| On the 542                           | confirmed | unconfirmed | no year | vs consensus | labelled (125) | iTunes asked |
+| ------------------------------------ | --------- | ----------- | ------- | ------------ | -------------- | ------------ |
+| ISRC kept (shipped)                  | 474       | 63          | 5       | 342/343      | 112            | 196          |
+| No ISRC, a lone Deezer never counts  | 457       | 46          | 39      | 335/343      | 106            | 259          |
+| No ISRC, a lone Deezer always counts | 457       | 83          | 2       | 335/343      | 106            | 259          |
+| GBSMU codes excluded                 | 474       | 63          | 5       | 342/343      | 112            | 196          |
+
+- **Why the ISRC helps**: Deezer's release date is often a compilation or remaster date (Billie Jean
+  2009, Free Bird 2001), while the ISRC keeps the original year (1973 for Free Bird). It is the
+  second, older date that lets Deezer agree with MusicBrainz at `resolve`. Without it, 63 more cards
+  wait for iTunes, and the labelled score drops from 112 to 106.
+- **The GBSMU exclusion is invisible on the spike's data**, which holds no GBSMU code. On the
+  2026-09-30 captures it moves one card, Sweet Child O' Mine, from `verify` to `resolve`, saving one
+  iTunes request. It changes no year.
