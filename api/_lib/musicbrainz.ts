@@ -81,13 +81,32 @@ export type MusicBrainzErrorCode =
   | 'not-configured'
   /** The 1 req/s gate is busy. Carries `retryAfterMs`. */
   | 'rate-limited'
-  /** Network failure, or a non-200 that survived the 503 retry. Transient. */
+  /**
+   * Network failure, or a non-200 that survived the 503 retry -- on EITHER request. Also a
+   * busy gate before the release-group request, once request 1 has been spent (see
+   * `attachReleaseGroupDates()`). Transient.
+   */
   | 'upstream-unavailable'
   /** A 200 whose body was not the shape we parse. NOT transient — the adapter needs updating. */
   | 'unexpected-payload';
 
+/**
+ * Which rung of `buildAttempts()`'s query ladder returned the recordings.
+ *
+ * Reported, never acted on: the adapter makes no scoring decisions (see the module header),
+ * so it only says which query found the pool, and `api/_lib/resolve-year.ts` decides what
+ * that is worth. Today the one consumer is the `low` cap on a `tokenised` hit.
+ */
+export type MusicBrainzAttempt = 'duration-bounded' | 'unbounded' | 'artist-guess' | 'tokenised';
+
 export type MusicBrainzResult =
-  | { ok: true; candidates: RecordingCandidate[]; requestCount: number }
+  | {
+      ok: true;
+      candidates: RecordingCandidate[];
+      requestCount: number;
+      /** Absent when every rung came back empty, so the pool is empty too. */
+      matchedAttempt?: MusicBrainzAttempt;
+    }
   | { ok: false; code: MusicBrainzErrorCode; retryAfterMs?: number };
 
 /** The minimum of `Response` this adapter touches. */
@@ -138,10 +157,11 @@ export async function fetchYearCandidates(
   const attempts = buildAttempts(input);
   let requestCount = 0;
   let recordings: unknown[] = [];
+  let matchedAttempt: MusicBrainzAttempt | undefined;
 
   // Attempts run in order and stop at the first one that returns ANYTHING. Each costs a
   // request against the global budget, so each exists only to rescue a total miss.
-  for (const query of attempts) {
+  for (const { kind, query } of attempts) {
     const permit = await deps.gate.acquire();
     if (!permit.ok) {
       // Only reachable before any request has been made, because a later attempt only runs
@@ -154,52 +174,129 @@ export async function fetchYearCandidates(
     if (!response.ok) return response;
 
     recordings = asArray(asRecord(response.body)?.['recordings']);
-    if (recordings.length > 0) break;
+    if (recordings.length > 0) {
+      matchedAttempt = kind;
+      break;
+    }
   }
 
   const candidates = normalizeRecordings(recordings);
   const enriched = await attachReleaseGroupDates(candidates, deps);
+  if (!enriched.ok) return enriched;
 
-  return {
+  const result: MusicBrainzResult = {
     ok: true,
     candidates: enriched.candidates,
     requestCount: requestCount + enriched.requests,
   };
+  if (matchedAttempt !== undefined) result.matchedAttempt = matchedAttempt;
+  return result;
 }
 
 /**
  * The query ladder, in order. Each rung costs one request and only runs when the previous
- * rung returned zero results.
+ * rung returned zero results -- so a card the first rung finds still costs exactly two
+ * requests, however long the ladder grows.
+ *
+ *   1. `duration-bounded` -- quoted title, full artist, `dur:` bound
+ *   2. `unbounded`        -- the same, no bound
+ *   3. `artist-guess`     -- quoted title, the primary-artist guess
+ *   4. `tokenised`        -- every title word quoted and ANDed, the last phrase rung's artist
  */
-function buildAttempts(input: YearLookupInput): string[] {
+function buildAttempts(input: YearLookupInput): { kind: MusicBrainzAttempt; query: string }[] {
   const title = escapePhrase(input.title);
   const artist = escapePhrase(input.artist);
   const base = `recording:"${title}" AND artist:"${artist}"`;
+  const durationBound =
+    typeof input.durationMs === 'number' && input.durationMs > DURATION_TOLERANCE_MS
+      ? `dur:[${input.durationMs - DURATION_TOLERANCE_MS} TO ${input.durationMs + DURATION_TOLERANCE_MS}]`
+      : undefined;
 
-  const attempts: string[] = [];
+  const attempts: { kind: MusicBrainzAttempt; query: string }[] = [];
 
   // 1. Duration-bounded. Almost always the only rung that runs, and the reason the whole
   //    pipeline is accurate: `dur:` collapses the pool below the 100-result page limit, so
   //    the original studio recording is actually IN the results rather than ranked out of
   //    them. "Stairway to Heaven" is 842 candidates unbounded and 31 bounded, and it only
   //    resolves correctly in the second case.
-  if (typeof input.durationMs === 'number' && input.durationMs > DURATION_TOLERANCE_MS) {
-    const low = input.durationMs - DURATION_TOLERANCE_MS;
-    const high = input.durationMs + DURATION_TOLERANCE_MS;
-    attempts.push(`${base} AND dur:[${low} TO ${high}]`);
+  if (durationBound !== undefined) {
+    attempts.push({ kind: 'duration-bounded', query: `${base} AND ${durationBound}` });
   }
 
   // 2. Unbounded, for a track whose Spotify duration disagrees with every MusicBrainz
   //    length (a radio edit in the playlist, say), and for tracks with no duration at all.
-  attempts.push(base);
+  attempts.push({ kind: 'unbounded', query: base });
 
   // 3. The lossy single-artist guess, LAST — which is what makes its lossiness harmless.
   //    "Earth, Wind & Fire" matches on the full string at rung 2 and never reaches a guess
   //    that would truncate it to "Earth". Reversing this order makes the guess a source of
   //    wrong years (see `shared/artists.ts`).
   const guess = primaryArtistGuess(input.artist);
-  if (guess !== '' && guess !== input.artist) {
-    attempts.push(`recording:"${title}" AND artist:"${escapePhrase(guess)}"`);
+  const hasGuess = guess !== '' && guess !== input.artist;
+  if (hasGuess) {
+    attempts.push({
+      kind: 'artist-guess',
+      query: `recording:"${title}" AND artist:"${escapePhrase(guess)}"`,
+    });
+  }
+
+  // 4. Tokenised, LAST, so it runs only after every phrase rung has returned nothing. The
+  //    quoted phrase fails on titles whose words MusicBrainz holds in a different shape: an
+  //    emoticon (`Olvidarnos De To' :)` leaves a stray `)` inside the phrase), a different
+  //    word order, an apostrophe variant. An AND of the words tolerates all three -- spike
+  //    §3.3's most productive rewrite, 6 of the 115 yearless tracks recovered, 0 of them
+  //    disagreeing with a store.
+  //
+  //    Looser evidence than a phrase, so `api/_lib/resolve-year.ts` caps a hit at `low`.
+  //    Reporting `matchedAttempt` is what lets it do so while this module decides nothing.
+  //
+  //    Four choices, each measured or forced:
+  //
+  //    - EVERY WORD IS QUOTED, so a word that is a Lucene keyword (`AND`, `OR`, `NOT`) or
+  //      carries an operator (`(`, `)`, `?`, `!`, `-`, `/`) is a literal, not query syntax.
+  //    - A TOKEN WITH NO LETTER OR DIGIT IS DROPPED before quoting. `")"` analyses to an
+  //      empty phrase, and the stray `)` is exactly what broke the phrase rungs for the
+  //      track this rung was built for. The two-word minimum is counted AFTER the drop.
+  //    - FEWER THAN TWO WORDS SKIPS THE RUNG. A one-word AND is the one-word phrase rung 2
+  //      already asked, so it would spend a request on a guaranteed repeat.
+  //    - THE ARTIST IS THE LAST PHRASE RUNG'S: the guess when there is one, else the full
+  //      string. Measured 2026-09-30 on the spike's six recoveries (five distinct queries):
+  //      with the FULL artist string the rung found 1 of 5 (La Nieve, the one single-artist
+  //      track); with the guess it found 5 of 5. Spotify joins collaborators with ", " and
+  //      MusicBrainz with a joinphrase, so a multi-artist phrase rarely matches -- which is
+  //      also why the spike's own variant queried the first artist only. The guess's
+  //      lossiness is harmless here for the reason it is harmless at rung 3: this runs
+  //      only after the full string has missed, and `pickBestRecording()` still filters
+  //      the pool against the FULL artist.
+  //
+  //    THE `dur:` BOUND IS CARRIED when a duration is known. Measured 2026-09-30, live, one
+  //    process at 1 req/s, in the adapter's request shape, on the same six tracks:
+  //
+  //      track                       with dur:            without dur:
+  //      Olvidarnos De To' )         2026 high (pool 1)   2026 high (pool 1)
+  //      La Nieve                    2026 high (pool 1)   2026 high (pool 1)
+  //      La Plena - W Sound 05 (x2)  2025 high (pool 1)   2025 high (pool 1)
+  //      Tumbando el Club            2019 low  (pool 1)   2019 low  (pool 3)
+  //      Macacoa 2000                2026 high (pool 1)   2026 high (pool 1)
+  //
+  //    (The years are before the cap; the rung's own answers are all `low`.) Zero
+  //    difference, so the tiebreak is structural. By the time this rung runs, rung 2 has
+  //    already asked WITHOUT the bound and missed, so the duration is not the suspect --
+  //    the phrase is. And this is the loosest title match in the ladder while
+  //    `pickBestRecording()` compares no titles at all, so the length is the only identity
+  //    signal left in the query besides the artist. What the bound costs is a track that is
+  //    BOTH phrase-broken AND duration-mismatched: a double failure, unmeasured, accepted,
+  //    in the "deliberately stingy" spirit of the loose artist fallback. The remix fallback
+  //    passes no duration, so there this rung is unbounded anyway.
+  const words = title.split(' ').filter((word) => /[\p{L}\p{N}]/u.test(word));
+  if (words.length >= 2) {
+    const tokens = `recording:(${words.map((word) => `"${word}"`).join(' AND ')})`;
+    const tokenArtist = hasGuess ? escapePhrase(guess) : artist;
+    const query = `${tokens} AND artist:"${tokenArtist}"`;
+    attempts.push({
+      kind: 'tokenised',
+      query: durationBound === undefined ? query : `${query} AND ${durationBound}`,
+    });
   }
 
   return attempts;
@@ -210,15 +307,34 @@ function buildAttempts(input: YearLookupInput): string[] {
  * rung would accept.
  *
  * Skipped entirely when nothing is eligible — a track heading for a lower rung should not
- * spend a request on it. If the gate is busy this DEGRADES rather than failing: the
- * candidates come back un-enriched, the `official-release` rung finds nothing to date, and
- * the caller falls through to the next rung. Losing accuracy beats discarding a request
- * already spent.
+ * spend a request on it.
+ *
+ * ===========================================================================
+ *  A FAILED SECOND REQUEST IS A FAILED LOOKUP. IT DOES NOT DEGRADE.
+ *
+ *  Until 2026-09-30 a busy gate or a failed request here handed the candidates
+ *  back un-enriched, so the `official-release` rung found nothing to date and
+ *  the ladder fell through to `studio-release` or `unfiltered` -- a `low` year
+ *  drawn from inlined REISSUE dates, on a card that would have been `high` a
+ *  second later. That was a precision leak dressed as resilience ("losing
+ *  accuracy beats discarding a request already spent"), and it was CACHED for
+ *  seven days as though it were the track's real answer. Spike §8 P6; one case
+ *  in the spike's 542-track run.
+ *
+ *  So both branches now fail the lookup, and every layer above already treats
+ *  `upstream-unavailable` as transient: `resolve-year.ts` caches nothing,
+ *  `/api/year` answers 502, and the client retries later. The request already
+ *  spent IS discarded -- that is the price, and it buys never caching a
+ *  degraded year. See docs/plans/plan.year-fetch-rework-mb-fixes.md step 5.
+ * ===========================================================================
  */
 async function attachReleaseGroupDates(
   candidates: RecordingCandidate[],
   deps: MusicBrainzDeps,
-): Promise<{ candidates: RecordingCandidate[]; requests: number }> {
+): Promise<
+  | { ok: true; candidates: RecordingCandidate[]; requests: number }
+  | { ok: false; code: MusicBrainzErrorCode }
+> {
   const eligible = candidates.filter(
     (candidate) => isOfficialOriginalRelease(candidate) && candidate.releaseGroupId,
   );
@@ -233,7 +349,7 @@ async function attachReleaseGroupDates(
     ),
   ];
 
-  if (ids.length === 0) return { candidates, requests: 0 };
+  if (ids.length === 0) return { ok: true, candidates, requests: 0 };
 
   const capped = ids.slice(0, MAX_RELEASE_GROUPS);
   if (capped.length < ids.length) {
@@ -245,16 +361,25 @@ async function attachReleaseGroupDates(
 
   const permit = await deps.gate.acquire();
   if (!permit.ok) {
-    console.warn(
-      '[musicbrainz] gate busy before the release-group request; falling back to relaxed',
-    );
-    return { candidates, requests: 0 };
+    // `upstream-unavailable`, NOT `rate-limited`, and deliberately with no `retryAfterMs`.
+    // The client treats a 429 as free -- it re-asks without counting an attempt -- which is
+    // right for a refusal that cost nothing and wrong here: request 1 has been spent, and a
+    // free retry would spend it again, in a loop, for as long as the gate stays busy. A
+    // transient failure is counted, so the client's retry budget bounds it.
+    console.warn('[musicbrainz] gate busy before the release-group request; failing the lookup');
+    return { ok: false, code: 'upstream-unavailable' };
   }
 
   const response = await getJson(searchUrl('release-group', `rgid:(${capped.join(' OR ')})`), deps);
   if (!response.ok) {
-    console.warn('[musicbrainz] release-group request failed; falling back to relaxed');
-    return { candidates, requests: 1 };
+    // `getJson` has already spent its one 503 retry. Its code passes through unchanged:
+    // `upstream-unavailable` for a network failure or a non-200, `unexpected-payload` for a
+    // 200 that was not JSON. The second is not transient, and must not be dressed up as if
+    // it were.
+    console.warn(
+      `[musicbrainz] release-group request failed (${response.code}); failing the lookup`,
+    );
+    return { ok: false, code: response.code };
   }
 
   const dates = new Map<string, string>();
@@ -266,6 +391,7 @@ async function attachReleaseGroupDates(
   }
 
   return {
+    ok: true,
     candidates: candidates.map((candidate) => {
       const date = candidate.releaseGroupId ? dates.get(candidate.releaseGroupId) : undefined;
       return date ? { ...candidate, releaseGroupFirstReleaseDate: date } : candidate;

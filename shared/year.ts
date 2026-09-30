@@ -43,15 +43,58 @@ import type {
  */
 
 /**
- * A trailing ` - tail`, ` (tail)`, or ` [tail]`.
+ * The LAST trailing ` - tail`, ` (tail)`, or ` [tail]`.
  *
  * Only TRAILING segments are considered, and the dash form requires whitespace on both
  * sides. Both restrictions are what stop the cleaner mangling ordinary titles: "Anti-Hero"
  * has no spaced dash, and "(Don't Fear) The Reaper" has no trailing parenthetical. A title
  * that genuinely contains the word "Live" -- "Live and Let Die", "Live Forever" -- is
  * untouched for the same reason: the word is not in a trailing segment.
+ *
+ * ===========================================================================
+ *  THE HEAD IS GREEDY AND NO SEGMENT MAY CONTAIN A BRACKET. THAT IS THE FIX.
+ *
+ *  Until 2026-09-30 this was `^(.*?)\s+(?:-\s+(.+)|\((.+)\)|\[(.+)\])$`: a LAZY
+ *  head with greedy inner groups. So the FIRST separator the regex reached
+ *  started the segment, and the inner `(.+)` swallowed everything up to the
+ *  final bracket -- two bracketed tails were read as one:
+ *
+ *      "SI ME HICIERA EL DE LA LENGUA (REMIX) (feat. Luar La L)"
+ *        -> one segment "REMIX) (feat. Luar La L" -> unclassifiable -> unchanged
+ *
+ *  Measured on the 542-track sample of spike.year-fetch-rework.md §3.1. The same
+ *  shape made `stripRemixSuffix("A - B - Remix")` return "A", throwing away the
+ *  real title's own " - B".
+ *
+ *  Now the head is greedy, so the LAST separator wins, and every inner group is
+ *  bracket-free, so a segment can never straddle two brackets. The last segment
+ *  is examined first and `cleanTrackTitle()` loops inward from there.
+ *
+ *  WHY THE FIX CANNOT REGRESS: `cleanTrackTitle()` keeps the old pattern as
+ *  `LEGACY_TRAILING_SEGMENT_PATTERN` and falls back to it whenever this one finds
+ *  nothing it can strip, and then compares its answer with the old algorithm's
+ *  and keeps the shorter. So the cleaner never strips LESS than it did before
+ *  this change; the existing tests could not tell the two patterns apart, which
+ *  is why the guarantee is structural rather than a matter of test coverage.
+ * ===========================================================================
  */
-const TRAILING_SEGMENT_PATTERN = /^(.*?)\s+(?:-\s+(.+)|\((.+)\)|\[(.+)\])$/;
+const TRAILING_SEGMENT_PATTERN = /^(.*)\s+(?:-\s+([^()[\]]+)|\(([^()[\]]+)\)|\[([^()[\]]+)\])$/;
+
+/**
+ * The pre-2026-09-30 pattern, lazy head and all. Kept ONLY as `cleanTrackTitle()`'s floor.
+ *
+ * Two shapes need it, because the bracket-free segments above cannot reach them:
+ *
+ * - `Song - Live at Wembley - 1986`: the LAST segment, `1986`, is unrecognised, and the
+ *   new loop would stop there. The lazy read takes `Live at Wembley - 1986` as one segment,
+ *   which the `live` family accepts, so today's answer is "Song".
+ * - Nested brackets, `Song (From "Movie (Part 2)")`: no bracket-free segment ends the title
+ *   at all, so the new pattern does not even match. The lazy read's greedy inner group
+ *   spans the nesting and finds the `from` tail.
+ *
+ * Never used by `stripRemixSuffix()`: there, the lazy read is exactly the bug.
+ */
+const LEGACY_TRAILING_SEGMENT_PATTERN = /^(.*?)\s+(?:-\s+(.+)|\((.+)\)|\[(.+)\])$/;
 
 /**
  * Which family a trailing segment belongs to, or `undefined` to keep it.
@@ -78,6 +121,14 @@ const FAMILY_PATTERNS: { family: StripFamily; pattern: RegExp }[] = [
   // "feat. Beyoncé", "ft Drake", "featuring Nas", "with Elton John".
   { family: 'feature', pattern: /^(?:feat\.?|ft\.?|featuring|with)\s+\S.*$/ },
 
+  // Spanish "con" and Catalan "amb", the same featuring credit in the language of the deck.
+  // Measured: "Sangría - con WOS" (spike.year-fetch-rework.md §3.2); "amb" is its Catalan
+  // twin and is insurance. SAFE ONLY BECAUSE this list never sees a bare word: a tail is
+  // what follows a spaced dash or sits in a trailing bracket, so "Con Calma" and "Café con
+  // Leche" never reach here, and the required whitespace keeps "- Contigo" out. It carries
+  // the same residual risk "with" always has -- a real subtitle that starts with the word.
+  { family: 'feature', pattern: /^(?:con|amb)\s+\S.*$/ },
+
   // Edition / edit / mix / version tails, and the soundtrack tail `From "Barbie"`.
   {
     family: 'version',
@@ -91,6 +142,80 @@ const FAMILY_PATTERNS: { family: StripFamily; pattern: RegExp }[] = [
     pattern: /^.*\b(?:anniversary|deluxe|special|expanded|collector'?s)\s+(?:edition|version)$/,
   },
   { family: 'version', pattern: /^from\s+["“'].+$/ },
+
+  // ---- Added 2026-09-30 (plan.year-fetch-rework-mb-fixes.md step 3) ----------------
+  // Every entry below maps to an EXISTING flag, so `TitleStripFlags` did not change. The
+  // plan files the Spanish/Catalan edition words and the long remaster tail under `version`
+  // too, even where `live` or `remaster` would read more naturally; the flags are
+  // diagnostic only (see `TitleStripFlags`), and nothing reads them at finer grain.
+
+  // TikTok variants. Measured: "MUSSEGU - Sped Up" (§3.2). "Slowed", with or without the
+  // "+ Reverb" that usually rides along, is its twin and is insurance. Anchored at the end,
+  // so a tail that merely says "Slow" is not "Slowed".
+  { family: 'version', pattern: /^sped\s+up(?:\s+version)?$/ },
+  { family: 'version', pattern: /^slowed(?:\s*(?:\+|&|and)\s*reverb)?(?:\s+version)?$/ },
+
+  // A producer tag. Measured: "FULL ICE (prod. ORODEMBOW)" (§3.2). The whitespace after
+  // "prod"/"prod." is required, so a tail like "Prodigy" is not a producer credit.
+  { family: 'version', pattern: /^prod\.?\s+(?:by\s+)?\S.*$/ },
+
+  // An UNQUOTED film or album tail, admitted ONLY when it names what it is from. Measured:
+  // "La Nieve - Original song from the film La Bola Negra" and "Macacoa 2000 (from GTAVI:
+  // The Album)" (§3.2). The hint word is the whole safety argument: "(From Me to You)" and
+  // "- From Home" carry none and are kept, because an unhinted "from" is as likely to be
+  // part of the song's name as a tail. The quoted form needs no hint and is the entry above.
+  {
+    family: 'version',
+    pattern:
+      /^(?:original\s+song\s+)?from\s+.*\b(?:film|movie|motion\s+picture|soundtrack|album|pel[íi]cula|pel·l[íi]cula|bso)\b.*$/,
+  },
+
+  // Doubled apostrophes standing in for quotes, with words between "From" and the title.
+  // Measured on 2 titles (§13.6): "From Walt Disney's ''Mary Poppins''" and "From Disney's
+  // ''Tangled''". Keyed on the DOUBLED pair, because "Disney's" already carries a single one;
+  // the curly ‘…’ pair is insurance.
+  { family: 'version', pattern: /^from\s+.*(?:''.+''|‘.+’)$/ },
+
+  // The Spanish film tail: "de"/"del" plus a QUOTED film name, optionally followed by
+  // "/Banda Sonora Original", or an unquoted name that carries the "Banda Sonora" words.
+  // Measured on 9 titles, all MusicBrainz misses (§13.6): "Bella - de "La Bella y La
+  // Bestia"/Banda Sonora Original", "Pobres Almas En Desgracia - De "La Sirenita"". Never a
+  // bare "- de …": without the quotes or the soundtrack words nothing marks it as a tail
+  // ("- de Madrid" is kept), which is the same reason a bare film name is not stripped.
+  {
+    family: 'version',
+    pattern:
+      /^del?\s+(?:["“”'].+["“”'](?:\s*\/\s*banda\s+sonora(?:\s+original)?)?|.+\/\s*banda\s+sonora(?:\s+original)?)$/,
+  },
+
+  // Soundtrack edition words. Measured on 5 titles with the remaster tail below (§13.6):
+  // "Lose Yourself - Soundtrack Version", "Over The Rainbow - LP Soundtrack Version from
+  // Wizard Of Oz", "Flashdance...What a Feeling - Re-Recorded".
+  { family: 'version', pattern: /^(?:lp\s+)?soundtrack\s+version(?:\s+from\s+\S.*)?$/ },
+  { family: 'version', pattern: /^re-?recorded(?:\s+version)?$/ },
+
+  // A remaster tail that runs on past "Version". Measured: "Stayin' Alive - 2007 Remastered
+  // Version Saturday Night Fever" (§13.6). Narrower than it looks: it needs the whole
+  // "Remaster(ed) Version" phrase first, so it only ever catches what the exact remaster
+  // pattern at the top of this list refuses for its trailing words.
+  { family: 'version', pattern: /^(?:\d{4}\s+)?remaster(?:ed)?\s+version\s+\S.*$/ },
+
+  // A love theme after a spaced dash. Measured: "Take My Breath Away - Love Theme from "Top
+  // Gun"" (§13.6), and "My Heart Will Go On - Love Theme from "Titanic"" is the same shape.
+  // The quote is required. "Love Theme From "The Godfather"" is a WHOLE title, with no
+  // separator, so it never reaches this list and keeps resolving as it does today.
+  { family: 'version', pattern: /^love\s+theme\s+from\s+["“'].+$/ },
+
+  // Spanish and Catalan edition words. INSURANCE: none of them occurred in the 542-track
+  // sample (§3.2), and they are here because the decks are Spanish and Catalan. Accents are
+  // optional because Spotify titles do not carry them reliably.
+  { family: 'version', pattern: /^en\s+(?:vivo|directo|directe)\b.*$/ },
+  {
+    family: 'version',
+    pattern: /^(?:\d{4}\s+)?remasteri(?:zad[oa]|tzat|tzada)(?:\s+\d{4})?$/,
+  },
+  { family: 'version', pattern: /^versi(?:ó|o)n?\s+\S.*$/ },
+  { family: 'version', pattern: /^ac[úu]stic[oa]?$/ },
 ];
 
 /**
@@ -116,37 +241,32 @@ function noFlags(): TitleStripFlags {
  *
  * Loops until nothing more matches, because a single title routinely carries two of them
  * ("Perfect (feat. Beyoncé) - Remastered 2011"), and a single pass would half-handle it.
+ * Each pass strips the LAST trailing segment, so the loop works inward from the end.
+ *
+ * Never strips LESS than the pre-2026-09-30 cleaner did: see `TRAILING_SEGMENT_PATTERN` for
+ * the two-layer guarantee, and `LEGACY_TRAILING_SEGMENT_PATTERN` for the shapes that need it.
  *
  * Never throws and never returns an empty title: if stripping would consume everything,
  * the original is kept. A title that is nothing BUT a suffix is a title we cannot improve,
  * and an empty query would return the whole database.
  */
 export function cleanTrackTitle(rawTitle: string): CleanedTitle {
-  const stripped = noFlags();
-
-  if (typeof rawTitle !== 'string') return { title: '', stripped };
+  if (typeof rawTitle !== 'string') return { title: '', stripped: noFlags() };
 
   const original = rawTitle.trim();
-  let working = original;
 
-  // Bounded rather than `while (true)`: the body always shortens `working`, so the loop
-  // terminates on its own, but a bound makes that guarantee local and cheap to verify.
-  for (let pass = 0; pass < 6; pass += 1) {
-    const match = TRAILING_SEGMENT_PATTERN.exec(working);
-    if (!match) break;
-
-    const head = match[1] ?? '';
-    const tail = (match[2] ?? match[3] ?? match[4] ?? '').trim().toLowerCase();
-    const family = classifySegment(tail);
-
-    // An unrecognised trailing segment stops the loop entirely rather than being skipped
-    // over: segments nest right-to-left, so anything to its left is part of the real title.
-    if (!family) break;
-    if (head.trim() === '') break;
-
-    stripped[family] = true;
-    working = head.trim();
-  }
+  // Layer 1: last segment first, retrying each pass with the lazy read (see below).
+  const current = stripTrailingSegments(original, [
+    TRAILING_SEGMENT_PATTERN,
+    LEGACY_TRAILING_SEGMENT_PATTERN,
+  ]);
+  // Layer 2: the whole pre-2026-09-30 algorithm, run as the floor. It differs from layer 1
+  // only on titles whose middle segments were unclassifiable garbage the lazy read happened
+  // to swallow in one bite -- `A (Live) Foo (Mono)` loses its "Foo" today. Keeping today's
+  // answer there is the price of "never strips less" holding by construction rather than by
+  // an argument about every shape a title can take.
+  const legacy = stripTrailingSegments(original, [LEGACY_TRAILING_SEGMENT_PATTERN]);
+  const { working, stripped } = legacy.working.length < current.working.length ? legacy : current;
 
   const neutralized = working.replace(QUERY_BREAKING_CHARS, ' ').replace(/\s+/g, ' ').trim();
 
@@ -156,6 +276,58 @@ export function cleanTrackTitle(rawTitle: string): CleanedTitle {
 
   const fallback = original.replace(QUERY_BREAKING_CHARS, ' ').replace(/\s+/g, ' ').trim();
   return { title: fallback !== '' ? fallback : original, stripped: noFlags() };
+}
+
+/**
+ * The stripping loop, over an ordered list of segment patterns.
+ *
+ * Each pass tries the patterns in order and takes the FIRST one that yields a strippable
+ * segment -- a match, a recognised family, and a non-empty head. "Yields nothing" covers two
+ * different failures, and the fallback must fire on both: the pattern matched but the family
+ * is unknown (`Song - Live at Wembley - 1986`), or the pattern did not match at all (nested
+ * brackets, `Song (From "Movie (Part 2)")`).
+ */
+function stripTrailingSegments(
+  original: string,
+  patterns: readonly RegExp[],
+): { working: string; stripped: TitleStripFlags } {
+  const stripped = noFlags();
+  let working = original;
+
+  // Bounded rather than `while (true)`: the body always shortens `working`, so the loop
+  // terminates on its own, but a bound makes that guarantee local and cheap to verify.
+  for (let pass = 0; pass < 6; pass += 1) {
+    let step: { head: string; family: StripFamily } | undefined;
+    for (const pattern of patterns) {
+      step = strippableSegment(working, pattern);
+      if (step) break;
+    }
+
+    // An unrecognised trailing segment stops the loop entirely rather than being skipped
+    // over: segments nest right-to-left, so anything to its left is part of the real title.
+    if (!step) break;
+
+    stripped[step.family] = true;
+    working = step.head;
+  }
+
+  return { working, stripped };
+}
+
+/** The head and family of `title`'s trailing segment under `pattern`, if it can be stripped. */
+function strippableSegment(
+  title: string,
+  pattern: RegExp,
+): { head: string; family: StripFamily } | undefined {
+  const match = pattern.exec(title);
+  if (!match) return undefined;
+
+  const head = (match[1] ?? '').trim();
+  const tail = (match[2] ?? match[3] ?? match[4] ?? '').trim().toLowerCase();
+  const family = classifySegment(tail);
+
+  if (!family || head === '') return undefined;
+  return { head, family };
 }
 
 function classifySegment(tail: string): StripFamily | undefined {
@@ -207,6 +379,10 @@ const REMIX_SEGMENT_PATTERN =
  * Pure, and it never returns an empty string: a title that is nothing but a remix segment
  * ("- Remix") has no underlying song to ask about, so it returns `undefined` and the caller
  * spends no request on it.
+ *
+ * Reads the LAST segment only, with no legacy fallback. Before 2026-09-30 the lazy pattern
+ * made `"A - B - Remix"` strip to `"A"`, discarding the " - B" that belongs to the song;
+ * it now strips to `"A - B"`. A fallback here would bring that back, not guard against it.
  */
 export function stripRemixSuffix(title: string): string | undefined {
   if (typeof title !== 'string') return undefined;
@@ -259,8 +435,16 @@ export function stripRemixSuffix(title: string): string | undefined {
  * on their own) and remix-fallback `low` entries (7-day), where a track may now resolve on its
  * ORIGINAL title before the remix rewrite is attempted. Bumped anyway, because a version that
  * is only bumped when someone judges it necessary is a version nobody can trust.
+ *
+ * **v5 (2026-09-30):** plan.year-fetch-rework-mb-fixes.md. Four changes, each of which would
+ * wash out on its own within 7 days: the lazy-head fix in `TRAILING_SEGMENT_PATTERN` and the
+ * new cleaner families change the CLEANED title, and so the cache key, for the titles they
+ * touch; the adapter's tokenised rescue rung turns cached `none` entries into years; and a
+ * failed release-group request now reports `upstream-unavailable` instead of caching the
+ * degraded `low` answer the relaxed rungs used to give. Bumped by the unconditional rule, as
+ * v2 and v4 were, rather than because any one of the four strictly needed it.
  */
-export const YEAR_CACHE_SCHEMA_VERSION = 'v4';
+export const YEAR_CACHE_SCHEMA_VERSION = 'v5';
 
 /**
  * Lowercase, de-accent, drop punctuation, collapse whitespace.

@@ -158,6 +158,243 @@ describe('cleanTrackTitle', () => {
 });
 
 // ===========================================================================
+//  THE LAST SEGMENT FIRST (2026-09-30, P1)
+//
+//  The lazy head read two trailing segments as one unclassifiable segment and
+//  left the title unchanged. Every case below was UNCHANGED by the old cleaner.
+// ===========================================================================
+
+const NO_FLAGS = { remaster: false, live: false, feature: false, version: false } as const;
+
+describe('cleanTrackTitle, last segment first', () => {
+  it('should strip both tails from a title with a bracketed remix and a bracketed featuring', () => {
+    // The measured case (spike.year-fetch-rework.md §3.1). "Both tails" spans TWO functions
+    // on purpose: a remix is deliberately NOT a `cleanTrackTitle()` family (the first query
+    // keeps it -- see `stripRemixSuffix()`), so the cleaner strips the featuring, and the
+    // resolver's remix fallback strips the remix from what is left. Before the fix the
+    // cleaner stripped nothing, and the remix fallback then saw no trailing remix at all.
+    const cleaned = cleanTrackTitle('SI ME HICIERA EL DE LA LENGUA (REMIX) (feat. Luar La L)');
+
+    expect(cleaned).toEqual({
+      title: 'SI ME HICIERA EL DE LA LENGUA (REMIX)',
+      stripped: { ...NO_FLAGS, feature: true },
+    });
+    expect(stripRemixSuffix(cleaned.title)).toBe('SI ME HICIERA EL DE LA LENGUA');
+
+    // And two bracketed tails that are both cleaner families go in one call.
+    expect(cleanTrackTitle('Perfect (Remastered 2017) (feat. Beyoncé)')).toEqual({
+      title: 'Perfect',
+      stripped: { ...NO_FLAGS, remaster: true, feature: true },
+    });
+  });
+
+  it('should strip the last recognised segment first', () => {
+    // One case per existing family, each behind an unrecognised middle segment. The lazy
+    // read took "Reprise - …" as one segment and kept the whole title; the last segment is
+    // now examined on its own, and the Reprise -- a different track -- still survives.
+    for (const [raw, title, family] of [
+      ['Song - Reprise - Remastered 2011', 'Song - Reprise', 'remaster'],
+      ['Song - Reprise - Live', 'Song - Reprise', 'live'],
+      ['Song - Reprise (feat. Someone)', 'Song - Reprise', 'feature'],
+      ['Song - Reprise - Radio Edit', 'Song - Reprise', 'version'],
+      ['Song (Demo) (Live)', 'Song (Demo)', 'live'],
+      ['Song (Interlude) [Explicit]', 'Song (Interlude)', 'version'],
+    ] as const) {
+      expect(cleanTrackTitle(raw), raw).toEqual({
+        title,
+        stripped: { ...NO_FLAGS, [family]: true },
+      });
+    }
+  });
+
+  it('should never strip less than the previous pattern', () => {
+    // The fallback's two shapes. Last segment "1986" is unrecognised, and the lazy read
+    // still takes "Live at Wembley - 1986" as one live tail -- today's answer.
+    expect(cleanTrackTitle('Song - Live at Wembley - 1986')).toEqual({
+      title: 'Song',
+      stripped: { ...NO_FLAGS, live: true },
+    });
+    // Nested brackets: no bracket-free segment ends the title, so the new pattern does not
+    // even match, and only the lazy read reaches the `from` tail.
+    expect(cleanTrackTitle('Song (From "Movie (Part 2)")')).toEqual({
+      title: 'Song',
+      stripped: { ...NO_FLAGS, version: true },
+    });
+    // Both layers together: the new pattern takes the featuring, the lazy read the rest.
+    expect(cleanTrackTitle('Song - Live at Wembley - 1986 (feat. Someone)')).toEqual({
+      title: 'Song',
+      stripped: { ...NO_FLAGS, live: true, feature: true },
+    });
+    // The floor, pinned as CURRENT BEHAVIOUR rather than as a good answer: the lazy read
+    // swallows the unclassifiable " Foo" inside a live tail, and the cleaner keeps doing so,
+    // because "never strips less than today" is the guarantee and this is today.
+    expect(cleanTrackTitle('Song (Live) Foo (Mono)').title).toBe('Song');
+  });
+
+  it('should keep the titles the old cleaner kept', () => {
+    // The new loop must not start eating real titles. Each of these resolves today.
+    for (const raw of [
+      "Sgt. Pepper's Lonely Hearts Club Band - Reprise",
+      'Song (Reprise) (Demo)',
+      'Love Theme From "The Godfather"',
+      'Theme From Mortal Kombat',
+      '(Don’t Fear) The Reaper',
+    ]) {
+      expect(cleanTrackTitle(raw).stripped, raw).toEqual(NO_FLAGS);
+    }
+  });
+});
+
+// ===========================================================================
+//  THE 2026-09-30 FAMILIES (P2, and the soundtrack tails of spike §13.6)
+// ===========================================================================
+
+describe('cleanTrackTitle, the 2026-09-30 families', () => {
+  it('should strip the TikTok variants', () => {
+    expect(cleanTrackTitle('MUSSEGU - Sped Up').title).toBe('MUSSEGU');
+    expect(cleanTrackTitle('Song - Slowed + Reverb').title).toBe('Song');
+    expect(cleanTrackTitle('Song (Slowed)').title).toBe('Song');
+  });
+
+  it('should strip a producer tag', () => {
+    expect(cleanTrackTitle('FULL ICE (prod. ORODEMBOW)').title).toBe('FULL ICE');
+    expect(cleanTrackTitle('Song - Prod. by Someone').title).toBe('Song');
+  });
+
+  it('should strip an unquoted from tail that names a film or an album', () => {
+    expect(cleanTrackTitle('Macacoa 2000 (from GTAVI: The Album)').title).toBe('Macacoa 2000');
+    expect(cleanTrackTitle('Song - From the Movie Something').title).toBe('Song');
+    expect(cleanTrackTitle('Cançó - from la pel·lícula Algo').title).toBe('Cançó');
+  });
+
+  it('should strip the "Original song from the film" tail', () => {
+    expect(cleanTrackTitle('La Nieve - Original song from the film La Bola Negra').title).toBe(
+      'La Nieve',
+    );
+  });
+
+  it('should strip a Spanish or Catalan featuring tail', () => {
+    expect(cleanTrackTitle('Sangría - con WOS')).toEqual({
+      title: 'Sangría',
+      stripped: { ...NO_FLAGS, feature: true },
+    });
+    expect(cleanTrackTitle('Cançó (amb Txarango)').title).toBe('Cançó');
+  });
+
+  it('should strip each Spanish and Catalan edition word', () => {
+    for (const raw of [
+      'Song - En Vivo',
+      'Song - En Directe',
+      'Song (En Directo desde Madrid)',
+      'Song - Remasterizado',
+      'Song - Remasterizada 2011',
+      'Song - Remasteritzat',
+      'Song - Versión Acústica',
+      'Song - Versió Original',
+      'Song (Acústico)',
+      'Song (Acústic)',
+    ]) {
+      expect(cleanTrackTitle(raw).title, raw).toBe('Song');
+    }
+  });
+
+  it('should keep the words the new families must not take', () => {
+    // A bare word is never a tail: "con" and "from" only count after a separator.
+    for (const raw of [
+      'Con Calma',
+      'Café con Leche',
+      'Vivir Con Ella',
+      // Whitespace after "con" is required.
+      'Song - Contigo',
+      // An unhinted "from" is as likely to be the song's name as a tail.
+      'Song (From Me to You)',
+      'Postcard - From Home',
+      // "Slow" is not "Slowed".
+      'Song - Slow',
+      'Song - Slowly',
+      // "prod" needs a credit after it, and "Prodigy" is not "prod".
+      'Song - Prodigy',
+    ]) {
+      expect(cleanTrackTitle(raw), raw).toEqual({ title: raw, stripped: NO_FLAGS });
+    }
+  });
+
+  it('should strip each measured soundtrack tail', () => {
+    // Every title here is from the spike's soundtrack sample (§13.6), where each one was a
+    // MusicBrainz miss. What stripping them recovers is not measured by this test.
+    for (const [raw, expected] of [
+      ['Bella - de "La Bella y La Bestia"/Banda Sonora Original', 'Bella'],
+      ['¡Qué Festín! - de "La Bella y La Bestia"/Banda Sonora Original', '¡Qué Festín!'],
+      ['Pobres Almas En Desgracia - De "La Sirenita"', 'Pobres Almas En Desgracia'],
+      ['Song - de La Sirenita/Banda Sonora Original', 'Song'],
+      [
+        "Supercalifragilisticexpialidocious - From Walt Disney's ''Mary Poppins''",
+        'Supercalifragilisticexpialidocious',
+      ],
+      ["I See the Light - From Disney's ''Tangled''", 'I See the Light'],
+      ['Lose Yourself - Soundtrack Version', 'Lose Yourself'],
+      ['Over The Rainbow - LP Soundtrack Version from Wizard Of Oz', 'Over The Rainbow'],
+      ['Flashdance...What a Feeling - Re-Recorded', 'Flashdance...What a Feeling'],
+      ["Stayin' Alive - 2007 Remastered Version Saturday Night Fever", "Stayin' Alive"],
+      ['Take My Breath Away - Love Theme from "Top Gun"', 'Take My Breath Away'],
+      ['My Heart Will Go On - Love Theme from "Titanic"', 'My Heart Will Go On'],
+    ] as const) {
+      expect(cleanTrackTitle(raw).title, raw).toBe(expected);
+    }
+
+    // Resolves at `high` today through the quoted-`from` family; it must not move.
+    expect(
+      cleanTrackTitle('Transformation - From "Beauty and the Beast"/Soundtrack Version').title,
+    ).toBe('Transformation');
+  });
+
+  it('should keep a soundtrack-looking tail that nothing marks as one', () => {
+    for (const raw of [
+      // An unquoted "- de …" without the Banda Sonora words.
+      'Song - de Madrid',
+      'Cruela De Vil - De Nuevo',
+      // A bare film name after a dash: nothing marks it as a tail, and stripping it would
+      // eat real titles. Deliberately NOT a family.
+      'You Sexy Thing - Full Monty',
+      // "Love Theme" needs the quoted film name.
+      'Song - Love Theme',
+    ]) {
+      expect(cleanTrackTitle(raw), raw).toEqual({ title: raw, stripped: NO_FLAGS });
+    }
+  });
+
+  it('should set the expected strip flag for each new family', () => {
+    // Every new family maps to an EXISTING `TitleStripFlags` member, so the type did not
+    // change (plan.year-fetch-rework-mb-fixes.md decision 8).
+    for (const [raw, family] of [
+      ['Song - Sped Up', 'version'],
+      ['Song - Slowed + Reverb', 'version'],
+      ['Song (prod. Someone)', 'version'],
+      ['Song (from the film Something)', 'version'],
+      ['Song - Original song from the film Something', 'version'],
+      ['Song - con Someone', 'feature'],
+      ['Song (amb Someone)', 'feature'],
+      ['Song - En Vivo', 'version'],
+      ['Song - Remasterizado', 'version'],
+      ['Song - Versión Acústica', 'version'],
+      ['Song (Acústico)', 'version'],
+      ['Song - de "Something"/Banda Sonora Original', 'version'],
+      ["Song - From Disney's ''Something''", 'version'],
+      ['Song - Soundtrack Version', 'version'],
+      ['Song - LP Soundtrack Version from Something', 'version'],
+      ['Song - Re-Recorded', 'version'],
+      ['Song - 2007 Remastered Version Something', 'version'],
+      ['Song - Love Theme from "Something"', 'version'],
+    ] as const) {
+      expect(cleanTrackTitle(raw), raw).toEqual({
+        title: 'Song',
+        stripped: { ...NO_FLAGS, [family]: true },
+      });
+    }
+  });
+});
+
+// ===========================================================================
 //  THE REMIX FALLBACK TITLE
 //
 //  Not part of `cleanTrackTitle()` on purpose -- a remix is often a real,
@@ -200,6 +437,17 @@ describe('stripRemixSuffix', () => {
   it('should be case-insensitive about the tail', () => {
     expect(stripRemixSuffix('Song - REMIX')).toBe('Song');
     expect(stripRemixSuffix('Song - remix')).toBe('Song');
+  });
+
+  it('should strip only the remix tail from a title with two spaced dashes', () => {
+    // The side effect of the 2026-09-30 lazy-head fix. The lazy pattern took "B - Remix" as
+    // one segment, which the remix pattern's `(?:.+\s)?` accepted, and returned "A" -- the
+    // " - B" that belongs to the song was thrown away with the remix.
+    expect(stripRemixSuffix('A - B - Remix')).toBe('A - B');
+    // And the featuring left in front of a dash remix is still there to re-clean.
+    expect(stripRemixSuffix('Tumbando el Club (feat. Someone) - Remix')).toBe(
+      'Tumbando el Club (feat. Someone)',
+    );
   });
 
   it('should return undefined for a title with no remix tail', () => {
@@ -273,9 +521,13 @@ describe('normalizeForCacheKey', () => {
     const key = yearCacheKey('Queen', 'Bohemian Rhapsody');
 
     expect(key).toBe(`mbyear:${YEAR_CACHE_SCHEMA_VERSION}:queen|bohemian rhapsody`);
-    // Pinned literally as well, so a bump has to be a DELIBERATE two-line change rather than
+  });
+
+  it('should key the cache under v5', () => {
+    // Pinned literally, so a bump has to be a DELIBERATE two-line change rather than
     // something that slips through because every assertion interpolated the constant.
-    expect(key.startsWith('mbyear:v4:')).toBe(true);
+    // v5 is plan.year-fetch-rework-mb-fixes.md: the cleaner fix, the tokenised rung and P6.
+    expect(yearCacheKey('Queen', 'Bohemian Rhapsody').startsWith('mbyear:v5:')).toBe(true);
   });
 });
 

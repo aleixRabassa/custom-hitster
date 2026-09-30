@@ -1,10 +1,15 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   NO_WOMAN_NO_CRY,
+  OLVIDARNOS,
+  OLVIDARNOS_QUERIES,
   emptySearch,
   noWomanNoCryReleaseGroups,
   noWomanNoCrySearch,
+  olvidarnosPhraseSearches,
+  olvidarnosReleaseGroups,
+  olvidarnosTokenisedSearch,
   undatedSearch,
 } from './__fixtures__/musicbrainz-payloads.js';
 import { HIGH_CONFIDENCE_TTL_SECONDS, NO_YEAR_TTL_SECONDS, createMemoryCache } from './cache.js';
@@ -255,6 +260,39 @@ describe('resolveYear', () => {
     expect(cache.writes).toEqual([]);
   });
 
+  it('should not cache a result when the release-group request fails', async () => {
+    // P6, asserted end to end rather than read off the code. Before 2026-09-30 this exact
+    // sequence came back as un-enriched candidates, scored a degraded `low` from inlined
+    // reissue dates, and WROTE it -- for seven days -- on a card one retry away from `high`.
+    const cache = recordingCache();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      // 500 rather than 503: these deps inject no `sleep`, and a 503 would really wait 1.2 s.
+      const fetch: FetchLike = (url) =>
+        Promise.resolve(
+          url.includes('/release-group?')
+            ? { ok: false, status: 500, json: () => Promise.resolve({}) }
+            : { ok: true, status: 200, json: () => Promise.resolve(noWomanNoCrySearch) },
+        );
+
+      const outcome = await resolveYear(TRACK, {
+        cache,
+        fetchImpl: fetch,
+        gate: countingGate(),
+        userAgent: USER_AGENT,
+      });
+
+      expect(outcome).toEqual({
+        ok: false,
+        code: 'upstream-unavailable',
+        cleanedTitle: NO_WOMAN_NO_CRY.title,
+      });
+      expect(cache.writes).toEqual([]);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it('should surface a rate-limit refusal with its retry delay', async () => {
     const closedGate: RateLimitGate = {
       kind: 'redis',
@@ -386,6 +424,29 @@ describe('resolveYear remix fallback', () => {
     });
   });
 
+  it('should re-clean the title after stripping a remix tail', async () => {
+    // The remix tail is what stopped the cleaner on the primary pass, so the `(feat. …)` to
+    // its left survives the strip. Queried as-is, `No Woman No Cry (feat. Someone)` finds
+    // nothing -- the double answers only the bare title -- which is exactly how
+    // `Tumbando el Club (feat. …) - Remix` stayed blank (spike §3.1).
+    const { fetch } = titleAwareFetch();
+
+    const outcome = await resolveYear(
+      { title: `${NO_WOMAN_NO_CRY.title} (feat. Someone) - Remix`, artist: NO_WOMAN_NO_CRY.artist },
+      { cache: createMemoryCache(), fetchImpl: fetch, gate: countingGate(), userAgent: USER_AGENT },
+    );
+
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+
+    expect(outcome.result).toMatchObject({
+      year: NO_WOMAN_NO_CRY.expectedYear,
+      confidence: 'low',
+      // The RE-CLEANED title, because that is what was actually asked.
+      viaTitle: NO_WOMAN_NO_CRY.title,
+    });
+  });
+
   it('should drop durationMs from the fallback query', async () => {
     // A remix is not the same length as the song it remixes, so bounding by the remix's
     // duration would exclude the very recording being looked for. This is the assertion that
@@ -510,5 +571,98 @@ describe('resolveYear remix fallback', () => {
       confidence: 'low',
       viaTitle: NO_WOMAN_NO_CRY.title,
     });
+  });
+});
+
+// ===========================================================================
+//  THE TOKENISED RUNG'S CAP
+// ===========================================================================
+
+/**
+ * A fetch double routed by the decoded query text: `route` returns the recording search body
+ * for a query, or `undefined` to answer 404 -- so a query nobody expected fails loudly instead
+ * of looking like an empty result.
+ */
+function queryRoutedFetch(
+  route: (query: string) => unknown,
+  releaseGroups: unknown,
+): { fetch: FetchLike; queries: string[] } {
+  const queries: string[] = [];
+  const fetch: FetchLike = (url) => {
+    const query = new URL(url).searchParams.get('query') ?? '';
+    queries.push(query);
+    const body = url.includes('/release-group?') ? releaseGroups : route(query);
+    return Promise.resolve(
+      body === undefined
+        ? { ok: false, status: 404, json: () => Promise.resolve({}) }
+        : { ok: true, status: 200, json: () => Promise.resolve(body) },
+    );
+  };
+  return { fetch, queries };
+}
+
+describe('resolveYear tokenised rung', () => {
+  it('should cap a tokenised hit at low', async () => {
+    // Every phrase rung misses and the tokenised one returns the No Woman No Cry pool, which
+    // on its own scores `high` off the release group. The cap is the loose-artist precedent:
+    // weaker evidence may turn a null into a year, never into a `high` one.
+    const cache = recordingCache();
+    const { fetch } = queryRoutedFetch(
+      (query) => (query.startsWith('recording:(') ? noWomanNoCrySearch : emptySearch),
+      noWomanNoCryReleaseGroups,
+    );
+
+    const outcome = await resolveYear(TRACK, {
+      cache,
+      fetchImpl: fetch,
+      gate: countingGate(),
+      userAgent: USER_AGENT,
+    });
+
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+
+    expect(outcome.result).toMatchObject({
+      year: NO_WOMAN_NO_CRY.expectedYear,
+      confidence: 'low',
+      source: 'release-group',
+    });
+    // No `viaTitle`: the query asked about the card's own words, not a rewritten title.
+    expect(outcome.result.viaTitle).toBeUndefined();
+    // And the CACHED value is capped too, so a hit reports what the miss did.
+    expect(cache.writes[0]?.value).toMatchObject({ confidence: 'low' });
+  });
+
+  it('should resolve the captured tokenised track', async () => {
+    // End to end over the live capture, from the RAW Spotify title. Any query outside the
+    // captured five answers 404, so a drift in the cleaner or in a rung's query text fails
+    // here instead of quietly resolving against a request the capture never saw.
+    const cache = recordingCache();
+    const { fetch, queries } = queryRoutedFetch((query) => {
+      const index = OLVIDARNOS_QUERIES.indexOf(query);
+      if (index === 3) return olvidarnosTokenisedSearch;
+      return index >= 0 && index < 3 ? olvidarnosPhraseSearches[index] : undefined;
+    }, olvidarnosReleaseGroups);
+
+    const outcome = await resolveYear(OLVIDARNOS, {
+      cache,
+      fetchImpl: fetch,
+      gate: countingGate(),
+      userAgent: USER_AGENT,
+    });
+
+    expect(queries).toEqual(OLVIDARNOS_QUERIES);
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+
+    expect(outcome.result).toMatchObject({
+      year: OLVIDARNOS.expectedYear,
+      confidence: 'low',
+      source: 'release-group',
+      cached: false,
+    });
+    expect(outcome.result.viaTitle).toBeUndefined();
+    expect(cache.writes).toHaveLength(1);
+    expect(cache.writes[0]?.key).toBe(yearCacheKey(OLVIDARNOS.artist, outcome.result.cleanedTitle));
   });
 });

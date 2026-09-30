@@ -19,7 +19,7 @@ import tseslint from 'typescript-eslint';
  */
 export default tseslint.config(
   {
-    ignores: ['dist/**', 'coverage/**', '.vercel/**', 'node_modules/**'],
+    ignores: ['dist/**', 'coverage/**', '.vercel/**', 'node_modules/**', '.scratch/**'],
   },
 
   // --- Baseline for all TypeScript in the repo -------------------------------

@@ -19,7 +19,7 @@ import {
 import { ttlFor } from './cache.js';
 import { fetchYearCandidates } from './musicbrainz.js';
 import type { YearCache } from './cache.js';
-import type { MusicBrainzDeps, MusicBrainzErrorCode } from './musicbrainz.js';
+import type { MusicBrainzAttempt, MusicBrainzDeps, MusicBrainzErrorCode } from './musicbrainz.js';
 import type { RecordingCandidate, YearLookupResult, YearResult } from '../../shared/types.js';
 
 export interface ResolveYearInput {
@@ -73,7 +73,9 @@ export async function resolveYear(
   if (!candidates.ok) {
     // Nothing is cached on an upstream failure: a 502 is a statement about MusicBrainz's
     // availability right now, not about the track, and caching it would poison the key for
-    // a day for no reason.
+    // a day for no reason. Since 2026-09-30 this includes a failed RELEASE-GROUP request,
+    // which used to come back as un-enriched candidates and a degraded `low` that WAS cached
+    // (`api/_lib/musicbrainz.ts`, `attachReleaseGroupDates()`).
     const failure: ResolveYearOutcome = {
       ok: false,
       code: candidates.code,
@@ -84,10 +86,10 @@ export async function resolveYear(
   }
 
   // ---- Walk the scoring ladder, then fall back to an explicit null -------------
-  let result = runTiers(candidates.candidates, {
-    artist: input.artist,
-    durationMs: input.durationMs,
-  });
+  let result = capTokenisedHit(
+    runTiers(candidates.candidates, { artist: input.artist, durationMs: input.durationMs }),
+    candidates.matchedAttempt,
+  );
 
   // ---- Last resort: ask about the underlying song of a remix -------------------
   if (result.year === null) {
@@ -100,6 +102,34 @@ export async function resolveYear(
   await deps.cache.set(key, result, ttlFor(result));
 
   return { ok: true, result: present(result, cleaned, false) };
+}
+
+/**
+ * Cap a year found by the adapter's `tokenised` rung at `low`.
+ *
+ * The same shape as two caps that already exist, and named after them on purpose. The
+ * LOOSE-ARTIST fallback in `shared/year.ts` (`admitByArtist()`, applied through `weakest()`)
+ * is the precedent: a weaker match is allowed to turn a null into a year, never to report
+ * the year as `high`, however good the release-group evidence behind it was. The remix
+ * fallback below is the other: a title that had to be rewritten to find anything reports
+ * `low`. A tokenised hit sits between the two -- the words are the card's own, but they no
+ * longer had to appear as a phrase, in order -- so it gets the same ceiling. The developer's
+ * decision (plan.year-fetch-rework-mb-fixes.md, decision 4); under plan 2 a second provider
+ * can still confirm it.
+ *
+ * Deliberately NO `viaTitle`: that field means "we asked about a different title than the
+ * card shows", and a tokenised query asked about the same words. The loose-artist cap carries
+ * no marker either.
+ *
+ * The decision lives here rather than in the adapter because `api/_lib/musicbrainz.ts` makes
+ * no scoring decisions; it only reports which rung matched.
+ */
+function capTokenisedHit(
+  result: YearResult,
+  matchedAttempt: MusicBrainzAttempt | undefined,
+): YearResult {
+  if (matchedAttempt !== 'tokenised' || result.year === null) return result;
+  return { ...result, confidence: 'low' };
 }
 
 /**
@@ -134,18 +164,41 @@ export async function resolveYear(
  *    new take on one. Reporting `high` here would put a year on the card with no signal that a
  *    guess was involved.
  *
+ * 3. **The stripped title is CLEANED AGAIN before it is queried** (2026-09-30). The remix tail
+ *    is what stopped `cleanTrackTitle()` on the primary pass -- it is not a family the cleaner
+ *    strips, and an unrecognised trailing segment ends the loop -- so anything to its LEFT
+ *    that the cleaner would have removed is still there once the tail is gone.
+ *    `Tumbando el Club (feat. C.R.O, …) - Remix` stripped to `Tumbando el Club (feat. …)`,
+ *    which still returned nothing; re-cleaned it is `Tumbando el Club`, which the spike
+ *    recovered (§3.3, `extended-clean+remix`). `viaTitle` reports the re-cleaned string,
+ *    because that is what was actually asked.
+ *
  * Returns `undefined` when there is nothing to try, or when trying it found nothing: the
  * caller then keeps the null result from the primary passes. An upstream FAILURE here is
  * swallowed for the same reason -- a definite "no year" must not turn into a 502 that makes
  * the client retry a card whose answer is already known.
+ *
+ * TWO CONSEQUENCES OF RE-ENTERING `fetchYearCandidates()`, BOTH KNOWN AND ACCEPTED:
+ *
+ * - **A double total miss runs the tokenised rung twice**, once per title: up to two extra
+ *   recording requests on top of the phrase rungs. Accepted rather than suppressed with a
+ *   flag (plan.year-fetch-rework-mb-fixes.md step 4): it only happens when BOTH titles miss
+ *   every phrase rung, which is rare, and it is already the most expensive path a card can
+ *   take. A fallback hit is `low` whichever rung found it, so the rung's own cap is moot here.
+ * - **The swallowing still covers a failed RELEASE-GROUP request.** Since 2026-09-30 the
+ *   adapter reports that as `upstream-unavailable` instead of degrading, and the primary pass
+ *   above passes it on uncached -- but in here it is swallowed like any other failure, so the
+ *   primary pass's null is cached for a day. Left as is on purpose: making this fallback
+ *   propagate its own errors is out of scope for that plan.
  */
 async function resolveViaRemixFallback(
   cleanedTitle: string,
   input: ResolveYearInput,
   deps: ResolveYearDeps,
 ): Promise<YearResult | undefined> {
-  const baseTitle = stripRemixSuffix(cleanedTitle);
-  if (baseTitle === undefined) return undefined;
+  const stripped = stripRemixSuffix(cleanedTitle);
+  if (stripped === undefined) return undefined;
+  const baseTitle = cleanTrackTitle(stripped).title;
 
   const fallback = await fetchYearCandidates({ title: baseTitle, artist: input.artist }, deps);
   if (!fallback.ok) return undefined;

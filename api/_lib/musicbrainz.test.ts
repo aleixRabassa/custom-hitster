@@ -2,11 +2,16 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   NO_WOMAN_NO_CRY,
+  OLVIDARNOS,
+  OLVIDARNOS_QUERIES,
   emptyReleaseGroups,
   emptySearch,
   joinPhraseSearch,
   noWomanNoCryReleaseGroups,
   noWomanNoCrySearch,
+  olvidarnosPhraseSearches,
+  olvidarnosReleaseGroups,
+  olvidarnosTokenisedSearch,
   undatedSearch,
 } from './__fixtures__/musicbrainz-payloads.js';
 import { fetchYearCandidates } from './musicbrainz.js';
@@ -43,9 +48,18 @@ function gateAllowing(n: number): RateLimitGate {
   };
 }
 
+/** The decoded Lucene `query` parameter of a request URL. */
+function queryOf(url: string): string {
+  return new URL(url).searchParams.get('query') ?? '';
+}
+
 /**
  * A fetch double that answers `recording` and `release-group` requests from the given
  * payloads and records every URL it was asked for.
+ *
+ * `recording` may also be a function of the decoded query text, which is how a test tells
+ * the rungs of the query ladder apart: the phrase rungs and the tokenised rung all hit the
+ * same endpoint, and only the query says which one is asking.
  */
 function stubFetch(
   responses: { recording?: unknown; releaseGroup?: unknown },
@@ -63,7 +77,11 @@ function stubFetch(
     call += 1;
 
     const isReleaseGroup = url.includes('/release-group?');
-    const body = isReleaseGroup ? responses.releaseGroup : responses.recording;
+    const body = isReleaseGroup
+      ? responses.releaseGroup
+      : typeof responses.recording === 'function'
+        ? (responses.recording as (query: string) => unknown)(queryOf(url))
+        : responses.recording;
 
     return Promise.resolve({
       ok: status >= 200 && status < 300,
@@ -407,10 +425,90 @@ describe('fetchYearCandidates', () => {
     expect(result).toEqual({ ok: false, code: 'rate-limited', retryAfterMs: 1100 });
     expect(urls).toEqual([]);
   });
+});
 
-  it('should degrade to un-enriched candidates when the gate is busy before the second request', async () => {
-    // A request already spent must not be discarded. The strict pass then finds nothing to
-    // date and the caller falls through to the relaxed tier -- worse accuracy, not an error.
+// ===========================================================================
+//  P6: A FAILED RELEASE-GROUP REQUEST FAILS THE LOOKUP
+//
+//  These replace a test that asserted the opposite -- that a busy gate before
+//  request 2 DEGRADED to un-enriched candidates. That degradation drew a `low`
+//  year from inlined reissue dates on a card that was one retry away from
+//  `high`, and cached it for seven days (spike §8 P6).
+// ===========================================================================
+
+const NWNC_INPUT = {
+  title: NO_WOMAN_NO_CRY.title,
+  artist: NO_WOMAN_NO_CRY.artist,
+  durationMs: NO_WOMAN_NO_CRY.durationMs,
+};
+
+describe('fetchYearCandidates release-group failures', () => {
+  it('should return upstream-unavailable when the release-group request fails', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      // 500 is not retried, so this is exactly two requests: the recording search that
+      // succeeded, and the release-group request that did not.
+      const { fetch, urls } = stubFetch(
+        { recording: noWomanNoCrySearch, releaseGroup: noWomanNoCryReleaseGroups },
+        { statuses: [200, 500] },
+      );
+
+      const result = await fetchYearCandidates(NWNC_INPUT, deps(fetch));
+
+      expect(result).toEqual({ ok: false, code: 'upstream-unavailable' });
+      expect(urls).toHaveLength(2);
+      expect(urls[1]).toContain('/release-group?');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('should spend the single 503 retry on the release-group request before failing', async () => {
+    // `getJson`'s one retry is unchanged, and it applies to request 2 like any other.
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const { fetch, urls } = stubFetch(
+        { recording: noWomanNoCrySearch, releaseGroup: noWomanNoCryReleaseGroups },
+        { statuses: [200, 503, 503] },
+      );
+
+      const result = await fetchYearCandidates(NWNC_INPUT, deps(fetch));
+
+      expect(result).toEqual({ ok: false, code: 'upstream-unavailable' });
+      expect(urls).toHaveLength(3);
+      expect(urls.slice(1).every((url) => url.includes('/release-group?'))).toBe(true);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('should return unexpected-payload when the release-group 200 is not JSON', async () => {
+    // Passed through, not flattened into the transient code: a 200 that is not JSON means
+    // the endpoint changed shape, and retrying will not fix that.
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const fetch: FetchLike = (url) =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: url.includes('/release-group?')
+            ? () => Promise.reject(new Error('bad json'))
+            : () => Promise.resolve(noWomanNoCrySearch),
+        });
+
+      await expect(fetchYearCandidates(NWNC_INPUT, deps(fetch))).resolves.toEqual({
+        ok: false,
+        code: 'unexpected-payload',
+      });
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('should return upstream-unavailable when the gate is busy before the release-group request', async () => {
+    // NOT `rate-limited`, and with no `retryAfterMs` -- `toEqual` fails on a stray one. The
+    // client treats a 429 as free, so it would spend request 1 again, in a loop, for as long
+    // as the gate stayed busy.
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
       const { fetch, urls } = stubFetch({
@@ -418,31 +516,121 @@ describe('fetchYearCandidates', () => {
         releaseGroup: noWomanNoCryReleaseGroups,
       });
 
-      const result = await fetchYearCandidates(
-        {
-          title: NO_WOMAN_NO_CRY.title,
-          artist: NO_WOMAN_NO_CRY.artist,
-          durationMs: NO_WOMAN_NO_CRY.durationMs,
-        },
-        deps(fetch, gateAllowing(1)),
-      );
+      const result = await fetchYearCandidates(NWNC_INPUT, deps(fetch, gateAllowing(1)));
 
-      expect(result.ok).toBe(true);
-      if (!result.ok) return;
-
+      expect(result).toEqual({ ok: false, code: 'upstream-unavailable' });
       expect(urls).toHaveLength(1);
-      expect(result.candidates.every((c) => c.releaseGroupFirstReleaseDate === undefined)).toBe(
-        true,
-      );
-      expect(
-        pickBestRecording(result.candidates, {
-          artist: NO_WOMAN_NO_CRY.artist,
-          durationMs: NO_WOMAN_NO_CRY.durationMs,
-          tier: 'official-release',
-        }).year,
-      ).toBeNull();
     } finally {
       warn.mockRestore();
     }
+  });
+});
+
+// ===========================================================================
+//  THE TOKENISED RUNG
+// ===========================================================================
+
+/** Every decoded query a double was asked, in order. */
+function queriesOf(urls: readonly string[]): string[] {
+  return urls.map(queryOf);
+}
+
+const isTokenised = (query: string): boolean => query.startsWith('recording:(');
+
+describe('fetchYearCandidates tokenised rung', () => {
+  it('should append the tokenised attempt last and only once', async () => {
+    // Every rung misses, so the whole ladder runs: the two full-artist phrase rungs, the
+    // artist-guess phrase rung, and then -- once, last -- the tokenised one.
+    const { fetch, urls } = stubFetch({ recording: emptySearch });
+
+    const result = await fetchYearCandidates(
+      { title: 'A Song Title', artist: 'A Band, Someone Else', durationMs: 200_000 },
+      deps(fetch),
+    );
+
+    const queries = queriesOf(urls);
+    expect(queries).toHaveLength(4);
+    expect(queries.filter(isTokenised)).toHaveLength(1);
+    expect(isTokenised(queries.at(-1) ?? '')).toBe(true);
+    expect(queries.slice(0, -1).every((query) => query.startsWith('recording:"'))).toBe(true);
+    // Nothing matched, so nothing is reported as having matched.
+    expect(result).toEqual({ ok: true, candidates: [], requestCount: 4 });
+  });
+
+  it('should quote every token and skip the rung under two tokens', async () => {
+    // Quoted, so a word that is a Lucene keyword or carries an operator is a literal; the
+    // stray `)` has no letter or digit and is dropped rather than quoted into an empty phrase.
+    // No duration here, so the rung carries no `dur:` bound.
+    const quoted = stubFetch({ recording: emptySearch });
+    await fetchYearCandidates(
+      { title: 'Love AND Hate / Why? )', artist: 'A Band' },
+      deps(quoted.fetch),
+    );
+    expect(queriesOf(quoted.urls).at(-1)).toBe(
+      'recording:("Love" AND "AND" AND "Hate" AND "Why?") AND artist:"A Band"',
+    );
+
+    // One word, and one word left after the punctuation-only token is dropped: the rung
+    // would be a guaranteed repeat of the unbounded phrase rung, so it is not built.
+    for (const title of ['September', 'Hello )']) {
+      const { fetch, urls } = stubFetch({ recording: emptySearch });
+      await fetchYearCandidates({ title, artist: 'A Band' }, deps(fetch));
+      expect(queriesOf(urls).some(isTokenised)).toBe(false);
+    }
+  });
+
+  it('should not issue the tokenised request when an earlier rung returned recordings', async () => {
+    // The rung loop stops at the first rung with results, so a first-try card still costs
+    // exactly two requests: the recording search and the release-group enrichment.
+    const { fetch, urls } = stubFetch({
+      recording: noWomanNoCrySearch,
+      releaseGroup: noWomanNoCryReleaseGroups,
+    });
+
+    const result = await fetchYearCandidates(NWNC_INPUT, deps(fetch));
+
+    expect(urls).toHaveLength(2);
+    expect(queriesOf(urls).some(isTokenised)).toBe(false);
+    expect(result.ok && result.requestCount).toBe(2);
+    expect(result.ok && result.matchedAttempt).toBe('duration-bounded');
+  });
+
+  it('should find the captured tokenised track on the last rung, with the captured requests', async () => {
+    // Over the live capture. The exact query list is the request shape the fixture was
+    // captured WITH, so a change to any rung's query text fails here rather than silently
+    // leaving the fixture describing requests the adapter no longer makes.
+    const { fetch, urls } = stubFetch({
+      recording: (query: string) => {
+        const index = OLVIDARNOS_QUERIES.indexOf(query);
+        return index === 3 ? olvidarnosTokenisedSearch : olvidarnosPhraseSearches[index];
+      },
+      releaseGroup: olvidarnosReleaseGroups,
+    });
+
+    const result = await fetchYearCandidates(
+      // The cleaned title, as the adapter receives it: the colon of `:)` is neutralised.
+      {
+        title: "Olvidarnos De To' )",
+        artist: OLVIDARNOS.artist,
+        durationMs: OLVIDARNOS.durationMs,
+      },
+      deps(fetch),
+    );
+
+    expect(queriesOf(urls)).toEqual(OLVIDARNOS_QUERIES);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.matchedAttempt).toBe('tokenised');
+    expect(result.requestCount).toBe(5);
+    // The adapter reports; it does not score. The pool itself is good enough for `high` --
+    // capping it is `api/_lib/resolve-year.ts`'s decision, not this module's.
+    expect(
+      pickBestRecording(result.candidates, {
+        artist: OLVIDARNOS.artist,
+        durationMs: OLVIDARNOS.durationMs,
+        tier: 'official-release',
+      }),
+    ).toEqual({ year: OLVIDARNOS.expectedYear, confidence: 'high', source: 'release-group' });
   });
 });

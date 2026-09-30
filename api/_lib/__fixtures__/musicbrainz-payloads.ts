@@ -31,7 +31,8 @@
  * capture of this one query is ~180 kB and unreadable. Nothing was invented: every value
  * here came off the wire.
  *
- * The remaining fixtures below are SYNTHESISED, and each says why.
+ * The remaining fixtures below are SYNTHESISED, and each says why -- except the tokenised-rung
+ * capture at the end of the file, which is real and carries its own provenance header.
  */
 
 export const NO_WOMAN_NO_CRY = {
@@ -430,6 +431,97 @@ export const joinPhraseSearch = {
       'first-release-date': '1981-10-26',
       'artist-credit': [{ name: 'Queen', joinphrase: ' & ' }, { name: 'David Bowie' }],
       releases: [],
+    },
+  ],
+};
+
+// ===========================================================================
+//  THE TOKENISED RUNG
+// ===========================================================================
+
+/**
+ * A track that ONLY the tokenised rung finds, captured live for
+ * docs/plans/plan.year-fetch-rework-mb-fixes.md step 7.
+ *
+ * ## Provenance
+ *
+ * Captured 2026-09-30 from `musicbrainz.org/ws/2` with
+ * `User-Agent: custom-hitster/0.1.0 ( … )` (the value of `MUSICBRAINZ_USER_AGENT` in
+ * `.env.local` at the time, recorded as it was actually sent), paced at one request per 1.5 s,
+ * by calling the REAL `fetchYearCandidates()` with a recording `fetchImpl` -- so these are the
+ * adapter's own five requests, not a reconstruction of them. `OLVIDARNOS_QUERIES` lists them
+ * in the order they were made. No cache of any kind was involved.
+ *
+ * "Olvidarnos De To' :)" is spike §3.2's emoticon row. `cleanTrackTitle()` neutralises the
+ * colon, which leaves a stray `)` inside the quoted phrase, and all three phrase rungs return
+ * nothing -- even though MusicBrainz holds the recording as "Olvidarnos de to' :)", with its
+ * length equal to Spotify's to the millisecond. The tokenised rung drops the `)` (it has no
+ * letter or digit) and ANDs the three remaining words, and finds it. The pipeline then scores
+ * it `high` off the release group, and `api/_lib/resolve-year.ts` caps it at `low`.
+ *
+ * **Trimmed exactly as the No Woman No Cry capture was**: every field the adapter does not read
+ * was dropped (`score`, `video`, `artist-credit-id`, the `artist` sub-objects and their aliases,
+ * `release-events`, `media`, `track-count`, `country`, `isrcs`, the release-group's own
+ * `artist-credit` and `releases`, and so on). Nothing was invented: every value here came off
+ * the wire. The three phrase-rung responses were byte-identical apart from `created`.
+ */
+export const OLVIDARNOS = {
+  title: "Olvidarnos De To' :)",
+  artist: 'Cano, Justin Quiles',
+  durationMs: 200625,
+  expectedYear: 2026,
+};
+
+/** The `query` parameter of each request, in the order the adapter made them. */
+export const OLVIDARNOS_QUERIES = [
+  `recording:"Olvidarnos De To' )" AND artist:"Cano, Justin Quiles" AND dur:[190625 TO 210625]`,
+  `recording:"Olvidarnos De To' )" AND artist:"Cano, Justin Quiles"`,
+  `recording:"Olvidarnos De To' )" AND artist:"Cano"`,
+  `recording:("Olvidarnos" AND "De" AND "To'") AND artist:"Cano" AND dur:[190625 TO 210625]`,
+  'rgid:(efb10ea5-724a-4a23-a15e-e5d1509c568a)',
+];
+
+/** The three phrase rungs' answers, in request order. */
+export const olvidarnosPhraseSearches = [
+  { created: '2026-09-30T18:20:11.403Z', count: 0, offset: 0, recordings: [] },
+  { created: '2026-09-30T18:20:12.666Z', count: 0, offset: 0, recordings: [] },
+  { created: '2026-09-30T18:20:14.173Z', count: 0, offset: 0, recordings: [] },
+];
+
+export const olvidarnosTokenisedSearch = {
+  created: '2026-09-30T18:20:15.708Z',
+  count: 1,
+  offset: 0,
+  recordings: [
+    {
+      id: '4d9fb260-6dca-4e7d-b735-362714e46663',
+      title: "Olvidarnos de to' :)",
+      length: 200625,
+      'artist-credit': [{ joinphrase: ' & ', name: 'Cano' }, { name: 'Justin Quiles' }],
+      'first-release-date': '2026-04-17',
+      releases: [
+        {
+          status: 'Official',
+          date: '2026-04-17',
+          'release-group': {
+            id: 'efb10ea5-724a-4a23-a15e-e5d1509c568a',
+            'primary-type': 'Album',
+          },
+        },
+      ],
+    },
+  ],
+};
+
+export const olvidarnosReleaseGroups = {
+  created: '2026-09-30T18:20:17.190Z',
+  count: 1,
+  offset: 0,
+  'release-groups': [
+    {
+      id: 'efb10ea5-724a-4a23-a15e-e5d1509c568a',
+      title: 'Anaís',
+      'first-release-date': '2026-04-17',
     },
   ],
 };
