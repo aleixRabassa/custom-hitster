@@ -5378,3 +5378,23 @@ and Deezer are not independent on these decks (both carry the label's release da
 agreement confirmed two 2006 reissue years and 29 SX3 CD dates. The title cleaner also leaves the
 Spanish `- de "…"/Banda Sonora Original` tail and `''…''` quotes in place. Full write-up in
 [`docs/spikes/spike.year-fetch-rework.md`](./spikes/spike.year-fetch-rework.md) §13.
+
+## 2026-09-30 — An LLM guesses past its knowledge cutoff; Gemini's free tier cuts streams mid-response
+
+Measured for [`docs/spikes/spike.ai-year-fetch.md`](./spikes/spike.ai-year-fetch.md) with a
+free-tier Gemini key.
+
+- **Abstention does not happen.** With "return null rather than guess" in the prompt, **40 of 40**
+  post-cutoff tracks got a year, all of them wrong. That is PEGAO's 38 on `gemini-3.6-flash`
+  (2023/2024 for 2026 songs) and 2 on `gemini-3.8-flash`. Nearly every answer was
+  `confidence: "high"`, so self-reported confidence cannot gate anything.
+- **The free tier is 20 requests a day per model** (`GenerateRequestsPerDayPerProjectPerModel-FreeTier`),
+  and under load most calls come back `503`.
+- **A `503` can arrive INSIDE a stream that began with HTTP 200.** Six of eight
+  `streamGenerateContent?alt=sse` legs were cut like this, so a streaming client must read the body
+  for an error object and resume with the missing keys only.
+- **In NDJSON (text) mode the response schema is not enforced**: `"confidence":"medium"` came back,
+  outside the enum. Validate every line server-side.
+- **Thinking at `low` billed zero tokens** on this task (`totalTokenCount` = prompt + output).
+- The Windows `node` assertion `!(handle->flags & UV_HANDLE_CLOSING)` after `process.exit()` with a
+  fetch body still open is harmless noise from the harness, not a result.
