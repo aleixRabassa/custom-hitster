@@ -5447,3 +5447,86 @@ Built from [`docs/plans/plan.year-fetch-rework-mb-fixes.md`](./plans/plan.year-f
   - The tokeniser splits on whitespace only, so a bracketed tail the cleaner left in place leaks
     tokens such as `"(feat."` into the tokenised query. That did no harm in the diff.
 - Harness and raw responses: `.scratch/plan1/` (git-ignored; `inspect.ts` replays a track offline).
+
+## 2026-09-30 — The provider vote rebuilt; the replay reproduces the spike; back-coded ISRCs are real and a 1986 floor was refused
+
+Built from [`docs/plans/plan.year-fetch-rework-server.md`](./plans/plan.year-fetch-rework-server.md).
+
+- **The spike's §12.7 files were lost, not paused.** `shared/year-providers.ts`, `api/_lib/provider-lookup.ts`,
+  `deezer.ts`, `itunes.ts`, `discogs.ts` and the `rate-limit.ts` / `cache.ts` edits were in no commit,
+  no stash and no dangling object: an uncommitted working tree was lost. Everything was rebuilt from
+  the plan, without `discogs.ts`. The replay scripts survived only in two old session scratchpads,
+  now copied to the git-ignored `.scratch/`.
+- **The replay reproduces §13.10 and §13.12 to the digit** (`.scratch/plan2/replay/replay.ts`,
+  offline). The recorded Deezer, MusicBrainz and iTunes answers go through the new `nextFrontier`,
+  `findConfirmation` and `decideYear`:
+  - on the 542: 474 confirmed, 63 unconfirmed and 5 without a year; 346 confirmed at `resolve` and
+    128 at `verify`; 342/343 against the consensus;
+  - 21/22 fixtures, and 112/125 labelled cards with §13.12's trust order.
+    The spike's harness ISRC pivot (above 40 reads as 19xx) and `isrcYear`'s (at or below the current
+    two-digit year + 1 reads as 20xx) disagree only on 28–40, and no recorded card has one.
+- **Back-coded ISRCs are routine and CORRECT, so "an ISRC year before 1986 is impossible" is
+  false.** ISO 3901 dates from 1986, but major labels code their old catalogue with the original
+  recording year. There are 28 verified Deezer rows across the 804 cards that decode to 1964–1984,
+  for example `AUAP08000046` Back In Black 1980, `SEAYD7601020` Dancing Queen 1976 and
+  `USMC17301722` Free Bird 1973, and each is the recording's year or within one of it. A floor
+  nulling them was measured and refused. On the 542 it lost 4 confirmations (474 → 470) and 4
+  consensus hits, moved Lay All Your Love On Me from 1980 to a wrong 1977, took labelled cards from
+  112 to 111, and fixed no shown year anywhere.
+- **The GBSMU registrant writes nonsense year digits** (29, 34, 39, 46, 64) on "Legendary FM
+  Broadcasts" live bootlegs. The Deezer ISRC year is the minimum over the fetched rows, so
+  `GBSMU2955085` (read as 1929) hides Sweet Child O' Mine's correct `USGF18714809` (1987). No shown
+  year changes: the card confirms at `verify` instead of `resolve`, which costs one iTunes request. A
+  named GBSMU exclusion is the narrow fix; it is not built, pending a decision. The spike's own
+  data holds no such code; they appear only in the 2026-09-30 captures.
+- **Deezer costs 2.35 requests per card, not "2"**: one search, plus `track/{id}` per VERIFIED hit
+  capped at `DEEZER_TRACK_FETCH_LIMIT` = 3. §11.2's "2 per card" came from a harness that fetched
+  `data[0]` whether or not it verified. On the 542's recorded rows a bound of 3 gets 389 of 514
+  release years exact, against 382 for a bound of 1.
+- **Drift against the spike:** iTunes matches 22/22 (§4.3) and 30/30 on a CSV sample. Deezer
+  differs on two of the 22. `sweetChild` is 2016 / ISRC 1929 now, where the spike had 1988 / 1987,
+  because the 1988 row left the top ten. `bohemianRhapsody`'s ISRC year went from 2001 to 2003,
+  because the catalogue changed.
+- **The quota body is real**, captured with HTTP 200:
+  `{"error":{"type":"Exception","message":"Quota limit exceeded","code":4}}`. The spike's quote
+  left out the `type` field.
+- **`api/year.test.ts` would deploy as a function**, because `vercel.json` routes every `api/*.ts`.
+  The endpoint tests live in `api/_lib/year-endpoint.test.ts`.
+- **The cross-layer test freezes `Date`** (`vi.useFakeTimers({ toFake: ['Date'] })`), because
+  `isrcYear`'s pivot moves with the clock and GBSMU's `29` reads 2029 from 2028 on.
+
+## 2026-09-30 — Provisional years and keepYearless: two places a resumed card silently became final, and a flaky full-suite run
+
+Built from [`docs/plans/plan.year-fetch-rework-game.md`](./plans/plan.year-fetch-rework-game.md) and
+[`docs/plans/plan.year-fetch-rework-ui.md`](./plans/plan.year-fetch-rework-ui.md).
+
+- **Two lines would have turned a resumed provisional card final and never verified it.** The
+  resolver's seed marked every card with a numeric year as done; it now seeds `needs-verify` from
+  `yearProvisional`. `persistence.ts`'s `validateCard` rebuilt the card field by field and would
+  have dropped the flag; it now copies `yearProvisional` only as `true` beside a numeric year, and
+  rejects every other shape. Nothing in jsdom shows either of these, because a provisional year on
+  screen looks identical to a final one.
+- **The card-1 gap closed itself in the resolver, not the hook.** During `preparing` the start card
+  goes provisional without `currentCardId` changing, so the hook's `prioritize` never fires again. The
+  resolver now tracks the current card itself (seeded from `deck[startIndex]`), so the start card is
+  the verify lane's first pick as soon as its resolve answer lands.
+- **A 200 without a boolean `final` is `unexpected-payload`**, and that also guards against
+  stage-less edge-cache bodies an old client left behind. `App.test.tsx`'s year stubs needed
+  `final: true`; without it every gate in that file hangs rather than fails.
+- **A deferred card that was made urgent, hit a 429, and was then left behind by the player dropped
+  out of every queue** and stayed pending forever. Found during the resolver rewrite, fixed, and
+  pinned by a test.
+- **The reveal reserves one `min-h-lh` notice line in every state that shows a year**, empty and
+  `aria-hidden` on a final `high`. Otherwise "Confirming year" disappearing on confirmation would
+  re-centre the `justify-center` column. So a `high` card now carries one empty line it did not have
+  before.
+- **The checkbox's `touch-target` sits on the `<label>`, not the input**: on the input it draws a
+  44 px native box. The hint sits OUTSIDE the label, tied by `aria-describedby`, because inside it
+  would become part of the accessible name.
+- **The dead `isYearPending` prop chain was removed** (`App` → `GameScreen` → `CardStack` → `Card` →
+  `CardRevealSide`). `yearStateOf(card)` has exactly its definition of pending, and a boolean cannot
+  tell provisional from final.
+- **`pnpm test` reported "15 errors" twice today with every test passing.** They were
+  `[vitest-pool]: Failed to start forks worker … Timeout waiting for worker to respond` while other
+  processes loaded the machine. `pnpm test -- --maxWorkers=4` ran clean: 70 files and 1453 tests.
+  Read the error text before reading it as a failure.

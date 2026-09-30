@@ -1,6 +1,6 @@
 # Playlist Jitster
 
-Turn any public Spotify playlist link into a playable digital [Hitster](https://hitstergame.com/) deck. Paste a playlist URL, press Start, and get a shuffled deck of cards you play in the browser: each card shows only a QR code, and you tap to reveal the title, artist, and — the part the game is actually about — the song's **original** release year. Release years come from MusicBrainz rather than Spotify, because Spotify reports the _album edition's_ date, which turns a 2011 remaster of Bohemian Rhapsody into a 2011 song.
+Turn any public Spotify playlist link into a playable digital [Hitster](https://hitstergame.com/) deck. Paste a playlist URL, press Start, and get a shuffled deck of cards you play in the browser: each card shows only a QR code, and you tap to reveal the title, artist, and — the part the game is actually about — the song's **original** release year. Release years come from a vote between MusicBrainz, Deezer and iTunes rather than from Spotify, because Spotify reports the _album edition's_ date, which turns a 2011 remaster of Bohemian Rhapsody into a 2011 song.
 
 Built with **Vite 8 + React 19 + TypeScript + Tailwind CSS v4**, with a thin **Vercel Functions** backend that exists only to do what a browser can't: reach a CORS-blocked endpoint, set a custom `User-Agent`, and hold a cache shared across users.
 
@@ -66,7 +66,7 @@ The end screen offers three things beyond "play again", and each has one caveat 
 
 > **Print double-sided on the LONG edge.** The back sheet's columns are mirrored to compensate for exactly that, and a printer set to short-edge binding will pair every card with the wrong answer. The app cannot read your printer's settings, so this is the one instruction it cannot enforce.
 
-Cards whose year has not arrived yet are left out and counted, never listed. Titles print in a Latin-1 font, so Cyrillic, Greek and CJK titles come out as `?` — the year and the QR code are unaffected, so the card still plays and still scans.
+Cards whose year has not arrived yet — or is shown but still being confirmed — are left out and counted, never listed. A card whose year cannot be found at all is normally dropped from the deck; tick **Keep cards with no year found** on the playlist picker (it is remembered in your browser) and it stays, plays as "Year unknown", and prints with its year left blank so you can write it in by hand. Titles print in a Latin-1 font, so Cyrillic, Greek and CJK titles come out as `?` — the year and the QR code are unaffected, so the card still plays and still scans.
 
 **Or skip the screen entirely.** The welcome screen — the first thing a fresh visit shows, before the playlist picker — offers _Print your cards_: a ready-made PDF of year cards from 1970 to 2033 to print, cut out and lay along a table. It is a static file, so it downloads even before any playlist is chosen. The playlist picker has a Back button at the top left that returns to the welcome screen, so the cards are one press away from wherever you are choosing a playlist.
 

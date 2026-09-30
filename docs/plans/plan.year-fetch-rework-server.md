@@ -149,15 +149,15 @@ MusicBrainz included. The endpoint fails loudly only when **all** providers fail
 
 ## Implementation Steps
 
-- [ ] **Step 1: shared types.** In `shared/types.ts`:
-  - [ ] Add `YearProviderId` (`deezer`, `musicbrainz`, `itunes`) and `YearStage`
+- [x] **Step 1: shared types.** In `shared/types.ts`:
+  - [x] Add `YearProviderId` (`deezer`, `musicbrainz`, `itunes`) and `YearStage`
         (`resolve`, `verify`).
-  - [ ] Rename today's `'release-group' | 'recording'` to `MusicBrainzYearSource` and keep it on
+  - [x] Rename today's `'release-group' | 'recording'` to `MusicBrainzYearSource` and keep it on
         `YearResult`, which is the cached MusicBrainz value and is otherwise unchanged. Widen
         `YearSource` to `MusicBrainzYearSource`, `deezer`, `itunes` or `vote`:
     - `vote` when two providers confirmed the year;
     - otherwise the provider whose year was kept.
-  - [ ] `YearLookupResult` gains:
+  - [x] `YearLookupResult` gains:
     - `final: boolean`, required;
     - `agreedBy?`, a pair of provider ids, present only when confirmed;
     - `skipped?`, the provider ids skipped for configuration or failure, present only when non-empty.
@@ -170,17 +170,17 @@ MusicBrainz included. The endpoint fails loudly only when **all** providers fail
 
     The client derives pending, provisional or dropped from `final`, never from `confidence`.
 
-  - [ ] Add a `ProviderAnswer` value type: provider id and year (or null). Deezer carries its
+  - [x] Add a `ProviderAnswer` value type: provider id and year (or null). Deezer carries its
         release-date year and its ISRC year separately. MusicBrainz carries its tier confidence,
         `source` and `viaTitle`. Never widen `YearResult` for this.
-- [ ] **Step 2: export the date helpers.** Export `compareDates`, `parseYear` and `isPlausibleYear`
+- [x] **Step 2: export the date helpers.** Export `compareDates`, `parseYear` and `isPlausibleYear`
       from `shared/year.ts` rather than copying them into the new modules. Their comments say they
       are shared now.
-- [ ] **Step 3: the pure planner and vote, `shared/year-providers.ts`.**
-  - [ ] `YEAR_PROVIDER_PLAN`: an ordered list of steps (provider id, `phase` of fast / coverage /
+- [x] **Step 3: the pure planner and vote, `shared/year-providers.ts`.**
+  - [x] `YEAR_PROVIDER_PLAN`: an ordered list of steps (provider id, `phase` of fast / coverage /
         precision, HTTP `stage`, `finalWhenCertain` off for all three): Deezer and MusicBrainz in
         `resolve`, iTunes in `verify`.
-  - [ ] `UNCONFIRMED_TRUST`: the order in which a lone answer is kept when nobody agrees. Its entries
+  - [x] `UNCONFIRMED_TRUST`: the order in which a lone answer is kept when nobody agrees. Its entries
         are **tiers**, not providers, because MusicBrainz appears twice: `musicbrainz:high`, `itunes`,
         `musicbrainz:low`, `deezer`.
     - The header records why: iTunes before a `low` recovered A Whole New World (2014 → 1992) and
@@ -190,15 +190,15 @@ MusicBrainz included. The endpoint fails loudly only when **all** providers fail
     - The header also says that reordering, adding or removing a provider is an edit to these two
       constants plus a registry entry, and nothing else. Re-adding Discogs is such an edit plus its
       adapter; its measured cost and benefit are in spike §13.10.
-  - [ ] `validatePlan`: each provider appears exactly once in the steps; each tier in the trust order
+  - [x] `validatePlan`: each provider appears exactly once in the steps; each tier in the trust order
         names a provider of the plan, and every provider has at least one tier; and every `resolve`
         step comes before every `verify` step. It runs as a test, never at runtime.
-  - [ ] `voterYears(answer)`: the years one provider contributes. Deezer's two dates are **one** voter.
+  - [x] `voterYears(answer)`: the years one provider contributes. Deezer's two dates are **one** voter.
         iTunes and Deezer are **two** voters (spike §13.11). Say so in the comment, with the rejected
         alternative and its measured cost, so nobody "fixes" it back.
-  - [ ] `findConfirmation(answers)`: the earliest year on which two **different** providers agree, and
+  - [x] `findConfirmation(answers)`: the earliest year on which two **different** providers agree, and
         which two they were.
-  - [ ] `decideYear(answers, plan)`:
+  - [x] `decideYear(answers, plan)`:
     - a confirmed year gives `high`, final, source `vote`;
     - otherwise the first answer in `UNCONFIRMED_TRUST` gives `low`, where a lone Deezer counts only
       when its release-date year equals its ISRC year;
@@ -206,85 +206,85 @@ MusicBrainz included. The endpoint fails loudly only when **all** providers fail
 
     It does not decide finality. The driver does, from whether any provider is left to ask.
 
-  - [ ] `deezerRecentSignature(answer, rawTitle)`: release-date year equals ISRC year, the year is at
+  - [x] `deezerRecentSignature(answer, rawTitle)`: release-date year equals ISRC year, the year is at
         least 2015, and the raw Spotify title has no remaster or live suffix (`La Grange - 2005 Remaster`
         must not fire). Only `finalWhenCertain` reads it, and that switch is off, so it is dormant but
         tested.
-  - [ ] `isrcYear(isrc)`: characters 6–7 as a year. Two-digit pivot: a value at or below the current
+  - [x] `isrcYear(isrc)`: characters 6–7 as a year. Two-digit pivot: a value at or below the current
         two-digit year plus one reads as 20xx, otherwise 19xx. A malformed ISRC gives null.
-  - [ ] `nextFrontier(plan, stage, answers)`: the rules in Chosen Approach. Providers already answered
+  - [x] `nextFrontier(plan, stage, answers)`: the rules in Chosen Approach. Providers already answered
         or skipped are never asked again. A confirmation returns "done". It never returns a provider
         from the other stage.
-  - [ ] `providerCacheKey(provider, artist, cleanedTitle)`: the prefix `yearprov:<provider>:v1:`
+  - [x] `providerCacheKey(provider, artist, cleanedTitle)`: the prefix `yearprov:<provider>:v1:`
         followed by `normalizeForCacheKey` of each part. The version is per provider, so a change to
         one adapter's logic discards only that provider's entries.
-- [ ] **Step 4: pure store-hit verification, `shared/store-match.ts`.** Input: the rows an adapter has
+- [x] **Step 4: pure store-hit verification, `shared/store-match.ts`.** Input: the rows an adapter has
       already normalised (title, credit, duration in ms or unknown, date, an `excluded` flag) and the
       target (raw title, primary artist, duration). A row passes when all of these hold:
-  - [ ] the cleaned, normalised titles are equal (`cleanTrackTitle` on both sides, then
+  - [x] the cleaned, normalised titles are equal (`cleanTrackTitle` on both sides, then
         `normalizeForCacheKey`);
-  - [ ] every token of the primary Spotify artist appears in the credit. This is the rule the spike
+  - [x] every token of the primary Spotify artist appears in the credit. This is the rule the spike
         measured, not `artistMatchesExact`;
-  - [ ] the duration is within `DURATION_TOLERANCE_MS`, and a row without a duration does not pass.
+  - [x] the duration is within `DURATION_TOLERANCE_MS`, and a row without a duration does not pass.
         (The per-call "duration optional" option existed only for Discogs, and goes with it.)
 
   The answer is the **earliest** verified row's year, using `compareDates`.
 
-- [ ] **Step 5: the adapter contract, `api/_lib/provider-lookup.ts`.**
-  - [ ] Input: the raw title, the `CleanedTitle`, the raw artist, the primary artist, the duration and
+- [x] **Step 5: the adapter contract, `api/_lib/provider-lookup.ts`.**
+  - [x] Input: the raw title, the `CleanedTitle`, the raw artist, the primary artist, the duration and
         an `AbortSignal`.
-  - [ ] Outcome, one of:
+  - [x] Outcome, one of:
     - an answer, with `cached` and a request count;
     - skipped, as `not-configured`;
     - failed, a transient error with its code;
     - busy, with `retryAfterMs`.
-  - [ ] The registry is a typed `Record<YearProviderId, ProviderLookup>` built in `api/year.ts`, so a
+  - [x] The registry is a typed `Record<YearProviderId, ProviderLookup>` built in `api/year.ts`, so a
         plan step with no adapter is a compile error.
-- [ ] **Step 6: the two store adapters.** Each takes an injected `fetch` and its gate, never throws
+- [x] **Step 6: the two store adapters.** Each takes an injected `fetch` and its gate, never throws
       for an upstream problem, and parses tolerantly:
-  - [ ] `api/_lib/deezer.ts`:
+  - [x] `api/_lib/deezer.ts`:
     - a free-text `search?q=<artist> <title>`; the advanced syntax returns nothing (§4.1);
     - then `track/{id}` for verified hits, up to a named constant bound, which gives `release_date` and
       the ISRC;
     - read the **body** for `{"error":{"code":4}}` returned with HTTP 200 and map it to busy (§11.2).
     - Reconcile the "2 requests per card" figure against the CSV when capturing, and record the result
       in the header.
-  - [ ] `api/_lib/itunes.ts`:
+  - [x] `api/_lib/itunes.ts`:
     - `search?term=<artist> <title>&entity=song&country=ES`;
     - the storefront is a named constant, not an environment variable;
     - a 403 or 429 maps to busy.
-  - [ ] Each adapter's permits go through its own gate (step 8).
-- [ ] **Step 7: the MusicBrainz provider, `api/_lib/musicbrainz-provider.ts`.**
-  - [ ] Wrap `resolveYear` **whole**, passing the raw title, because it cleans the title itself and
+  - [x] Each adapter's permits go through its own gate (step 8).
+- [x] **Step 7: the MusicBrainz provider, `api/_lib/musicbrainz-provider.ts`.**
+  - [x] Wrap `resolveYear` **whole**, passing the raw title, because it cleans the title itself and
         owns cache-before-gate and the `mbyear:` entry.
-  - [ ] Map the outcome:
+  - [x] Map the outcome:
     - a result becomes a `ProviderAnswer` with its confidence, `source` and `viaTitle`;
     - `upstream-unavailable` becomes failed;
     - `rate-limited` becomes busy;
     - a missing `MUSICBRAINZ_USER_AGENT` becomes skipped as `not-configured`, **not** a 500.
-  - [ ] It is never wrapped in the store answer cache.
-  - [ ] `resolve-year.test.ts` stays untouched and green. That is the proof its behaviour did not
+  - [x] It is never wrapped in the store answer cache.
+  - [x] `resolve-year.test.ts` stays untouched and green. That is the proof its behaviour did not
         change.
-- [ ] **Step 8: gates per provider, `api/_lib/rate-limit.ts`.**
-  - [ ] `createRateLimitGate` and the instance gate take a gate key, a minimum interval and a maximum
+- [x] **Step 8: gates per provider, `api/_lib/rate-limit.ts`.**
+  - [x] `createRateLimitGate` and the instance gate take a gate key, a minimum interval and a maximum
         wait. The refusal's `retryAfterMs` derives from that gate.
-  - [ ] `PROVIDER_GATES`:
+  - [x] `PROVIDER_GATES`:
     - MusicBrainz: `mbgate:v1`, 1.1 s, today's wait (defaults unchanged);
     - Deezer: 120 ms;
     - iTunes: 3 s.
-  - [ ] The header says why these gates are global: Vercel's egress IPs are shared, so a per-IP limit
+  - [x] The header says why these gates are global: Vercel's egress IPs are shared, so a per-IP limit
         is effectively a limit across all players.
-- [ ] **Step 9: the provider answer cache, `api/_lib/cache.ts`.**
-  - [ ] A `ProviderAnswerCache` beside the unchanged `YearCache`, keyed by `providerCacheKey`, with
+- [x] **Step 9: the provider answer cache, `api/_lib/cache.ts`.**
+  - [x] A `ProviderAnswerCache` beside the unchanged `YearCache`, keyed by `providerCacheKey`, with
         TTLs per provider: 30 days for an answer with a year, 1 day for a null. Validated on read like
         `isYearResult`.
-  - [ ] A batched read of several keys (Upstash `MGET`), which is the widening `YearCache`'s own
+  - [x] A batched read of several keys (Upstash `MGET`), which is the widening `YearCache`'s own
         comment asks to wait for until something needs it. A warm card then costs one Redis command.
         Extend the memory cache used under `vercel dev` with the same method.
-  - [ ] `withAnswerCache(lookup, cache)`: a wrapper applied to the two **store** adapters only, so
+  - [x] `withAnswerCache(lookup, cache)`: a wrapper applied to the two **store** adapters only, so
         the plan's order never touches a key.
-- [ ] **Step 10: the driver, `api/_lib/year-pipeline.ts`.** `runStage(stage, input, registry, cache, plan)`:
-  - [ ] **Read first.** One batched read (`MGET`) of every provider's cached answer, **including the
+- [x] **Step 10: the driver, `api/_lib/year-pipeline.ts`.** `runStage(stage, input, registry, cache, plan)`:
+  - [x] **Read first.** One batched read (`MGET`) of every provider's cached answer, **including the
         MusicBrainz `mbyear:` key**, computed with the same key helper `resolveYear` uses and
         validated with `isYearResult`. On an `mbyear:` hit, the MusicBrainz provider is not called at
         all. On a miss, `resolveYear` runs and repeats its own cache check, so a cold card pays one
@@ -292,9 +292,9 @@ MusicBrainz included. The endpoint fails loudly only when **all** providers fail
         confirm, or no provider is left to ask, return the final answer without a provider request.
         This is what lets a warm deck cost one call per card, and what lets `resolve` decide the final
         answer alone.
-  - [ ] **Ask.** Loop: `nextFrontier`, run that frontier concurrently with `Promise.all`, merge the
+  - [x] **Ask.** Loop: `nextFrontier`, run that frontier concurrently with `Promise.all`, merge the
         outcomes, stop at a confirmation or when the stage has no provider left.
-  - [ ] **Finality.** An answer is final when any of these holds:
+  - [x] **Finality.** An answer is final when any of these holds:
     - a confirmation was reached;
     - `verify` has asked every remaining provider;
     - `resolve` was answered entirely from cache and no provider remains unasked in either stage.
@@ -305,43 +305,43 @@ MusicBrainz included. The endpoint fails loudly only when **all** providers fail
     Providers skipped as `not-configured` count as absent, so a final can still be reached without
     them.
 
-  - [ ] **Busy.** A busy provider stops the loop and returns busy with its `retryAfterMs`. The answers
+  - [x] **Busy.** A busy provider stops the loop and returns busy with its `retryAfterMs`. The answers
         already obtained stay cached, and the next call picks up from them.
-  - [ ] **Warnings.** Log `console.warn` **once per cold start** for each provider skipped as
+  - [x] **Warnings.** Log `console.warn` **once per cold start** for each provider skipped as
         `not-configured`, naming the missing variable and never its value. List skipped providers in
         the response's `skipped`. If **every** provider in the plan is `not-configured`, the endpoint
         returns the existing loud `not-configured` 500.
-- [ ] **Step 11: the endpoint, `api/year.ts`.**
-  - [ ] **No `stage` parameter:** today's MusicBrainz-only path, byte for byte, with its 30-day edge
+- [x] **Step 11: the endpoint, `api/year.ts`.**
+  - [x] **No `stage` parameter:** today's MusicBrainz-only path, byte for byte, with its 30-day edge
         cache. Tabs still running the old client (the service worker waits rather than calling
         `skipWaiting`) keep calling it, and an old client drops any card that comes back `null`. The
         comment names this reason. **This path still returns the loud `not-configured` 500 on a
         missing `MUSICBRAINZ_USER_AGENT`, on purpose**: it has only one provider, so "skipped with a
         warning" would be "every provider skipped". Say so in the comment, so nobody "fixes" one path
         to match the other.
-  - [ ] **`stage=resolve` or `stage=verify`:** build the registry from the environment and call
+  - [x] **`stage=resolve` or `stage=verify`:** build the registry from the environment and call
         `runStage`. Any other `stage` value is `invalid-request`.
-  - [ ] **Status mapping:** busy is 429 with `retryAfterMs`; every provider failing is 502
+  - [x] **Status mapping:** busy is 429 with `retryAfterMs`; every provider failing is 502
         `upstream-unavailable`; every provider `not-configured` is 500 `not-configured`.
-  - [ ] **Edge `Cache-Control`:**
+  - [x] **Edge `Cache-Control`:**
     - a final answer with nothing skipped gets at most the shortest TTL among the cache entries it was
       built from;
     - a provisional answer, or a final one reached with a provider skipped, gets about 60 s.
 
     Rewrite the `cache.test.ts` mirror test ("Redis TTL ≥ edge TTL") to state that rule rather than
     extending it.
-- [ ] **Step 12: capture fixtures and re-run the replay.**
-  - [ ] Capture Deezer and iTunes responses for the 22 ground-truth tracks with the adapters' exact
+- [x] **Step 12: capture fixtures and re-run the replay.**
+  - [x] Capture Deezer and iTunes responses for the 22 ground-truth tracks with the adapters' exact
         requests, from a scratch script, **never pointed at Upstash**.
-  - [ ] Trim the captures without inventing anything, show that trimming changes no answer, and add
+  - [x] Trim the captures without inventing anything, show that trimming changes no answer, and add
         provenance headers in the style of `musicbrainz-payloads.ts`. Include one real Deezer
         quota-exceeded body served with HTTP 200.
-  - [ ] Build `shared/__fixtures__/year-votes.ts`: one `ProviderAnswer` per provider per track, with
+  - [x] Build `shared/__fixtures__/year-votes.ts`: one `ProviderAnswer` per provider per track, with
         ground truth. The MusicBrainz column is computed in the test from `YEAR_FIXTURES` through
         `YEAR_TIER_ORDER` and pinned.
-  - [ ] Use `docs/spikes/spike.year-fetch-rework.data.csv` as the drift reference. Any provider answer
+  - [x] Use `docs/spikes/spike.year-fetch-rework.data.csv` as the drift reference. Any provider answer
         that differs from the CSV is investigated before it is pinned.
-  - [ ] Re-run a replay against the new module. The surviving scripts live only in two previous
+  - [x] Re-run a replay against the new module. The surviving scripts live only in two previous
         sessions' scratchpads:
     - `C:\Users\AleixRabassa\AppData\Local\Temp\claude\C--repos-custom-hitster\342d46e9-7dce-4952-ad35-8c2301633e30\scratchpad\impl\replay.ts`,
       which imports `shared/year-providers.ts` by `file:///` URL and reads its data through the
@@ -360,15 +360,15 @@ MusicBrainz included. The endpoint fails loudly only when **all** providers fail
     unconfirmed, 5 without a year, 342/343 against the consensus, and 21/22 fixtures. With §13.12's
     trust order it must also reproduce 112/125 on the labelled cards. Any difference is explained in
     `docs/agent_findings.md`.
-- [ ] **Step 13: environment.** In `.env.example`:
-  - [ ] mark `MUSICBRAINZ_USER_AGENT` as skipped-with-a-warning rather than required;
-  - [ ] update the Upstash comment: Redis now backs three gates and the provider cache, and without it
+- [x] **Step 13: environment.** In `.env.example`:
+  - [x] mark `MUSICBRAINZ_USER_AGENT` as skipped-with-a-warning rather than required;
+  - [x] update the Upstash comment: Redis now backs three gates and the provider cache, and without it
         `vercel dev` leaves iTunes unpaced from the developer's own IP.
-  - [ ] Add no Discogs variable. Neither store needs a key.
-- [ ] **Step 14: grep and run the four checks.**
-  - [ ] Grep for `@/` under `api/` (must be none) and for relative imports without `.js` under `api/`
+  - [x] Add no Discogs variable. Neither store needs a key.
+- [x] **Step 14: grep and run the four checks.**
+  - [x] Grep for `@/` under `api/` (must be none) and for relative imports without `.js` under `api/`
         and in `shared/` runtime imports.
-  - [ ] Run `pnpm typecheck && pnpm lint && pnpm test && pnpm build`.
+  - [x] Run `pnpm typecheck && pnpm lint && pnpm test && pnpm build`.
 - [ ] **Step 15: preview deploy smoke test**, with Upstash set:
   - [ ] one `resolve` and one `verify` for a recent song and an old song;
   - [ ] confirm `mbyear:` entries are hit rather than re-fetched;
@@ -380,89 +380,89 @@ MusicBrainz included. The endpoint fails loudly only when **all** providers fail
 
 **`shared/year-providers.test.ts`**
 
-- [ ] `should not confirm on Deezer's release year and ISRC year alone`: one voter (the Killing In The Name shape).
-- [ ] `should confirm when either Deezer year agrees with another provider`.
-- [ ] `should take the earliest year when Deezer's two years each agree with a different provider`.
-- [ ] `should take the earliest year when two separate pairs agree`.
-- [ ] `should confirm Personal Jesus at 1990 at step 2 and never ask iTunes`: the stop rule. MusicBrainz and Deezer agree on 1990, so iTunes' correct 1989 is never asked for. This is the accepted price of "the pair beats iTunes" (spike §13.12: the pair was right 11 times to iTunes' 4).
-- [ ] `should keep the MusicBrainz and Deezer year when iTunes disagrees`: the Men In Black shape (pair 1997, iTunes 1988), decided with every answer present, so the rule and not the stop is what is pinned.
-- [ ] `should count iTunes and Deezer as two voters`: the Pink Panther Theme shape (MusicBrainz `high` 1963, iTunes 2006, Deezer 2006) confirms 2006. That is a known wrong answer, pinned **on purpose** with a comment pointing at §13.11.
-- [ ] `should ignore a skipped or null provider and still ask the next one`.
-- [ ] `should return no year when every answer is null`.
-- [ ] `should fall back in the order MusicBrainz high, iTunes, MusicBrainz low, Deezer`:
+- [x] `should not confirm on Deezer's release year and ISRC year alone`: one voter (the Killing In The Name shape).
+- [x] `should confirm when either Deezer year agrees with another provider`.
+- [x] `should take the earliest year when Deezer's two years each agree with a different provider`.
+- [x] `should take the earliest year when two separate pairs agree`.
+- [x] `should confirm Personal Jesus at 1990 at step 2 and never ask iTunes`: the stop rule. MusicBrainz and Deezer agree on 1990, so iTunes' correct 1989 is never asked for. This is the accepted price of "the pair beats iTunes" (spike §13.12: the pair was right 11 times to iTunes' 4).
+- [x] `should keep the MusicBrainz and Deezer year when iTunes disagrees`: the Men In Black shape (pair 1997, iTunes 1988), decided with every answer present, so the rule and not the stop is what is pinned.
+- [x] `should count iTunes and Deezer as two voters`: the Pink Panther Theme shape (MusicBrainz `high` 1963, iTunes 2006, Deezer 2006) confirms 2006. That is a known wrong answer, pinned **on purpose** with a comment pointing at §13.11.
+- [x] `should ignore a skipped or null provider and still ask the next one`.
+- [x] `should return no year when every answer is null`.
+- [x] `should fall back in the order MusicBrainz high, iTunes, MusicBrainz low, Deezer`:
   - a lone MusicBrainz `high` beats a lone iTunes (the Killing In The Name shape: 1992 `high`, iTunes 2001);
   - a lone iTunes beats a MusicBrainz `low` (the A Whole New World shape: 2014 `low`, iTunes 1992);
   - a MusicBrainz `low` beats a lone Deezer.
-- [ ] `should accept a lone Deezer only when its two years agree`.
-- [ ] `should not confirm a MusicBrainz high alone`, and `should confirm a MusicBrainz low with one agreeing provider`.
-- [ ] `should fire the recent-release signature only from 2015 and without a remaster or live suffix`: the La Grange case, `deezerRecentSignature`.
-- [ ] `nextFrontier`: with nothing answered it returns Deezer and MusicBrainz together; with one answer it returns the next provider; with `finalWhenCertain` switched on in a test plan it returns Deezer alone; it never returns a provider from the other stage or one already answered or skipped; it returns done on a confirmation.
-- [ ] `validatePlan`: the shipped plan is valid; a duplicate step, a trust tier naming a provider outside the plan, a provider with no tier, and a verify step before a resolve step are each rejected.
-- [ ] `isrcYear`: the century pivot, and a malformed ISRC giving null.
-- [ ] `providerCacheKey`: the prefix per provider, and normalisation of both parts.
-- [ ] `should come out 21/22 exact over the 22 fixtures`, pinning the confirmed-at-step counts (a reorder changes them, which is intended).
+- [x] `should accept a lone Deezer only when its two years agree`.
+- [x] `should not confirm a MusicBrainz high alone`, and `should confirm a MusicBrainz low with one agreeing provider`.
+- [x] `should fire the recent-release signature only from 2015 and without a remaster or live suffix`: the La Grange case, `deezerRecentSignature`.
+- [x] `nextFrontier`: with nothing answered it returns Deezer and MusicBrainz together; with one answer it returns the next provider; with `finalWhenCertain` switched on in a test plan it returns Deezer alone; it never returns a provider from the other stage or one already answered or skipped; it returns done on a confirmation.
+- [x] `validatePlan`: the shipped plan is valid; a duplicate step, a trust tier naming a provider outside the plan, a provider with no tier, and a verify step before a resolve step are each rejected.
+- [x] `isrcYear`: the century pivot, and a malformed ISRC giving null.
+- [x] `providerCacheKey`: the prefix per provider, and normalisation of both parts.
+- [x] `should come out 21/22 exact over the 22 fixtures`, pinning the confirmed-at-step counts (a reorder changes them, which is intended).
 
 **`shared/store-match.test.ts`**
 
-- [ ] One test per rule: the title rule, the artist-token rule, the duration rule (a row without a duration fails), the `excluded` flag, and earliest-wins.
-- [ ] A mutation guard, the same shape as the existing `artistMatchesExact` guard: for each rule, at least one **captured** fixture row where dropping that rule changes the year.
+- [x] One test per rule: the title rule, the artist-token rule, the duration rule (a row without a duration fails), the `excluded` flag, and earliest-wins.
+- [x] A mutation guard, the same shape as the existing `artistMatchesExact` guard: for each rule, at least one **captured** fixture row where dropping that rule changes the year.
 
 **Adapters** (`api/_lib/deezer.test.ts`, `itunes.test.ts`)
 
-- [ ] Each over its captured payloads: the request URLs and parameters, verified versus unverified rows, the answer's year(s).
-- [ ] Deezer: the quota-exceeded body served with HTTP 200 maps to busy; the `track/{id}` bound is respected.
-- [ ] iTunes: `country=ES`; 403 and 429 map to busy.
-- [ ] Every adapter: a network error or a 5xx maps to failed and never throws; an aborted signal stops it.
-- [ ] Cross-layer test (in `api/_lib/`, because `shared/` may not import `api/`): for each of the 22 tracks, each adapter over its raw payload equals that track's row in `year-votes.ts`.
+- [x] Each over its captured payloads: the request URLs and parameters, verified versus unverified rows, the answer's year(s).
+- [x] Deezer: the quota-exceeded body served with HTTP 200 maps to busy; the `track/{id}` bound is respected.
+- [x] iTunes: `country=ES`; 403 and 429 map to busy.
+- [x] Every adapter: a network error or a 5xx maps to failed and never throws; an aborted signal stops it.
+- [x] Cross-layer test (in `api/_lib/`, because `shared/` may not import `api/`): for each of the 22 tracks, each adapter over its raw payload equals that track's row in `year-votes.ts`.
 
 **`api/_lib/musicbrainz-provider.test.ts`**
 
-- [ ] Each `resolveYear` outcome maps to the right provider outcome.
-- [ ] A missing User-Agent is skipped, not a 500.
-- [ ] It is not wrapped in the store cache.
+- [x] Each `resolveYear` outcome maps to the right provider outcome.
+- [x] A missing User-Agent is skipped, not a 500.
+- [x] It is not wrapped in the store cache.
 
 **`api/_lib/rate-limit.test.ts`**
 
-- [ ] Gates with different keys do not block each other.
-- [ ] `retryAfterMs` derives from the gate.
-- [ ] The MusicBrainz defaults are unchanged.
+- [x] Gates with different keys do not block each other.
+- [x] `retryAfterMs` derives from the gate.
+- [x] The MusicBrainz defaults are unchanged.
 
 **`api/_lib/cache.test.ts`**
 
-- [ ] The provider cache round-trips each answer shape.
-- [ ] Invalid stored values are rejected on read.
-- [ ] TTL is 30 days for a year and 1 day for a null.
-- [ ] The batched read returns hits and misses in order.
-- [ ] The memory cache under `vercel dev` behaves the same.
-- [ ] The rewritten edge-TTL rule.
+- [x] The provider cache round-trips each answer shape.
+- [x] Invalid stored values are rejected on read.
+- [x] TTL is 30 days for a year and 1 day for a null.
+- [x] The batched read returns hits and misses in order.
+- [x] The memory cache under `vercel dev` behaves the same.
+- [x] The rewritten edge-TTL rule.
 
 **`api/_lib/year-pipeline.test.ts`**
 
-- [ ] A cold `resolve` asks Deezer and MusicBrainz concurrently: both are in flight before either resolves.
-- [ ] A confirmation at `resolve` returns final and never asks a verify provider.
-- [ ] An unconfirmed `resolve` returns a provisional answer with `final: false`.
-- [ ] `verify` reads `resolve`'s answers from the cache and does not ask Deezer or MusicBrainz again.
-- [ ] `verify` asks iTunes once and returns a final answer whether or not it agrees: confirmed when it does, the trust order's single answer when it does not.
-- [ ] Everything cached means `resolve` returns the final answer with zero provider requests.
-- [ ] A busy provider returns busy, keeps the answers obtained, and the next call resumes from them.
-- [ ] A transient failure without a confirmation is not final, and all asked providers failing gives `upstream-unavailable`.
-- [ ] `not-configured` providers are skipped and listed in `skipped`, and all of them `not-configured` gives `not-configured`.
-- [ ] The warning is logged once per provider per cold start and never contains a secret.
+- [x] A cold `resolve` asks Deezer and MusicBrainz concurrently: both are in flight before either resolves.
+- [x] A confirmation at `resolve` returns final and never asks a verify provider.
+- [x] An unconfirmed `resolve` returns a provisional answer with `final: false`.
+- [x] `verify` reads `resolve`'s answers from the cache and does not ask Deezer or MusicBrainz again.
+- [x] `verify` asks iTunes once and returns a final answer whether or not it agrees: confirmed when it does, the trust order's single answer when it does not.
+- [x] Everything cached means `resolve` returns the final answer with zero provider requests.
+- [x] A busy provider returns busy, keeps the answers obtained, and the next call resumes from them.
+- [x] A transient failure without a confirmation is not final, and all asked providers failing gives `upstream-unavailable`.
+- [x] `not-configured` providers are skipped and listed in `skipped`, and all of them `not-configured` gives `not-configured`.
+- [x] The warning is logged once per provider per cold start and never contains a secret.
 
-**`api/year.test.ts`**
+**`api/year.test.ts`** (built as `api/_lib/year-endpoint.test.ts`: `vercel.json` would deploy a test beside the handler as a function)
 
-- [ ] A stage-less request returns today's response and headers unchanged.
-- [ ] `stage=resolve` and `stage=verify` are routed.
-- [ ] An unknown `stage` is 400.
-- [ ] The 429, 502 and 500 mappings.
-- [ ] `Cache-Control` for a final, a provisional, and a final with a provider skipped.
+- [x] A stage-less request returns today's response and headers unchanged.
+- [x] `stage=resolve` and `stage=verify` are routed.
+- [x] An unknown `stage` is 400.
+- [x] The 429, 502 and 500 mappings.
+- [x] `Cache-Control` for a final, a provisional, and a final with a provider skipped.
 
 ---
 
 ## Documentation Updates
 
-- [ ] `AGENTS.md` Documentation Index: mark this plan's row **Built**, with the date, once it lands. Plan 1 adds the row.
-- [ ] `AGENTS.md`: a new block on the provider plan:
+- [x] `AGENTS.md` Documentation Index: mark this plan's row **Built**, with the date, once it lands. Plan 1 adds the row.
+- [x] `AGENTS.md`: a new block on the provider plan:
   - the order and why, and that **Discogs was measured and dropped** (spike §13.10–13.12), so its
     absence is a decision, not an omission;
   - two agreeing providers confirm, and nothing more is asked, so a MusicBrainz + Deezer agreement
@@ -484,25 +484,25 @@ MusicBrainz included. The endpoint fails loudly only when **all** providers fail
   Also add `shared/year-providers.ts` and `shared/store-match.ts` to the layout rules, and the new
   environment variables to the Key Rules.
 
-- [ ] `AGENTS.md`: update the "CONFIDENCE IS THE WEAKEST OF TWO AXES" and tier-ladder blocks where
+- [x] `AGENTS.md`: update the "CONFIDENCE IS THE WEAKEST OF TWO AXES" and tier-ladder blocks where
       they imply MusicBrainz's `high` is the final word. It is now one voter.
-- [ ] `docs/api.md`: `/api/year`'s `stage` parameter, the response fields `final`, `agreedBy` and
+- [x] `docs/api.md`: `/api/year`'s `stage` parameter, the response fields `final`, `agreedBy` and
       `skipped`, the widened `source`, the status codes, the edge-cache rule, the legacy stage-less
       path, and the environment-variable reference (`MUSICBRAINZ_USER_AGENT` now optional with a
       warning).
-- [ ] `docs/architecture.md` §3: the three providers, the planner and driver split, the per-provider
+- [x] `docs/architecture.md` §3: the three providers, the planner and driver split, the per-provider
       cache and gates, why `verify` reads from Redis and never from the client, and external services
       (Deezer, iTunes Search).
-- [ ] `docs/development.md` §4: without Upstash, `vercel dev` re-asks every provider on `verify` and
+- [x] `docs/development.md` §4: without Upstash, `vercel dev` re-asks every provider on `verify` and
       paces iTunes per process only. §5: new manual rows for production contention on the shared
       iTunes gate, and the unmeasured second round trip (§12.4).
-- [ ] `docs/agent_findings.md`: a dated entry recording that the spike §12.7 files were lost with an
+- [x] `docs/agent_findings.md`: a dated entry recording that the spike §12.7 files were lost with an
       uncommitted working tree on 2026-09-30 and rebuilt from this plan, the replay's reproduction of
       §12.3, the Deezer request-count reconciliation, and any drift against the CSV.
-- [ ] `docs/spikes/spike.year-fetch-rework.md` §12.7: a status line saying the table is superseded,
+- [x] `docs/spikes/spike.year-fetch-rework.md` §12.7: a status line saying the table is superseded,
       the files listed as "Written" were lost, and this plan rebuilt them without `discogs.ts`.
-- [ ] `.env.example`: step 13.
-- [ ] Module headers: each new file states its place in the decision/binding split.
+- [x] `.env.example`: step 13.
+- [x] Module headers: each new file states its place in the decision/binding split.
 
 ---
 
@@ -542,8 +542,14 @@ MusicBrainz included. The endpoint fails loudly only when **all** providers fail
 
 ## Open Questions
 
-- [ ] How many `track/{id}` fetches does Deezer need per card? §4.1 says one per verified hit, and
+- [x] How many `track/{id}` fetches does Deezer need per card? §4.1 says one per verified hit, and
       §11.2 measured two requests per card. Settle it at capture time (step 6).
+      **Answered 2026-09-30:** one per verified hit, capped at `DEEZER_TRACK_FETCH_LIMIT` = 3. §11.2's
+      "2" was an artifact: its harness fetched `track/{id}` for `data[0]`, verified or not. On the
+      542's recorded rows a bound of 1 / 2 / 3 / 4 costs 1.97 / 2.15 / 2.20 / 2.20 requests per card
+      and gets 382 / 385 / 389 / 389 of 514 release-date years exact against the CSV consensus, so 3
+      takes every year a fourth fetch found. Live over the 22 fixtures plus 30 CSV tracks it spent
+      122 requests on 52 cards (2.35 each). Full reasoning in `api/_lib/deezer.ts`'s header.
 - [ ] Is a 60 s edge TTL right for provisional answers? It is a guess, and only production traffic
       will say.
 

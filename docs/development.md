@@ -133,14 +133,21 @@ Set `MUSICBRAINZ_USER_AGENT` in `.env.local` first, with a real contact address.
 > - **the in-memory cache never hits** — the same track twice returns `cached: false` both times, and
 >   the `[year-cache] …` line printing on _every_ request rather than once is the tell;
 > - **the rate-limit gate paces nothing** — each invocation builds a gate with `nextAllowedAt = 0`, so
->   every request is admitted and five rapid ones return `200 200 200 200 200`.
+>   every request is admitted and five rapid ones return `200 200 200 200 200`;
+> - **`?stage=verify` re-asks every provider** (2026-09-30) — it reads `resolve`'s answers from the
+>   shared cache, never from the client, and the memory cache is per instance, so it finds none of
+>   them and runs Deezer and MusicBrainz again before asking iTunes. Every `verify` costs what a cold
+>   `resolve` plus iTunes costs;
+> - **iTunes is paced per process only** — its 3 s gate is one more per-instance gate, so iTunes is
+>   sent **unpaced** traffic from your own IP. Apple answers excess with 403s, which the adapter
+>   reports as `busy`, so a local crawl turns into 429s rather than into years.
 >
 > The second one matters: your machine is then sending MusicBrainz **completely unpaced** traffic, two
 > requests per lookup, against a published limit of 1 req/s that they enforce by blocking. Single curl
 > commands are fine. **A 50-track run is ~100 unthrottled requests — configure Upstash first.** The
 > Redis gate is cross-process and works correctly under `vercel dev` for exactly that reason.
 >
-> Production is unaffected: Vercel keeps a warm instance, so module scope persists and both fallbacks
+> Production is unaffected: Vercel keeps a warm instance, so module scope persists and the fallbacks
 > behave as documented.
 
 ```bash
@@ -158,6 +165,22 @@ Watch the cold-start log lines. They tell you which mode you are in, and they ex
 [rate-limit] using per-instance pacing (does NOT enforce the global 1 req/s)
 ```
 
+The staged path, `?stage=resolve` then `?stage=verify` (2026-09-30). Same query, plus the stage; see [`api.md`](./api.md) §1 for the body:
+
+```bash
+# resolve: Deezer and MusicBrainz in parallel. Expect "final":true with "source":"vote" and
+# "agreedBy":["deezer","musicbrainz"] when the two agree, or "final":false with a provisional year.
+curl -s "http://localhost:3000/api/year?stage=resolve&title=Billie%20Jean&artist=Michael%20Jackson&durationMs=293826"
+
+# verify: asks iTunes (and, with no Upstash, Deezer and MusicBrainz again). Final unless a provider failed.
+curl -s "http://localhost:3000/api/year?stage=verify&title=Billie%20Jean&artist=Michael%20Jackson&durationMs=293826"
+
+# An unknown or empty stage is a 400, never a silent fall back to the legacy body.
+curl -i "http://localhost:3000/api/year?stage=&title=Imagine&artist=John%20Lennon"
+```
+
+Without `durationMs` neither store can verify a row, so both answer `null` and the vote rests on MusicBrainz alone. Pass it.
+
 The checks worth running by hand, because each pins a decision rather than a value. **These four work with no Upstash:**
 
 ```bash
@@ -168,9 +191,12 @@ curl -s ".../api/year?title=Bohemian%20Rhapsody%20-%20Remastered%202011&artist=Q
 # Nonsense must be year:null / confidence:none with a reason — not a wrong year, not a 500.
 curl -s ".../api/year?title=Zzzqqq%20Nope&artist=Nobody%20At%20All"
 
-# Unset MUSICBRAINZ_USER_AGENT and restart: every call must be 500 not-configured,
+# Unset MUSICBRAINZ_USER_AGENT and restart: every STAGE-LESS call must be 500 not-configured,
 # including ones that would have hit the cache.
 curl -i ".../api/year?title=Billie%20Jean&artist=Michael%20Jackson"
+# ...while the STAGED path skips MusicBrainz instead: a 200 with "skipped":["musicbrainz"], and one
+# "[year-pipeline] musicbrainz skipped: MUSICBRAINZ_USER_AGENT is not set" line per cold start.
+curl -s ".../api/year?stage=resolve&title=Billie%20Jean&artist=Michael%20Jackson&durationMs=293826"
 
 # Wrong verb: 405 with an Allow header.
 curl -i -X POST ".../api/year?title=Imagine&artist=John%20Lennon"
@@ -211,13 +237,13 @@ pnpm test          # once
 pnpm test:watch    # watch mode
 ```
 
-Current suite: **456 tests across 34 files**, and **all of them offline** — no test touches the network. That is deliberate: a test that really called MusicBrainz would be rate-limited to 1 req/s, would drift as the database improves, and would fail for reasons unrelated to the code. All of them must pass before a commit (§6).
+Current suite: **1,453 tests across 70 files** (counted 2026-09-30 — the number drifts with every change, so re-count with `pnpm exec vitest run --reporter=dot` rather than trusting it), and **all of them offline** — no test touches the network. That is deliberate: a test that really called MusicBrainz would be rate-limited to 1 req/s, would drift as the database improves, and would fail for reasons unrelated to the code. All of them must pass before a commit (§6).
 
 The suite runs green **with no environment variables set at all**, which is the new-contributor path. If you have to configure something to make tests pass, that is a bug.
 
 The centre of gravity is `shared/year.test.ts`'s accuracy suite: it runs the scorer over captured candidates for fourteen Phase 0 known-tricky tracks and asserts each one's **known-correct** year, not whatever the code currently produces. Phase 0 measured a naive lookup at ~6% accurate; that suite is the evidence the pipeline beats it and the thing that catches a regression in scoring. Fixture provenance is documented in the headers of `shared/__fixtures__/year-candidates.ts` and `api/_lib/__fixtures__/musicbrainz-payloads.ts`.
 
-Tests are discovered at `{src,shared,api}/**/*.{test,spec}.{ts,tsx}`. The **default environment is `node`**, and a test that needs a DOM opts in per file with a `/** @vitest-environment jsdom */` docblock — fifteen files do (the card components, the screens, the audio hook, and the container). Keeping `node` as the default is what makes a DOM API accidentally added to `shared/` fail here rather than at deploy time. Full detail, including why there is no `setupFiles`, why every DOM file needs its own `afterEach(cleanup)`, and why that tag must never appear in prose, is in [`toolchain.md`](./toolchain.md) §5.
+Tests are discovered at `{src,shared,api}/**/*.{test,spec}.{ts,tsx}`. The **default environment is `node`**, and a test that needs a DOM opts in per file with a `/** @vitest-environment jsdom */` docblock — 27 files did on 2026-09-30 (the card components, the screens, the hooks, and the container). Keeping `node` as the default is what makes a DOM API accidentally added to `shared/` fail here rather than at deploy time. Full detail, including why there is no `setupFiles`, why every DOM file needs its own `afterEach(cleanup)`, and why that tag must never appear in prose, is in [`toolchain.md`](./toolchain.md) §5.
 
 **`src/index.css.test.ts` is a `node` test over the stylesheet's TEXT, and it is labelled a canary rather than a behaviour test.** jsdom evaluates no media queries, so there is no environment here in which `prefers-reduced-motion: reduce` can be made true and observed; the choice was between a text-level assertion that the block exists and names its three `data-motion` hooks, and no coverage at all for the reduced-motion work. The component-side halves are in `Card.test.tsx`, `PreparingScreen.test.tsx` and `QrCode.test.tsx`. What none of them can tell you is whether any of it works — that is §5's Phase 7 pass below.
 
@@ -301,14 +327,62 @@ The end-to-end checks worth running by hand, each pinning a decision:
 
 **Step 15 of [`plan.phase-4-6-screens.md`](./plans/plan.phase-4-6-screens.md) is owed and needs a preview deployment**, not a dev server — it is Phase 3's progressive-loading verification, deferred until there was a UI to exercise it through. Deploy a preview **with Upstash configured** (the cache and the gate are backed by the same two variables) and confirm:
 
-- Start waits on **one** lookup on a cold deck, not the whole deck.
+- Start waits on **one** card's final answer on a cold deck, not the whole deck — with "Keep cards with no year found" OFF; with it ON, Start waits on nothing.
 - Cards 2..n fill during play, and flip / swipe / QR / audio / Exit never block on a pending year.
 - The priority jump: advance rapidly past the resolver and watch the current card get served next.
 - A 429 backs off rather than failing a card.
 - The **50-track cold-deck wall clock** — owed since Phase 2 and still unmeasured.
-- **Exactly one `/api/year` request per card under React 19 StrictMode**, by counting requests in the network tab rather than assuming. `use-game-session.ts` has a double-crawl guard that nothing tests.
+- **Exactly one `/api/year` request per card PER STAGE under React 19 StrictMode** — one `stage=resolve` for every card, and one `stage=verify` only for a card whose `resolve` came back `"final":false` — and **never two requests of the same stage in flight at once**, by counting requests in the network tab rather than assuming. `use-game-session.ts` has a double-crawl guard that nothing tests, and since 2026-09-30 it guards two lanes: a leaked first resolver would show up as a doubled count in either stage. This is row 3 of "The provisional year and the two lanes" below.
 
 **Do not take timings through `vercel dev`** — the ~4 s per-invocation overhead swamps them, and the fresh process per request means the gate and cache never persist (§4).
+
+### The three-provider year vote — built 2026-09-30, all of it Pending
+
+[`plans/plan.year-fetch-rework-server.md`](./plans/plan.year-fetch-rework-server.md). The vote, the
+planner, the adapters over captured payloads, the driver, the gates and the cache are unit-tested
+offline; what none of them can model is a shared Redis, real contention between players, and real
+latency. Every row needs a **preview deployment with both Upstash variables configured**.
+
+| #   | Check                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Status  |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| 1   | **Production contention on the shared iTunes gate.** The gate is 3 s and a caller waits at most 1.5 s for a permit, so of two `verify` calls that reach iTunes within 3 s of each other, the second must get a **429** with `retryAfterMs` and a `Retry-After` header, never a hang and never an Apple 403. Only a card whose `resolve` came back `"final":false` reaches iTunes (a Deezer + MusicBrainz agreement never does), so pick two such cards and fire their `verify` requests within 3 s of each other, then read the two statuses. | Pending |
+| 2   | **The second round trip, unmeasured** (spike §12.4). The ~40% of cards that `resolve` does not confirm pay a second `/api/year` call for `verify`, and the spike measured the providers, not that extra request's network and cold-start cost ("a warm Vercel function adds tens of milliseconds; a cold start adds more"). Measure `resolve` then `verify` wall clock on a real deployment, warm and cold, and record it beside §12.4's figures.                                                                                             | Pending |
+| 3   | **Plan 2 step 15, the smoke test.** One `resolve` and one `verify` each for a **recent** song and an **old** one; confirm the `mbyear:` entries already in Redis are **hit** rather than re-fetched (on a card the legacy path already resolved, `resolve` returns in Deezer's time rather than MusicBrainz's 1.3–3.6 s, and the `mbyear:` key's TTL in the Upstash data browser does not reset; a fully warm card answers `"cached":true`); and confirm a **stage-less** request still answers exactly as before, body and `Cache-Control`.  | Pending |
+
+### The provisional year and the two lanes — built 2026-09-30, all of it Pending
+
+[`plans/plan.year-fetch-rework-game.md`](./plans/plan.year-fetch-rework-game.md). The reducer, the
+two-lane resolver, persistence and the PDF selector are node-tested, and `App.test.tsx` drives a
+provisional year changing on a revealed card with a stubbed year client. What none of it reaches is a
+real crawl against the shared gates, a real reload and a real StrictMode double mount. Every row needs
+a **preview deployment with both Upstash variables configured**, and every row here is with "Keep
+cards with no year found" **OFF** — the option-ON paths are the next section's.
+
+| #   | Check                                                                                                                                                                                                                                                                                                                                                                                                         | Status  |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| 1   | **A provisional year changes under a revealed card.** Flip a card while its year still shows "Confirming year" and wait for `verify`: when the final answer differs, the year changes in place, the notice goes (or becomes "Unconfirmed year"), and the face does **not** jump — the notice line is reserved. When `verify` answers null, the card is dropped from under the player (the accepted residual). | Pending |
+| 2   | **A reload mid-verification** resumes on the same card with the provisional years still marked "Confirming year", and they are then **verified** — watch `stage=verify` requests go out for exactly those cards, and no `stage=resolve` for a card that already had a year. A provisional year that silently reads as final after the reload is the bug this row exists for.                                  | Pending |
+| 3   | **The double-crawl guard now covers two lanes.** Under React 19 StrictMode, count `/api/year` requests **per stage** in the network tab: one `resolve` per card, one `verify` per card whose `resolve` was not final, and never two of the same stage in flight at once. The same bullet sits in the progressive-loading list above; this is where its result goes.                                           | Pending |
+| 4   | **Plan 3 step 11, the smoke test**: a recent-heavy deck plays; a provisional year changes on a revealed card when its final answer differs (row 1); the PDF waits for verification — Print with provisional cards on the table waits, and "Print so far" leaves them out and counts them; a reload mid-verification resumes and verifies (row 2).                                                             | Pending |
+
+### "Keep cards with no year found", "Confirming year" and the blank PDF year — built 2026-09-30, all of it Pending
+
+[`plans/plan.year-fetch-rework-ui.md`](./plans/plan.year-fetch-rework-ui.md). The preference module
+is node-tested, the checkbox, the year slot and the PDF's pass-through are jsdom-tested, and none of
+that computes a layout, reads an accessibility tree or touches paper. **The store screenshots now
+show a picker without the checkbox, and are stale** — they are regenerated only when the developer
+asks (see `AGENTS.md`, Conventions).
+
+| #   | Check                                                                                                                                                                                                                                                                                                                                                                                              | Status  |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| 1   | **The checkbox at 320 px**: it sits between the playlist rows and Start, its caption wraps legibly, the hint reads under the caption rather than under the box, and **whether the checkbox plus its hint push Start below the fold** — in all three languages, since the hint is longest in Spanish. If they do, **dropping the hint is the first lever**.                                         | Pending |
+| 2   | **A screen reader over a provisional-to-final change** — joined to the Phase 7 screen-reader table below, where the result is recorded.                                                                                                                                                                                                                                                            | Pending |
+| 3   | **A printed blank year**: with the option ON, a kept yearless card prints with its title and artist in their usual places and nothing in the year area — and **whether the blank needs a guide to write on** (a box or a rule). None is drawn by decision; this row is what would reopen it.                                                                                                       | Pending |
+| 4   | **A native speaker's read of the Spanish and Catalan strings** — `Confirmando año`, `Mantener cartas sin año` and `Útil para imprimir la baraja entera y escribir a mano los años que falten`; `Confirmant l'any`, `Mantenir cartes sense any` and `Útil per imprimir la baralla sencera i escriure a mà els anys que faltin`. Part of the native-speaker pass "The three languages" already owes. | Pending |
+| 5   | **Plan 4 step 10, option ON**: the game starts without a loading screen, and a card flipped at once shows the spinner, then the year with "Confirming year", then the final state.                                                                                                                                                                                                                 | Pending |
+| 6   | **Plan 4 step 10, option ON**: a yearless card stays in the deck as "Year unknown" and prints blank (row 3).                                                                                                                                                                                                                                                                                       | Pending |
+| 7   | **Plan 4 step 10, option OFF**: everything behaves exactly as after plan 3 — the previous section's rows.                                                                                                                                                                                                                                                                                          | Pending |
+| 8   | **Plan 4 step 10, the memory**: the checkbox is remembered across reloads, and a share link opened in a fresh profile deals with the option **OFF** — the recipient's choice, never the sender's.                                                                                                                                                                                                  | Pending |
 
 ### Phase 7 look-and-access verification — nothing here is closed, and no local check can close it
 
@@ -420,14 +494,15 @@ phone gets a card taller than its viewport ([`architecture.md`](./architecture.m
 **Screen reader.** VoiceOver, NVDA or Narrator over one flip. This is the pass that matters most,
 because Phase 7 added the app's only live region and the whole point of it is audible.
 
-| Check                                                                              | Status  |
-| ---------------------------------------------------------------------------------- | ------- |
-| Flipping a card **announces** the year, title and artist                           | Pending |
-| An **unflipped** card announces nothing about its track                            | Pending |
-| The announcement is polite — it does not interrupt mid-sentence                    | Pending |
-| The landing input's accessible name is "Playlist link", matching its visible label | Pending |
-| A submission error is announced, **and** reachable again by focusing the field     | Pending |
-| The HUD's card count is announced as it changes                                    | Pending |
+| Check                                                                                                                                                                                                                             | Status  |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| Flipping a card **announces** the year, title and artist                                                                                                                                                                          | Pending |
+| An **unflipped** card announces nothing about its track                                                                                                                                                                           | Pending |
+| The announcement is polite — it does not interrupt mid-sentence                                                                                                                                                                   | Pending |
+| The landing input's accessible name is "Playlist link", matching its visible label                                                                                                                                                | Pending |
+| A submission error is announced, **and** reachable again by focusing the field                                                                                                                                                    | Pending |
+| The HUD's card count is announced as it changes                                                                                                                                                                                   | Pending |
+| A **provisional-to-final change** on a flipped card (2026-09-30) is announced: "Confirming year" with the provisional year, then the changed year when `verify` differs — from the one region, with no second announcement source | Pending |
 
 A live region that mounts already-populated is the known soft spot: screen readers differ on whether
 they announce content present at insertion versus content changed afterwards. If the flip turns out
@@ -860,20 +935,28 @@ If a function returns `FUNCTION_INVOCATION_FAILED`, the Vercel **runtime** log (
 
 ### What the next preview deployment owes
 
-One errand, four questions — deliberately one trip rather than four. Step 15 of
+One errand, six questions — deliberately one trip rather than six. Step 15 of
 [`plan.phase-4-6-screens.md`](./plans/plan.phase-4-6-screens.md), carried over from Phase 3, needs a
 preview deployment **with both Upstash variables configured**, because nothing local models the shared
 cache or the 1 req/s gate: without them the gate paces nothing and any number measured is meaningless.
 
-While there, collect all four:
+While there, collect all six:
 
 1. **Progressive loading against a real deck** — the original errand.
 2. **The 50-track cold-deck wall clock**, unmeasured since Phase 2.
-3. **A count of `/api/year` requests under React 19 StrictMode.** `use-game-session.ts` has a
-   double-crawl guard that nothing tests, so the number is the only evidence it works.
+3. **A count of `/api/year` requests per stage under React 19 StrictMode.** `use-game-session.ts`
+   has a double-crawl guard that nothing tests, now over two lanes, so the number is the only evidence
+   it works.
 4. **Lighthouse on the game screen and the card**, added by Phase 7. It cannot be done locally at all
    — `vite preview` serves no `/api`, so Start fails and the game screen is unreachable (§8). The
    landing screen has been audited; these two have not.
+5. **The three-provider year vote**, added 2026-09-30: the iTunes-gate contention, the second round
+   trip's cost, and plan 2 step 15's smoke test. The three rows are in §5, "The three-provider year
+   vote".
+6. **The provisional year and the keep-yearless option**, added 2026-09-30: plan 3 step 11's smoke
+   test with the option OFF, and plan 4 step 10's option-ON and memory checks. The rows are in §5,
+   "The provisional year and the two lanes" and ""Keep cards with no year found", "Confirming
+   year" and the blank PDF year".
 
 ---
 

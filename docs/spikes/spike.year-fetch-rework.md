@@ -1120,6 +1120,15 @@ The card's year slot, on the **revealed side only**, has four states:
 
 ### 12.7 What is written so far (not wired, not tested)
 
+> **Status (2026-09-30): superseded. Do not read this table as the state of the code.** The files it
+> lists as "Written" and "Edited" were **lost with an uncommitted working tree**: none of them is in
+> any commit, stash or checkout ([§13.8](#138-a-note-on-127) records the discovery).
+> [Plan 2](../plans/plan.year-fetch-rework-server.md) rebuilt all of them from scratch on
+> 2026-09-30, and wired and tested them: `shared/year-providers.ts`, `api/_lib/provider-lookup.ts`,
+> `deezer.ts`, `itunes.ts`, `rate-limit.ts`, `cache.ts`, plus `shared/store-match.ts`,
+> `api/_lib/store-http.ts`, `musicbrainz-provider.ts`, `year-pipeline.ts` and the staged
+> `api/year.ts`. It rebuilt them **without `discogs.ts`**, because Discogs was dropped (§13.12).
+
 | File                                               | State                                                                                                                                                                                    |
 | -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `shared/year-providers.ts`                         | Written: `YEAR_PROVIDER_PLAN`, the vote (`findConfirmation`, `decideYear`), Deezer's signature, `providerCacheKey`. The only piece that has been exercised, through the replay in §12.3. |

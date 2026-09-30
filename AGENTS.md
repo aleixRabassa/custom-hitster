@@ -36,9 +36,9 @@ Several decisions in this repo look like mistakes and are not. If something seem
 | [`docs/plans/plan.google-play-back-button.md`](./docs/plans/plan.google-play-back-button.md)       | Google Play, plan 2 — Android back as an in-app control. **Built 2026-08-12**; device rows wait on plan 1. **Frozen 2026-09-19** — its rows run from plan 3                                                                                                                                                                                                                                                                                          |
 | [`docs/plans/plan.play-store-todo.md`](./docs/plans/plan.play-store-todo.md)                       | Google Play, plan 3 — **THE ONLY EXECUTABLE GOOGLE PLAY FILE.** Everything from the trademark relabel to a staged production rollout. Steps 2, 3 and 8 built 2026-09-19                                                                                                                                                                                                                                                                              |
 | [`docs/plans/plan.year-fetch-rework-mb-fixes.md`](./docs/plans/plan.year-fetch-rework-mb-fixes.md) | Year-fetch rework, plan 1 — the last-segment-first title cleaner and its new families, the `tokenised` rescue rung capped at `low`, a failed release-group request as `upstream-unavailable`, the cache at `v5`. **Built 2026-09-30**                                                                                                                                                                                                                |
-| [`docs/plans/plan.year-fetch-rework-server.md`](./docs/plans/plan.year-fetch-rework-server.md)     | Year-fetch rework, plan 2 — the provider vote in `shared/` (Deezer beside MusicBrainz, then iTunes; two agreeing providers confirm a year), the Deezer and iTunes adapters, a gate and a cache per provider, `/api/year` split into `resolve` and `verify` stages. **Not built yet**                                                                                                                                                                 |
-| [`docs/plans/plan.year-fetch-rework-game.md`](./docs/plans/plan.year-fetch-rework-game.md)         | Year-fetch rework, plan 3 — the game layer: provisional years, `keepYearless`, the two-lane resolver, persistence, the PDF gate. **Not built yet**                                                                                                                                                                                                                                                                                                   |
-| [`docs/plans/plan.year-fetch-rework-ui.md`](./docs/plans/plan.year-fetch-rework-ui.md)             | Year-fetch rework, plan 4 — the reveal's provisional-year slot, the picker's "Keep cards with no year found" checkbox and its remembered choice, copy in three languages, the blank PDF year. **Not built yet**                                                                                                                                                                                                                                      |
+| [`docs/plans/plan.year-fetch-rework-server.md`](./docs/plans/plan.year-fetch-rework-server.md)     | Year-fetch rework, plan 2 — the provider vote in `shared/` (Deezer beside MusicBrainz, then iTunes; two agreeing providers confirm a year), the Deezer and iTunes adapters, a gate and a cache per provider, `/api/year` split into `resolve` and `verify` stages. **Built 2026-09-30**; step 15's preview smoke test outstanding                                                                                                                    |
+| [`docs/plans/plan.year-fetch-rework-game.md`](./docs/plans/plan.year-fetch-rework-game.md)         | Year-fetch rework, plan 3 — the game layer: provisional years, `keepYearless`, the two-lane resolver, persistence, the PDF gate. **Built 2026-09-30**; step 11's preview smoke test outstanding                                                                                                                                                                                                                                                      |
+| [`docs/plans/plan.year-fetch-rework-ui.md`](./docs/plans/plan.year-fetch-rework-ui.md)             | Year-fetch rework, plan 4 — the reveal's provisional-year slot, the picker's "Keep cards with no year found" checkbox and its remembered choice, copy in three languages, the blank PDF year. **Built 2026-09-30**; step 10's preview checks outstanding                                                                                                                                                                                             |
 | [`docs/spikes/spike.year-fetch-rework.md`](./docs/spikes/spike.year-fetch-rework.md)               | Year-fetch spike — why 21% of real cards get no year, what title rewrites and other providers recover, and which providers a paid app may use (not Deezer, not iTunes; MusicBrainz needs a plan or a mirror). **Measured 2026-09-29, and turned into the four `plan.year-fetch-rework-*.md` plans above**; film-score, Disney and anime decks measured 2026-09-30 (§13); **Discogs dropped and the lone-answer order decided the same day (§13.12)** |
 | [`docs/spikes/spike.ai-year-fetch.md`](./docs/spikes/spike.ai-year-fetch.md)                       | LLM spike — one streamed request to `gemini-3.8-flash` / `gpt-6-luna` instead of the providers. Licence-clean when paid, ~15–20× faster per deck, **but past its cutoff the model guessed a wrong year on 40 of 40 tracks**, so it cannot be the only source. **Two free-tier probes 2026-09-30, nothing built**                                                                                                                                     |
 
@@ -217,7 +217,10 @@ buttons, each language named in itself with a matching `lang`), never in a top c
 192px logo leaves ~40px beside it, and moving the logo breaks the `pt-8` equal-height contract with the
 picker. Share links and resumed sessions skip the welcome screen and rely on detection. **Nothing about
 the translations has been read by a native speaker**, and the screen-reader pronunciation is unverified:
-rows in [`docs/development.md`](./docs/development.md) §5.
+rows in [`docs/development.md`](./docs/development.md) §5. That includes the three keys the year-fetch
+rework added on 2026-09-30 — `COPY.card.yearProvisional` ("Confirming year"), `COPY.landing.keepYearless`
+("Keep cards with no year found", the developer's own wording) and `COPY.landing.keepYearlessHint` —
+whose Spanish and Catalan strings are **unreviewed proposals**, said so in their own comments.
 
 **A LEFT SWIPE STEPS BACK ONE CARD AS OF 2026-09-18, A RIGHT SWIPE STILL ADVANCES, AND THE DECK IS NO
 LONGER ONE-DIRECTIONAL — every sentence in `src/`, `README.md` and the top-level `docs/` that said it was
@@ -432,7 +435,11 @@ rather than ceremonially, because the change altered answers cached at `high` fo
 with the fixes below. And **all 22 fixtures were RE-CAPTURED**, because the
 old ones carried Single candidates with no `releaseGroupFirstReleaseDate` (nothing had ever fetched
 one) — so the 14-track suite passed both before and after the code change while being structurally
-incapable of testing it. Measured 21 of 22 exact live.
+incapable of testing it. Measured 21 of 22 exact live. **Since 2026-09-30 that `high` is ONE VOTER,
+not the card's answer** (the provider-vote block below): on the staged `/api/year` a MusicBrainz
+`high` is confirmed only when a second provider agrees, and alone it is kept as the strongest
+UNCONFIRMED answer — `low` on the wire. Everything above is still true of MusicBrainz's own scorer
+and of the stage-less legacy path, which returns the ladder's answer as it always did.
 
 **AND AS OF 2026-09-30 THE CLEANER READS THE LAST TRAILING SEGMENT FIRST, AND A LOOKUP THAT MISSES
 EVERY PHRASE RUNG GETS ONE MORE TRY** ([`plan.year-fetch-rework-mb-fixes.md`](./docs/plans/plan.year-fetch-rework-mb-fixes.md)).
@@ -473,6 +480,13 @@ admission can collapse the pool to just it) — so a union can move a year in **
 fallback shape provably cannot: exact pool non-empty → bit-identical to before; exact pool empty →
 every rung already returned `no-candidates` and the card was **dropped from the deck**. It can only
 turn a null into a year. `year.test.ts` pins that with a two-candidate exact-1994/loose-1984 case.
+**Both halves of that argument are about MusicBrainz's OWN answer, and since 2026-09-30 that answer is
+one vote among three** (the provider-vote block below): a MusicBrainz null no longer drops a card on
+the staged path, it only leaves the vote to Deezer and iTunes, and a MusicBrainz `high` is no longer
+final alone. **The ceiling also does a second job now**: `UNCONFIRMED_TRUST` ranks MusicBrainz twice,
+`high` above iTunes and `low` below it, so a loose-artist or `tokenised` hit capped at `low` also
+drops BELOW a lone iTunes year when nobody agrees. That is the cap working as intended — looser
+evidence ranks lower — not a regression to fix by raising it.
 **Why it exists**: Spotify joins collaborators with `", "` and MusicBrainz uses a joinphrase, so they
 disagree about the connector _and_ the order — measured 5 of 18 failures across two real 50-track
 playlists. **Note what it is NOT**: `normalizeForCacheKey` already maps `&`, `+` and `,` to spaces, so
@@ -488,6 +502,194 @@ reaches the loose pass, which is what makes the safety argument a test instead o
 accuracy suite cannot check any of this**: the fixtures were trimmed keeping representatives of
 distinct exclusion reasons and "excluded by artist" was never one of them, so `pnpm test` passes
 identically with the artist rule reverted. Same false-comfort shape as the pre-2026-08-11 fixtures.
+
+**A CARD'S YEAR IS A VOTE OF THREE PROVIDERS AS OF 2026-09-30, AND MUSICBRAINZ IS ONE VOTER IN IT —
+TWO AGREEING PROVIDERS CONFIRM A YEAR, AND NOTHING MORE IS ASKED**
+([`plan.year-fetch-rework-server.md`](./docs/plans/plan.year-fetch-rework-server.md)). The order is
+two constants in `shared/year-providers.ts` and nothing else. `YEAR_PROVIDER_PLAN` asks **Deezer**
+(fast: ~2 requests and ~0.25 s a card) **in parallel with MusicBrainz** (coverage: the only source
+whose date means "first release" on old catalogue) at `stage=resolve`, then **iTunes** (precision:
+19/19 fixtures, but ~20 requests a minute for the whole app) at `stage=verify`. `UNCONFIRMED_TRUST`
+says whose lone year is kept when nobody agrees. **The parallel pair is wired nowhere** — it falls
+out of `nextFrontier`'s "no usable answer yet, ask the next two" rule — so a reorder is an edit to
+those two lists plus the `Record<YearProviderId, ProviderLookup>` registry in `api/year.ts` (a plan
+step with no adapter is a compile error), checked by `validatePlan` in a test and never at runtime.
+**Discogs is absent by DECISION, not by omission**: it was measured and dropped the same day (spike
+§13.10–13.12) at ~1.1 s on average and ~2.4 s at p90 for about 5 known-right years per ~780 cards.
+Re-adding it is a plan step, a trust tier, a `YearProviderId` member and an adapter. Eleven things.
+
+- **Two agreeing providers are the stop rule**, so a MusicBrainz + Deezer agreement at `resolve`
+  stands and iTunes is never asked. Measured on the 24 of 804 cards where iTunes disagrees with that
+  pair: the pair was right 11 times and iTunes 4 (§13.12). The accepted price is pinned in
+  `year-providers.test.ts`: Personal Jesus confirms at 1990 and iTunes' correct 1989 is never
+  requested — the twenty-second track above, now wrong by vote as well as by recording.
+- **Deezer's two dates are ONE voter; iTunes and Deezer are TWO, and counting the two stores as one
+  is the edit to refuse** (`voterYears`, §13.11). Deezer's release-date year and ISRC year come from
+  one catalogue row, so either can agree with another provider but they never confirm each other —
+  that is what keeps Killing In The Name at 1992 against a 20th-anniversary edition that says 2012
+  twice. Both stores carry the label's metadata, and merging them was measured and **rejected**: it
+  undid three corrections §5.3 had verified by hand on the 542 (H.I.E.L.O., Happy Together, Iris),
+  a net −4 known-right years there for +2 on the soundtrack decks. The correlated-reissue failure it
+  targets is real and was accepted as the cheaper error: Pink Panther Theme confirms a WRONG 2006 on
+  the two stores over MusicBrainz's `high` 1963, pinned on purpose.
+- **When nobody agrees the card keeps ONE year, in the order MusicBrainz `high` > iTunes >
+  MusicBrainz `low` > Deezer**, marked unconfirmed (`low` on the wire) and still shown (`decideYear`).
+  iTunes before a `low` recovered A Whole New World (2014 → 1992) and The Time of My Life
+  (2024 → 1987). **iTunes before a `high` was measured and rejected** — 6 known years worse (Killing
+  In The Name 1992 → 2001, L'Empordà 1989 → 2010, three dubs moved to compilation dates) against 2–3
+  better — so moving `itunes` one slot up is the edit to refuse. A lone Deezer counts only when its
+  release-date year equals its ISRC year, the fresh-recording signature, because a release date alone
+  is too often a reissue's. 112/125 labelled cards exact, against 110 for spike §12's order.
+- **The year is the RECORDING's, not the film's or the original song's** (§13.9, the developer's
+  answer). A cover dated by its own release, or a Spanish dub dated by the dub, is correct and not a
+  bug to fix: it is what every provider answers, and the film's year would need a different lookup.
+- **`finalWhenCertain` is OFF for all three providers.** Turning Deezer's on
+  (`deezerRecentSignature`, dormant but tested — `La Grange - 2005 Remaster` must not fire it) lets a
+  recent Deezer answer end a card alone. That is the MusicBrainz saving §12.3 measured
+  (1 527 → 751 requests), and the developer has not asked for it.
+- **`isrcYear` has NO 1986 floor, and adding one is the edit to refuse** (measured 2026-09-30). ISRCs
+  date from 1986, so a pre-1986 year looks impossible, but major labels back-code their old catalogue
+  with the ORIGINAL recording year (`SEAYD7601020` Dancing Queen 1976, 28 such rows across the spike's
+  804 cards, every one right to within a year). A floor lost 4 confirmations on the 542 and fixed no
+  shown year. The real garbage is narrower: the GBSMU bootleg registrant writes nonsense digits (29, 34) that hide a correct code through the minimum. That costs an iTunes request and can never confirm
+  a wrong year alone. A named GBSMU exclusion is the narrow fix, and it is unbuilt.
+- **Every provider is skippable with a warning, MusicBrainz included, and only "all of them" is
+  loud** (the developer's decision). A `not-configured` provider counts as ABSENT: it is listed in the
+  response's `skipped`, `console.warn`ed once per cold start naming the variable and never its value,
+  and a final can still be reached without it. **The `not-configured` 500 needs every provider of the
+  plan to report it in ONE call**, so structurally only `verify` can return it (`resolve` never asks
+  iTunes) — and since neither store needs a key, the shipped registry never reaches it at all.
+- **A transient failure is never a final "no year"**, because a final null drops the card (unless
+  the session keeps yearless cards — and even then it would print a blank year the vote could have
+  filled): any
+  `failed` outcome without a confirmation makes the answer provisional and the client asks again.
+  **A partial failure beside an answer is a 200 with `final: false`, never a 502** — a 502 would throw
+  away a year the client can show while it retries; `upstream-unavailable` (502) means something
+  failed AND nothing answered. `busy` (429 + `retryAfterMs`, from whichever provider's gate was full)
+  stops the call at once, and what the same frontier obtained is already cached for the next call.
+- **`verify` re-runs `resolve`'s frontiers first, and that is not a second resolve** (`STAGES_RUN` in
+  `api/_lib/year-pipeline.ts`). On a warm cache every `resolve` provider was already answered by the
+  batched read, so those frontiers are empty and `verify` asks only iTunes. They matter when the cache
+  does not hold them — `vercel dev`, an evicted entry, a `resolve` whose MusicBrainz failed — because
+  `verify` is the stage the client treats as the last word. It reads `resolve`'s answers from Redis,
+  never from the client, so no client can put a year into the cache.
+- **Every provider's answer is cached on its own, so a reorder needs no bump.** The stores live under
+  `yearprov:<provider>:v1:` (30 days with a year, 1 day for a null; the version is per provider, so an
+  adapter change discards only its own entries). MusicBrainz stays under its `mbyear:` key and is
+  **never** wrapped in `withAnswerCache`, and the driver reads that key in the same `MGET`, so a warm
+  card is one Redis command. The vote is recomputed on every call and no key encodes the order. A
+  cached final vote (`yearfinal:`) was rejected because it would need a bump on every plan change and
+  would pin a final reached while a provider was skipped. The edge gets at most the shortest source
+  TTL for a final answer with nothing skipped, and ~60 s otherwise.
+- **The stage-less `/api/year` is the old MusicBrainz-only path, byte for byte, and it stays** for
+  tabs still running the pre-vote client: the service worker waits rather than calling `skipWaiting`,
+  so such a tab lives until every tab closes, and it drops any card that comes back `null`. **It still
+  answers the loud `not-configured` 500 on a missing `MUSICBRAINZ_USER_AGENT`, on purpose** — it has
+  one provider, so skipping it is "every provider skipped", the same rule as the staged path. Do not
+  "fix" one path to match the other.
+
+Three as-built facts. **The handler's tests are `api/_lib/year-endpoint.test.ts`, NOT
+`api/year.test.ts`** (the plan's name): `vercel.json` deploys every `api/*.ts` as a function, so a test
+beside the handler would ship as `/api/year.test`, importing Vitest at runtime; `_`-prefixed paths are
+not routed. **`api/_lib/store-http.ts` is the one gated GET both store adapters share** — a permit, one
+GET, and every failure mapped to an outcome arm (refusal → `busy`, network error or 5xx → transient
+`failed`, any other non-2xx or a non-JSON body → `unexpected-payload`) — so Deezer and iTunes cannot
+drift on the promise that an adapter never throws. Deezer's quota error is `{"error":{"code":4}}` with
+**HTTP 200**, so it is read from the body; iTunes' 403 and 429 are `busy`; and Deezer fetches
+`track/{id}` for at most `DEEZER_TRACK_FETCH_LIMIT` = 3 verified hits, because a fourth found no year
+the third had not. And **the licences of spike §10.1 still stand**: Deezer and iTunes may not be used
+in a paid app, and MusicBrainz needs a plan or a mirror. The developer set that aside because the app
+may be free, so dropping a provider is deleting its line from both constants.
+
+**A CARD'S YEAR ARRIVES IN UP TO TWO STEPS AS OF 2026-09-30 — PROVISIONAL, THEN FINAL — AND THE FLAG
+THAT SAYS WHICH IS STORED ON THE CARD WHILE THE THREE-WAY READING OF IT IS DERIVED**
+([`plan.year-fetch-rework-game.md`](./docs/plans/plan.year-fetch-rework-game.md)). `Card.yearProvisional`
+is present only as `true`, only beside a numeric `year`, and written only by the reducer; `yearStateOf(card)`
+beside the selectors in `reducer.ts` is the ONE reading of it — **pending** (`year` undefined),
+**provisional** (the flag), **final** (anything else, a kept `null` included) — and every three-way
+switch goes through it, `CardRevealSide`'s `YearSlot` with an exhaustive `never`. The flag lives on the
+card because Restart re-deals `state.deck` through `START`: kept anywhere else, a restart would turn every
+provisional card final and it would never be verified. A stored `yearStatus` was rejected as a second copy
+of `year` that can disagree with it, and a tagged union replacing `year` as a save migration plus ~100
+test sites. It is additive — **no save-format bump**, the `startIndex` precedent. Seven things.
+
+- **There is no provisional null.** `YEAR_RESOLVED` is a union of a FINAL arm (today's payload,
+  number or null) and a PROVISIONAL arm (a number, `low`, `provisional: true`); a `resolve` that found
+  nothing dispatches nothing and the card stays PENDING. **A provisional answer never downgrades a final
+  card** — the reducer returns the same state object — because the order between lanes is not
+  guaranteed after a resume or a retry. A final number replaces a provisional year on **every** card,
+  the one the player is reading included.
+- **The resolver runs TWO LANES, ONE REQUEST IN FLIGHT PER STAGE** (`resolver.ts`'s header). One slot
+  per stage because each stage sits behind its own provider gates on the server, and **one client must
+  never hold two MusicBrainz lookups** against a gate shared by every user — which a single queue with
+  two slots would allow. One resolver rather than two workers because the resolve-to-verify hand-off
+  would land in the hook (whose header forbids logic), there would be two teardowns, and nothing would
+  push the start card into verification while the loading screen waits on it. "Do not optimise into a
+  parallel fetch" still stands, per lane. On a 429 **only that lane sleeps**, then picks again; one
+  `AbortController` and one `stop()` end both, and `not-configured` halts both.
+- **Every card is in one of three stage states** — `needs-resolve`, `needs-verify`, `final` — **seeded
+  from the deck**: an undefined year needs resolve, a `yearProvisional` year needs verify (a resumed
+  provisional card goes STRAIGHT to verification), anything else is final. The seed used to be "has a
+  year = done", and that line is one of the TWO places a resumed provisional card would have silently
+  become final and never been verified. The other is `persistence.ts`'s `validateCard`, which rebuilds a
+  card field by field — it copies `yearProvisional` only as `true` beside a numeric year and **rejects**
+  it otherwise.
+- **The verify lane's pick order is the current card, then the nearest card needing verify within
+  `VERIFY_LOOKAHEAD_CARDS` (3) ahead of it, then the rest first-in-first-out.** Forward only, no wrap;
+  3 is a guess to tune on a device and its comment says so. When there is nothing to do the lane waits
+  on a PROMISE the resolve lane settles, never a timer. `prioritize()` remembers the urgent card, so when
+  the start card's resolve answer lands during `preparing` it goes to the FRONT of verify — without that,
+  `currentCardId` never changes on the loading screen and the hook's `prioritize` would never fire again.
+- **A non-final verify is a TRANSIENT**, not an answer: the server's `final: false` means a provider
+  failed transiently, so its year (if any) is shown provisionally and the card is retried like any
+  transient failure.
+- **Exhausted verify settles the card FINAL at the best single answer it has** (spike §10.3): its
+  provisional year at `low`, or a final `null` if resolve found nothing either. Otherwise the card waits
+  for ever, and the PDF with it. The resolve lane's deferred pass settles null exactly as it always did.
+- **The year selectors now disagree ON PURPOSE.** `isCurrentYearPending` stays "`year` is undefined",
+  because a provisional card SHOWS its year; `resolvedCount` excludes provisional cards, so
+  `pendingYearCount` counts them as pending and the PDF waits for verification. Two questions, two
+  answers — do not "fix" one to match the other; the comment above `pendingYearCount` says the same.
+
+**"KEEP CARDS WITH NO YEAR FOUND" IS A SESSION OPTION AS OF 2026-09-30, DEFAULT OFF, AND IT DECIDES
+THREE THINGS: THE GATE, THE DROP AND THE PDF'S BLANK YEAR**
+([`plan.year-fetch-rework-ui.md`](./docs/plans/plan.year-fetch-rework-ui.md), spike §12.8). A checkbox on
+the picker between the playlist rows and Start (`COPY.landing.keepYearless`, with
+`COPY.landing.keepYearlessHint` beneath it), recorded by `START` as `GameState.keepYearless` — required
+there and on `START`, so no call site can forget it; optional in the save, where absent means `false`.
+**ON**: `START` goes straight to `playing`, because nothing waits for a year; a card whose final answer
+is null STAYS, with `confidence: 'none'`, and plays as "Year unknown"; and the PDF prints it with its
+title and artist in their usual places and the year area left blank to write in. **OFF**: exactly the
+behaviour before it — the gate waits on the current card's FINAL answer and a final null is dropped.
+Six things.
+
+- **Remembered per viewer under `jitster:prefs:v1`** by the pure `src/game/prefs.ts`, built exactly
+  like `locale.ts`: an injected `StorageLike`, a new never-renamed key, **validated on read** (anything
+  not a JSON object with a boolean `keepYearless` reads as the default), and **rebuilt field by field on
+  write** — the `playlist-library.ts` leak rule, because `savePrefs(storage, { ...somethingLarger })`
+  type-checks. `App.tsx` holds it in a lazily-seeded `useState` through the guarded
+  `readLocalStorage()` and guards the write too.
+- **Which value a deal uses is the part to get right.** Every NEW deal — the picker's Start, a share
+  link's deal effect, "Play the shared deck" — takes the **recipient's remembered preference**; Restart
+  and "Play again" take the **session's** `state.keepYearless`, never the checkbox's current state; a
+  resumed game takes its save's. **The link format is unchanged and never carries the sender's
+  choice**, and `linkArrivalIntent` does not look at it.
+- **The PDF export reads the SESSION's value**, threaded as a plain prop from `App.tsx` through
+  `GameScreen` → `DeckActionsDialog` and `EndScreen` into `DeckActions` → `usePdfExport` →
+  `selectPrintableCards` — never the picker's preference.
+- **The residual with the option OFF is accepted, and nothing is built for it**: a later card whose
+  verify comes back null is still dropped from under the player (the developer's decision, spike
+  §12.8). Keeping a card once the player has reached it is out of scope, not forgotten.
+- **The markup has three traps, all pinned in `LandingScreen`'s comment.** `touch-target` is on the
+  `<label>`, which is the press area — on the input it would draw a 44px native box — and
+  `focus-visible:focus-ring` is on the input, which takes focus. The hint is **OUTSIDE the label**, tied
+  by `aria-describedby`: inside, it would join the accessible NAME. And `text-sm` is on the caption
+  `<span>`, not the label — the 2026-09-21 preflight trap. The input carries no `value` attribute,
+  because the leak audit reads `value`.
+- **Nothing about it has been seen outside jsdom** — whether the checkbox and its hint push Start
+  below the fold at 320px (dropping the hint is the first lever), a printed blank year, and a screen
+  reader over a provisional-to-final change are rows in [`docs/development.md`](./docs/development.md)
+  §5, beside plan 4's step 10 preview checks.
 
 **What is left in Phase 8 is entirely MANUAL VERIFICATION, and it is now the project's largest gap.** Nothing is waiting on a decision or on code. Everything automatable is automated, and the ceiling is genuinely low here — jsdom paints nothing, evaluates no media query, computes no layout and has no accessibility tree — so what remains needs a deployment, a printer, a phone and a screen reader. Scoped row by row in [`docs/development.md`](./docs/development.md) §5, gaps in its §8. **Run the screen-reader pass over one flip first**: it is the only check on the app's only live region, which is what makes the game's payoff audible at all, and it has now been carried by two phases without being run.
 
@@ -517,7 +719,8 @@ it is a stored format, a failing pin is fixed by reverting, and a future algorit
 bring a version back, or accept the same re-deal knowingly. **A mid-game link
 carries `&card=<trackId>`** and the recipient starts ON that card (`START.startCardId`; card 1 plus the
 `startCardMissing` notice when the card is gone); the end screen's link does not, because its position is the
-last card. So the card-1 gate is now "the CURRENT card has a year", the resolver crawls from the start card and
+last card. So the card-1 gate is now "the CURRENT card's answer is **final**" (and only with "Keep cards with no
+year found" OFF — with it ON nothing gates, see the option's block), the resolver crawls from the start card and
 wraps, and `GameState.startIndex` (the lowest index this player has been on; saved, absent = 0) is what the end
 screen's `cardsPlayed` subtracts. The copy-failed fallback `<input value>` beside an unflipped card now holds that
 track id — the QR already encodes it, and the leak tests subtract it by exact string. **A link over a saved game is
@@ -659,7 +862,7 @@ that run on BOTH builds, so "half passed" means the sideloaded half; the Play-si
 
 **`src/components/ErrorBoundary.tsx` is the only class component in the app, and its fallback MUST NEVER render the caught error's message or stack.** `componentDidCatch` has no hook equivalent, which is why it is a class. It wraps `<App />` from **`main.tsx`, outside it** — a boundary catches only what is below it, so one rendered inside `App` would be unmounted by the very exception it exists to catch. The leak rule is the load-bearing part: every prop in the app flows through the tree it catches and the deck is in there, so an error string can quote a track title, artist or year. State holds a **boolean, not the `Error`**, so the leak is unavailable rather than merely avoided; the detail goes to `console.error`, which is not a rendered surface. **"Show the error so the player can report it" is the natural next change and it is the one that turns a crash screen into a spoiler** — `ErrorBoundary.test.tsx` throws an error containing a fixture card's title, artist and year and asserts all three are absent.
 
-**An `ended` session with an EMPTY deck goes to the landing screen with a warning, not to the end screen.** A card whose year lookup finds nothing is removed from the deck, so a playlist MusicBrainz cannot place drains to zero; that used to reach the end screen reading "Deck finished" over a count of **0**. `App.tsx` derives `deckCollapsed` from `status === 'ended' && deck.length === 0` — exact, because every other route to `ended` leaves the played cards in the deck — and checks it **before** `endedView`. The warning is `no-years-found`, which is why **`messages.ts` owns `StartFailureCode = PlaylistClientErrorCode | 'no-years-found'`**: the code is produced by the session, not by a fetch, and adding it to the client's own union would make that type claim a code `fetchPlaylist` cannot return. One slot, one union, no fifth view.
+**An `ended` session with an EMPTY deck goes to the landing screen with a warning, not to the end screen.** A card whose FINAL year answer is null is removed from the deck while the session drops yearless cards (the default — "Keep cards with no year found" OFF), so a playlist the provider vote cannot place drains to zero; with the option ON the deck never shrinks, so `deckCollapsed` can fire only on an empty deal and the check stays exact in both modes; that used to reach the end screen reading "Deck finished" over a count of **0**. `App.tsx` derives `deckCollapsed` from `status === 'ended' && deck.length === 0` — exact, because every other route to `ended` leaves the played cards in the deck — and checks it **before** `endedView`. The warning is `no-years-found`, which is why **`messages.ts` owns `StartFailureCode = PlaylistClientErrorCode | 'no-years-found'`**: the code is produced by the session, not by a fetch, and adding it to the client's own union would make that type claim a code `fetchPlaylist` cannot return. One slot, one union, no fifth view.
 
 **Comments in `index.html` are shipped bytes**, unlike comments in `src/` — it is the blocking document on the critical path and nothing strips it. Keep the reasoning in [`docs/architecture.md`](./docs/architecture.md) §3 and one-line pointers in the file. Two literals there are load-bearing: `theme-color` **must** track `--color-page` by hand (a `meta` attribute cannot hold a `var()`), and the favicon is a 20 kB WebP that replaced a **1.26 MB PNG which was costing 6.2 s of LCP** — never restore a large icon.
 
@@ -690,7 +893,7 @@ deck rather than the card. The cost is measured: **+4.8 kB gzip on the initial p
 **The PDF export WAITS for the year crawl; the share link and the save do not** (2026-08-07). The
 asymmetry is the design, not an inconsistency: a link is (playlist id + seed) and a save is
 (id + name), both complete the moment a deck exists — **the PDF is the one artefact that is finished
-when it is made**, and `selectPrintableCards` drops every card without a year, so an export taken
+when it is made**, and `selectPrintableCards` drops every card without a FINAL year, so an export taken
 mid-crawl prints a deck that is quietly short and the omission is discoverable only by counting
 printed paper. So a press with lookups outstanding neither exports nor refuses: it shows a
 preparing-screen-shaped wait and exports itself when the last year lands. Three traps. **The wait is
@@ -699,13 +902,22 @@ cleared by an effect is what `react-hooks/set-state-in-effect` rejects, and the 
 the wait ends by itself on the render where the count hits zero. **The auto-export effect still
 needs `hasAutoExportedRef`**, because `hasAskedToPrint` stays true after the handoff and `deck` is a
 new array identity on every resolved year. And **`excludedCount` / `nothing-to-print` are still live
-branches**: the gate waits for `year === undefined`, while `selectPrintableCards` also drops
-`year === null`, which only a resumed pre-reversal save holds. `pendingYearCount` is a selector
-beside the reducer and is the first caller `resolvedCount` has had since 2026-08-05.
+branches**. Since 2026-09-30 the gate waits for `year === undefined` **and for provisional** —
+`pendingYearCount` counts a `yearProvisional` card as pending, because a printed year must be one the
+`verify` stage can no longer correct — and `selectPrintableCards(deck, { keepYearless })` leaves
+provisional cards out and COUNTS them in every export, **"Print so far" included** (the developer's
+decision: nothing on paper can still change). A `year === null` card is the option's call: with
+"Keep cards with no year found" ON it is printed with its title and artist in their usual places and
+the year area **left blank** to write in by hand (`drawBack` skips only the year's `text` call — no
+box, no line, `backLayout()` and the print palette untouched); with it OFF it is dropped, and only a
+resumed pre-reversal save holds one. `options` is required, so no caller can forget to decide the
+null rule. `pendingYearCount` is a selector beside the reducer and is the first caller
+`resolvedCount` has had since 2026-08-05.
 
 **The wait offers "Print so far", and it does not contradict the gate — it is the gate's informed
 version** (2026-08-07). What the gate refuses is a deck that is **quietly** short; a player who
-presses this is told the count that was left out, in "PDF downloaded — N cards left out, no year yet".
+presses this is told the count that was left out, in "PDF downloaded — N cards left out, no year yet"
+(since 2026-09-30 that N also counts cards whose year is shown but still provisional).
 **That line is now the whole of the disclosure** — an explanatory caption above the buttons was
 written and then cut as noise, so do not weaken the message. Three things to know. It does **not touch
 `hasAskedToPrint`**, so the wait survives its own export and the complete deck still arrives by
@@ -910,20 +1122,29 @@ a reason to touch one of them.
 **Five developer decisions landed on 2026-08-05, after Phase 7 plan 1. Two of them reverse
 something `plan.md` had already resolved, so read these before "fixing" the code back:**
 
-- **A card whose year lookup finds nothing is REMOVED from the deck** (`gameReducer`, `YEAR_RESOLVED`).
-  This reverses `plan.md` §6's `confidence: 'none'` follow-on, which had it stay and play. **Low
-  confidence is unaffected** — it carries a real year. Consequences: the deck shrinks by roughly a
-  third on a real playlist, the card-1 gate is phrased as "the first card has a year" rather than "the
-  resolved card was card 1", and all three entry points (`START`, `YEAR_RESOLVED`, `RESUME`) filter, so
-  **no card in a live deck holds `year: null`**. `CardRevealSide`'s `none` branch is kept for
-  pre-reversal saves only.
+- **A card whose year lookup finds nothing is REMOVED from the deck** (`gameReducer`, `YEAR_RESOLVED`)
+  — **as of 2026-09-30, a card whose FINAL answer is null is removed, unless the session keeps yearless
+  cards** (`GameState.keepYearless`, the picker's "Keep cards with no year found"; see the option's
+  block). A `resolve` that found nothing is not a final null: the card stays PENDING and goes to
+  `verify`. This reverses `plan.md` §6's `confidence: 'none'` follow-on, which had it stay and play —
+  and the option is the developer's way of asking for that follow-on back, per session. **Low
+  confidence is unaffected** — it carries a real year. Consequences, with the option OFF: the deck
+  shrinks on a real playlist (roughly a third before the provider vote), the card-1 gate is phrased
+  as "the current card's answer is **final**" rather than "the resolved card was card 1" (with the
+  option ON nothing gates at all), and all three entry points (`START`, `YEAR_RESOLVED`, `RESUME`)
+  filter, so **no card in a live deck holds `year: null` — unless the session keeps yearless
+  cards**, in which case a final null stays with `confidence: 'none'` and the index unchanged.
+  `CardRevealSide`'s `none` branch ("Year unknown", "Check this one yourself") is therefore **LIVE
+  again** for those sessions, and still covers pre-reversal saves.
 - **The preparing screen shows no resolved/total count.** Also a reversal; `PreparingScreen` takes no
-  count props. `resolvedCount` stays exported beside the reducer, with its tests, and has no caller.
+  count props. `resolvedCount` stays exported beside the reducer, with its tests, and no screen
+  renders it — `pendingYearCount` is its complement.
 - **Exit goes through a confirmation dialog** (`ExitConfirmDialog`, opened by `GameScreen`). While it is
   open `GameScreen`'s window key handler is disabled — that is guard 4, and it exists because → would
   otherwise deal a card behind the backdrop. **Since 2026-09-29 it has THREE answers**: Keep playing,
   **Restart game** (App's `handleRestart`, the end screen's "Play again": `state.deck` re-dealt with a
-  fresh seed, zero lookups, card 1) and End game. A restart usually leaves `GameScreen` MOUNTED
+  fresh seed and the SESSION's `keepYearless`, card 1, and zero lookups for a card already final — a
+  `yearProvisional` card rides the re-deal and still owes its verify) and End game. A restart usually leaves `GameScreen` MOUNTED
   (`playing → playing`), so `handleRestartConfirmed` closes the dialog and stops the audio by hand, and
   `CardStack` is keyed on `seed` so the jump to card 1 remounts it instead of playing the step-back
   entrance. The Tab trap is a three-button cycle.
@@ -957,6 +1178,7 @@ something `plan.md` had already resolved, so read these before "fixing" the code
 **Layout and imports** — details in [`docs/architecture.md`](./docs/architecture.md) §2
 
 - `src/` = browser (may use the `@/` alias and DOM APIs) · `api/` = Node · `shared/` = both, so **no DOM and no Node APIs**.
+- **`shared/` holds the DECISION half of the year vote as of 2026-09-30.** `shared/year-providers.ts` = the provider plan, the trust order, the voter rule, the confirmation, the frontier, `isrcYear` and the provider cache key; `shared/store-match.ts` = whether a Deezer or iTunes row is the SAME recording (equal cleaned title, every primary-artist token in the credit — deliberately NOT `artistMatchesExact` — a duration within tolerance where a length-less row fails, and the earliest verified row wins). Both sit beside `shared/year.ts` and are node-tested with no HTTP. The BINDING half is `api/_lib/`: `year-pipeline.ts` (the thin driver), `provider-lookup.ts` (the adapter contract), `deezer.ts` and `itunes.ts` over `store-http.ts`, and `musicbrainz-provider.ts` (wraps `resolveYear` whole). A vote rule that starts growing in the driver belongs in `shared/year-providers.ts`, same rule as `gestures.ts`. `store-match.ts`'s mutation guard lives in `api/_lib/year-votes.test.ts`, because the captured payloads are Node-side fixtures and a `shared/` test importing `api/` would drag them into the browser typecheck.
 - **`src/` has four subtrees, and which one a file belongs in is a real decision.** `src/game/` = the session (reducer, shuffle, resolver, persistence, gesture _decisions_, the playlist client, the error-copy map) — pure and framework-free apart from one hook. `src/components/` = presentational React, props in and callbacks out, no session knowledge. `src/hooks/` = the stateful concerns a component should not own (audio, gesture _binding_, the playlist request). `src/components/__fixtures__/` = the shared fixture deck every component test renders from. Logic that starts accumulating in a component belongs in a hook or in `src/game/`.
 - **`src/App.tsx` is the ONLY caller of `useGameSession()`**, and the only file that knows all four statuses exist. Screens receive plain data and callbacks. `dispatch` is deliberately not exposed by the hook, so a screen cannot invent a transition the reducer's tests never considered — if a screen seems to need a fifth action, add it to the reducer with its tests.
 - **Both HTTP clients live in `src/game/` and take an injected `fetch`** (`year-client.ts`, `playlist-client.ts`), with a thin hook over each. That is what keeps every status branch a **node-environment** unit test with no jsdom and no network. Anything that accumulates in the hook belongs in the client instead.
@@ -985,8 +1207,14 @@ something `plan.md` had already resolved, so read these before "fixing" the code
 - Vitest config lives in the `test` key of `vite.config.ts`. **The default environment is `node` and stays that way** — it is what makes a DOM API accidentally added to `shared/` (which must stay portable to `api/`) fail a test run. A test needing a DOM opts in **per file** with a `/** @vitest-environment jsdom */` docblock as the first thing in the file. Do not globalise jsdom.
 - **Testing Library does not clean up between tests here.** Its auto-`afterEach(cleanup)` only registers when Vitest `globals` are on, and this repo imports `describe`/`it`/`expect` explicitly — so every DOM test file needs its own `afterEach(cleanup)`. Without it, a test queries a DOM still holding every previous render, and the failure reads as a component bug.
 - **The hidden side of a card must leak nothing, and the audit covers more than visible text.** Attributes, `aria-label`s, `alt` text, live regions, and the OS media session are all leak surfaces. Never set `navigator.mediaSession.metadata`. See [`docs/architecture.md`](./docs/architecture.md) §3.
-- **`CardRevealSide`'s live region is the ONE place announcing track data is correct, and it is not a bug.** Phase 7 gave the reveal a polite `role="status"` because the flip was otherwise silent to assistive technology — the year, the payoff of the whole game, was reachable by sight only. It is safe because `Card.tsx` mounts that component **only while the card is flipped**, so the region cannot exist on a card that is still a mystery. **Do not add one to `CardHiddenSide`, to `CardStack`'s backs, or to the HUD** beyond the `role="status"` already on the count; `CardHiddenSide.test.tsx` asserts the absence. If you are about to file the reveal's region as a leak, you are reasoning from the rule without its mounting condition.
+- **`CardRevealSide`'s live region is the ONE place announcing track data is correct, and it is not a bug.** Phase 7 gave the reveal a polite `role="status"` because the flip was otherwise silent to assistive technology — the year, the payoff of the whole game, was reachable by sight only. It is safe because `Card.tsx` mounts that component **only while the card is flipped**, so the region cannot exist on a card that is still a mystery. **Since 2026-09-30 the same region also announces "Confirming year" (`COPY.card.yearProvisional`) and a year the `verify` stage CHANGED on a revealed card** — the notice sits INSIDE the one `role="status"`, so a provisional-to-final change is read out with no second region anywhere. The notice is `text-fg-secondary`, **never `text-warning`** (it is progress; the amber must keep meaning "unconfirmed"), and it is a token, never an opacity modifier. Its line is **reserved with `min-h-lh` in all three year-number states** — empty and `aria-hidden` on a final `high` — because the reveal is a `justify-center` column, so a line that vanished when a provisional year was confirmed would recentre the face at the moment the player is reading it. A provisional `low` card shows "Confirming year", not "Unconfirmed year": one slot, one notice. **Do not add one to `CardHiddenSide`, to `CardStack`'s backs, or to the HUD** beyond the `role="status"` already on the count; `CardHiddenSide.test.tsx` asserts the absence. If you are about to file the reveal's region as a leak, you are reasoning from the rule without its mounting condition.
 - **Never put secrets in `api/` source** — the Vite dev server serves it as readable text.
+
+**Environment variables** — reference in [`docs/api.md`](./docs/api.md), annotated in `.env.example`
+
+- **The provider vote added NO variable (2026-09-30).** Deezer and iTunes are keyless public search APIs, the iTunes storefront (`ITUNES_STOREFRONT = 'ES'`) is a constant in `api/_lib/itunes.ts`, and there is no Discogs variable because there is no Discogs. Do not add one "for later".
+- **`MUSICBRAINZ_USER_AGENT` is SKIPPED WITH A WARNING on the staged path and still a LOUD 500 on the stage-less one**, and that asymmetry is the one rule applied to two paths (see the provider-vote block). Unset, `?stage=` leaves MusicBrainz out of the vote, lists it in `skipped` and warns once per cold start — and its batched read still uses `mbyear:` answers already cached, where the legacy path answers 500 even for warm tracks. Set it in development and production all the same; it is sent to a third party on every lookup, so it carries a real contact address.
+- **`UPSTASH_REDIS_REST_URL` / `_TOKEN` now back THREE gates and TWO caches**: `mbgate:v1` (1.1 s), `deezergate:v1` (120 ms) and `itunesgate:v1` (3 s), all with a 1.5 s maximum wait, plus the `mbyear:` year cache and the `yearprov:` provider-answer cache. The gates are global rather than per client because every request leaves from Vercel's shared egress IPs, so a provider's per-IP limit is a limit across all players. Production only: without it everything falls back per instance and logs so once. Under `vercel dev` that means `verify` finds none of `resolve`'s answers and re-asks every provider, and iTunes gets unpaced traffic from your own IP (it answers excess with 403s).
 
 **No Spotify credentials exist or are needed.** Spotify's Feb 2026 API changes mean no credentialed path can serve "anyone with a public link", so the app reads the public embed endpoint anonymously. Before adding a `SPOTIFY_CLIENT_ID`, read [`docs/plans/plan.md`](./docs/plans/plan.md) §2 — **it is a product decision, not an oversight.**
 
