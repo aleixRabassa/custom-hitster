@@ -5267,3 +5267,85 @@ The 2026-09-19 "is fixed" entry above raised the file's budgets, and that fixed 
 - **A mid-game restart usually leaves `GameScreen` mounted.** `START` skips the card-1 gate when the new first card already has a year, and a re-dealt `state.deck` is mostly resolved, so the status goes `playing → playing`. A confirmed Exit relies on the unmount to close the dialog and drop its state; a restart cannot. So `handleRestartConfirmed` closes the dialog by hand (left open, guard 4 keeps the keyboard dead over the new deck) and calls `stop()` by hand (the card-change audio rule is keyed on card id, and the reshuffle can deal the same card first).
 - **Without a remount, the stack plays a restart as a step back.** `CardStack` latches the last index and derives the animation from the delta, so a jump from card N to card 1 reads as `backward` and the new first card slides in from the right. `CardStack` is keyed on `seed`, which only `START` changes, so a restart remounts it and shows the card at rest, as the first card of a session always is. The key is on the stack rather than on `GameScreen` so the back-navigation hook's history entry is not torn down and re-pushed.
 - **The dialog's Tab trap was a two-button swap** (`target === cancel ? confirm : cancel`). With a third button that would skip Restart, so it is now a cycle in DOM order with Shift+Tab going backwards.
+
+## 2026-09-29 — Year-fetch spike: 21% of real cards get no year, title work cannot fix it, a store vote can
+
+Measured over 542 tracks from eight `LandingScreen` suggestions; full write-up and per-track CSV in
+[`docs/spikes/spike.year-fetch-rework.md`](./spikes/spike.year-fetch-rework.md). The conclusions a
+future session should not have to re-derive:
+
+- **115 of 542 cards (21%) resolve to no year and are dropped; ~109 of those had an EMPTY MusicBrainz
+  pool.** Openings Català loses 44 of 47, Trap Argentino 29 of 100, Rock Party 0 of 100. It is coverage
+  (new Latin/urban, Catalan catalogue), exactly as 2026-08-11 found on 18 tracks.
+- **Every title rewrite and query alternative together recovers 8 of the 115**, never with a wrong
+  year. Best single rungs: `recording:(w1 AND w2 …)` instead of a quoted phrase (6), and Deezer's ISRC
+  fed to MusicBrainz's `isrc:` search (5). Bracketed-text-only found 0.
+- **`TRAILING_SEGMENT_PATTERN`'s lazy head is a real bug**: `X (REMIX) (feat. Y)` is read as ONE
+  parenthetical `REMIX) (feat. Y`, fails classification, and the title is left untouched.
+- **MusicBrainz `high` is ≤ ~96.7% precise on real decks**: at least 13 of 394 are confidently wrong
+  (Self Esteem 2002, Dark Horse 2016, Bad Romance 2008 …), and 8 of 33 `low` answers are wrong.
+- **Deezer's `release_date` is an edition date** (40% exact before 2015, 94% after); **iTunes is
+  strong on old catalogue** (86%, and 19 of 19 on the accuracy fixtures, including Personal Jesus
+  1989). Deezer's `artist:"…" track:"…"` search syntax returned nothing for 540 of 542 — use free text.
+- **A vote needing two INDEPENDENT providers** (MusicBrainz, Apple, Deezer — Deezer's release date and
+  ISRC year count as one) takes dropped cards 115 → 18 and changes 29 answers: 21 confident
+  corrections, 0 known regressions, 7 unverifiable. Letting Deezer's two fields agree with each other
+  produced the only regressions (Killing In The Name → 2012, Hypnotize → 2007).
+- **46 of 542 lookups hit a MusicBrainz `503` at the gate's 1.1 s spacing**, and one release-group
+  failure silently degraded to the relaxed rungs.
+- The harness must never share the production Upstash cache, and two harness processes with
+  per-instance gates exceed MusicBrainz's 1 req/s together.
+
+## 2026-09-29 — Licences: Deezer and iTunes are out for a paid app, and the public MusicBrainz API is non-commercial
+
+Read the terms while ranking year providers; full table and quotes in
+[`docs/spikes/spike.year-fetch-rework.md`](./spikes/spike.year-fetch-rework.md) §10.1. Not legal
+advice.
+
+- **Deezer API:** "strictly limited for a non-commercial purpose", with no revenue "in connection
+  with the use". Excluded.
+- **iTunes Search API:** promotional use only, beside a "Download on iTunes" badge, and never "for
+  independent entertainment value". Excluded.
+- **MusicBrainz web service:** "Non-commercial use of this web service is free; please see our
+  commercial plans … if you would like to use this service commercially."
+  - The $0 Stealth tier is only for services not yet public; Bronze starts at $100/month.
+  - **This affects the current app, not just a proposal.**
+  - The **data** is CC0 core data, and a self-hosted mirror of the dumps is allowed commercially
+    ("financial support strongly urged"). The prebuilt search indexes are CC BY-NC-SA, so a mirror
+    must build its own.
+- **Discogs API:** commercial use is generally permitted, but charging for an app that integrates
+  Discogs content needs Discogs's written permission. Its monthly dumps are CC0.
+- **Wikidata:** CC0 and allowed, but useless here. A batched lookup by Spotify track id (`P2207`)
+  found a date for 9 of 542 tracks, and none of the 115 MusicBrainz misses.
+- **Measured dead end:** batching several cards into ONE MusicBrainz recording search loses 33–40% of
+  the years, because the shared 100-result page is filled by the popular songs. Only the
+  release-group id lookup is safely batchable.
+
+## 2026-09-29 — Discogs measured, and Deezer's "recent release" signature is the fastest certain year source
+
+Full write-up in [`docs/spikes/spike.year-fetch-rework.md`](./spikes/spike.year-fetch-rework.md) §11.
+
+**Discogs: 21 of 22 fixtures exact, Personal Jesus included (1989), but only 60% coverage of the 542
+tracks and 9 of MusicBrainz's 115 misses.** It catalogues physical releases. Traps:
+
+- `database/search` accepts an **undocumented** `sort=year&sort_order=asc`, and without it the right
+  master is often not on the first page.
+- A master's `year` is its **main** release's year. Singles need a `type=release&release_title=`
+  query too.
+- `track=` matching is fuzzy.
+- Git Bash rewrites a `/masters/...` argument into a Windows path; set `MSYS_NO_PATHCONV=1`.
+
+**Deezer's quota error comes back with HTTP 200** (`{"error":{"code":4,"message":"Quota limit
+exceeded"}}`), so a client that trusts the status reads it as an empty result.
+
+**MusicBrainz returned 503 on 10–16% of requests** at the permitted 1.1 s spacing.
+
+**The ordering finding:** a Deezer result whose release-date year equals its ISRC year, is ≥ 2015, and
+whose Spotify title has no remaster/live suffix agreed with the three-provider consensus 129 of 129
+times. That covers 44% of a real deck at ~0.25 s a card.
+
+- Putting it **before** MusicBrainz halves MusicBrainz requests (1 757 → 855 per 542 cards).
+- Queueing iTunes and then Discogs for uncertain cards takes yearless cards from 108 to 4, with no
+  loss of precision.
+- Every remaining `high` error is a MusicBrainz `high` kept final by the developer's
+  never-correct-a-certain-year rule.
