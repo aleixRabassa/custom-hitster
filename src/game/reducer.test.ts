@@ -1439,6 +1439,40 @@ describe('gameReducer provisional years', () => {
     });
   });
 
+  it('should mark a provisional year that verify answered, and keep the mark on a later one', () => {
+    // `yearVerifyAnswered` is what lets a reload remember that some verify came back with a year.
+    // A later report without it -- a late resolve answer -- must not un-say that.
+    const state = playing();
+    const targetId = idAt(state, 5);
+
+    const marked = gameReducer(state, { ...provisional(targetId, 1969), verifyAnswered: true });
+    const later = gameReducer(marked, provisional(targetId, 1970));
+
+    expect(marked.deck.find((c) => c.id === targetId)).toMatchObject({ yearVerifyAnswered: true });
+    expect(later.deck.find((c) => c.id === targetId)).toMatchObject({
+      year: 1970,
+      yearProvisional: true,
+      yearVerifyAnswered: true,
+    });
+  });
+
+  it('should clear the verify mark with the provisional flag on a final answer', () => {
+    const state = playing();
+    const targetId = idAt(state, 5);
+
+    const marked = gameReducer(state, { ...provisional(targetId, 1969), verifyAnswered: true });
+    const next = gameReducer(marked, {
+      type: 'YEAR_RESOLVED',
+      cardId: targetId,
+      year: 1969,
+      confidence: 'high',
+    });
+
+    const settled = next.deck.find((c) => c.id === targetId);
+    expect(settled).not.toHaveProperty('yearProvisional');
+    expect(settled).not.toHaveProperty('yearVerifyAnswered');
+  });
+
   it('should not drop a card on a provisional answer', () => {
     // A provisional answer always carries a year, so it can never take a card away -- only the
     // final answer can. Nothing else moves either: no index, no flip, no status.

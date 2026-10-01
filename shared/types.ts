@@ -103,6 +103,16 @@ export interface Card {
    */
   yearProvisional?: true;
   /**
+   * Present ONLY as `true`, ONLY beside `yearProvisional`, and written ONLY by the reducer
+   * (2026-10-01): some `verify` call for this card came back with a year, even a non-final one. It
+   * decides what an exhausted verify settles as: an ordinary unconfirmed `low` year when set, a
+   * `yearUnverified` one when not (`settleExhausted` in `src/game/resolver.ts`). Stored on the card
+   * rather than only in the resolver's memory, so a reload between that answer and the exhaustion
+   * does not turn an answered card into an unchecked one. Cleared with `yearProvisional` by any
+   * final answer. Additive, so no save-format bump.
+   */
+  yearVerifyAnswered?: true;
+  /**
    * Present ONLY as `true`, ONLY beside a FINAL numeric `year` at `low`, and written ONLY by the
    * reducer (2026-10-01): the `verify` stage could not be ASKED -- its retries ran out and not one
    * of them came back with a year (typically the device offline, or the server unreachable) -- so the

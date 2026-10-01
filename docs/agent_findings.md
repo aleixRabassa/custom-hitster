@@ -5811,3 +5811,14 @@ non-final 200 with a NULL year does not count: it said nothing about the card's 
 that a pure iTunes outage now yields unconfirmed years, which a session skipping those drops — the
 developer's call. iTunes winning over MusicBrainz `high` was proposed in the same conversation and
 NOT built: it is the edit `UNCONFIRMED_TRUST` was measured against (6 known years worse, 2–3 better).
+
+## 2026-10-01 — "Some verify answered" is saved on the card, so a reload cannot turn unconfirmed into unchecked
+
+Until this entry `verifyAnswered` was memory-only: it was lost on a reload, so a card
+whose verify had already answered, resumed offline, settled `unverified` and survived "skip
+unconfirmed". It is now `Card.yearVerifyAnswered`, written by the reducer from the provisional
+arm's `verifyAnswered: true`, validated by `validateCard` (only `true`, only beside
+`yearProvisional`), cleared by any final answer and seeded back by the resolver on resume. One trap:
+the resolver used to report a non-final verify year only when it DIFFERED from the provisional one,
+so an agreeing year would never have reached the card — it now reports once more when the mark is
+new.

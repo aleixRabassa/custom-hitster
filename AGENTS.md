@@ -731,7 +731,12 @@ test sites. It is additive — **no save-format bump**, the `startIndex` precede
   later that day): if any non-final 200 carried one — iTunes failed, or a provider answered and
   nothing confirmed it — the card settles that year as an ordinary UNCONFIRMED `low`, which the
   vote already chose by `UNCONFIRMED_TRUST`, so the client needs no list of who answered. An
-  iTunes outage therefore yields unconfirmed years, not unchecked ones. Stored on
+  iTunes outage therefore yields unconfirmed years, not unchecked ones. **That "some verify
+  answered" fact is saved too**, as `Card.yearVerifyAnswered` (only `true`, only beside
+  `yearProvisional`, cleared by any final answer): the resolver reports it with the provisional
+  year — once, even when the year did not change — and seeds itself from it on resume, so a reload
+  between that answer and the exhaustion does not turn an unconfirmed card into an unchecked one.
+  The unverified mark itself is stored on
   the card, copied by `validateCard` only as `true` beside a numeric, non-provisional year, written
   only on a FINAL answer; additive, no save bump. It is never retried, on resume either. **The null
   keeps its old rule and cost**: an exhausted card with no year still drops while yearless cards are

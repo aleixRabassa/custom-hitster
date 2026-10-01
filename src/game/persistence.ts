@@ -386,6 +386,7 @@ function validateCard(value: unknown): Card | null {
     year,
     yearConfidence,
     yearProvisional,
+    yearVerifyAnswered,
     yearUnverified,
   } = record;
 
@@ -415,6 +416,19 @@ function validateCard(value: unknown): Card | null {
   }
 
   /*
+    `yearVerifyAnswered` (2026-10-01): ONLY `true`, ONLY beside `yearProvisional` -- the reducer
+    adds it to a provisional card and clears it with the flag. Copied because the resolver seeds its
+    exhaustion rule from it: dropped on a reload, a card some verify already answered would settle
+    `unverified` instead of unconfirmed, and a session that skips unconfirmed years would keep it.
+  */
+  if (
+    yearVerifyAnswered !== undefined &&
+    (yearVerifyAnswered !== true || yearProvisional !== true)
+  ) {
+    return null;
+  }
+
+  /*
     `yearUnverified` (2026-10-01) by the same rule: ONLY `true`, ONLY beside a numeric year at
     `low`, and never on a provisional card -- the reducer writes it only on a FINAL answer, and an
     exhausted verify only ever settles at `low`. Copied for the
@@ -436,6 +450,7 @@ function validateCard(value: unknown): Card | null {
   if (year !== undefined) card.year = year;
   if (yearConfidence !== undefined) card.yearConfidence = yearConfidence;
   if (yearProvisional === true) card.yearProvisional = true;
+  if (yearVerifyAnswered === true) card.yearVerifyAnswered = true;
   if (yearUnverified === true) card.yearUnverified = true;
 
   return card;

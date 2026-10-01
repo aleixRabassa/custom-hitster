@@ -254,7 +254,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       //     back with a year it arrives `unverified`, and `isDroppedAnswer` keeps
       //     it even when the session skips unconfirmed years -- there is a year to
       //     play, it just could not be checked. When some verify DID answer, it is
-      //     an ordinary unconfirmed year (the resolver's `verifyAnswered`).
+      //     an ordinary unconfirmed year (the resolver's `verifyAnswered`, kept on
+      //     the card as `yearVerifyAnswered` so a reload does not lose it).
       // =======================================================================
       // Honoured only beside a numeric `low` year -- the one shape `Card.yearUnverified` may take,
       // and the one `validateCard` accepts back from a save.
@@ -313,6 +314,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         // it, so the card reads as final. A kept null lands here too, beside its `none`.
         const updated: Card = { ...card, year: action.year, yearConfidence: action.confidence };
         delete updated.yearProvisional;
+        delete updated.yearVerifyAnswered;
         delete updated.yearUnverified;
         if (isUnverified) updated.yearUnverified = true;
         deck.push(updated);
@@ -628,7 +630,15 @@ function recordProvisionalYear(
 
     changed = true;
 
-    return { ...card, year: action.year, yearConfidence: action.confidence, yearProvisional: true };
+    // `yearVerifyAnswered` is only ever ADDED here: a later report without it (a late `resolve`
+    // answer) does not un-say that a verify came back with a year, so the spread keeps it.
+    return {
+      ...card,
+      year: action.year,
+      yearConfidence: action.confidence,
+      yearProvisional: true,
+      ...(action.verifyAnswered === true ? { yearVerifyAnswered: true as const } : {}),
+    };
   });
 
   // Covers both "no card has that id" (a callback from a replaced session) and "every copy is

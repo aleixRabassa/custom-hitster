@@ -217,7 +217,15 @@ export type YearResolvedAction =
        */
       unverified?: true;
     }
-  | { type: 'YEAR_RESOLVED'; cardId: string; year: number; confidence: 'low'; provisional: true };
+  | {
+      type: 'YEAR_RESOLVED';
+      cardId: string;
+      year: number;
+      confidence: 'low';
+      provisional: true;
+      /** A `verify` call came back with this year (non-final) -- see `Card.yearVerifyAnswered`. */
+      verifyAnswered?: true;
+    };
 
 /**
  * The `localStorage` shape, kept structurally separate from `GameState` even where the two

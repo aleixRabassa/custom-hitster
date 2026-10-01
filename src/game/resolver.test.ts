@@ -431,7 +431,7 @@ describe('createYearResolver stages', () => {
     expect(harness.callsIn('verify')).toEqual(['a', 'a']);
     expect(harness.sleeps).toEqual([500]);
     expect(harness.resolved).toEqual([
-      { cardId: 'a', year: 1983, confidence: 'low', provisional: true },
+      { cardId: 'a', year: 1983, confidence: 'low', provisional: true, verifyAnswered: true },
       { cardId: 'a', year: 1975, confidence: 'high' },
     ]);
   });
@@ -505,9 +505,47 @@ describe('createYearResolver stages', () => {
     expect(harness.callsIn('verify')).toHaveLength(3 + 3);
     expect(harness.resolved).toEqual([
       { cardId: 'a', year: 1980, confidence: 'low', provisional: true },
-      { cardId: 'a', year: 1990, confidence: 'low', provisional: true },
+      { cardId: 'a', year: 1990, confidence: 'low', provisional: true, verifyAnswered: true },
       { cardId: 'a', year: 1990, confidence: 'low' },
     ]);
+  });
+
+  it('should report the verify mark even when the verify year equals the provisional one', async () => {
+    // Nothing on screen changes, but the card (and so the save) must learn that verify answered,
+    // or a reload before exhaustion would settle it unverified.
+    const harness = createHarness([card('a')], (_cardId, attempt, stage) => {
+      if (stage === 'resolve') return PROVISIONAL;
+      return attempt <= 2 ? answer(1980, false, 'low') : fail('upstream-unavailable');
+    });
+    harness.resolver.start();
+    await harness.flush();
+
+    expect(harness.resolved).toEqual([
+      { cardId: 'a', year: 1980, confidence: 'low', provisional: true },
+      // Once, not per answer: the second identical non-final verify reports nothing new.
+      { cardId: 'a', year: 1980, confidence: 'low', provisional: true, verifyAnswered: true },
+      { cardId: 'a', year: 1980, confidence: 'low' },
+    ]);
+  });
+
+  it('should settle a resumed card UNCONFIRMED when its saved verify mark says one answered', async () => {
+    // The mark survives a reload on the card: offline after the reload, the card still settles as
+    // the unconfirmed year it already was, not as an unchecked one.
+    const harness = createHarness(
+      [
+        card('a', {
+          year: 1990,
+          yearConfidence: 'low',
+          yearProvisional: true,
+          yearVerifyAnswered: true,
+        }),
+      ],
+      () => fail('network'),
+    );
+    harness.resolver.start();
+    await harness.flush();
+
+    expect(harness.resolved).toEqual([{ cardId: 'a', year: 1990, confidence: 'low' }]);
   });
 
   it('should still mark an exhausted card unverified when no verify carried a year', async () => {

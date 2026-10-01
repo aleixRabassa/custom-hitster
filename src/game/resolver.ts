@@ -124,7 +124,13 @@ import type { YearLookupOutcome } from './year-client';
  */
 export type ResolvedYear =
   | { cardId: string; year: number | null; confidence: YearConfidence; unverified?: true }
-  | { cardId: string; year: number; confidence: 'low'; provisional: true };
+  | {
+      cardId: string;
+      year: number;
+      confidence: 'low';
+      provisional: true;
+      verifyAnswered?: true;
+    };
 
 /**
  * The single network dependency: run one stage for one track, never throw. `year-client.ts`'s
@@ -284,8 +290,9 @@ export function createYearResolver(deck: readonly Card[], deps: ResolverDeps): Y
   const verifyPasses = new Map<string, number>();
   /**
    * Cards for which some `verify` came back with a year, even a non-final one: the server took the
-   * vote (over live or cached answers) without a confirmation. In memory only, so a resumed card
-   * starts without it. What decides, on exhaustion, between
+   * vote (over live or cached answers) without a confirmation. Mirrored onto the card as
+   * `yearVerifyAnswered` (reported with the provisional year) and seeded back from it, so a
+   * resumed card keeps it. What decides, on exhaustion, between
    * an UNCONFIRMED year and an UNVERIFIED one -- see `settleExhausted`.
    */
   const verifyAnswered = new Set<string>();
@@ -315,6 +322,7 @@ export function createYearResolver(deck: readonly Card[], deps: ResolverDeps): Y
     } else if (card.year !== null && card.yearProvisional === true) {
       stageOf.set(card.id, 'needs-verify');
       provisionalYear.set(card.id, card.year);
+      if (card.yearVerifyAnswered === true) verifyAnswered.add(card.id);
       verifyQueue.push(card.id);
     } else {
       stageOf.set(card.id, 'final');
@@ -656,10 +664,12 @@ export function createYearResolver(deck: readonly Card[], deps: ResolverDeps): Y
       // A NON-final verify: the server's "a provider failed transiently, so this is not the last
       // word" (plan.year-fetch-rework-server.md step 10). Its year, if it has one, is the best
       // answer so far and is shown provisionally; the card is then retried like any transient.
+      // Reported again when only the mark is new, so the card -- and the save -- carry it.
       if (outcome.result.year !== null) {
+        const isNewMark = !verifyAnswered.has(cardId);
         verifyAnswered.add(cardId);
-        if (provisionalYear.get(cardId) !== outcome.result.year) {
-          reportProvisional(cardId, outcome.result.year);
+        if (isNewMark || provisionalYear.get(cardId) !== outcome.result.year) {
+          reportProvisional(cardId, outcome.result.year, true);
         }
       }
     } else {
@@ -767,12 +777,18 @@ export function createYearResolver(deck: readonly Card[], deps: ResolverDeps): Y
     });
   }
 
-  function reportProvisional(cardId: string, year: number): void {
+  function reportProvisional(cardId: string, year: number, fromVerify = false): void {
     provisionalYear.set(cardId, year);
     // `low` LITERALLY, never the body's confidence: plan 2 never marks a provisional answer
     // `high`, and if it ever did, a provisional card must still not read as confirmed.
     report(() => {
-      deps.onResolved({ cardId, year, confidence: 'low', provisional: true });
+      deps.onResolved({
+        cardId,
+        year,
+        confidence: 'low',
+        provisional: true,
+        ...(fromVerify ? { verifyAnswered: true as const } : {}),
+      });
     });
   }
 
