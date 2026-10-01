@@ -457,6 +457,20 @@
    */
   --duration-card-exit: 250ms;
 
+  /*
+   * The notice banner's fade-out when it dismisses itself (2026-10-01: every
+   * banner goes 10 visible seconds after it appears, unless the player closed it
+   * first). Read by the banner's `transition-opacity`, and
+   * mirrored by `NOTICE_FADE_MS` in `src/hooks/useTimedDismiss.ts`, whose timer
+   * unmounts the banner when the fade is over. The two must change together.
+   *
+   * Deliberately NOT collapsed under `prefers-reduced-motion`: it is an
+   * opacity change with nothing moving, which is not the vestibular trigger
+   * that preference exists for, so the reduced-motion block below still covers
+   * exactly its three surfaces.
+   */
+  --duration-notice-fade: 500ms;
+
   /* --- Interaction minimums ---------------------------------------------- */
 
   /*

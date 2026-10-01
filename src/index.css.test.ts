@@ -51,6 +51,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { NOTICE_FADE_MS } from './hooks/useTimedDismiss';
 
 /*
   ===========================================================================
@@ -329,5 +330,11 @@ describe('src/index.css', () => {
     // has to hold rather than a proportion.
     expect(stylesheet).toMatch(/--size-control-icon:\s*calc\(\s*var\(--size-control-button\)/);
     expect(stylesheet).toMatch(/--size-control-spinner:\s*calc\(\s*var\(--size-control-button\)/);
+  });
+
+  it('should keep the notice fade token equal to the timer that unmounts the banner', () => {
+    // The banner's transition reads the token; `useTimedDismiss` unmounts it after the constant.
+    // Change one alone and the banner is cut mid-fade, or sits invisible but clickable.
+    expect(stylesheet).toMatch(new RegExp(`--duration-notice-fade:\\s*${NOTICE_FADE_MS}ms;`));
   });
 });

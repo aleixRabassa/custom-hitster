@@ -12,6 +12,7 @@
 
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ReactNode } from 'react';
 
 import { GameScreen } from './GameScreen';
 import { COPY } from '../game/copy';
@@ -64,6 +65,7 @@ function renderScreen(props: {
   pendingYearCount?: number;
   keepYearless?: boolean;
   isPlayable?: boolean;
+  notice?: ReactNode;
 }) {
   const element = (
     <GameScreen
@@ -90,6 +92,7 @@ function renderScreen(props: {
       isPlaylistSaved={false}
       pendingYearCount={props.pendingYearCount ?? 0}
       keepYearless={props.keepYearless ?? false}
+      notice={props.notice}
     />
   );
 
@@ -155,6 +158,28 @@ describe('GameScreen', () => {
     const footer = container.querySelector('footer');
     expect(footer).not.toBeNull();
     expect(footer?.className).toContain('absolute');
+  });
+
+  it('should float the notice above the HUD, out of the column flow', () => {
+    // 2026-10-01, the developer's request: the card keeps one fixed, centred position whether a
+    // notice is up, fading or gone. A banner that is a row of the `justify-center` column moves
+    // the HUD, the card and the controls when it comes and goes; one anchored ABSOLUTELY to the
+    // HUD's top edge does not. jsdom computes no layout, so the classes are what is observable.
+    render(renderScreen({ notice: <div data-testid="fake-notice" /> }));
+
+    const slot = screen.getByTestId('notice-slot');
+    expect(slot.contains(screen.getByTestId('fake-notice'))).toBe(true);
+    expect(slot.className).toContain('absolute');
+    expect(slot.className).toContain('bottom-full');
+    // Anchored to the HUD's own wrapper, which is what puts it "just above" the card's group.
+    const anchor = slot.parentElement;
+    expect(anchor?.className).toContain('relative');
+    expect(anchor?.contains(screen.getByTestId('hud'))).toBe(true);
+  });
+
+  it('should render no notice slot when there is no notice', () => {
+    render(renderScreen({}));
+    expect(screen.queryByTestId('notice-slot')).toBeNull();
   });
 
   it('should keep the footer ahead of the deck-actions dialog in the tab order', () => {

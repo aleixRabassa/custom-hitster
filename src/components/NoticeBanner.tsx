@@ -32,6 +32,14 @@
  * appear and vanish faster than a sentence can be read, which is not a notice. So the container
  * keeps it visible into `playing` until the player dismisses it, and dismissal is container state
  * so it cannot reappear on the next card (decision 9).
+ *
+ * ## And since 2026-10-01 it dismisses itself
+ *
+ * The developer's request: the banner fades out 10 s after it appears, whatever it says, unless the
+ * player has closed it first (the clock counts only visible time). The clock is the container's
+ * (`useTimedDismiss` in `App.tsx`), not this component's, because this component is remounted on
+ * the preparing-to-game hand-off and would restart it. This component only draws the fade, from
+ * `isFading`.
  */
 
 import { useCopy } from '../hooks/useLocale';
@@ -75,6 +83,11 @@ export interface NoticeBannerProps {
    * would be naming a card the player has not played.
    */
   startCardMissing?: boolean;
+  /**
+   * The container's self-dismiss has started: fade to transparent over `--duration-notice-fade`.
+   * The container unmounts the banner when the fade is over. Optional, false by default.
+   */
+  isFading?: boolean;
   onDismiss: () => void;
 }
 
@@ -86,6 +99,7 @@ export function NoticeBanner({
   loadedPlaylistCount = 0,
   yearLookupsUnavailable,
   startCardMissing = false,
+  isFading = false,
   onDismiss,
 }: NoticeBannerProps) {
   const copy = useCopy();
@@ -139,7 +153,13 @@ export function NoticeBanner({
         was `max-w-sm` (24rem) against a card of 18rem, so on a wide screen it overhung the deck
         on both sides. Sharing the card's own width token makes them agree at every viewport.
       */
-      className="flex w-full max-w-(--card-width) items-start gap-3 rounded-lg border border-warning-border/60 bg-warning-surface/40 px-3 py-2 text-xs text-warning-text"
+      /*
+        `transition-opacity` is always on, so a fade has a "from" state; only `opacity-0` toggles.
+        The duration is a token (`--duration-notice-fade`), mirrored by the container's timer.
+      */
+      className={`flex w-full max-w-(--card-width) items-start gap-3 rounded-lg border border-warning-border/60 bg-warning-surface/40 px-3 py-2 text-xs text-warning-text transition-opacity duration-(--duration-notice-fade) ${
+        isFading ? 'opacity-0' : 'opacity-100'
+      }`}
     >
       <ul className="flex flex-1 flex-col gap-1">
         {notices.map((notice) => (

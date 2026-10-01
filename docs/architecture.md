@@ -480,7 +480,11 @@ src/components/
                         through the container's flag; a <button>, not an anchor
   PreparingScreen.tsx   The card-1 gate. COUNT-ONLY
   Hud.tsx               Cards remaining + playlist name. Counts only, no Exit
-  NoticeBanner.tsx      truncated / skippedCount / yearLookupsUnavailable
+  NoticeBanner.tsx      truncated / skippedCount / yearLookupsUnavailable. Fades out 10
+                        visible seconds after the deal (2026-10-01); the clock is App's
+                        (useTimedDismiss), since the banner is remounted on the
+                        preparing-to-game hand-off. On the game screen it floats above
+                        the HUD, out of flow, so the card never moves
   EndScreen.tsx         Cards played, Play again, Home — plus <DeckActions>
   DeckActions.tsx       The three things a deck can become: a link, a saved playlist,
                         a PDF. SHARED — the game screen mounts it too. Counts only

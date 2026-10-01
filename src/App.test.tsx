@@ -41,6 +41,7 @@ import { COPY } from './game/copy';
 import { PLAYLIST_ERROR_MESSAGES } from './game/messages';
 import { clearQrCache } from './game/qr-cache';
 import { resetBackNavigationTraversals } from './hooks/useBackNavigation';
+import { AUTO_DISMISS_AFTER_MS, NOTICE_FADE_MS } from './hooks/useTimedDismiss';
 import { SESSION_STORAGE_KEY, SESSION_VERSION } from './game/persistence';
 import { LIBRARY_STORAGE_KEY, LIBRARY_VERSION } from './game/playlist-library';
 import { PREFS_STORAGE_KEY } from './game/prefs';
@@ -1778,6 +1779,57 @@ describe('App', () => {
     // Advance a card. It must stay gone.
     fireEvent.keyDown(window, { key: 'ArrowRight' });
     expect(screen.queryByTestId('notice-banner')).toBeNull();
+  });
+
+  it('should fade the truncation notice out on its own after 10 s, across the screen hand-off', async () => {
+    // 2026-10-01, the developer's request. The clock is the CONTAINER's: the banner is remounted
+    // when `preparing` hands over to `playing`, so a timer it owned would restart there.
+    // `shouldAdvanceTime` keeps `waitFor` working while the 10 s are jumped over.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      stubYearApi();
+      renderApp(playlistFetch(200, playlistResult({ truncated: true })));
+
+      startPlaylist();
+      await waitFor(() => {
+        expect(screen.queryByTestId('hud')).not.toBeNull();
+      });
+      expect(screen.queryByTestId('notice-banner')).not.toBeNull();
+
+      act(() => {
+        vi.advanceTimersByTime(AUTO_DISMISS_AFTER_MS);
+      });
+      expect(screen.getByTestId('notice-banner').className).toContain('opacity-0');
+
+      act(() => {
+        vi.advanceTimersByTime(NOTICE_FADE_MS);
+      });
+      expect(screen.queryByTestId('notice-banner')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('should fade any notice out on its own, not only the truncation line', async () => {
+    // 2026-10-01: the developer widened the timed dismiss from the "more than 100 songs" line to
+    // every banner.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      stubYearApi();
+      renderApp(playlistFetch(200, playlistResult({ skippedCount: 2 })));
+
+      startPlaylist();
+      await waitFor(() => {
+        expect(screen.queryByTestId('notice-banner')).not.toBeNull();
+      });
+
+      act(() => {
+        vi.advanceTimersByTime(AUTO_DISMISS_AFTER_MS + NOTICE_FADE_MS);
+      });
+      expect(screen.queryByTestId('notice-banner')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('should not render a notice when nothing applies', async () => {

@@ -28,6 +28,7 @@ function renderBanner(props: Partial<Parameters<typeof NoticeBanner>[0]> = {}) {
       loadedPlaylistCount={props.loadedPlaylistCount ?? 0}
       yearLookupsUnavailable={props.yearLookupsUnavailable ?? false}
       startCardMissing={props.startCardMissing ?? false}
+      isFading={props.isFading ?? false}
       onDismiss={onDismiss}
     />,
   );
@@ -256,6 +257,33 @@ describe('NoticeBanner', () => {
     const banner = screen.getByTestId('notice-banner');
     expect(banner.className).toContain('max-w-(--card-width)');
     expect(banner.className).not.toContain('max-w-sm');
+  });
+
+  it('should fade to transparent through the notice-fade token when fading', () => {
+    // The container's self-dismiss (2026-10-01). The transition is on at rest so the fade has a
+    // "from" state, and its duration is the token, not a literal: an unknown utility would be a
+    // silent no-op, so the class names are what is checkable here.
+    const { rerender, onDismiss } = renderBanner({ truncated: true });
+
+    const banner = screen.getByTestId('notice-banner');
+    expect(banner.className).toContain('transition-opacity');
+    expect(banner.className).toContain('duration-(--duration-notice-fade)');
+    expect(banner.className).toContain('opacity-100');
+    expect(banner.className).not.toContain('opacity-0');
+
+    rerender(
+      <NoticeBanner
+        truncated
+        skippedCount={0}
+        yearLookupsUnavailable={false}
+        isFading
+        onDismiss={onDismiss}
+      />,
+    );
+    expect(screen.getByTestId('notice-banner').className).toContain('opacity-0');
+    // Still closable by hand while it fades.
+    fireEvent.click(screen.getByRole('button', { name: COPY.notice.dismiss }));
+    expect(onDismiss).toHaveBeenCalledOnce();
   });
 
   it('should never gate anything: it renders no confirm or blocking control', () => {

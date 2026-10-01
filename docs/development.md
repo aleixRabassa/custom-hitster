@@ -867,6 +867,14 @@ address bar, a real reload, two real devices, and the TWA sharing Chrome's `loca
 | 3   | **The dialog's three buttons fit a 320px phone** in the column layout, in all three languages.                                                                                                                                                                                                               | Pending |
 | 4   | **The icon-only Back arrow** reads as a back control at `text-xl`, still clears the logo at 320px, and a screen reader announces it by its label rather than as "leftwards arrow".                                                                                                                           | Pending |
 
+### The notice banner fades out by itself and floats above the HUD — built 2026-10-01, all of it Pending
+
+| #   | Check                                                                                                                                                                                                                                                                                                                                  | Status  |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| 1   | **Deal any deck with a notice** (a 100+ track playlist, a combined deck): the banner shows on the loading screen and on the game screen, and **fades out about 10 s after the deal**, whatever it says, not 10 s after the game screen appears (the clock is the container's, so a slow card-1 gate eats into it). The fade is ~0.5 s. | Pending |
+| 2   | **The card does not move** when the banner appears, fades or is closed: on the game screen it is out of flow, anchored above the HUD. **On a short phone** (the column already fills the screen), check the banner is not pushed past the top of the screen; if it is, that is the accepted cost to weigh.                             | Pending |
+| 3   | **Lock the phone, or switch apps, within 10 s of the deal**: on return the banner is still there, and fades only after the rest of its 10 visible seconds. **Closed by hand** it goes at once and does not come back.                                                                                                                  | Pending |
+
 ### The suggestion multi-select — built 2026-08-12, and the gesture itself is the part nothing local runs
 
 Holding a suggested playlist (or Ctrl/Cmd/Shift-activating it) puts it in the form instead of dealing

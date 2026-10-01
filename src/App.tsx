@@ -47,6 +47,7 @@ import { loadPrefs, savePrefs } from './game/prefs';
 import { useGameSession } from './game/use-game-session';
 import { useCopy } from './hooks/useLocale';
 import { usePlaylist } from './hooks/usePlaylist';
+import { useTimedDismiss } from './hooks/useTimedDismiss';
 import { spotifyPlaylistUrl } from '../shared/spotify-url';
 import type { DeckLink } from './game/deck-link';
 import type { MergedDeck } from './game/deck-merge';
@@ -432,6 +433,23 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
     loadedPlaylistCount: number;
     startCardMissing: boolean;
   } | null>(null);
+
+  /**
+   * The notice banner dismisses ITSELF: it fades out 10 s after the deal, whatever it says, unless
+   * the player closed it first (2026-10-01, the developer's request -- first for the "more than 100
+   * songs" line, then for every banner). The clock counts only the time the page is visible, so a
+   * locked phone does not use it up. Here and not in
+   * `NoticeBanner` because the banner is remounted when `preparing` hands over to `playing`,
+   * which would restart a timer it owned.
+   *
+   * The dismiss clears only the notice it was started for: by the time the fade ends, a new deal
+   * may have replaced it, and that one gets its own clock. Stable (`useCallback`), as the hook
+   * requires, because every resolved year re-renders this container.
+   */
+  const dismissNoticeOnTimer = useCallback((expired: NonNullable<typeof notice>) => {
+    setNotice((current) => (current === expired ? null : current));
+  }, []);
+  const { isFading: isNoticeFading } = useTimedDismiss(notice, dismissNoticeOnTimer);
 
   /**
    * The merged deck already dealt, by identity.
@@ -822,6 +840,9 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
         // The one notice that comes from game state rather than from the fetch: no
         // `MUSICBRAINZ_USER_AGENT` on the server means no card will ever get a year.
         yearLookupsUnavailable={state.yearLookupsUnavailable}
+        // Not while the years-unavailable line is up: that line is game state, so the banner
+        // survives the timed dismiss with it, and a fade would snap back to opaque on unmount.
+        isFading={isNoticeFading && !state.yearLookupsUnavailable}
         onDismiss={() => {
           setNotice(null);
         }}
