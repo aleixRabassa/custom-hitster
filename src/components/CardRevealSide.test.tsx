@@ -210,7 +210,7 @@ describe('CardRevealSide', () => {
     });
 
     it('should show COPY.card.yearUnverified, not yearUnconfirmed, for an unchecked year', () => {
-      // 2026-10-01: verify could not be asked (an outage, or no connection), so the reveal says
+      // 2026-10-01: verify could not be asked (no verify call came back with a year), so the reveal says
       // the year could not be checked -- unchecked, not doubtful. Still the warning amber.
       const unchecked: Card = { ...lowConfidenceCard, yearUnverified: true };
       expect(yearStateOf(unchecked)).toBe('final');

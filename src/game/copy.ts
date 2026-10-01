@@ -253,10 +253,10 @@ export const COPY = {
     yearUnknownDetail: 'Check this one yourself',
     yearUnconfirmed: 'Unconfirmed year',
     /**
-     * A final year that could NOT be checked (2026-10-01): verify ran out of retries -- a provider
-     * outage, or no connection -- so this is the first provider's year with no second opinion.
-     * Distinct from `yearUnconfirmed`, where a second provider answered and did not agree. A
-     * warning like it, in the same amber.
+     * A final year that could NOT be checked (2026-10-01): verify ran out of retries and not one
+     * call came back with a year -- typically no connection -- so this is the resolve stage's year
+     * with no verdict. Distinct from `yearUnconfirmed`, where some verify answered and nothing
+     * confirmed it (an iTunes outage included). A warning like it, in the same amber.
      */
     yearUnverified: 'Year could not be checked',
     /**

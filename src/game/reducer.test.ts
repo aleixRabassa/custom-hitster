@@ -2135,8 +2135,9 @@ describe('gameReducer with skipUnconfirmed', () => {
   });
 
   // =========================================================================
-  //  An UNVERIFIED year (2026-10-01): verify ran out of retries -- an outage,
-  //  or no connection -- so the year was never put to a second provider. It is
+  //  An UNVERIFIED year (2026-10-01): verify ran out of retries and none came
+  //  back with a year -- typically no connection -- so it was never put to a
+  //  second provider. It is
   //  unchecked, not unconfirmed, and skipping unconfirmed years must not drop it.
   // =========================================================================
 

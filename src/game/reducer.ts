@@ -47,7 +47,8 @@ interface DropRules {
  * - A final `null` is dropped unless the session keeps yearless cards (reversal 2026-08-05).
  * - A final year at `low` -- one no second provider confirmed -- is dropped when the session skips
  *   unconfirmed years (2026-10-01). NOT one marked `yearUnverified`: that year was never put to a
- *   second provider (verify ran out of retries -- an outage, or no connection), so it is unchecked
+ *   second provider (verify ran out of retries and none came back with a year -- typically no
+ *   connection), so it is unchecked
  *   rather than unconfirmed, and dropping it would delete cards for a network blip, permanently
  *   (the deck, the save and Restart all lose it).
  *
@@ -249,9 +250,11 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       //     `not-configured` dispatches `YEAR_LOOKUPS_UNAVAILABLE` instead of a
       //     hundred nulls, so a deployment with no `MUSICBRAINZ_USER_AGENT`
       //     yields a yearless deck rather than an empty one. A YEAR settled the
-      //     same way is different since 2026-10-01: it arrives `unverified`, and
-      //     `isDroppedAnswer` keeps it even when the session skips unconfirmed
-      //     years -- there is a year to play, it just could not be checked.
+      //     same way is different since 2026-10-01: when no verify call ever came
+      //     back with a year it arrives `unverified`, and `isDroppedAnswer` keeps
+      //     it even when the session skips unconfirmed years -- there is a year to
+      //     play, it just could not be checked. When some verify DID answer, it is
+      //     an ordinary unconfirmed year (the resolver's `verifyAnswered`).
       // =======================================================================
       // Honoured only beside a numeric `low` year -- the one shape `Card.yearUnverified` may take,
       // and the one `validateCard` accepts back from a save.

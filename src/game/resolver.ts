@@ -282,6 +282,13 @@ export function createYearResolver(deck: readonly Card[], deps: ResolverDeps): Y
   const verifyQueue: string[] = [];
   /** Completed verify passes per card: reaching `PASSES_PER_STAGE` settles it final. */
   const verifyPasses = new Map<string, number>();
+  /**
+   * Cards for which some `verify` came back with a year, even a non-final one: the server took the
+   * vote (over live or cached answers) without a confirmation. In memory only, so a resumed card
+   * starts without it. What decides, on exhaustion, between
+   * an UNCONFIRMED year and an UNVERIFIED one -- see `settleExhausted`.
+   */
+  const verifyAnswered = new Set<string>();
 
   const requestedStart = deps.startIndex ?? 0;
   const startIndex =
@@ -640,6 +647,7 @@ export function createYearResolver(deck: readonly Card[], deps: ResolverDeps): Y
 
     if (outcome.ok && outcome.result.final) {
       verifyAttempts.delete(cardId);
+      verifyAnswered.delete(cardId);
       settleFinal(cardId, outcome.result.year, outcome.result.confidence);
       return;
     }
@@ -648,8 +656,11 @@ export function createYearResolver(deck: readonly Card[], deps: ResolverDeps): Y
       // A NON-final verify: the server's "a provider failed transiently, so this is not the last
       // word" (plan.year-fetch-rework-server.md step 10). Its year, if it has one, is the best
       // answer so far and is shown provisionally; the card is then retried like any transient.
-      if (outcome.result.year !== null && provisionalYear.get(cardId) !== outcome.result.year) {
-        reportProvisional(cardId, outcome.result.year);
+      if (outcome.result.year !== null) {
+        verifyAnswered.add(cardId);
+        if (provisionalYear.get(cardId) !== outcome.result.year) {
+          reportProvisional(cardId, outcome.result.year);
+        }
       }
     } else {
       switch (outcome.code) {
@@ -702,16 +713,28 @@ export function createYearResolver(deck: readonly Card[], deps: ResolverDeps): Y
    * provisional year at `low`, or a final null if resolve found nothing either (or never answered
    * at all -- an exhausted resolve hands its card here with no provisional year).
    *
-   * The year is reported `unverified` (2026-10-01, the developer's ruling): nobody said this year
-   * was wrong, we could not ask -- typically a provider outage or a device that lost its
-   * connection, which exhausts every card in flight within seconds. Without the mark the reducer
-   * reads it as an ordinary unconfirmed year and, in a session that skips those, drops it for
-   * good. The null keeps its old meaning, and its old accepted cost (`reducer.ts`'s gate notes).
+   * Which of the two a year is depends on whether verify was ever ANSWERED (2026-10-01, the
+   * developer's two rulings):
+   *
+   * - **Some verify came back with a year** (a non-final 200): the server took the vote -- possibly
+   *   over `resolve`'s cached answers alone, with every live provider failing -- and nothing
+   *   confirmed it: iTunes failed, or it answered and nobody agreed. The
+   *   year is the vote's best unconfirmed answer (the next provider in `UNCONFIRMED_TRUST`), and it
+   *   settles as an ordinary UNCONFIRMED year, which a session that skips those drops.
+   * - **No verify ever came back with a year** (every call failed, 502'd or was refused as a bad
+   *   request): we could not ask -- typically a device that lost its connection, which exhausts
+   *   every card in flight within seconds. The year is reported `unverified`, so a session that
+   *   skips unconfirmed years does not drop it for good over a network blip.
+   *
+   * The client cannot see which provider failed, and does not need to: the server already folded
+   * that into the year it sent. The null keeps its old meaning, and its old accepted cost
+   * (`reducer.ts`'s gate notes).
    */
   function settleExhausted(cardId: string): void {
     const year = provisionalYear.get(cardId);
     if (year === undefined) settleFinal(cardId, null, 'none');
-    else settleFinal(cardId, year, 'low', true);
+    else settleFinal(cardId, year, 'low', !verifyAnswered.has(cardId));
+    verifyAnswered.delete(cardId);
   }
 
   // ---- Shared -----------------------------------------------------------------

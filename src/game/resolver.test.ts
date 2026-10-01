@@ -491,6 +491,43 @@ describe('createYearResolver stages', () => {
     });
   });
 
+  it('should settle an exhausted card UNCONFIRMED when some verify came back with a year', async () => {
+    // The developer's second ruling (2026-10-01): providers were reached and nothing confirmed the
+    // year -- e.g. iTunes failing on every try while MusicBrainz and Deezer disagree. That is an
+    // ordinary unconfirmed year, at the vote's best unconfirmed answer, not an unchecked one.
+    const harness = createHarness([card('a')], (_cardId, attempt, stage) => {
+      if (stage === 'resolve') return PROVISIONAL;
+      return attempt === 1 ? answer(1990, false, 'low') : fail('upstream-unavailable');
+    });
+    harness.resolver.start();
+    await harness.flush();
+
+    expect(harness.callsIn('verify')).toHaveLength(3 + 3);
+    expect(harness.resolved).toEqual([
+      { cardId: 'a', year: 1980, confidence: 'low', provisional: true },
+      { cardId: 'a', year: 1990, confidence: 'low', provisional: true },
+      { cardId: 'a', year: 1990, confidence: 'low' },
+    ]);
+  });
+
+  it('should still mark an exhausted card unverified when no verify carried a year', async () => {
+    // A non-final verify with NO year answered nothing about this card's year, so it does not
+    // count: the provisional year from resolve was never put to a second provider.
+    const harness = createHarness([card('a')], (_cardId, attempt, stage) => {
+      if (stage === 'resolve') return PROVISIONAL;
+      return attempt === 1 ? answer(null, false) : fail('network');
+    });
+    harness.resolver.start();
+    await harness.flush();
+
+    expect(harness.resolved.at(-1)).toEqual({
+      cardId: 'a',
+      year: 1980,
+      confidence: 'low',
+      unverified: true,
+    });
+  });
+
   it('should defer an exhausted verify card behind the rest of the queue', async () => {
     // The verify lane's deferred pass: a blip on one card must not hold up the others.
     // `a` is the start card, so `b` and `c` are both inside its look-ahead window. Once `b` has

@@ -23,7 +23,7 @@
  *                    Showing a possibly-wrong year beats showing none, PROVIDED it
  *                    is always marked (plan.md §5, decided 2026-08-04). A `low`
  *                    year marked `yearUnverified` (verify could not be asked --
- *                    an outage or no connection, 2026-10-01) says "Year could not
+ *                    no verify call ever answered, 2026-10-01) says "Year could not
  *                    be checked" instead, in the same amber: unchecked, not
  *                    doubtful.
  *    none         -> final, `year: null`. Every provider was asked. Reaches a live

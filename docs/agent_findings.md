@@ -5796,3 +5796,18 @@ resolver now reports `unverified: true`, the reducer stores `Card.yearUnverified
 exempts it, and the reveal says "Year could not be checked". The PDF never waited on it either way:
 exhaustion is what makes a card final. A null settled the same way is unchanged and still drops
 while yearless cards are dropped — the remaining offline loss, left to the developer.
+
+## 2026-10-01 — "Unchecked" means no verify ever answered, and the client can tell without the server's help
+
+The first version of `yearUnverified` marked EVERY exhausted verify, so a card whose providers were
+reached and disagreed while a third kept failing (MusicBrainz 1990, iTunes 1991, Deezer 5xx every
+time) read "Year could not be checked" and survived "skip unconfirmed". The review assumed the fix
+needed the server to list which providers answered. It does not, once the developer ruled that an
+iTunes failure means "unconfirmed": a NON-FINAL 200 carrying a year already says "a provider was
+reached and nothing confirmed it", and its year is the vote's best unconfirmed answer by
+`UNCONFIRMED_TRUST`. So `resolver.ts` records `verifyAnswered` on any such 200, and an exhausted card
+is `unverified` only when none arrived — every call failed (typically the device offline). A
+non-final 200 with a NULL year does not count: it said nothing about the card's year. The cost is
+that a pure iTunes outage now yields unconfirmed years, which a session skipping those drops — the
+developer's call. iTunes winning over MusicBrainz `high` was proposed in the same conversation and
+NOT built: it is the edit `UNCONFIRMED_TRUST` was measured against (6 known years worse, 2–3 better).
