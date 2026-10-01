@@ -47,7 +47,7 @@ export const COPY_CA = {
   landing: {
     logoAlt: COPY.landing.logoAlt,
     intro: (maxPlaylists: number) =>
-      `Enganxa o tria fins a ${maxPlaylists} playlists de Spotify per repartir una baralla i començar a jugar.`,
+      `Tria fins a ${maxPlaylists} playlists de Spotify i començar a jugar.`,
     playlistLinkLabel: (index: number) =>
       index === 0 ? 'Enllaç de la playlist' : `Enllaç de la playlist ${index + 1}`,
     playlistLinkPlaceholder: COPY.landing.playlistLinkPlaceholder,

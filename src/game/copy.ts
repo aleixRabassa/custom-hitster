@@ -160,7 +160,7 @@ export const COPY = {
     /** The `alt` of the logo, which is the `<h1>`'s accessible name -- never empty. */
     logoAlt: APP_NAME,
     intro: (maxPlaylists: number) =>
-      `Paste or select up to ${maxPlaylists} Spotify playlists to deal a deck and start playing.`,
+      `Pick up to ${maxPlaylists} Spotify playlists and start playing.`,
     /**
      * The visible label of row `index` (0-based).
      *

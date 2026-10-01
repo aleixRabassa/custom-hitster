@@ -40,7 +40,7 @@ export const COPY_ES = {
   landing: {
     logoAlt: COPY.landing.logoAlt,
     intro: (maxPlaylists: number) =>
-      `Pega o elige hasta ${maxPlaylists} playlists de Spotify para repartir un mazo y empezar a jugar.`,
+      `Elige hasta ${maxPlaylists} playlists de Spotify y empieza a jugar.`,
     playlistLinkLabel: (index: number) =>
       index === 0 ? 'Enlace de playlist' : `Enlace de playlist ${index + 1}`,
     playlistLinkPlaceholder: COPY.landing.playlistLinkPlaceholder,
