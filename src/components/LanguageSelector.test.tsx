@@ -80,4 +80,20 @@ describe('LanguageSelector', () => {
       expect(button.className).toContain('touch-target');
     }
   });
+
+  it('should disable every option when asked, and enable them by default', () => {
+    // The picker passes `disabled` while a request is loading; the welcome screen never does.
+    const onChange = vi.fn();
+    const { rerender } = render(<LanguageSelector locale="en" onChange={onChange} disabled />);
+
+    for (const button of screen.getAllByRole('button')) {
+      expect((button as HTMLButtonElement).disabled).toBe(true);
+    }
+
+    rerender(<LanguageSelector locale="en" onChange={onChange} />);
+
+    for (const button of screen.getAllByRole('button')) {
+      expect((button as HTMLButtonElement).disabled).toBe(false);
+    }
+  });
 });

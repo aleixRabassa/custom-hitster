@@ -70,6 +70,7 @@
 import { useRef, useState } from 'react';
 
 import { Footer } from './Footer';
+import { LanguageSelector } from './LanguageSelector';
 import { OPTION_GROUP_CLASS_NAME, OptionCheckbox } from './OptionCheckbox';
 import { SuggestionButton } from './SuggestionButton';
 import { MAX_DECK_PLAYLISTS } from '../game/deck-merge';
@@ -271,7 +272,7 @@ export function LandingScreen({
   dealUnconfirmed,
   onDealUnconfirmedChange,
 }: LandingScreenProps) {
-  const { copy, errorMessages } = useLocale();
+  const { copy, errorMessages, locale, setLocale } = useLocale();
   const [rows, setRows] = useState<PlaylistRow[]>(() => [{ id: 'row-1', value: '' }]);
 
   /**
@@ -1063,6 +1064,17 @@ export function LandingScreen({
             </li>
           ))}
         </ul>
+      </section>
+
+      {/*
+        THE LANGUAGE SWITCH, IN THE SAME PLACE AS ON THE WELCOME SCREEN (2026-10-01): in flow, last,
+        centred, under the same visible heading. Not the top corner either, which here already holds
+        Back -- and the `pt-8` logo contract rules it out for the same 320px reason `WelcomeScreen`
+        records. Disabled while loading, like every other control on this screen.
+      */}
+      <section className="flex w-full max-w-content flex-col items-center gap-3">
+        <h2 className="text-sm text-fg-secondary">{copy.language.label}</h2>
+        <LanguageSelector locale={locale} onChange={setLocale} disabled={isLoading} />
       </section>
 
       {/* The app's front door, so the one screen where a copyright line is expected. */}

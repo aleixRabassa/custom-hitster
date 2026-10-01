@@ -216,7 +216,7 @@ export const COPY = {
   },
 
   /**
-   * The language selector on the welcome screen (2026-09-28). Only the GROUP's accessible name is
+   * The language selector on the welcome screen (2026-09-28) and the picker (2026-10-01). Only the GROUP's accessible name is
    * copy: each option is the language's own name in that language (`LANGUAGE_NAMES` in
    * `locale.ts`), which is never translated -- a player stuck in the wrong language must still
    * recognise their own.

@@ -65,10 +65,13 @@ BASE name** (the first playlist's truncated name, no "+N more"), because the cou
 label would keep the language it was saved in forever; `LandingScreen` composes the label at render,
 and a legacy entry ending in exactly ` +${n-1} more` is stripped on read against a FROZEN literal, not
 against `COPY.deck.label`, since it describes bytes already in storage. **The selector is on the
-welcome screen only, IN FLOW as its last section** (`LanguageSelector.tsx`, three `aria-pressed`
+welcome screen AND, since 2026-10-01 (the developer's request), on the picker, IN FLOW as the last
+section of each, under the same visible heading** (`LanguageSelector.tsx`, three `aria-pressed`
 buttons, each language named in itself with a matching `lang`), never in a top corner: at 320px the
-192px logo leaves ~40px beside it, and moving the logo breaks the `pt-8` equal-height contract with the
-picker. Share links and resumed sessions skip the welcome screen and rely on detection. **Nothing about
+192px logo leaves ~40px beside it, moving the logo breaks the `pt-8` equal-height contract between the
+two screens, and the picker's corner already holds Back. On the picker it takes `disabled` while a
+request is loading, like every other control there. The game screen still has none (a height budget).
+Share links and resumed sessions skip both screens and rely on detection. **Nothing about
 the translations has been read by a native speaker**, and the screen-reader pronunciation is unverified:
 rows in [`docs/development.md`](./development.md) §5. That includes the three keys the year-fetch
 rework added on 2026-09-30 — `COPY.card.yearProvisional` ("Confirming year") — and the three option

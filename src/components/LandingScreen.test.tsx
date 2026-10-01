@@ -19,8 +19,9 @@ import { fixtureDeck } from './__fixtures__/cards';
 import { LONG_PRESS_DURATION_MS } from '../game/gestures';
 import { MAX_DECK_PLAYLISTS } from '../game/deck-merge';
 import { CATALOGUES } from '../game/i18n';
+import { LANGUAGE_NAMES, LOCALES } from '../game/locale';
 import { PLAYLIST_ERROR_MESSAGES } from '../game/messages';
-import { LocaleContext } from '../hooks/useLocale';
+import { DEFAULT_LOCALE_CONTEXT, LocaleContext } from '../hooks/useLocale';
 import { parsePlaylistUrl, spotifyPlaylistUrl } from '../../shared/spotify-url';
 
 const PLAYLIST_URL = 'https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M';
@@ -886,8 +887,10 @@ describe('LandingScreen', () => {
 
     const interactive = [...container.querySelectorAll('button, input')];
     // Back (2026-09-18), two inputs, two removes, the "+", the two deal options (2026-10-01),
-    // Start, and one button per suggestion.
-    expect(interactive).toHaveLength(1 + 2 + 2 + 1 + 2 + 1 + SUGGESTED_PLAYLISTS.length);
+    // Start, one button per suggestion, and one language button per locale (2026-10-01).
+    expect(interactive).toHaveLength(
+      1 + 2 + 2 + 1 + 2 + 1 + SUGGESTED_PLAYLISTS.length + LOCALES.length,
+    );
 
     for (const element of interactive) {
       expect(element.className).toContain('focus-visible:focus-ring');
@@ -1154,8 +1157,11 @@ describe('LandingScreen', () => {
       renderLanding({ savedPlaylists: [] });
 
       expect(screen.queryByText(COPY.landing.savedHeading)).toBeNull();
-      // Back, the "+", Start, and the suggestions. No remove button: there is one row.
-      expect(screen.getAllByRole('button')).toHaveLength(1 + 2 + SUGGESTED_PLAYLISTS.length);
+      // Back, the "+", Start, the suggestions and the language buttons. No remove button: there is
+      // one row.
+      expect(screen.getAllByRole('button')).toHaveLength(
+        1 + 2 + SUGGESTED_PLAYLISTS.length + LOCALES.length,
+      );
     });
 
     it('should remove a saved deck by its deck key', () => {
@@ -1198,9 +1204,9 @@ describe('LandingScreen', () => {
 
       const interactive = [...container.querySelectorAll('button, input')];
       // Back (2026-09-18), one row's input, the "+", the two deal options (2026-10-01), Start,
-      // two buttons per saved row, and one per suggestion.
+      // two buttons per saved row, one per suggestion, and one per locale (2026-10-01).
       expect(interactive).toHaveLength(
-        1 + 1 + 1 + 2 + 1 + SAVED.length * 2 + SUGGESTED_PLAYLISTS.length,
+        1 + 1 + 1 + 2 + 1 + SAVED.length * 2 + SUGGESTED_PLAYLISTS.length + LOCALES.length,
       );
 
       for (const element of interactive) {
@@ -1475,6 +1481,54 @@ describe('LandingScreen', () => {
 //  the translation says. The saved row is the case that matters: its count is
 //  composed at render time, so a deck saved in English reads in Spanish here.
 // ===========================================================================
+
+describe('LandingScreen language switch', () => {
+  afterEach(cleanup);
+
+  it('should end the column with the language flags under a visible heading, as the welcome screen does', () => {
+    // SAME POSITION as `WelcomeScreen` (2026-10-01): in flow, the last section before the footer --
+    // never the top corner, which holds Back and would break the `pt-8` logo contract at 320px.
+    const { container } = renderLanding();
+
+    const sections = container.querySelectorAll('main > section');
+    const last = sections[sections.length - 1];
+    const group = screen.getByRole('group', { name: COPY.language.label });
+
+    expect(last?.contains(group)).toBe(true);
+    expect(screen.getByRole('heading', { level: 2, name: COPY.language.label })).not.toBeNull();
+    expect(last?.querySelector('h2')?.textContent).toBe(COPY.language.label);
+  });
+
+  it('should hand a pressed flag to the locale context', () => {
+    const setLocale = vi.fn();
+    render(
+      <LocaleContext.Provider value={{ ...DEFAULT_LOCALE_CONTEXT, setLocale }}>
+        <LandingScreen
+          onSubmit={vi.fn()}
+          onBack={vi.fn()}
+          isLoading={false}
+          dealYearless={false}
+          onDealYearlessChange={vi.fn()}
+          dealUnconfirmed
+          onDealUnconfirmedChange={vi.fn()}
+        />
+      </LocaleContext.Provider>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: LANGUAGE_NAMES.ca }));
+
+    expect(setLocale).toHaveBeenCalledExactlyOnceWith('ca');
+  });
+
+  it('should disable the flags while a request is in flight, like every other control here', () => {
+    renderLanding({ isLoading: true });
+
+    for (const locale of LOCALES) {
+      const button = screen.getByRole('button', { name: LANGUAGE_NAMES[locale] });
+      expect((button as HTMLButtonElement).disabled).toBe(true);
+    }
+  });
+});
 
 describe('LandingScreen in another language', () => {
   afterEach(cleanup);

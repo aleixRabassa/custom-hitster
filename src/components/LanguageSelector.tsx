@@ -16,8 +16,11 @@
  *   theirs. Its `lang` attribute is what makes a screen reader pronounce "Español" as Spanish
  *   under an English page. English is the Union flag, since the copy is British English.
  * - **The group's name is copy** (`copy.language.label`), and since the buttons stopped carrying
- *   words it is a VISIBLE heading too -- rendered by `WelcomeScreen` in the same shape as its other
- *   section headings -- as well as the `role="group"`'s `aria-label`.
+ *   words it is a VISIBLE heading too -- rendered by each host (`WelcomeScreen` and, since
+ *   2026-10-01, `LandingScreen`) in the same shape as its other section headings -- as well as the
+ *   `role="group"`'s `aria-label`.
+ * - **`disabled` is the picker's**: every control there is disabled while a request is loading, and
+ *   this joins them. The welcome screen has no loading state and never passes it.
  * - **`aria-pressed`, not `disabled`, marks the active one**, so it stays in the tab order and
  *   announces as "pressed". Pressing it again is a no-op rather than a redundant write.
  */
@@ -30,10 +33,11 @@ import { useCopy } from '../hooks/useLocale';
 export interface LanguageSelectorProps {
   locale: Locale;
   onChange: (locale: Locale) => void;
+  disabled?: boolean;
 }
 
 const BUTTON_BASE =
-  'touch-target flex items-center justify-center rounded-lg border-2 px-3 py-2 focus-visible:focus-ring';
+  'touch-target flex items-center justify-center rounded-lg border-2 px-3 py-2 focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)';
 const BUTTON_PRESSED = 'border-accent bg-surface-raised';
 const BUTTON_UNPRESSED =
   'border-border-strong opacity-60 hover:border-border-hover hover:opacity-100';
@@ -102,7 +106,7 @@ const FLAGS: Record<Locale, () => ReactNode> = {
   ca: CataloniaFlag,
 };
 
-export function LanguageSelector({ locale, onChange }: LanguageSelectorProps) {
+export function LanguageSelector({ locale, onChange, disabled = false }: LanguageSelectorProps) {
   const copy = useCopy();
 
   return (
@@ -123,6 +127,7 @@ export function LanguageSelector({ locale, onChange }: LanguageSelectorProps) {
             aria-label={LANGUAGE_NAMES[option]}
             title={LANGUAGE_NAMES[option]}
             aria-pressed={isActive}
+            disabled={disabled}
             onClick={() => {
               if (!isActive) onChange(option);
             }}

@@ -327,9 +327,10 @@ export function WelcomeScreen({ onStart }: WelcomeScreenProps) {
         THE LANGUAGE SWITCH (2026-09-28): in flow, last, centred -- NOT an absolute top corner. At
         320px the 192px logo leaves ~40px beside it, so three touch targets up there would overlap
         it, and moving the logo down instead breaks the `pt-8` equal-height contract with
-        `LandingScreen` above. On THIS screen only: the picker's corner already holds Back, and the
-        game screen is a height budget. A share link or a resumed session skips this screen and
-        relies on `LocaleProvider`'s auto-detection, which is the right default for both.
+        `LandingScreen` above. The picker carries the same section in the same place since
+        2026-10-01; the game screen does not, because it is a height budget. A share link or a
+        resumed session skips both and relies on `LocaleProvider`'s auto-detection, which is the
+        right default for both.
 
         The buttons are flags with no visible words (2026-09-29), so the section got a visible
         heading in the same shape as the two above it.
