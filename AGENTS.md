@@ -646,10 +646,13 @@ GET, and every failure mapped to an outcome arm (a refused gate PERMIT → `busy
 refusal → a `refused` skip, network error or 5xx → transient
 `failed`, any other non-2xx or a non-JSON body → `unexpected-payload`) — so Deezer and iTunes cannot
 drift on the promise that an adapter never throws. Deezer's quota error is `{"error":{"code":4}}` with
-**HTTP 200**, so it is read from the body; it, a Deezer 429 and iTunes' 403 and 429 are a **`refused`
-skip, not `busy`** (2026-10-01, the developer's ruling: "no cap while busy; if the IP is refused,
-stop"). Only our OWN gate being full is busy, and that is retried with no cap. A provider shutting us
-out is left out of the call like a `not-configured` one, listed in `skipped`, warned once per cold
+**HTTP 200**, so it is read from the body. **Busy and refused are split by what the signal means**
+(2026-10-01, the developer's rulings: "no cap while busy; if the IP is refused, stop", then "the
+Deezer busy error should be retried, as well as all other provider busy errors"). **Busy**, retried
+with no cap like our own full gate: Deezer code 700 (service busy), a Deezer 429 and an iTunes 429,
+each with the provider's `Retry-After` when sent (else 5 s for Deezer, 30 s for iTunes, which the
+client clamps to 10 s). **Refused**, a `refused` skip: an iTunes 403 and Deezer's quota error, code 4.
+A provider shutting us out is left out of the call like a `not-configured` one, listed in `skipped`, warned once per cold
 start, and the vote decides without it, so no card waits for ever on a provider that refuses. With
 the option OFF a card can therefore settle without iTunes' vote, or as a final null if nothing else
 answered. The ~60 s "final with something skipped" edge window is what lets it heal; and Deezer fetches

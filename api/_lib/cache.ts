@@ -188,7 +188,7 @@ export const PROVISIONAL_EDGE_SECONDS = 60;
  * - **Provisional BECAUSE OF A TRANSIENT PROBLEM** (`transient`: a provider failed or was busy
  *   on this call, and nothing confirmed): `0`. Checked FIRST, so it wins over the skipped and
  *   the provisional branches below -- a failed provider is listed in `skipped` too. It is the
- *   rule `withAnswerCache` follows, applied to the body: a failure or a busy gate is a
+ *   rule `withAnswerCache` follows, applied to the body: a failure, a busy gate or a 429 is a
  *   statement about the provider RIGHT NOW, not about the track, and a body built on one is
  *   exactly what the client must not get back. Its verify lane retries a non-final answer on
  *   the SAME URL within a second or two; an edge copy would answer every retry with the same

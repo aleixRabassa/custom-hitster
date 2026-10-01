@@ -310,8 +310,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
  * an answer in hand it is the `ok`-and-`transient` row, and that body carries the busy
  * provider's `retryAfterMs` -- in the BODY only, no `Retry-After` header on a 200 -- unless the
  * answer is final. `verify` answers it on any busy provider (`api/_lib/year-pipeline.ts` says
- * why the two differ). "Busy" means OUR gate refused a permit, and nothing else: a provider's
- * OWN refusal (an iTunes 403/429, a Deezer quota body or 429) is never a 429 here. It is a
+ * why the two differ). "Busy" means "try again shortly": OUR gate refused a permit, or the
+ * provider said so itself (a Deezer or iTunes 429, Deezer's `SERVICE_BUSY` body). A provider's
+ * "stop asking" (an iTunes 403, a Deezer quota body) is never a 429 here. It is a
  * skip, as an unconfigured provider is -- a 200 listing it in `skipped`, held `s-maxage=60`
  * whether final or not (a refusal alone is not `transient`, so it never makes the body
  * `no-store`) -- and never counts toward the 500.

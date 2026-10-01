@@ -239,9 +239,10 @@ describe('/api/year?stage=', () => {
   });
 
   it('should map a refused gate permit to 429 with retryAfterMs and Retry-After', async () => {
-    // `verify`: any busy provider is a 429, answers in hand or not. `busy` is ONLY our own
-    // gate refusing a permit (other players hold iTunes' shared slot) -- Apple's own 403/429 is
-    // a refused skip, the test after the next one.
+    // `verify`: any busy provider is a 429, answers in hand or not. Here `busy` is our own gate
+    // refusing a permit (other players hold iTunes' shared slot); Apple's own 429 is the same
+    // outcome (`api/_lib/itunes.test.ts`). Apple's 403 is a refused skip -- the test after the
+    // next one.
     script('deezer', answer({ provider: 'deezer', year: 1990, isrcYear: 2010 }));
     script(
       'musicbrainz',

@@ -35,16 +35,21 @@
  * and sends nothing -- no permit, no request.
  *
  * FAILURE MAPPING. Apple documents about 20 requests a minute and answers excess with 403
- * (observed by the spike's harness, which then slept 30 s) or 429. Since 2026-10-01 both are
- * a `refused` skip (`HTTP 403` / `HTTP 429`), not `busy`: iTunes is left out of this call and
- * the vote decides without it, so a `verify` goes final at once on the answers it has --
- * typically the trust order's pick between Deezer and MusicBrainz, unconfirmed. Retrying
- * would be asking again from the egress IP every player shares, which is how a throttle
- * becomes a block (`api/_lib/provider-lookup.ts`). Only a refused permit from iTunes' own
- * 3 s gate is still `busy`. A final answer reached with iTunes skipped gets the edge's short
- * window, so the card heals within about a minute once Apple stops refusing. A body without
- * a `results` array is `unexpected-payload`; network errors and 5xx are transient `failed`
- * (`api/_lib/store-http.ts`).
+ * (observed by the spike's harness, which then slept 30 s) or 429, and the developer's split
+ * (2026-10-01) handles the two oppositely (`api/_lib/provider-lookup.ts` says why):
+ *
+ * - **429 is `busy`**, exactly as a refused permit from iTunes' own 3 s gate is: "too many
+ *   requests, try again shortly", retried with no cap. It backs off by the `Retry-After`
+ *   header when Apple sends a usable one and by `ITUNES_BUSY_RETRY_AFTER_MS` when it does not.
+ * - **403 is a `refused` skip** (`HTTP 403`): Apple telling the egress IP every player shares
+ *   to stop, so asking again is how a throttle becomes a block. iTunes is left out of this
+ *   call and the vote decides without it, so a `verify` goes final at once on the answers it
+ *   has -- typically the trust order's pick between Deezer and MusicBrainz, unconfirmed. A
+ *   final answer reached with iTunes skipped gets the edge's short window, so the card heals
+ *   within about a minute once Apple stops refusing.
+ *
+ * A body without a `results` array is `unexpected-payload`; network errors and 5xx are
+ * transient `failed` (`api/_lib/store-http.ts`).
  */
 
 import { earliestVerifiedRow } from '../../shared/store-match.js';
@@ -65,6 +70,15 @@ export const ITUNES_STOREFRONT = 'ES';
 
 /** Rows per search. What the spike's harnesses sent. */
 export const ITUNES_SEARCH_LIMIT = 10;
+
+/**
+ * Back-off after a 429 that carries no usable `Retry-After`. Thirty seconds is what the
+ * spike's capture harness slept after a throttle and then succeeded; Apple publishes no
+ * figure. The client's resolver clamps any wait it is given to 10 s
+ * (`RETRY_AFTER_CEILING_MS` in `src/game/resolver.ts`), so it never sleeps this whole -- and
+ * the 3 s gate paces whoever asks next anyway.
+ */
+export const ITUNES_BUSY_RETRY_AFTER_MS = 30_000;
 
 /** The search URL, exactly as the adapter requests it. Exported for the tests and the capture. */
 export function itunesSearchUrl(primaryArtist: string, cleanedTitle: string): string {
@@ -148,7 +162,9 @@ export function createItunesLookup(deps: StoreDeps): ProviderLookup {
         itunesSearchUrl(input.primaryArtist, input.cleaned.title),
         {
           ...(input.signal ? { signal: input.signal } : {}),
-          refusedStatuses: [403, 429],
+          busyStatuses: [429],
+          busyRetryAfterMs: ITUNES_BUSY_RETRY_AFTER_MS,
+          refusedStatuses: [403],
         },
       );
       if (response.kind !== 'ok') return response;

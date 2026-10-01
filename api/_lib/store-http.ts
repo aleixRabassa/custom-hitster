@@ -6,9 +6,9 @@
  * knows nothing about Deezer's or iTunes' payloads, and it decides nothing about years. It
  * exists so the two adapters cannot disagree about the parts of the contract that are the
  * same for both -- `api/_lib/provider-lookup.ts` promises the driver that an adapter NEVER
- * throws for an upstream problem, that a refused PERMIT is `busy`, that the store's OWN
- * refusal is a `refused` skip, and that a network error or a 5xx is a transient `failed`.
- * Written twice, those promises drift.
+ * throws for an upstream problem, that a refused PERMIT and the store's own "too fast, try
+ * again shortly" are both `busy`, that the store's own "stop asking" is a `refused` skip, and
+ * that a network error or a 5xx is a transient `failed`. Written twice, those promises drift.
  *
  * What maps to what, and why:
  *
@@ -21,24 +21,32 @@
  *   from whichever provider's gate was full (plan step 8). Waiting is what a full queue asks
  *   for, and the client retries it with no cap.
  * - **Network error**: `failed` / `upstream-unavailable`.
- * - **A status the adapter names as a refusal** (iTunes' 403 and 429; Deezer's 429):
- *   `skipped` / `refused`, with `HTTP <status>` as the detail -- NOT `busy` (the developer's
- *   decision, 2026-10-01). That is the store itself telling our shared egress IP to stop, and
- *   every player leaves from that IP: retrying is how a short throttle becomes a long block.
- *   So the provider is left out of this call, as an unconfigured one is, and the vote decides
- *   without it. A `Retry-After` header is not read any more -- nothing waits on it.
+ * - **A status the adapter names as busy** (`busyStatuses`: Deezer's 429, iTunes' 429):
+ *   `busy`, exactly as a full gate is, with the `Retry-After` header when the store sent a
+ *   usable number of seconds, else the adapter's `busyRetryAfterMs`. A 429 is the store's
+ *   own "too many requests, try again shortly" -- the message our gate gives, so it gets the
+ *   gate's treatment: retried with no cap (the developer's split, 2026-10-01).
+ * - **A status the adapter names as a refusal** (`refusedStatuses`: iTunes' 403):
+ *   `skipped` / `refused`, with `HTTP <status>` as the detail -- NOT `busy` (the same split).
+ *   That is the store telling our shared egress IP to stop, and every player leaves from that
+ *   IP: retrying is how a short throttle becomes a long block. So the provider is left out of
+ *   this call, as an unconfigured one is, and the vote decides without it. No header is read
+ *   for it -- nothing waits on a refusal.
  * - **5xx**: `failed` / `upstream-unavailable` -- transient, so never a final "no year".
  * - **Any other non-2xx, or a body that is not JSON**: `failed` / `unexpected-payload`. The
  *   request itself was wrong or the store changed shape; either way retrying the same URL
  *   will not help, and caching a null would hide it for a day.
+ *
+ * The busy list is checked before the refused one, so a status in both would be busy and its
+ * refusal entry dead. No adapter lists one status twice.
  */
 
 import type { ProviderOutcome } from './provider-lookup.js';
 import type { RateLimitGate } from './rate-limit.js';
 
 /**
- * The minimum of `fetch` the store adapters need. No response headers: the only one ever read
- * was `Retry-After`, for a store refusal that is now a skip rather than a wait.
+ * The minimum of `fetch` the store adapters need. `headers` is optional so a test double can
+ * omit it; only `Retry-After` is ever read, and only on a `busyStatuses` status.
  */
 export type StoreFetch = (
   url: string,
@@ -47,6 +55,7 @@ export type StoreFetch = (
   ok: boolean;
   status: number;
   json: () => Promise<unknown>;
+  headers?: { get: (name: string) => string | null };
 }>;
 
 /** Everything a store adapter needs injected. */
@@ -64,6 +73,19 @@ const UNAVAILABLE: NotAnAnswer = { kind: 'failed', code: 'upstream-unavailable' 
 const UNEXPECTED: NotAnAnswer = { kind: 'failed', code: 'unexpected-payload' };
 
 /**
+ * Seconds in a `Retry-After` header, as milliseconds. The HTTP-date form, a zero, and anything
+ * that is not a plain integer are ignored: the adapter's own back-off applies instead.
+ */
+function retryAfterFrom(
+  headers: { get: (name: string) => string | null } | undefined,
+): number | undefined {
+  const raw = headers?.get('retry-after')?.trim();
+  if (!raw || !/^\d+$/.test(raw)) return undefined;
+  const seconds = Number.parseInt(raw, 10);
+  return seconds > 0 ? seconds * 1000 : undefined;
+}
+
+/**
  * The `refused` skip for a store's own "stop asking". The detail is built from a number only
  * -- a status or an error code -- so nothing a store sends can reach the warning it is logged
  * in. Shared with the Deezer adapter, whose quota error arrives in a 200 body.
@@ -75,14 +97,18 @@ export function refusedSkip(detail: string): NotAnAnswer {
 /**
  * One gated GET. Never throws.
  *
- * `refusedStatuses` is the adapter's: which statuses that store uses for "you are asking too
- * much". Each one becomes a `refused` skip, never a retry.
+ * The three options are the adapter's: `busyStatuses`, the statuses that store uses for "too
+ * fast, try again shortly" (each becomes `busy`, retried); `busyRetryAfterMs`, how long to
+ * back off when it sends no usable `Retry-After`; and `refusedStatuses`, the statuses it uses
+ * for "stop asking" (each becomes a `refused` skip, never a retry).
  */
 export async function requestStoreJson(
   deps: StoreDeps,
   url: string,
   options: {
     signal?: AbortSignal;
+    busyStatuses: readonly number[];
+    busyRetryAfterMs: number;
     refusedStatuses: readonly number[];
   },
 ): Promise<StoreResponse> {
@@ -105,6 +131,12 @@ export async function requestStoreJson(
     return UNAVAILABLE;
   }
 
+  if (options.busyStatuses.includes(response.status)) {
+    return {
+      kind: 'busy',
+      retryAfterMs: retryAfterFrom(response.headers) ?? options.busyRetryAfterMs,
+    };
+  }
   if (options.refusedStatuses.includes(response.status)) {
     return refusedSkip(`HTTP ${response.status}`);
   }

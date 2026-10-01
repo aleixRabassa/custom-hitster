@@ -42,25 +42,30 @@ export interface ProviderLookupInput {
  *   - `not-configured` -- a variable it needs is unset on this deployment. Carries the
  *                variable's NAME (never its value). Only this reason counts toward "every
  *                provider in the plan is not-configured", the loud 500.
- *   - `refused` -- the PROVIDER ITSELF told us to stop: an iTunes 403 or 429, a Deezer quota
- *                body (`{"error":{"code":4}}`, served with HTTP 200) or a Deezer 429. Carries
+ *   - `refused` -- the PROVIDER ITSELF told us to stop: an iTunes 403 or a Deezer quota
+ *                body (`{"error":{"code":4}}`, served with HTTP 200). Carries
  *                a short SAFE `detail` (`HTTP 403`, `quota error code 4`) built from a status
  *                or a code number, never from body text. Not a `failed`: it does not make the
  *                answer provisional and it does not count toward the 502. Never cached
  *                either -- like every arm but `answer`, it is about the provider right now.
  * - `failed`  -- transient or adapter-level failure. Never read as "no year": an answer
  *                that depended on a failed provider is not final.
- * - `busy`    -- OUR OWN gate (`api/_lib/rate-limit.ts`) refused the permit: other players
- *                hold the shared slot. Carries the gate's back-pressure, and the client
- *                retries it with no cap. Never the provider's own refusal, which is
- *                `skipped` / `refused` (the developer's decision, 2026-10-01).
+ * - `busy`    -- "try again shortly": OUR OWN gate (`api/_lib/rate-limit.ts`) refused the
+ *                permit because other players hold the shared slot, or the provider said the
+ *                same thing itself -- an HTTP 429 from Deezer or iTunes, or Deezer's
+ *                `SERVICE_BUSY` body (code 700, HTTP 200). Carries the back-pressure (the
+ *                gate's, the 429's `Retry-After`, or the adapter's constant), and the client
+ *                retries it with no cap. Never a provider's "stop asking", which is
+ *                `skipped` / `refused` (the developer's split, 2026-10-01).
  *
- * WHY THE TWO REFUSALS ARE HANDLED OPPOSITELY. A full gate is a queue we run: waiting is
- * exactly what it asks for, and the next permit comes within a gate interval or two. A
- * provider's 403 or quota error is the provider saying our shared egress IP is asking too
- * much -- and every player leaves from that IP, so retrying it is what turns a short
- * throttle into a long block. The vote is built to decide without any one provider, so
- * leaving the refusing one out and answering at once is the cheaper of the two errors.
+ * WHY "TRY AGAIN SHORTLY" AND "STOP ASKING" ARE HANDLED OPPOSITELY. A full gate is a queue we
+ * run: waiting is exactly what it asks for, and the next permit comes within a gate interval
+ * or two. A 429 or `SERVICE_BUSY` says the same of the provider's own queue, so it gets the
+ * same treatment. An iTunes 403 or a Deezer quota error is the provider saying our shared
+ * egress IP has asked too much -- and every player leaves from that IP, so retrying it is
+ * what turns a short throttle into a long block. The vote is built to decide without any one
+ * provider, so leaving the refusing one out and answering at once is the cheaper of the two
+ * errors there.
  */
 export type ProviderOutcome =
   | { kind: 'answer'; answer: ProviderAnswer; cached: boolean; requestCount: number }

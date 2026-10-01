@@ -73,9 +73,11 @@
  *   them, while it sleeps on a 429 WITHOUT counting -- so the `resolve` rule applied here
  *   would turn contention at a gate into cards settled for good at their provisional year.
  *
- * `busy` is ONLY our own gate refusing a permit (other players hold the shared slot). A
- * provider's OWN refusal -- an iTunes 403/429, a Deezer quota body or 429 -- is not `busy`
- * since 2026-10-01: it is a `refused` skip, below, and never reaches this paragraph.
+ * `busy` is "try again shortly": our own gate refusing a permit (other players hold the
+ * shared slot), or the provider saying so itself -- a Deezer or iTunes HTTP 429, or Deezer's
+ * `SERVICE_BUSY` body (code 700). A provider's "stop asking" -- an iTunes 403 or a Deezer
+ * quota body (code 4) -- is not `busy` (the developer's split, 2026-10-01): it is a `refused`
+ * skip, below, and never reaches this paragraph.
  *
  * Either way a busy provider is NOT listed in `skipped`, which means `not-configured`,
  * `refused` or failed; it is marked `transient`, below.
@@ -224,8 +226,9 @@ export async function runStage(
   const providers = plan.map((step) => step.provider);
   const answers = new Map<YearProviderId, ProviderAnswer>();
   const notConfigured = new Set<YearProviderId>();
-  // The provider ITSELF refused us (a 403/429 or a quota body): absent like `notConfigured`,
-  // but kept apart from it because it must never count toward the all-not-configured 500.
+  // The provider ITSELF refused us (an iTunes 403, a Deezer quota body): absent like
+  // `notConfigured`, but kept apart from it because it must never count toward the
+  // all-not-configured 500.
   const refused = new Set<YearProviderId>();
   const failed = new Set<YearProviderId>();
   // Set when a provider was busy on this call and `resolve` decided without it: the longest

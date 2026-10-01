@@ -9,6 +9,7 @@ import { isVerifiedStoreRow } from '../../shared/store-match.js';
 import { cleanTrackTitle } from '../../shared/year.js';
 import { DEEZER_CAPTURES, DEEZER_QUOTA_EXCEEDED } from './__fixtures__/deezer-payloads.js';
 import {
+  DEEZER_BUSY_RETRY_AFTER_MS,
   DEEZER_TRACK_FETCH_LIMIT,
   createDeezerLookup,
   deezerSearchRows,
@@ -220,9 +221,10 @@ describe('createDeezerLookup failure mapping', () => {
     json: async () => DEEZER_QUOTA_EXCEEDED.body,
   });
 
-  // Deezer ITSELF refusing us is a `refused` skip, never `busy` (the developer's decision,
-  // 2026-10-01): retrying it from the egress IP every player shares is how a throttle becomes a
-  // block. `busy` is kept for OUR gate refusing a permit -- the test after these three.
+  // The developer's split (2026-10-01). Deezer's quota body is "stop asking": a `refused` skip,
+  // because retrying it from the egress IP every player shares is how a throttle becomes a
+  // block. Its `SERVICE_BUSY` body and an HTTP 429 are "try again shortly": `busy`, retried
+  // with no cap exactly as OUR gate refusing a permit is.
   const quotaSkip = { kind: 'skipped', reason: 'refused', detail: 'quota error code 4' };
 
   it('should map the REAL quota body, served with HTTP 200, on the search to a refused skip', async () => {
@@ -251,29 +253,67 @@ describe('createDeezerLookup failure mapping', () => {
     expect(urls).toHaveLength(3);
   });
 
-  it('should map an HTTP 429 and the documented SERVICE_BUSY code to refused skips', async () => {
-    // Neither has been observed. The detail is fixed text per status or code, so nothing the
-    // body says can reach the warning it is logged in.
+  const serviceBusyResponse = async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({ error: { type: 'Exception', message: 'secret text', code: 700 } }),
+  });
+
+  it('should map the documented SERVICE_BUSY body (code 700) to busy, on the search and on a track fetch', async () => {
+    // Never observed. "Try again shortly" -- retried like a full gate, never a skip.
+    const search = servedFrom('billieJean', {
+      [captureFor('billieJean').search.url]: serviceBusyResponse,
+    });
+    await expect(
+      createDeezerLookup({ fetchImpl: search.fetchImpl, gate: openGate() }).lookup(
+        inputFor('billieJean'),
+      ),
+    ).resolves.toEqual({ kind: 'busy', retryAfterMs: DEEZER_BUSY_RETRY_AFTER_MS });
+    expect(search.urls).toHaveLength(1);
+
+    // On a track fetch it ends the lookup busy rather than answering from the dated rows.
+    const track = servedFrom('bohemianRhapsody', {
+      [deezerTrackUrl(captureRowId('bohemianRhapsody', 1))]: serviceBusyResponse,
+    });
+    await expect(
+      createDeezerLookup({ fetchImpl: track.fetchImpl, gate: openGate() }).lookup(
+        inputFor('bohemianRhapsody'),
+      ),
+    ).resolves.toEqual({ kind: 'busy', retryAfterMs: DEEZER_BUSY_RETRY_AFTER_MS });
+    expect(track.urls).toHaveLength(3);
+  });
+
+  it('should map an HTTP 429 to busy, honouring Retry-After when present', async () => {
+    // Never observed either: Deezer signals its quota in a 200 body. Deezer's five-second
+    // window when the 429 says nothing usable, the header's own figure when it does.
+    expect(DEEZER_BUSY_RETRY_AFTER_MS).toBe(5_000);
     const url = captureFor('billieJean').search.url;
     const cases = [
+      { headers: undefined, retryAfterMs: DEEZER_BUSY_RETRY_AFTER_MS },
+      { headers: { get: () => null }, retryAfterMs: DEEZER_BUSY_RETRY_AFTER_MS },
+      // The HTTP-date form and a zero are not usable: the constant applies.
       {
-        response: async () => ({ ok: false, status: 429, json: async () => ({}) }),
-        detail: 'HTTP 429',
+        headers: { get: () => 'Wed, 21 Oct 2026 07:28:00 GMT' },
+        retryAfterMs: DEEZER_BUSY_RETRY_AFTER_MS,
       },
+      { headers: { get: () => '0' }, retryAfterMs: DEEZER_BUSY_RETRY_AFTER_MS },
       {
-        response: async () => ({
-          ok: true,
-          status: 200,
-          json: async () => ({ error: { type: 'Exception', message: 'secret text', code: 700 } }),
-        }),
-        detail: 'service-busy error code 700',
+        headers: { get: (name: string) => (name === 'retry-after' ? '7' : null) },
+        retryAfterMs: 7_000,
       },
     ];
-    for (const { response, detail } of cases) {
-      const { fetchImpl } = servedFrom('billieJean', { [url]: response });
+    for (const { headers, retryAfterMs } of cases) {
+      const { fetchImpl } = servedFrom('billieJean', {
+        [url]: async () => ({
+          ok: false,
+          status: 429,
+          json: async () => ({}),
+          ...(headers ? { headers } : {}),
+        }),
+      });
       await expect(
         createDeezerLookup({ fetchImpl, gate: openGate() }).lookup(inputFor('billieJean')),
-      ).resolves.toEqual({ kind: 'skipped', reason: 'refused', detail });
+      ).resolves.toEqual({ kind: 'busy', retryAfterMs });
     }
   });
 

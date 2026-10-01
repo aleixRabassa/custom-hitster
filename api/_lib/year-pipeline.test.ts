@@ -69,7 +69,7 @@ const notConfigured = (missingVariable: string): ProviderOutcome => ({
   reason: 'not-configured',
   missingVariable,
 });
-/** The provider ITSELF refused us (a 403/429, a quota body) -- never `busy`, which is our gate. */
+/** The provider ITSELF said "stop asking" (an iTunes 403, a Deezer quota body) -- never `busy`. */
 const refused = (detail: string): ProviderOutcome => ({
   kind: 'skipped',
   reason: 'refused',
@@ -677,7 +677,7 @@ describe('runStage: busy, failed and skipped providers', () => {
 });
 
 describe('runStage: a provider that refuses us', () => {
-  // The developer's decision (2026-10-01): an iTunes 403/429 or a Deezer quota body is the
+  // The developer's split (2026-10-01): an iTunes 403 or a Deezer quota body (code 4) is the
   // provider telling our shared egress IP to stop. It is a SKIP -- absent for finality, listed
   // in `skipped`, never re-asked within the call -- and neither `busy` (no 429, no back-off),
   // `failed` (no provisional answer, no 502) nor `not-configured` (no 500).
@@ -820,7 +820,7 @@ describe('runStage: a provider that refuses us', () => {
       registryOf({
         deezer: fake('deezer', refused('quota error code 4')),
         musicbrainz: fake('musicbrainz', notConfigured('MUSICBRAINZ_USER_AGENT')),
-        itunes: fake('itunes', refused('HTTP 429')),
+        itunes: fake('itunes', refused('HTTP 403')),
       }),
       createMemoryCache(),
       YEAR_PROVIDER_PLAN,
@@ -832,7 +832,7 @@ describe('runStage: a provider that refuses us', () => {
       'verify',
       TRACK,
       registryOf({
-        deezer: fake('deezer', refused('HTTP 429')),
+        deezer: fake('deezer', refused('quota error code 4')),
         musicbrainz: fake('musicbrainz', refused('HTTP 403')),
         itunes: fake('itunes', refused('HTTP 403')),
       }),

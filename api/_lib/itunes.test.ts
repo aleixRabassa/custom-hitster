@@ -8,7 +8,13 @@ import { primaryArtistGuess } from '../../shared/artists.js';
 import { failedStoreRules } from '../../shared/store-match.js';
 import { cleanTrackTitle } from '../../shared/year.js';
 import { ITUNES_CAPTURES } from './__fixtures__/itunes-payloads.js';
-import { ITUNES_STOREFRONT, createItunesLookup, itunesRows, itunesSearchUrl } from './itunes.js';
+import {
+  ITUNES_BUSY_RETRY_AFTER_MS,
+  ITUNES_STOREFRONT,
+  createItunesLookup,
+  itunesRows,
+  itunesSearchUrl,
+} from './itunes.js';
 import type { ProviderLookupInput } from './provider-lookup.js';
 import type { RateLimitGate } from './rate-limit.js';
 import type { StoreFetch } from './store-http.js';
@@ -159,17 +165,51 @@ describe('createItunesLookup over the captures', () => {
 });
 
 describe('createItunesLookup failure mapping', () => {
-  it('should map 403 and 429 to a refused skip, never to busy', async () => {
-    // Apple ITSELF refusing us (the developer's decision, 2026-10-01): iTunes is left out of the
-    // call and the vote decides without it, instead of being retried from the egress IP every
-    // player shares. `busy` is kept for OUR gate refusing a permit -- the next test.
-    for (const status of [403, 429]) {
-      const fetchImpl = serving(async () => ({ ok: false, status, json: async () => ({}) }));
-      await expect(
-        createItunesLookup({ fetchImpl, gate: openGate() }).lookup(inputFor('billieJean')),
-      ).resolves.toEqual({ kind: 'skipped', reason: 'refused', detail: `HTTP ${status}` });
-      expect(fetchImpl).toHaveBeenCalledTimes(1);
-    }
+  // The developer's split (2026-10-01): a 403 is Apple saying "stop asking", a 429 "try again
+  // shortly", and the two are handled oppositely.
+  it('should map 403 to a refused skip, never to busy', async () => {
+    // iTunes is left out of the call and the vote decides without it, instead of being
+    // retried from the egress IP every player shares.
+    const fetchImpl = serving(async () => ({ ok: false, status: 403, json: async () => ({}) }));
+    await expect(
+      createItunesLookup({ fetchImpl, gate: openGate() }).lookup(inputFor('billieJean')),
+    ).resolves.toEqual({ kind: 'skipped', reason: 'refused', detail: 'HTTP 403' });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+
+    // A Retry-After on a 403 changes nothing: nothing waits on a refusal.
+    const withHeader = serving(async () => ({
+      ok: false,
+      status: 403,
+      json: async () => ({}),
+      headers: { get: (name: string) => (name === 'retry-after' ? '7' : null) },
+    }));
+    await expect(
+      createItunesLookup({ fetchImpl: withHeader, gate: openGate() }).lookup(
+        inputFor('billieJean'),
+      ),
+    ).resolves.toEqual({ kind: 'skipped', reason: 'refused', detail: 'HTTP 403' });
+  });
+
+  it('should map 429 to busy, honouring Retry-After when present', async () => {
+    // Retried with no cap, exactly as a refused permit from iTunes' own gate is (the next test).
+    expect(ITUNES_BUSY_RETRY_AFTER_MS).toBe(30_000);
+    const bare = serving(async () => ({ ok: false, status: 429, json: async () => ({}) }));
+    await expect(
+      createItunesLookup({ fetchImpl: bare, gate: openGate() }).lookup(inputFor('billieJean')),
+    ).resolves.toEqual({ kind: 'busy', retryAfterMs: ITUNES_BUSY_RETRY_AFTER_MS });
+    expect(bare).toHaveBeenCalledTimes(1);
+
+    const withHeader = serving(async () => ({
+      ok: false,
+      status: 429,
+      json: async () => ({}),
+      headers: { get: (name: string) => (name === 'retry-after' ? '7' : null) },
+    }));
+    await expect(
+      createItunesLookup({ fetchImpl: withHeader, gate: openGate() }).lookup(
+        inputFor('billieJean'),
+      ),
+    ).resolves.toEqual({ kind: 'busy', retryAfterMs: 7_000 });
   });
 
   it('should map a refused permit to busy with the gate retryAfterMs, making no request', async () => {

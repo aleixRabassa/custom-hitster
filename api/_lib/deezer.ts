@@ -87,19 +87,28 @@
  * FAILURE MAPPING. Deezer does not use HTTP status for its quota: a burst gets
  * `{"error":{"type":"Exception","message":"Quota limit exceeded","code":4}}` with **HTTP
  * 200** (spike §11.2; captured again 2026-09-30, 5 of 60 parallel searches). So the BODY is
- * read, on both requests, and code 4 is a `refused` skip (`quota error code 4`), as is an
- * HTTP 429 (`HTTP 429`) -- Deezer itself telling our shared egress IP to stop, which since
- * 2026-10-01 leaves Deezer out of the call rather than making it `busy` and retried
- * (`api/_lib/provider-lookup.ts` says why). Only a refused PERMIT from Deezer's own gate is
- * still `busy`. Code 700 (`SERVICE_BUSY` in Deezer's documented list) is refused too, by
- * name: it is the provider's own statement, and the one alternative, `unexpected-payload`,
- * would make it a transient failure -- retried, the very thing a refusal must not be. It has
- * never been observed. Code 800 (`DATA_NOT_FOUND`) on a track fetch drops that one row: the
- * track vanished between the two requests, and the other rows are still evidence. Any other
- * error body, or a body without a `data` array, is `unexpected-payload`. A failed, busy or
- * refused TRACK fetch ends the whole lookup with that outcome rather than answering from the
- * rows fetched so far: a partial answer could only be later than the full one, and it would
- * be cached for 30 days.
+ * read, on both requests. The developer's split (2026-10-01) sorts Deezer's three "too much"
+ * signals by what they ask of us (`api/_lib/provider-lookup.ts` says why the two kinds are
+ * handled oppositely):
+ *
+ * - **Code 4, the quota body, is a `refused` skip** (`quota error code 4`). It is the one
+ *   Deezer actually sends, and it says the shared egress IP every player leaves from has
+ *   spent its allowance: asking again is how a short throttle becomes a long block, so Deezer
+ *   is left out of the call and the vote decides without it.
+ * - **Code 700 (`SERVICE_BUSY` in Deezer's documented list) and an HTTP 429 are `busy`**,
+ *   backing off `DEEZER_BUSY_RETRY_AFTER_MS` (an HTTP 429's own `Retry-After` wins when it
+ *   carries one). Both say "too fast, try again shortly" -- the message our own gate gives
+ *   when it refuses a permit -- so they get the gate's treatment: retried with no cap.
+ *   Neither has been observed; both are named so that neither falls to `unexpected-payload`,
+ *   a transient failure the client would count toward settling the card at its provisional
+ *   year.
+ *
+ * Code 800 (`DATA_NOT_FOUND`) on a track fetch drops that one row: the track vanished between
+ * the two requests, and the other rows are still evidence. Any other error body, or a body
+ * without a `data` array, is `unexpected-payload`. A refused PERMIT from Deezer's own gate is
+ * `busy` too, and sends nothing. A failed, busy or refused TRACK fetch ends the whole lookup
+ * with that outcome rather than answering from the rows fetched so far: a partial answer could
+ * only be later than the full one, and it would be cached for 30 days.
  */
 
 import { earliestVerifiedRow, isVerifiedStoreRow } from '../../shared/store-match.js';
@@ -124,14 +133,18 @@ export const DEEZER_SEARCH_LIMIT = 10;
 export const DEEZER_TRACK_FETCH_LIMIT = 3;
 
 /**
- * Deezer's documented error codes that mean "you are asking too much" rather than "wrong
- * request", each with the `refused` detail it is logged as: 4 (the quota, observed) and 700
- * (`SERVICE_BUSY`, never observed). See the header.
+ * How long to back off after a `SERVICE_BUSY` body or an HTTP 429 with no usable
+ * `Retry-After`. Deezer's limit is a rolling window of about five seconds (the spike's burst
+ * runs waited 6 s for it to drain), so this is the window: one wait and the slot is free.
  */
-const DEEZER_REFUSED_CODES: ReadonlyMap<number, string> = new Map([
-  [4, 'quota error code 4'],
-  [700, 'service-busy error code 700'],
-]);
+export const DEEZER_BUSY_RETRY_AFTER_MS = 5_000;
+
+/** `SERVICE_BUSY`: "try again shortly", so `busy`. Never observed. See the header. */
+const DEEZER_SERVICE_BUSY_CODE = 700;
+
+/** The quota body: "stop asking", so a `refused` skip, logged with this fixed detail. */
+const DEEZER_QUOTA_CODE = 4;
+const DEEZER_QUOTA_DETAIL = 'quota error code 4';
 
 /** "No such object" -- a track that vanished between the search and the fetch. */
 const DEEZER_NOT_FOUND_CODE = 800;
@@ -165,12 +178,16 @@ function readBody(body: unknown): DeezerBody | undefined {
   return { kind: 'ok', record };
 }
 
-/** The detail is a fixed string per code; the body's `message` text never reaches a log. */
-function refusedOrUnexpected(code: number | undefined): ProviderOutcome {
-  const detail = code === undefined ? undefined : DEEZER_REFUSED_CODES.get(code);
-  return detail !== undefined
-    ? refusedSkip(detail)
-    : { kind: 'failed', code: 'unexpected-payload' };
+/**
+ * An `{error}` envelope that is not "no such object": busy, refused, or unexpected. The refusal
+ * detail is a fixed string; the body's `message` text never reaches a log.
+ */
+function errorOutcome(code: number | undefined): ProviderOutcome {
+  if (code === DEEZER_SERVICE_BUSY_CODE) {
+    return { kind: 'busy', retryAfterMs: DEEZER_BUSY_RETRY_AFTER_MS };
+  }
+  if (code === DEEZER_QUOTA_CODE) return refusedSkip(DEEZER_QUOTA_DETAIL);
+  return { kind: 'failed', code: 'unexpected-payload' };
 }
 
 /**
@@ -238,8 +255,11 @@ export function createDeezerLookup(deps: StoreDeps): ProviderLookup {
   const request = (url: string, signal: AbortSignal | undefined) =>
     requestStoreJson(deps, url, {
       ...(signal ? { signal } : {}),
-      // Deezer signals its quota in the body; a 429 would still mean the same thing.
-      refusedStatuses: [429],
+      // Deezer signals its quota in the body (code 4, refused); a 429 is "too many requests,
+      // try again shortly" and is retried like a full gate. No status is a refusal.
+      busyStatuses: [429],
+      busyRetryAfterMs: DEEZER_BUSY_RETRY_AFTER_MS,
+      refusedStatuses: [],
     });
 
   return {
@@ -281,7 +301,7 @@ export function createDeezerLookup(deps: StoreDeps): ProviderLookup {
 
       const searchBody = readBody(search.body);
       if (!searchBody) return { kind: 'failed', code: 'unexpected-payload' };
-      if (searchBody.kind === 'error') return refusedOrUnexpected(searchBody.code);
+      if (searchBody.kind === 'error') return errorOutcome(searchBody.code);
 
       const rows = deezerSearchRows(searchBody.record);
       if (!rows) return { kind: 'failed', code: 'unexpected-payload' };
@@ -303,7 +323,7 @@ export function createDeezerLookup(deps: StoreDeps): ProviderLookup {
         if (!trackBody) return { kind: 'failed', code: 'unexpected-payload' };
         if (trackBody.kind === 'error') {
           if (trackBody.code === DEEZER_NOT_FOUND_CODE) continue;
-          return refusedOrUnexpected(trackBody.code);
+          return errorOutcome(trackBody.code);
         }
 
         dated.push({

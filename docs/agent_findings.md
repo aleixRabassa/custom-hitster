@@ -5715,8 +5715,9 @@ MusicBrainz lookups" was corrected rather than enforced: `verify` re-running a c
 frontier is plan 2's design, kept so a card whose first MusicBrainz try failed still gets its vote.
 
 After the review the developer separated two kinds of "busy" ("no cap while busy; if the IP is
-refused, stop"). Our own gate refusing a permit stays `busy`, retried with no cap. A provider
-refusing us itself (an iTunes 403/429, a Deezer quota body `code: 4` or 700, a Deezer 429) is now a
-`refused` SKIP, counted absent like `not-configured`. Before, a long Apple throttle of Vercel's IPs
+refused, stop"; then "the Deezer busy error should be retried, as well as all other provider busy
+errors"). Our own gate refusing a permit, Deezer's service-busy body `code: 700` and a Deezer or
+iTunes 429 are `busy`, retried with no cap. A provider shutting us out (an iTunes 403, Deezer's quota
+body `code: 4`) is a `refused` SKIP, counted absent like `not-configured`. Before, a long Apple throttle of Vercel's IPs
 would have left every card provisional for ever, so the PDF never printed and, with the option OFF, a
 provisional start card held the loading screen.

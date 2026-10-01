@@ -427,7 +427,8 @@ export interface YearLookupResult {
   agreedBy?: readonly [YearProviderId, YearProviderId];
   /**
    * Providers left out of this answer: not configured, refused by the provider itself (an
-   * iTunes 403/429, a Deezer quota error), or failed. Present only when non-empty.
+   * iTunes 403, a Deezer quota error), or failed. Present only when non-empty. A provider
+   * that was merely busy (a full gate, a 429) is not listed: it is asked again.
    */
   skipped?: YearProviderId[];
   /**

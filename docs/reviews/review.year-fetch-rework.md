@@ -29,8 +29,9 @@ fixes needed the developer's ruling and **change two plans' text**:
 - W1 keeps plan 2's design and corrects the docs instead.
 
 **Busy versus refused, decided after the review** (the developer: "no cap while busy; if the IP is
-refused, stop"). Only our own gate being full is busy, and it is retried with no limit. A provider
-refusing us itself (an iTunes 403/429, a Deezer quota error or 429) is now a skip: that provider is
+refused, stop"; then "the Deezer busy error should be retried, as well as all other provider busy
+errors"). Our own full gate and a provider saying it is busy (Deezer code 700, a Deezer or iTunes 429)
+are busy, retried with no limit. A provider shutting us out (an iTunes 403, Deezer's quota error code 4) is now a skip: that provider is
 left out of the call and the vote decides without it, so a card can no longer wait for ever on a
 provider that has shut us out.
 

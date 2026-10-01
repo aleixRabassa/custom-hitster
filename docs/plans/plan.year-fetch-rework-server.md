@@ -341,7 +341,8 @@ MusicBrainz included. The endpoint fails loudly only when **all** providers fail
   >   lane sleeps on it (W2, W4). `verify` keeps the 429, because the client counts a non-final verify
   >   200 as a transient attempt.
   > - **Two kinds of busy.** Only OUR OWN gate being full is busy, and it is retried with no cap. A
-  >   provider refusing us itself (an iTunes 403/429, a Deezer quota error or 429) is now a SKIP. That
+  >   provider SAYING it is busy (Deezer code 700, a Deezer or iTunes 429) is retried the same way. A
+  >   provider shutting us out (an iTunes 403, Deezer's quota error code 4) is now a SKIP. That
   >   provider is left out of the call like a `not-configured` one and listed in `skipped`, and the
   >   vote decides without it, so a card is never stuck waiting for a provider that has shut us out.
   > - **The edge (step 11).** A non-final answer built on a failed or busy provider is
