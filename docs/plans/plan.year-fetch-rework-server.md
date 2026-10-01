@@ -330,6 +330,26 @@ MusicBrainz included. The endpoint fails loudly only when **all** providers fail
 
     Rewrite the `cache.test.ts` mirror test ("Redis TTL ≥ edge TTL") to state that rule rather than
     extending it.
+
+  > **Later, 2026-10-01: steps 10 and 11 were amended by the branch review**
+  > ([`review.year-fetch-rework.md`](../reviews/review.year-fetch-rework.md), the developer's rulings).
+  > The boxes above stay ticked as the record of what was built.
+  >
+  > - **Busy (step 10).** A `resolve` that has an answer in hand when a provider is busy no longer
+  >   returns busy. It decides, as a `200` with `final: false` (final only if the answers in hand
+  >   confirm). It carries the busy provider's `retryAfterMs` in the body, and the client's resolve
+  >   lane sleeps on it (W2, W4). `verify` keeps the 429, because the client counts a non-final verify
+  >   200 as a transient attempt.
+  > - **Two kinds of busy.** Only OUR OWN gate being full is busy, and it is retried with no cap. A
+  >   provider refusing us itself (an iTunes 403/429, a Deezer quota error or 429) is now a SKIP. That
+  >   provider is left out of the call like a `not-configured` one and listed in `skipped`, and the
+  >   vote decides without it, so a card is never stuck waiting for a provider that has shut us out.
+  > - **The edge (step 11).** A non-final answer built on a failed or busy provider is
+  >   `Cache-Control: no-store`, not ~60 s (B1). The verify lane retries the same URL within a second,
+  >   so an edge copy turned a short outage into a dropped card.
+  > - **A store lookup with no `durationMs`** sends no request and writes nothing to the answer cache
+  >   (W3, W6).
+
 - [x] **Step 12: capture fixtures and re-run the replay.**
   - [x] Capture Deezer and iTunes responses for the 22 ground-truth tracks with the adapters' exact
         requests, from a scratch script, **never pointed at Upstash**.

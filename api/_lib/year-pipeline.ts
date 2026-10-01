@@ -32,10 +32,10 @@
  * `nextFrontier()` itself still never returns a provider of the other stage.
  *
  * FINALITY. An answer is final when a confirmation was reached, or -- with NO transient
- * failure this call -- when every provider of the plan has answered or is skipped as
- * `not-configured`. For `verify` the second half holds whenever nothing failed, because both
- * stages' frontiers have run dry; for `resolve` it holds only when even iTunes' answer was
- * already cached. (The plan words the resolve case as "answered entirely from cache"; fresh
+ * failure this call -- when every provider of the plan has answered or is skipped (as
+ * `not-configured` or as `refused`). For `verify` the second half holds whenever nothing
+ * failed, because both stages' frontiers have run dry; for `resolve` it holds only when even
+ * iTunes' answer was already cached. (The plan words the resolve case as "answered entirely from cache"; fresh
  * answers from this very call settle a provider just as well, so the test is on settlement.)
  *
  * ===========================================================================
@@ -50,14 +50,61 @@
  *  away a year the client could show while it retries.
  * ===========================================================================
  *
- * `busy` stops the loop at once and is returned with its `retryAfterMs`. Whatever the same
- * frontier did obtain is already cached -- by `withAnswerCache` for the stores and by
- * `resolveYear()` for MusicBrainz -- so the next call's batched read picks up from it.
+ * `busy` stops the loop at once. Whatever the same frontier did obtain is already cached --
+ * by `withAnswerCache` for the stores and by `resolveYear()` for MusicBrainz -- so the next
+ * call's batched read picks up from it. What the call then RETURNS depends on the stage:
  *
- * `not-configured` providers count as ABSENT: skipped, listed in `skipped`, warned about once
- * per cold start per provider (naming the variable, never its value), and a final can still
- * be reached without them. Only when EVERY provider of the plan is `not-configured` is the
- * stage `not-configured` -- the loud 500 the developer asked to keep for "nothing can run".
+ * - **`resolve` with an answer in hand** (from this call or from the batched read, a
+ *   `year: null` answer included): stop asking and DECIDE, a 200. The busy provider has no
+ *   answer, so the stage is not settled and the answer is `final: false` -- unless the
+ *   answers in hand already confirm a year, which is `high` and final by the stop rule. A
+ *   429 there would throw away a year the client could show at once (Deezer answers in a
+ *   quarter of a second; MusicBrainz is the provider usually queued at its gate). The client
+ *   routes any non-final `resolve` to its verify lane, and `verify` re-runs `resolve`'s
+ *   frontiers, so the busy provider is asked again there. The 200 still carries the busy
+ *   provider's `retryAfterMs` (the longest, if several were busy) -- the wait the 429 would
+ *   have carried -- so the client's resolve lane sleeps it before its next card rather than
+ *   send a second lookup to a gate it was just told is full. (It cuts the waiters rather than
+ *   guaranteeing one: the verify lane's re-ask usually meets the same full gate and sleeps about
+ *   as long, so the two lanes can wake together.) A FINAL answer carries none. With NOTHING in
+ *   hand it is still `rate-limited` with its `retryAfterMs`: there is nothing to show.
+ * - **`verify`: always `rate-limited`**, answer in hand or not. The client counts a non-final
+ *   `verify` 200 as one transient attempt and settles the card exhausted after a handful of
+ *   them, while it sleeps on a 429 WITHOUT counting -- so the `resolve` rule applied here
+ *   would turn contention at a gate into cards settled for good at their provisional year.
+ *
+ * `busy` is ONLY our own gate refusing a permit (other players hold the shared slot). A
+ * provider's OWN refusal -- an iTunes 403/429, a Deezer quota body or 429 -- is not `busy`
+ * since 2026-10-01: it is a `refused` skip, below, and never reaches this paragraph.
+ *
+ * Either way a busy provider is NOT listed in `skipped`, which means `not-configured`,
+ * `refused` or failed; it is marked `transient`, below.
+ *
+ * `transient` (on the ok outcome, never in the body) says a provider FAILED or was BUSY on
+ * this call. `api/year.ts` sends `no-store` for a non-final answer that carries it
+ * (`stagedEdgeMaxAgeSeconds()`), because the client retries a non-final answer on the same
+ * URL and an edge copy of a body built on a transient problem would answer every retry.
+ *
+ * SKIPPED PROVIDERS COUNT AS ABSENT, for either reason: listed in `skipped`, excluded from
+ * every later frontier of the call (so never re-asked within it), warned about once per cold
+ * start per provider AND reason, and a final can still be reached without them.
+ *
+ * - `not-configured`: the warning names the variable, never its value. Only when EVERY
+ *   provider of the plan is `not-configured` is the stage `not-configured` -- the loud 500 the
+ *   developer asked to keep for "nothing can run".
+ * - `refused` (the developer's decision, 2026-10-01): the provider itself told us to stop.
+ *   The warning names the provider and the adapter's safe detail (`HTTP 403`, `quota error
+ *   code 4`), never a body. It is NOT `not-configured` -- a refusing provider is configured,
+ *   so it never counts toward the 500 -- and NOT `failed`, so it neither makes the answer
+ *   provisional nor `transient`, nor counts toward the 502. A `verify` with iTunes refused is
+ *   therefore final at once, on the trust order's pick among the answers in hand. With
+ *   NOTHING in hand and nothing failed -- every provider refused or unconfigured, at least one
+ *   refused -- the answer is a final null, because "stop asking" leaves nobody to ask: that
+ *   is the finality rule applied as written, not a special case. What heals all of these is
+ *   `stagedEdgeMaxAgeSeconds()`'s existing rule that a final answer with a provider skipped
+ *   is held for ~60 s, never a month, and `withAnswerCache` never writes a skip, so the next
+ *   call after the provider stops refusing asks it again. A refusal is counted as a request,
+ *   like a failure: the 403 was an answer the provider sent, and `cached` claims none was.
  *
  * ONE KNOWN CONSEQUENCE OF READING `mbyear:` HERE: a deployment with no
  * `MUSICBRAINZ_USER_AGENT` still uses MusicBrainz answers that are already cached, where the
@@ -105,6 +152,13 @@ export type StageOutcome =
        * cannot carry it, because the body must not grow internal fields.
        */
       sourceTtlsSeconds: number[];
+      /**
+       * A provider FAILED or was BUSY on this call. With `final: false` it makes the edge hold
+       * nothing (`stagedEdgeMaxAgeSeconds()`): the answer reflects the provider's state right
+       * now, not the track's, and the client retries it on the same URL. Not in the body, for
+       * the same reason as `sourceTtlsSeconds`.
+       */
+      transient: boolean;
     }
   | { ok: false; code: 'rate-limited'; retryAfterMs: number }
   | { ok: false; code: 'upstream-unavailable' }
@@ -114,20 +168,29 @@ export interface StageOptions {
   /** The lone-answer order. Injectable for tests; production passes nothing. */
   trust?: readonly TrustTier[];
   /**
-   * Which providers have already been warned about. Defaults to one set per module
-   * instance, i.e. per cold start -- which is exactly "once per cold start".
+   * Which skips have already been warned about, as `skipWarningKey()` strings. Defaults to
+   * one set per module instance, i.e. per cold start -- which is exactly "once per cold start".
    */
-  warned?: Set<YearProviderId>;
+  warned?: Set<string>;
 }
 
-/** Providers already warned about as `not-configured`, for the life of this instance. */
-const warnedThisColdStart = new Set<YearProviderId>();
+/**
+ * Skips already warned about, for the life of this instance: one entry per provider AND
+ * reason, so a provider warned about as `not-configured` is still warned about the first
+ * time it `refused`, and the reverse.
+ */
+const warnedThisColdStart = new Set<string>();
+
+/** The `warned` entry for one provider skipped for one reason. */
+function skipWarningKey(provider: YearProviderId, reason: 'not-configured' | 'refused'): string {
+  return `${provider}:${reason}`;
+}
 
 /**
- * Forget which providers were warned about. TEST-ONLY: production never calls it, because a
- * cold start is what resets the warning.
+ * Forget which skips were warned about. TEST-ONLY: production never calls it, because a cold
+ * start is what resets the warning.
  */
-export function resetNotConfiguredWarnings(): void {
+export function resetSkipWarnings(): void {
   warnedThisColdStart.clear();
 }
 
@@ -161,7 +224,13 @@ export async function runStage(
   const providers = plan.map((step) => step.provider);
   const answers = new Map<YearProviderId, ProviderAnswer>();
   const notConfigured = new Set<YearProviderId>();
+  // The provider ITSELF refused us (a 403/429 or a quota body): absent like `notConfigured`,
+  // but kept apart from it because it must never count toward the all-not-configured 500.
+  const refused = new Set<YearProviderId>();
   const failed = new Set<YearProviderId>();
+  // Set when a provider was busy on this call and `resolve` decided without it: the longest
+  // wait any busy provider asked for (see the header). `undefined` means nobody was busy.
+  let busyRetryAfterMs: number | undefined;
   let requestCount = 0;
 
   // ---- 1. Read first: ONE batched read, the `mbyear:` key included ---------------
@@ -184,11 +253,15 @@ export async function runStage(
   }
 
   // ---- 2. Ask: frontier by frontier, each one concurrently ------------------------
-  for (const frontierStage of STAGES_RUN[stage]) {
+  // Labelled because a busy provider in a `resolve` that has an answer in hand stops the
+  // ASKING, not just the current stage's rounds -- whatever `STAGES_RUN.resolve` holds.
+  asking: for (const frontierStage of STAGES_RUN[stage]) {
     // Bounded by the plan's length: every frontier either settles at least one provider or
     // is `done`, so this is a guard against a planner bug, never a real limit.
     for (let round = 0; round <= plan.length; round += 1) {
-      const excluded = new Set<YearProviderId>([...notConfigured, ...failed]);
+      // A refused provider is excluded here, which is what "never retried within the call"
+      // rests on: it has no answer, so without this every later round would ask it again.
+      const excluded = new Set<YearProviderId>([...notConfigured, ...refused, ...failed]);
       const frontier = nextFrontier(plan, frontierStage, {
         answers: inPlanOrder(providers, answers),
         excluded,
@@ -209,17 +282,32 @@ export async function runStage(
             answers.set(id, outcome.answer);
             requestCount += outcome.requestCount;
             break;
-          case 'skipped':
-            notConfigured.add(id);
-            if (!warned.has(id)) {
-              warned.add(id);
+          case 'skipped': {
+            const warningKey = skipWarningKey(id, outcome.reason);
+            const firstWarning = !warned.has(warningKey);
+            warned.add(warningKey);
+            if (outcome.reason === 'not-configured') {
+              notConfigured.add(id);
               // The variable's NAME only. The value is never read into this module, so it
               // cannot reach a shared log by accident.
-              console.warn(
-                `[year-pipeline] ${id} skipped: ${outcome.missingVariable} is not set on this deployment`,
-              );
+              if (firstWarning) {
+                console.warn(
+                  `[year-pipeline] ${id} skipped: ${outcome.missingVariable} is not set on this deployment`,
+                );
+              }
+            } else {
+              refused.add(id);
+              // The adapter's detail is built from a status or a code number, never a body.
+              // Counted as a request for the reason `failed` is below: it reached the provider.
+              requestCount += 1;
+              if (firstWarning) {
+                console.warn(
+                  `[year-pipeline] ${id} skipped: the provider refused the request (${outcome.detail})`,
+                );
+              }
             }
             break;
+          }
           case 'failed':
             failed.add(id);
             // Counted as a request: it may well have reached the provider, and `cached` is a
@@ -233,21 +321,32 @@ export async function runStage(
       });
 
       // Busy stops the call, AFTER the rest of the frontier was merged -- their answers are
-      // already cached, so the next call resumes from them.
-      if (retryAfterMs !== undefined) return { ok: false, code: 'rate-limited', retryAfterMs };
+      // already cached, so the next call resumes from them. `verify`, and a `resolve` with
+      // nothing in hand, return the 429 right here; a `resolve` with an answer in hand stops
+      // asking and goes on to decide, keeping the wait for the body (both halves are in the
+      // header).
+      if (retryAfterMs !== undefined) {
+        if (stage !== 'resolve' || answers.size === 0) {
+          return { ok: false, code: 'rate-limited', retryAfterMs };
+        }
+        busyRetryAfterMs = retryAfterMs;
+        break asking;
+      }
     }
   }
 
   // ---- 3. Decide ------------------------------------------------------------------
+  // `notConfigured` alone, never `refused`: a provider that refused us is configured, and
+  // "nothing can run" is the only thing the 500 may say.
   if (providers.length > 0 && providers.every((provider) => notConfigured.has(provider))) {
     return { ok: false, code: 'not-configured' };
   }
   if (failed.size > 0 && answers.size === 0) return { ok: false, code: 'upstream-unavailable' };
 
   const ordered = inPlanOrder(providers, answers);
-  const decision = decideYear(ordered, trust);
+  const decision = decideYear(ordered, trust, plan);
   const settled = providers.every(
-    (provider) => answers.has(provider) || notConfigured.has(provider),
+    (provider) => answers.has(provider) || notConfigured.has(provider) || refused.has(provider),
   );
   const final = decision.confidence === 'high' || (failed.size === 0 && settled);
 
@@ -268,11 +367,21 @@ export async function runStage(
     result.viaTitle = decision.viaTitle;
   }
   const skipped = providers.filter(
-    (provider) => notConfigured.has(provider) || failed.has(provider),
+    (provider) => notConfigured.has(provider) || refused.has(provider) || failed.has(provider),
   );
   if (skipped.length > 0) result.skipped = skipped;
+  // The back-off the 429 would have carried, on the 200 that replaced it -- so the client's
+  // resolve lane still sleeps before its next card instead of queueing a second lookup at the
+  // full gate. Never on a final answer: a card the answers in hand already confirm is done, and
+  // nothing about it should wait.
+  if (busyRetryAfterMs !== undefined && !final) result.retryAfterMs = busyRetryAfterMs;
 
-  return { ok: true, result, sourceTtlsSeconds: ordered.map((answer) => answerTtlFor(answer)) };
+  return {
+    ok: true,
+    result,
+    sourceTtlsSeconds: ordered.map((answer) => answerTtlFor(answer)),
+    transient: failed.size > 0 || busyRetryAfterMs !== undefined,
+  };
 }
 
 /** Answers in plan order, so "in plan order when more than two agree" holds downstream. */

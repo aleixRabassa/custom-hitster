@@ -205,6 +205,15 @@ wires the control.
 
     The resolve lane's deferred pass settles null exactly as today.
 
+    > **Later, 2026-10-01: reversed by the branch review** (S1, the developer's ruling; see
+    > [`review.year-fetch-rework.md`](../reviews/review.year-fetch-rework.md)). An exhausted
+    > resolve now hands the card to verify instead of settling it null, so a provider outage cannot
+    > drop a card before every stage has been asked. An exhausted verify is now the only route to a
+    > null after transient failures. The same review added a resolve-lane sleep on a non-final
+    > `resolve` 200 that carries `retryAfterMs` (W4). It also corrected the header's "one MusicBrainz
+    > lookup per client": `verify` re-asking a cold `resolve` frontier can briefly make it two, and
+    > that was accepted (W1).
+
   - [x] **Shutdown:** one `AbortController`, and one `stop()` ending both lanes. `not-configured` stops
         both lanes, and plan 2 returns it only when every provider is unconfigured.
   - [x] **The header:** rewrite it. "Do not optimise this into a parallel fetch" becomes "never more

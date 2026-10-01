@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { readLocalStorage } from '../game/browser-storage';
 import { CATALOGUES } from '../game/i18n';
 import { initialLocale, saveLocale, type Locale } from '../game/locale';
 import type { StorageLike } from '../game/persistence';
@@ -10,29 +11,6 @@ export interface LocaleProviderProps {
   storage?: StorageLike;
   /** Injected by tests; the real app reads `navigator.languages`. */
   languages?: readonly string[];
-}
-
-/** What the provider reads and writes when `localStorage` itself is unreachable. */
-const NO_STORAGE: StorageLike = {
-  getItem: () => null,
-  setItem: () => {},
-  removeItem: () => {},
-};
-
-/**
- * `localStorage`, or a storage that remembers nothing.
- *
- * Reading the PROPERTY can throw rather than return null (Safari private mode has historically; a
- * browser blocking site data does today), and this provider sits OUTSIDE `ErrorBoundary` -- so a
- * throw here is a white page with no crash screen at all. Same guard as `ErrorBoundary.tsx`'s own
- * `readLocalStorage()`. A module-level fallback, so `setLocale`'s dependency is stable.
- */
-function readLocalStorage(): StorageLike {
-  try {
-    return window.localStorage;
-  } catch {
-    return NO_STORAGE;
-  }
 }
 
 /**
@@ -48,6 +26,8 @@ function readLocalStorage(): StorageLike {
  * and sets no state.
  */
 export function LocaleProvider({ children, storage, languages }: LocaleProviderProps) {
+  // GUARDED, because this provider sits OUTSIDE `ErrorBoundary`: a throwing `localStorage` getter
+  // here would be a white page with no crash screen (see `browser-storage.ts`).
   const [fallbackStorage] = useState(readLocalStorage);
   const localeStorage = storage ?? fallbackStorage;
   const [locale, setLocaleState] = useState<Locale>(() =>

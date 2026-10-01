@@ -24,8 +24,25 @@
  *  LANE per stage and NEVER MORE THAN ONE REQUEST IN FLIGHT PER STAGE:
  *
  *    * one slot per stage, not one queue with two slots -- both slots of a
- *      shared queue could take MusicBrainz work at once, and one client would
- *      then hold two MusicBrainz lookups against a gate shared by every user;
+ *      shared queue could take `resolve` work at once, and one client would then
+ *      hold two MusicBrainz lookups against a gate shared by every user as a
+ *      matter of course. One slot per stage NORMALLY means one MusicBrainz lookup
+ *      per client, not always: the server's `verify` re-runs `resolve`'s
+ *      frontiers first (`STAGES_RUN` in api/_lib/year-pipeline.ts), so a card
+ *      with no cached `mbyear:` answer -- its resolve-stage MusicBrainz lookup
+ *      failed, MusicBrainz was BUSY during resolve (its gate full under
+ *      contention), the entry was evicted, or always under `vercel dev`'s
+ *      per-process cache -- has its verify request call MusicBrainz too, while
+ *      the resolve lane may be calling it for another card. That brief second
+ *      lookup was accepted (2026-10-01): skipping MusicBrainz in verify would
+ *      lose its vote -- the best coverage of old catalogue and the only "first
+ *      release" date -- on exactly the cards whose first try failed. The busy
+ *      case is the one contention makes common: that 200 carries the gate's
+ *      `retryAfterMs` and the resolve lane SLEEPS it (below) instead of firing
+ *      its next card into the full gate. That cuts the waiters but does NOT
+ *      guarantee one: the handed-off card's verify re-ask usually meets the same
+ *      full gate, gets a 429 and sleeps about as long, so the two lanes can wake
+ *      together and each send a lookup;
  *    * one resolver, not two independent workers -- the hand-off from resolve
  *      to verify would land in the React hook (whose header forbids logic),
  *      there would be two teardowns to get right, and nothing would push the
@@ -36,6 +53,14 @@
  *  then it PICKS AGAIN rather than blindly retrying: a player who moved on
  *  while it slept is served first. The card is not marked resolved, not
  *  skipped, and not counted as a failure.
+ *
+ *  The same signal can also ride on a 200 (2026-10-01): a `resolve` that had a
+ *  year in hand when a provider was busy answers with that year, NOT final,
+ *  plus the `retryAfterMs` the 429 would have carried. The resolve lane treats
+ *  the answer exactly as any non-final one -- the provisional year is reported
+ *  and the card handed to verify -- and THEN sleeps that delay before its next
+ *  pick, the same back-off a 429 gets and likewise counted as no attempt. The
+ *  verify lane never receives the field: `verify` answers busy with the 429.
  *
  *  What makes the wait bearable is not throughput, it is ordering: the resolve
  *  lane crawls in PLAY order from the card the player starts on, the verify
@@ -49,6 +74,8 @@
  *
  *    needs-resolve -> (resolve: final)                     -> final
  *    needs-resolve -> (resolve: provisional or nothing)    -> needs-verify
+ *    needs-resolve -> (resolve: retries run out)           -> needs-verify
+ *    needs-resolve -> (resolve: invalid-request)           -> final (null)
  *    needs-verify  -> (verify: final, or retries run out)  -> final
  *
  *  Seeded from the deck at creation: an undefined year needs resolve, a
@@ -59,7 +86,21 @@
  *
  *  A card whose verify retries run out settles FINAL at the best single answer
  *  it has (spike §10.3): its provisional year at `low`, or `null` if resolve
- *  found nothing either. Otherwise it would wait forever, and the PDF with it.
+ *  found nothing either, or never answered. Otherwise it would wait forever,
+ *  and the PDF with it.
+ *
+ *  A card whose RESOLVE retries run out (both passes) is handed to verify
+ *  exactly like a resolve that found nothing -- it does NOT settle null
+ *  (2026-10-01, the developer's ruling, reversing plan 3 step 4's "the deferred
+ *  pass settles null exactly as today"). The server's rule is that a transient
+ *  failure is never a final "no year", and `verify` asks more providers
+ *  (iTunes, plus another MusicBrainz try); with "Keep cards with no year
+ *  found" OFF a final null DROPS the card, so settling one here would let a
+ *  provider outage drop cards on the client that the server was built not to.
+ *  The card carries no provisional year, so if verify runs out as well it
+ *  settles final null -- the ONLY route to a null after transient failures.
+ *  `invalid-request` still settles null at once: every retry, verify's
+ *  included, would be the identical 400.
  * ===========================================================================
  *
  * Framework-free by construction -- it must NEVER import React. The lookup, the sleep and the
@@ -141,7 +182,7 @@ type StageState = 'needs-resolve' | 'needs-verify' | 'final';
 const MAX_ATTEMPTS_PER_PASS = 3;
 const PASSES_PER_STAGE = 2;
 
-/** First transient back-off; doubles per attempt (500 -> 1000 -> 2000 ms). */
+/** First transient back-off; doubles per attempt. With three attempts a pass, that is 500 then 1000 ms. */
 const TRANSIENT_BASE_DELAY_MS = 500;
 
 /**
@@ -394,7 +435,8 @@ export function createYearResolver(deck: readonly Card[], deps: ResolverDeps): Y
       // A deferred card that is urgent is attempted now but deliberately LEFT in the deferred
       // queue: if a 429 interrupts it and the player then moves on, the queue is what still
       // remembers it -- taken out, it would sit behind the cursor and in no queue at all, pending
-      // for ever. Running out again leaves it deferred (or, in the deferred pass, settles it).
+      // for ever. Running out again leaves it deferred (or, in the deferred pass, hands it to
+      // verify).
       if (stageOf.get(resolveUrgent) === 'needs-resolve') return resolveUrgent;
 
       resolveUrgent = undefined;
@@ -418,7 +460,8 @@ export function createYearResolver(deck: readonly Card[], deps: ResolverDeps): Y
 
       // ---- Deferred pass: one more try for cards a blip took out -------------------
       // Run ONCE, after the crawl, so a hiccup does not permanently blank a third of the deck.
-      // Only here does a failing card settle at `null` / `none`.
+      // A card that fails here too is handed to verify, never settled null -- see the second
+      // block at the top of the file.
       resolvePhase = 'deferred';
     }
 
@@ -457,9 +500,13 @@ export function createYearResolver(deck: readonly Card[], deps: ResolverDeps): Y
       if (result.year !== null) reportProvisional(cardId, result.year);
       // A resolve that found nothing reports NOTHING: there is no provisional null, and the card
       // stays pending until verify answers.
-      stageOf.set(cardId, 'needs-verify');
-      verifyQueue.push(cardId);
-      notifyVerify();
+      handOffToVerify(cardId);
+      // Decided beside a BUSY provider: back off before the next pick, exactly as on a 429 (see
+      // the block comment at the top of this file). AFTER the hand-off, so the verify lane has
+      // already been woken for this card while this lane sleeps.
+      if (result.retryAfterMs !== undefined) {
+        await deps.sleep(retryAfterDelay(result.retryAfterMs));
+      }
       return;
     }
 
@@ -494,11 +541,28 @@ export function createYearResolver(deck: readonly Card[], deps: ResolverDeps): Y
         resolveAttempts.delete(cardId);
         if (resolveUrgent === cardId) resolveUrgent = undefined;
 
-        if (resolvePhase === 'deferred') settleFinal(cardId, null, 'none');
+        // Out of attempts on the deferred pass: NOT a final null. The card goes on to verify,
+        // exactly as a resolve that found nothing does, and reports nothing -- a transient failure
+        // is never a "no year" (the server's own rule), and a null here would drop the card from
+        // a deck that is not keeping yearless ones. Only an exhausted verify settles it null.
+        if (resolvePhase === 'deferred') handOffToVerify(cardId);
         else if (!resolveDeferred.includes(cardId)) resolveDeferred.push(cardId);
         return;
       }
     }
+  }
+
+  /**
+   * The resolve-to-verify hand-off, shared by a non-final answer and an exhausted resolve. The
+   * stage is set BEFORE the verify lane is woken -- that lane's first rule is "current card
+   * first", which is how the start card goes straight to the front during `preparing`. Called
+   * only from the resolve lane while it is still running, so `resolveDone` cannot already be set
+   * and the verify lane always drains the queue before it can finish.
+   */
+  function handOffToVerify(cardId: string): void {
+    stageOf.set(cardId, 'needs-verify');
+    verifyQueue.push(cardId);
+    notifyVerify();
   }
 
   // ---- Verify lane ------------------------------------------------------------
@@ -635,7 +699,8 @@ export function createYearResolver(deck: readonly Card[], deps: ResolverDeps): Y
 
   /**
    * A card whose verify will never answer: final at the best single answer it has -- its
-   * provisional year at `low`, or a final null if resolve found nothing either.
+   * provisional year at `low`, or a final null if resolve found nothing either (or never answered
+   * at all -- an exhausted resolve hands its card here with no provisional year).
    */
   function settleExhausted(cardId: string): void {
     const year = provisionalYear.get(cardId);

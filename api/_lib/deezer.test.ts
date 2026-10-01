@@ -9,7 +9,6 @@ import { isVerifiedStoreRow } from '../../shared/store-match.js';
 import { cleanTrackTitle } from '../../shared/year.js';
 import { DEEZER_CAPTURES, DEEZER_QUOTA_EXCEEDED } from './__fixtures__/deezer-payloads.js';
 import {
-  DEEZER_QUOTA_RETRY_AFTER_MS,
   DEEZER_TRACK_FETCH_LIMIT,
   createDeezerLookup,
   deezerSearchRows,
@@ -162,6 +161,33 @@ describe('createDeezerLookup over the captures', () => {
     expect(urls).toHaveLength(1);
   });
 
+  it('should answer that same null with NO request and NO permit when the card has no length', async () => {
+    // `shared/store-match.ts` verifies a row only when both lengths are known, so a length-less
+    // target can verify nothing: the search would only buy the null above. Billie Jean is used
+    // because WITH its length it verifies a row and answers 2009 -- so the null here is the
+    // missing length's doing, not the capture's.
+    const searched = await createDeezerLookup({
+      fetchImpl: servedFrom('underPressure').fetchImpl,
+      gate: openGate(),
+    }).lookup(inputFor('underPressure'));
+
+    const { fetchImpl } = servedFrom('billieJean');
+    const gate = openGate();
+    const { durationMs, ...withoutLength } = inputFor('billieJean');
+    void durationMs;
+    const outcome = await createDeezerLookup({ fetchImpl, gate }).lookup(withoutLength);
+
+    expect(outcome).toEqual({ ...searched, requestCount: 0 });
+    expect(outcome).toEqual({
+      kind: 'answer',
+      answer: { provider: 'deezer', year: null, isrcYear: null },
+      cached: false,
+      requestCount: 0,
+    });
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(gate.acquire).not.toHaveBeenCalled();
+  });
+
   it('should drop a row whose track fetch says the track no longer exists (code 800)', async () => {
     // Bohemian Rhapsody with its second verified row gone: the answer is the album row's alone.
     const { fetchImpl } = servedFrom('bohemianRhapsody', {
@@ -194,25 +220,61 @@ describe('createDeezerLookup failure mapping', () => {
     json: async () => DEEZER_QUOTA_EXCEEDED.body,
   });
 
-  it('should map the REAL quota body, served with HTTP 200, on the search to busy', async () => {
+  // Deezer ITSELF refusing us is a `refused` skip, never `busy` (the developer's decision,
+  // 2026-10-01): retrying it from the egress IP every player shares is how a throttle becomes a
+  // block. `busy` is kept for OUR gate refusing a permit -- the test after these three.
+  const quotaSkip = { kind: 'skipped', reason: 'refused', detail: 'quota error code 4' };
+
+  it('should map the REAL quota body, served with HTTP 200, on the search to a refused skip', async () => {
     expect(DEEZER_QUOTA_EXCEEDED.status).toBe(200);
-    const { fetchImpl } = servedFrom('billieJean', {
+    const { fetchImpl, urls } = servedFrom('billieJean', {
       [captureFor('billieJean').search.url]: quotaResponse,
     });
 
     await expect(
       createDeezerLookup({ fetchImpl, gate: openGate() }).lookup(inputFor('billieJean')),
-    ).resolves.toEqual({ kind: 'busy', retryAfterMs: DEEZER_QUOTA_RETRY_AFTER_MS });
+    ).resolves.toEqual(quotaSkip);
+    // Stopped asking: no track fetch follows a refused search.
+    expect(urls).toHaveLength(1);
   });
 
-  it('should map the quota body on a TRACK fetch to busy, not to a partial answer', async () => {
-    const { fetchImpl } = servedFrom('bohemianRhapsody', {
+  it('should map the quota body on a TRACK fetch to a refused skip, not to a partial answer', async () => {
+    const { fetchImpl, urls } = servedFrom('bohemianRhapsody', {
       [deezerTrackUrl(captureRowId('bohemianRhapsody', 1))]: quotaResponse,
     });
 
+    // The first verified row WAS dated (1975); answering from it alone would be the partial
+    // answer the header refuses, so the refusal wins.
     await expect(
       createDeezerLookup({ fetchImpl, gate: openGate() }).lookup(inputFor('bohemianRhapsody')),
-    ).resolves.toEqual({ kind: 'busy', retryAfterMs: DEEZER_QUOTA_RETRY_AFTER_MS });
+    ).resolves.toEqual(quotaSkip);
+    expect(urls).toHaveLength(3);
+  });
+
+  it('should map an HTTP 429 and the documented SERVICE_BUSY code to refused skips', async () => {
+    // Neither has been observed. The detail is fixed text per status or code, so nothing the
+    // body says can reach the warning it is logged in.
+    const url = captureFor('billieJean').search.url;
+    const cases = [
+      {
+        response: async () => ({ ok: false, status: 429, json: async () => ({}) }),
+        detail: 'HTTP 429',
+      },
+      {
+        response: async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ error: { type: 'Exception', message: 'secret text', code: 700 } }),
+        }),
+        detail: 'service-busy error code 700',
+      },
+    ];
+    for (const { response, detail } of cases) {
+      const { fetchImpl } = servedFrom('billieJean', { [url]: response });
+      await expect(
+        createDeezerLookup({ fetchImpl, gate: openGate() }).lookup(inputFor('billieJean')),
+      ).resolves.toEqual({ kind: 'skipped', reason: 'refused', detail });
+    }
   });
 
   it('should map a refused permit to busy with the gate retryAfterMs, making no request', async () => {

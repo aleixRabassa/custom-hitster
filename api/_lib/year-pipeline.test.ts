@@ -14,7 +14,7 @@ import {
   withAnswerCache,
 } from './cache.js';
 import { createMusicBrainzLookup } from './musicbrainz-provider.js';
-import { resetNotConfiguredWarnings, runStage } from './year-pipeline.js';
+import { resetSkipWarnings, runStage } from './year-pipeline.js';
 import type { SharedYearCache } from './cache.js';
 import type { FetchLike } from './musicbrainz.js';
 import type {
@@ -68,6 +68,12 @@ const notConfigured = (missingVariable: string): ProviderOutcome => ({
   kind: 'skipped',
   reason: 'not-configured',
   missingVariable,
+});
+/** The provider ITSELF refused us (a 403/429, a quota body) -- never `busy`, which is our gate. */
+const refused = (detail: string): ProviderOutcome => ({
+  kind: 'skipped',
+  reason: 'refused',
+  detail,
 });
 
 type FakeLookup = ProviderLookup & { calls: number };
@@ -200,6 +206,7 @@ describe('runStage: resolve', () => {
         final: true,
       },
       sourceTtlsSeconds: [HIGH_CONFIDENCE_TTL_SECONDS, HIGH_CONFIDENCE_TTL_SECONDS],
+      transient: false,
     });
     expect(itunesLookup.calls).toBe(0);
   });
@@ -217,9 +224,12 @@ describe('runStage: resolve', () => {
       createMemoryCache(),
     );
 
+    // Not final, but nothing transient either: the ordinary hand-off to `verify`, which the
+    // edge may hold for its short window.
     expect(outcome).toMatchObject({
       ok: true,
       result: { year: 1974, confidence: 'low', source: 'release-group', final: false },
+      transient: false,
     });
     if (!outcome.ok) return;
     expect(outcome.result.agreedBy).toBeUndefined();
@@ -367,9 +377,13 @@ describe('runStage: verify', () => {
 });
 
 describe('runStage: busy, failed and skipped providers', () => {
-  it('should return busy, keep the answers obtained, and resume from them next call', async () => {
+  it('should decide a resolve with an answer in hand when a provider is busy, and resume next call', async () => {
+    // Deezer answered in the same parallel frontier MusicBrainz was busy in: a 429 would throw
+    // that year away. The busy provider has no answer, so the stage is not settled -- not
+    // final -- and it is transient, so the edge must not hold it. It is NOT `skipped`. The
+    // body carries the wait the 429 would have, so the client's resolve lane still backs off.
     const cache = createMemoryCache();
-    const deezerLookup = fake('deezer', answered(deezer(1990, 2010)));
+    const deezerLookup = fake('deezer', answered(deezer(1990, 1990)));
     const mbLookup = fake('musicbrainz', [
       { kind: 'busy', retryAfterMs: 1_100 },
       answered(musicbrainz(1990)),
@@ -380,19 +394,148 @@ describe('runStage: busy, failed and skipped providers', () => {
       itunes: never('itunes'),
     });
 
-    expect(await runStage('resolve', TRACK, registry, cache)).toEqual({
-      ok: false,
-      code: 'rate-limited',
-      retryAfterMs: 1_100,
+    const first = await runStage('resolve', TRACK, registry, cache);
+    expect(first).toMatchObject({
+      ok: true,
+      result: {
+        year: 1990,
+        confidence: 'low',
+        source: 'deezer',
+        final: false,
+        retryAfterMs: 1_100,
+      },
+      transient: true,
     });
+    if (first.ok) expect(first.result.skipped).toBeUndefined();
 
+    // Deezer's answer was cached, so the next call asks only MusicBrainz.
     const second = await runStage('resolve', TRACK, registry, cache);
     expect(deezerLookup.calls).toBe(1);
     expect(mbLookup.calls).toBe(2);
     expect(second).toMatchObject({
       ok: true,
       result: { year: 1990, confidence: 'high', agreedBy: ['deezer', 'musicbrainz'], final: true },
+      transient: false,
     });
+    if (second.ok) expect(second.result).not.toHaveProperty('retryAfterMs');
+  });
+
+  it('should carry no retryAfterMs on a confirmation reached beside a busy provider', async () => {
+    // iTunes' answer is already cached and agrees with Deezer's fresh one, so the card is
+    // confirmed -- final -- although MusicBrainz was busy. A final card is done: nothing about
+    // it should make the client wait, so the busy provider's back-off is not passed on.
+    const cache = createMemoryCache();
+    await cache.setAnswer(providerAnswerKey('itunes', LOOKUP_INPUT), itunes(1990), 60);
+
+    const outcome = await runStage(
+      'resolve',
+      TRACK,
+      registryOf({
+        deezer: fake('deezer', answered(deezer(1990, 1990))),
+        musicbrainz: fake('musicbrainz', { kind: 'busy', retryAfterMs: 1_100 }),
+        itunes: never('itunes'),
+      }),
+      cache,
+    );
+
+    expect(outcome).toMatchObject({
+      ok: true,
+      result: { year: 1990, confidence: 'high', agreedBy: ['deezer', 'itunes'], final: true },
+    });
+    if (outcome.ok) expect(outcome.result).not.toHaveProperty('retryAfterMs');
+  });
+
+  it('should carry the longest wait when both providers of the frontier are busy', async () => {
+    // The answer in hand is a cached iTunes NULL -- a year would make `nextFrontier` ask one
+    // provider, a null still leaves "no usable answer, ask the next two" -- so Deezer and
+    // MusicBrainz are both busy in the one parallel frontier. The 429 would have carried the
+    // longer wait, so the 200 does too.
+    const cache = createMemoryCache();
+    await cache.setAnswer(providerAnswerKey('itunes', LOOKUP_INPUT), itunes(null), 60);
+    const deezerLookup = fake('deezer', { kind: 'busy', retryAfterMs: 120 });
+    const mbLookup = fake('musicbrainz', { kind: 'busy', retryAfterMs: 1_100 });
+
+    const outcome = await runStage(
+      'resolve',
+      TRACK,
+      registryOf({ deezer: deezerLookup, musicbrainz: mbLookup, itunes: never('itunes') }),
+      cache,
+    );
+
+    expect([deezerLookup.calls, mbLookup.calls]).toEqual([1, 1]);
+
+    expect(outcome).toMatchObject({
+      ok: true,
+      result: { year: null, final: false, retryAfterMs: 1_100 },
+      transient: true,
+    });
+  });
+
+  it('should decide a resolve whose only answer in hand is a null, rather than 429', async () => {
+    // A recorded choice, not an accident: "an answer in hand" includes `year: null`, as it
+    // does everywhere in the vote. The client routes any non-final resolve to its verify
+    // lane, and `verify` re-runs resolve's frontiers, so MusicBrainz is asked again there.
+    const outcome = await runStage(
+      'resolve',
+      TRACK,
+      registryOf({
+        deezer: fake('deezer', answered(deezer(null, null))),
+        musicbrainz: fake('musicbrainz', { kind: 'busy', retryAfterMs: 1_100 }),
+        itunes: never('itunes'),
+      }),
+      createMemoryCache(),
+    );
+
+    expect(outcome).toMatchObject({
+      ok: true,
+      result: { year: null, confidence: 'none', final: false, retryAfterMs: 1_100 },
+      transient: true,
+    });
+  });
+
+  it('should still be rate-limited when a resolve has nothing in hand', async () => {
+    expect(
+      await runStage(
+        'resolve',
+        TRACK,
+        registryOf({
+          deezer: fake('deezer', { kind: 'busy', retryAfterMs: 120 }),
+          musicbrainz: fake('musicbrainz', { kind: 'busy', retryAfterMs: 1_100 }),
+          itunes: never('itunes'),
+        }),
+        createMemoryCache(),
+      ),
+    ).toEqual({ ok: false, code: 'rate-limited', retryAfterMs: 1_100 });
+  });
+
+  it('should keep verify rate-limited on any busy provider, answers in hand or not', async () => {
+    // The client counts a non-final verify 200 as a transient attempt and settles the card
+    // after a handful, but sleeps on a 429 without counting: under contention the resolve
+    // rule would settle cards for good at their provisional year.
+    const busyItunes = await runStage(
+      'verify',
+      TRACK,
+      registryOf({
+        deezer: fake('deezer', answered(deezer(1990, 2010))),
+        musicbrainz: fake('musicbrainz', answered(musicbrainz(1974))),
+        itunes: fake('itunes', { kind: 'busy', retryAfterMs: 3_000 }),
+      }),
+      createMemoryCache(),
+    );
+    expect(busyItunes).toEqual({ ok: false, code: 'rate-limited', retryAfterMs: 3_000 });
+
+    // The same holds inside resolve's frontier when it runs as part of a `verify` call.
+    const busyMusicBrainz = await runStage(
+      'verify',
+      TRACK,
+      registryOf({
+        deezer: fake('deezer', answered(deezer(1990, 1990))),
+        musicbrainz: fake('musicbrainz', { kind: 'busy', retryAfterMs: 1_100 }),
+        itunes: never('itunes'),
+      }),
+      createMemoryCache(),
+    );
+    expect(busyMusicBrainz).toEqual({ ok: false, code: 'rate-limited', retryAfterMs: 1_100 });
   });
 
   it('should not make an answer final when a provider failed transiently', async () => {
@@ -411,6 +554,7 @@ describe('runStage: busy, failed and skipped providers', () => {
     expect(outcome).toMatchObject({
       ok: true,
       result: { year: null, confidence: 'none', final: false, skipped: ['musicbrainz'] },
+      transient: true,
     });
   });
 
@@ -505,7 +649,7 @@ describe('runStage: busy, failed and skipped providers', () => {
   });
 
   it('should warn once per provider per cold start, naming the variable and never a value', async () => {
-    resetNotConfiguredWarnings();
+    resetSkipWarnings();
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const secret = 'super-secret-user-agent-value';
     // The adapter holds a secret in its closure; nothing it returns may carry it.
@@ -528,7 +672,230 @@ describe('runStage: busy, failed and skipped providers', () => {
     expect(line).toContain('musicbrainz');
     expect(line).toContain('MUSICBRAINZ_USER_AGENT');
     expect(line).not.toContain(secret);
-    resetNotConfiguredWarnings();
+    resetSkipWarnings();
+  });
+});
+
+describe('runStage: a provider that refuses us', () => {
+  // The developer's decision (2026-10-01): an iTunes 403/429 or a Deezer quota body is the
+  // provider telling our shared egress IP to stop. It is a SKIP -- absent for finality, listed
+  // in `skipped`, never re-asked within the call -- and neither `busy` (no 429, no back-off),
+  // `failed` (no provisional answer, no 502) nor `not-configured` (no 500).
+
+  it('should go final at once on a verify whose iTunes refuses, by the trust order', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const cache = createMemoryCache();
+    await cache.setAnswer(providerAnswerKey('deezer', LOOKUP_INPUT), deezer(1990, 2010), 60);
+    await cache.set(MB_KEY, { year: 1974, confidence: 'high', source: 'release-group' }, 60);
+    const itunesLookup = fake('itunes', refused('HTTP 403'));
+
+    const outcome = await runStage(
+      'verify',
+      TRACK,
+      registryOf({
+        deezer: never('deezer'),
+        musicbrainz: never('musicbrainz'),
+        itunes: itunesLookup,
+      }),
+      cache,
+      YEAR_PROVIDER_PLAN,
+      { warned: new Set() },
+    );
+
+    // The cached pair disagrees; with iTunes absent the trust order keeps MusicBrainz's `high`,
+    // unconfirmed. `toEqual`, so a stray `retryAfterMs` or `agreedBy` fails it. `cached` is
+    // false: the 403 was a request that reached Apple.
+    expect(outcome).toEqual({
+      ok: true,
+      result: {
+        year: 1974,
+        confidence: 'low',
+        source: 'release-group',
+        cached: false,
+        cleanedTitle: CLEANED.title,
+        stripped: CLEANED.stripped,
+        final: true,
+        skipped: ['itunes'],
+      },
+      sourceTtlsSeconds: [HIGH_CONFIDENCE_TTL_SECONDS, HIGH_CONFIDENCE_TTL_SECONDS],
+      transient: false,
+    });
+    expect(itunesLookup.calls).toBe(1);
+  });
+
+  it('should decide a resolve without a refusing Deezer, and never ask it twice', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const deezerLookup = fake('deezer', refused('quota error code 4'));
+
+    const outcome = await runStage(
+      'resolve',
+      TRACK,
+      registryOf({
+        deezer: deezerLookup,
+        musicbrainz: fake('musicbrainz', answered(musicbrainz(1974))),
+        itunes: never('itunes'),
+      }),
+      createMemoryCache(),
+      YEAR_PROVIDER_PLAN,
+      { warned: new Set() },
+    );
+
+    // MusicBrainz's lone `high`, unconfirmed. NOT final, because iTunes -- the other stage --
+    // is still unasked; and NOT transient, because nothing failed: the ordinary hand-off to
+    // `verify`, with no back-off for the client to sleep.
+    expect(outcome).toMatchObject({
+      ok: true,
+      result: {
+        year: 1974,
+        confidence: 'low',
+        source: 'release-group',
+        final: false,
+        skipped: ['deezer'],
+      },
+      transient: false,
+    });
+    if (outcome.ok) expect(outcome.result).not.toHaveProperty('retryAfterMs');
+    expect(deezerLookup.calls).toBe(1);
+  });
+
+  it('should not re-ask a refused resolve provider in the later frontiers of a verify', async () => {
+    // The verify call runs resolve's frontiers first. Deezer refuses in the first one; the
+    // second round and the verify stage must not reach it again (`excluded`).
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const deezerLookup = fake('deezer', refused('quota error code 4'));
+
+    const outcome = await runStage(
+      'verify',
+      TRACK,
+      registryOf({
+        deezer: deezerLookup,
+        musicbrainz: fake('musicbrainz', answered(musicbrainz(1974))),
+        itunes: fake('itunes', answered(itunes(1974))),
+      }),
+      createMemoryCache(),
+      YEAR_PROVIDER_PLAN,
+      { warned: new Set() },
+    );
+
+    expect(deezerLookup.calls).toBe(1);
+    expect(outcome).toMatchObject({
+      ok: true,
+      result: {
+        year: 1974,
+        confidence: 'high',
+        agreedBy: ['musicbrainz', 'itunes'],
+        final: true,
+        skipped: ['deezer'],
+      },
+      transient: false,
+    });
+  });
+
+  it('should answer a final null, not the not-configured 500, when every provider is refused or unconfigured', async () => {
+    // "Stop asking" with nobody left to ask and nothing failed: the finality rule as written
+    // makes it a final null. The 500 is only for "nothing is configured" -- a refusing provider
+    // is configured -- and the 502 only for a failure. The edge holds it ~60 s because a
+    // provider is skipped (`api/_lib/year-endpoint.test.ts`), which is what lets it heal.
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const expected = {
+      ok: true,
+      result: {
+        year: null,
+        confidence: 'none',
+        cached: false,
+        cleanedTitle: CLEANED.title,
+        stripped: CLEANED.stripped,
+        final: true,
+        skipped: ['deezer', 'musicbrainz', 'itunes'],
+      },
+      sourceTtlsSeconds: [],
+      transient: false,
+    };
+
+    // The shape the shipped registry can reach: MusicBrainz's own refusals are `failed`, so it
+    // is skipped only when unconfigured.
+    const mixed = await runStage(
+      'verify',
+      TRACK,
+      registryOf({
+        deezer: fake('deezer', refused('quota error code 4')),
+        musicbrainz: fake('musicbrainz', notConfigured('MUSICBRAINZ_USER_AGENT')),
+        itunes: fake('itunes', refused('HTTP 429')),
+      }),
+      createMemoryCache(),
+      YEAR_PROVIDER_PLAN,
+      { warned: new Set() },
+    );
+    expect(mixed).toEqual(expected);
+
+    const allRefused = await runStage(
+      'verify',
+      TRACK,
+      registryOf({
+        deezer: fake('deezer', refused('HTTP 429')),
+        musicbrainz: fake('musicbrainz', refused('HTTP 403')),
+        itunes: fake('itunes', refused('HTTP 403')),
+      }),
+      createMemoryCache(),
+      YEAR_PROVIDER_PLAN,
+      { warned: new Set() },
+    );
+    expect(allRefused).toEqual(expected);
+  });
+
+  it('should warn once per provider and reason per cold start, naming the detail only', async () => {
+    resetSkipWarnings();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const registry = registryOf({
+      deezer: fake('deezer', answered(deezer(1990, 2001))),
+      musicbrainz: fake('musicbrainz', notConfigured('MUSICBRAINZ_USER_AGENT')),
+      itunes: fake('itunes', refused('HTTP 403')),
+    });
+
+    await runStage('verify', TRACK, registry, createMemoryCache());
+    await runStage('verify', TRACK, registry, createMemoryCache());
+
+    // Two skips, two reasons, two lines -- once each across both calls.
+    expect(warn).toHaveBeenCalledTimes(2);
+    const lines = warn.mock.calls.map((args) => args.join(' '));
+    expect(lines.filter((line) => line.includes('itunes'))).toHaveLength(1);
+    expect(lines.find((line) => line.includes('itunes'))).toContain('HTTP 403');
+    expect(lines.filter((line) => line.includes('MUSICBRAINZ_USER_AGENT'))).toHaveLength(1);
+    resetSkipWarnings();
+  });
+
+  it('should warn about the same provider again for a different reason', async () => {
+    // The keys are per provider AND reason: a provider already warned about as unconfigured is
+    // not silenced when it later refuses, and the reverse.
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warned = new Set<string>();
+    const answers = {
+      deezer: fake('deezer', answered(deezer(1990, 2001))),
+      itunes: fake('itunes', answered(itunes(1985))),
+    };
+
+    await runStage(
+      'resolve',
+      TRACK,
+      registryOf({
+        ...answers,
+        musicbrainz: fake('musicbrainz', notConfigured('MUSICBRAINZ_USER_AGENT')),
+      }),
+      createMemoryCache(),
+      YEAR_PROVIDER_PLAN,
+      { warned },
+    );
+    await runStage(
+      'resolve',
+      TRACK,
+      registryOf({ ...answers, musicbrainz: fake('musicbrainz', refused('HTTP 403')) }),
+      createMemoryCache(),
+      YEAR_PROVIDER_PLAN,
+      { warned },
+    );
+
+    expect(warn).toHaveBeenCalledTimes(2);
+    expect(warn.mock.calls.flat().join(' ')).toContain('HTTP 403');
   });
 });
 
@@ -588,11 +955,12 @@ describe('runStage: the response body', () => {
   });
 
   it('should follow the plan it is given rather than a hard-wired order', async () => {
-    // A plan with only MusicBrainz and iTunes in `resolve`: the pair is asked together, and
-    // Deezer -- not in the plan -- is never asked.
+    // A plan with only iTunes and MusicBrainz in `resolve`: the pair is asked together, and
+    // Deezer -- not in the plan -- is never asked. iTunes comes FIRST, the reverse of the
+    // shipped plan, so `agreedBy` following this plan rather than the shipped one is visible.
     const plan: ProviderPlan = [
-      { provider: 'musicbrainz', phase: 'coverage', stage: 'resolve', finalWhenCertain: false },
       { provider: 'itunes', phase: 'precision', stage: 'resolve', finalWhenCertain: false },
+      { provider: 'musicbrainz', phase: 'coverage', stage: 'resolve', finalWhenCertain: false },
     ];
     const outcome = await runStage(
       'resolve',
@@ -609,7 +977,7 @@ describe('runStage: the response body', () => {
 
     expect(outcome).toMatchObject({
       ok: true,
-      result: { year: 1974, agreedBy: ['musicbrainz', 'itunes'], final: true },
+      result: { year: 1974, agreedBy: ['itunes', 'musicbrainz'], final: true },
     });
   });
 });

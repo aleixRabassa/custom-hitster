@@ -418,13 +418,27 @@ export interface YearLookupResult {
   viaTitle?: string;
   /**
    * True when no later call can change this answer. A transient provider failure never
-   * produces a final answer, so a final `null` really is "no provider has a year".
+   * produces a final answer, so a final `null` really is "no provider that answered has a
+   * year" -- a provider listed in `skipped` (not configured, or refusing us right now) did not
+   * answer, and the edge holds such a final only briefly so it can heal.
    */
   final: boolean;
   /** The two providers that agreed. Present only when the year is confirmed. */
   agreedBy?: readonly [YearProviderId, YearProviderId];
-  /** Providers skipped for configuration or failure. Present only when non-empty. */
+  /**
+   * Providers left out of this answer: not configured, refused by the provider itself (an
+   * iTunes 403/429, a Deezer quota error), or failed. Present only when non-empty.
+   */
   skipped?: YearProviderId[];
+  /**
+   * How long to wait before the next lookup, in ms. Present ONLY on a non-final `resolve`
+   * answer that was decided while a provider was BUSY: the year in hand is shown at once, and
+   * this is the back-off the `rate-limited` 429 would otherwise have carried (the longest of the
+   * busy providers'), so the client's resolve lane does not send its next card straight to a
+   * gate it was just told is full. Never on a final answer (nothing about the card should wait)
+   * and never on `verify`, which answers a busy provider with the 429 itself.
+   */
+  retryAfterMs?: number;
 }
 
 /**

@@ -220,6 +220,26 @@ describe('findConfirmation', () => {
   it('should not count one provider answering twice as two voters', () => {
     expect(findConfirmation([itunes(1990), itunes(1990)])).toBeNull();
   });
+
+  it('should name agreedBy in the order of the plan it is given, not the shipped one', () => {
+    // iTunes BEFORE MusicBrainz: the shipped plan would name them the other way round, so
+    // only a plan that is actually read can produce this order -- in `decideYear` too, which
+    // is what the driver calls with the plan it was handed.
+    const plan: ProviderPlan = [
+      { provider: 'itunes', phase: 'precision', stage: 'resolve', finalWhenCertain: false },
+      { provider: 'musicbrainz', phase: 'coverage', stage: 'resolve', finalWhenCertain: false },
+    ];
+    const answers = [mbHigh(1983), itunes(1983)];
+
+    expect(findConfirmation(answers)?.agreedBy).toStrictEqual(['musicbrainz', 'itunes']);
+    expect(findConfirmation(answers, plan)?.agreedBy).toStrictEqual(['itunes', 'musicbrainz']);
+    expect(decideYear(answers, UNCONFIRMED_TRUST, plan)).toStrictEqual({
+      year: 1983,
+      confidence: 'high',
+      source: 'vote',
+      agreedBy: ['itunes', 'musicbrainz'],
+    });
+  });
 });
 
 // ===========================================================================

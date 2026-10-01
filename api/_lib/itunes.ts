@@ -30,13 +30,21 @@
  *
  * A row WITHOUT `trackTimeMillis` fails verification (the store-match rule), where the spike's
  * harness let it through. That changed no measured answer: none of the 3 795 iTunes rows the
- * 542 recorded, nor any of the 2026-09-30 captures, lacked a length.
+ * 542 recorded, nor any of the 2026-09-30 captures, lacked a length. The same rule read from the
+ * other side: a CARD without a length can verify no row, so such a lookup answers null at once
+ * and sends nothing -- no permit, no request.
  *
  * FAILURE MAPPING. Apple documents about 20 requests a minute and answers excess with 403
- * (observed by the spike's harness, which then slept 30 s) or 429. Both are `busy`, backing
- * off by the `Retry-After` header when Apple sends one and by `ITUNES_BUSY_RETRY_AFTER_MS`
- * when it does not. A body without a `results` array is `unexpected-payload`; network errors
- * and 5xx are transient `failed` (`api/_lib/store-http.ts`).
+ * (observed by the spike's harness, which then slept 30 s) or 429. Since 2026-10-01 both are
+ * a `refused` skip (`HTTP 403` / `HTTP 429`), not `busy`: iTunes is left out of this call and
+ * the vote decides without it, so a `verify` goes final at once on the answers it has --
+ * typically the trust order's pick between Deezer and MusicBrainz, unconfirmed. Retrying
+ * would be asking again from the egress IP every player shares, which is how a throttle
+ * becomes a block (`api/_lib/provider-lookup.ts`). Only a refused permit from iTunes' own
+ * 3 s gate is still `busy`. A final answer reached with iTunes skipped gets the edge's short
+ * window, so the card heals within about a minute once Apple stops refusing. A body without
+ * a `results` array is `unexpected-payload`; network errors and 5xx are transient `failed`
+ * (`api/_lib/store-http.ts`).
  */
 
 import { earliestVerifiedRow } from '../../shared/store-match.js';
@@ -57,12 +65,6 @@ export const ITUNES_STOREFRONT = 'ES';
 
 /** Rows per search. What the spike's harnesses sent. */
 export const ITUNES_SEARCH_LIMIT = 10;
-
-/**
- * Back-off after a 403/429 that carries no `Retry-After`. Thirty seconds is what the spike's
- * capture harness slept on those statuses and then succeeded; Apple publishes no figure.
- */
-export const ITUNES_BUSY_RETRY_AFTER_MS = 30_000;
 
 /** The search URL, exactly as the adapter requests it. Exported for the tests and the capture. */
 export function itunesSearchUrl(primaryArtist: string, cleanedTitle: string): string {
@@ -125,13 +127,28 @@ export function createItunesLookup(deps: StoreDeps): ProviderLookup {
         durationMs: input.durationMs,
       };
 
+      // No length, no lookup. `failedStoreRules` in `shared/store-match.ts` passes a row only
+      // when BOTH lengths are known, so without the card's own the search could only answer the
+      // null below -- and it would spend a permit from the 3 s gate every player shares to learn
+      // it. Shaped exactly as the "searched and nothing verified" answer at the end (`cached:
+      // false`), because the two mean the same thing; `requestCount` is the one difference, and
+      // the true one. `withAnswerCache` refuses to write it either (its key has no duration). If
+      // store-match ever learns to verify a length-less target, this check goes with that rule.
+      if (input.durationMs === undefined) {
+        return {
+          kind: 'answer',
+          answer: { provider: 'itunes', year: null },
+          cached: false,
+          requestCount: 0,
+        };
+      }
+
       const response = await requestStoreJson(
         deps,
         itunesSearchUrl(input.primaryArtist, input.cleaned.title),
         {
           ...(input.signal ? { signal: input.signal } : {}),
-          busyStatuses: [403, 429],
-          busyRetryAfterMs: ITUNES_BUSY_RETRY_AFTER_MS,
+          refusedStatuses: [403, 429],
         },
       );
       if (response.kind !== 'ok') return response;

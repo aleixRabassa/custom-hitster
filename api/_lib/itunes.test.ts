@@ -8,13 +8,7 @@ import { primaryArtistGuess } from '../../shared/artists.js';
 import { failedStoreRules } from '../../shared/store-match.js';
 import { cleanTrackTitle } from '../../shared/year.js';
 import { ITUNES_CAPTURES } from './__fixtures__/itunes-payloads.js';
-import {
-  ITUNES_BUSY_RETRY_AFTER_MS,
-  ITUNES_STOREFRONT,
-  createItunesLookup,
-  itunesRows,
-  itunesSearchUrl,
-} from './itunes.js';
+import { ITUNES_STOREFRONT, createItunesLookup, itunesRows, itunesSearchUrl } from './itunes.js';
 import type { ProviderLookupInput } from './provider-lookup.js';
 import type { RateLimitGate } from './rate-limit.js';
 import type { StoreFetch } from './store-http.js';
@@ -135,28 +129,47 @@ describe('createItunesLookup over the captures', () => {
       requestCount: 1,
     });
   });
+
+  it('should answer that same null with NO request and NO permit when the card has no length', async () => {
+    // `shared/store-match.ts` verifies a row only when both lengths are known, so a length-less
+    // target can verify nothing: the request would only buy the null above, off the 3 s gate
+    // every player shares. Billie Jean is used because WITH its length it answers 1982 -- so the
+    // null here is the missing length's doing, not the capture's.
+    const searched = await createItunesLookup({
+      fetchImpl: capturedBody('creep'),
+      gate: openGate(),
+    }).lookup(inputFor('creep'));
+
+    const fetchImpl = capturedBody('billieJean');
+    const gate = openGate();
+    const { durationMs, ...withoutLength } = inputFor('billieJean');
+    void durationMs;
+    const outcome = await createItunesLookup({ fetchImpl, gate }).lookup(withoutLength);
+
+    expect(outcome).toEqual({ ...searched, requestCount: 0 });
+    expect(outcome).toEqual({
+      kind: 'answer',
+      answer: { provider: 'itunes', year: null },
+      cached: false,
+      requestCount: 0,
+    });
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(gate.acquire).not.toHaveBeenCalled();
+  });
 });
 
 describe('createItunesLookup failure mapping', () => {
-  it('should map 403 and 429 to busy, honouring Retry-After when present', async () => {
+  it('should map 403 and 429 to a refused skip, never to busy', async () => {
+    // Apple ITSELF refusing us (the developer's decision, 2026-10-01): iTunes is left out of the
+    // call and the vote decides without it, instead of being retried from the egress IP every
+    // player shares. `busy` is kept for OUR gate refusing a permit -- the next test.
     for (const status of [403, 429]) {
       const fetchImpl = serving(async () => ({ ok: false, status, json: async () => ({}) }));
       await expect(
         createItunesLookup({ fetchImpl, gate: openGate() }).lookup(inputFor('billieJean')),
-      ).resolves.toEqual({ kind: 'busy', retryAfterMs: ITUNES_BUSY_RETRY_AFTER_MS });
+      ).resolves.toEqual({ kind: 'skipped', reason: 'refused', detail: `HTTP ${status}` });
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
     }
-
-    const withHeader = serving(async () => ({
-      ok: false,
-      status: 429,
-      json: async () => ({}),
-      headers: { get: (name: string) => (name === 'retry-after' ? '7' : null) },
-    }));
-    await expect(
-      createItunesLookup({ fetchImpl: withHeader, gate: openGate() }).lookup(
-        inputFor('billieJean'),
-      ),
-    ).resolves.toEqual({ kind: 'busy', retryAfterMs: 7_000 });
   });
 
   it('should map a refused permit to busy with the gate retryAfterMs, making no request', async () => {

@@ -39,6 +39,7 @@ import { NoticeBanner } from './components/NoticeBanner';
 import { PreparingScreen } from './components/PreparingScreen';
 import { ReplaceSessionPrompt } from './components/ReplaceSessionPrompt';
 import { WelcomeScreen } from './components/WelcomeScreen';
+import { readLocalStorage } from './game/browser-storage';
 import { linkArrivalIntent, parseDeckLink } from './game/deck-link';
 import { deckBaseName, deckLabel } from './game/deck-merge';
 import { loadLibrary, removePlaylist, savePlaylist, savedDeckKey } from './game/playlist-library';
@@ -148,29 +149,6 @@ export interface AppProps {
  */
 function shareOrigin(): string {
   return `${window.location.origin}${window.location.pathname}`;
-}
-
-/** What the preference is read from and written to when `localStorage` itself is unreachable. */
-const NO_STORAGE: StorageLike = {
-  getItem: () => null,
-  setItem: () => {},
-  removeItem: () => {},
-};
-
-/**
- * `localStorage`, or a storage that remembers nothing -- the same guard `LocaleProvider.tsx` and
- * `ErrorBoundary.tsx` each keep a copy of (module-private there, so repeated here rather than
- * imported). Reading the PROPERTY can throw rather than return null (Safari private mode has
- * historically; a browser blocking site data does today), and the preference is read in a lazy
- * state initialiser on the first render: a throw there would be a crash screen before the front
- * door, for a checkbox nobody has touched.
- */
-function readLocalStorage(): StorageLike {
-  try {
-    return window.localStorage;
-  } catch {
-    return NO_STORAGE;
-  }
 }
 
 export default function App({ storage, fetchImpl, search }: AppProps = {}) {
@@ -369,13 +347,16 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
    *  The list the player sees is the list the app tried to store, and the next
    *  successful write repairs the store.
    *
-   *  `localStorage` is reached through the same `storage ?? localStorage` fallback
-   *  `useGameSession` uses, so the tests drive both keys from one in-memory stub.
+   *  `localStorage` is reached through the same `storage ?? readLocalStorage()`
+   *  fallback `useGameSession` uses, so the tests drive both keys from one
+   *  in-memory stub -- and GUARDED, because this runs on the first render: a
+   *  throwing getter here (blocked site data) was a crash screen before the
+   *  front door, and the next reload crashed again.
    *  Two keys under one storage, both carrying the two-tab hazard `plan.md` §6
    *  already accepts (step 15) -- this plan documents it rather than fixing it.
    * ===========================================================================
    */
-  const libraryStorage = storage ?? localStorage;
+  const libraryStorage = storage ?? readLocalStorage();
   const [savedPlaylists, setSavedPlaylists] = useState(() => loadLibrary(libraryStorage));
 
   /**
@@ -398,7 +379,8 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
    *
    *  Seeded in a LAZY initialiser, so the first render already shows the
    *  remembered value, through a GUARDED storage read (`readLocalStorage()`
-   *  above) -- `storage` is the tests' injection, as everywhere else here.
+   *  from `browser-storage.ts` -- a throw here would be a crash screen before
+   *  the front door) -- `storage` is the tests' injection, as everywhere else.
    * ===========================================================================
    */
   const [prefsStorage] = useState<StorageLike>(() => storage ?? readLocalStorage());

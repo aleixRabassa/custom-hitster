@@ -123,10 +123,15 @@ const MAX_STALE_WHILE_REVALIDATE_SECONDS = 86_400;
 /**
  * The staged path's `Cache-Control`. The max-age comes from `stagedEdgeMaxAgeSeconds()` --
  * bounded by the shortest TTL of the entries a final answer was built from, ~60 s for a
- * provisional one or a final reached with a provider skipped. The stale window mirrors the
- * legacy table's shape: never longer than the max-age, never longer than a day.
+ * provisional one or a final reached with a provider skipped, and `0` for a provisional one
+ * built on a provider that failed or was busy this call. `0` is sent as `no-store`, never as
+ * `s-maxage=0`: the client retries that answer on the same URL within a second or two, and
+ * nothing anywhere -- edge or browser -- may hand a retry the body it is retrying. The stale
+ * window mirrors the legacy table's shape: never longer than the max-age, never longer than
+ * a day.
  */
 function stagedCacheControl(maxAgeSeconds: number): string {
+  if (maxAgeSeconds <= 0) return 'no-store';
   const stale = Math.min(maxAgeSeconds, MAX_STALE_WHILE_REVALIDATE_SECONDS);
   return `public, s-maxage=${maxAgeSeconds}, stale-while-revalidate=${stale}`;
 }
@@ -291,12 +296,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 /**
  * The staged path: `runStage()` and its status mapping.
  *
- * | `runStage()`             | HTTP                                           |
- * | ------------------------ | ---------------------------------------------- |
- * | `ok`                     | 200, `Cache-Control` per `stagedCacheControl`  |
- * | `rate-limited`           | 429 + `retryAfterMs` + `Retry-After`           |
- * | `upstream-unavailable`   | 502 (every provider asked failed, none answered) |
- * | `not-configured`         | 500 (every provider in the plan unconfigured)  |
+ * | `runStage()`                         | HTTP                                             |
+ * | ------------------------------------ | ------------------------------------------------ |
+ * | `ok`, final, nothing skipped         | 200, `s-maxage` = shortest source TTL            |
+ * | `ok`, final with a provider skipped  | 200, `s-maxage=60`                               |
+ * | `ok`, provisional, nothing transient | 200, `s-maxage=60` (`resolve`'s hand-off)        |
+ * | `ok`, provisional and `transient`    | 200, `no-store` (a provider failed or was busy)  |
+ * | `rate-limited`                       | 429 + `retryAfterMs` + `Retry-After`             |
+ * | `upstream-unavailable`               | 502 (every provider asked failed, none answered) |
+ * | `not-configured`                     | 500 (every provider in the plan unconfigured)    |
+ *
+ * `resolve` answers `rate-limited` only when a provider was busy AND nothing answered; with
+ * an answer in hand it is the `ok`-and-`transient` row, and that body carries the busy
+ * provider's `retryAfterMs` -- in the BODY only, no `Retry-After` header on a 200 -- unless the
+ * answer is final. `verify` answers it on any busy provider (`api/_lib/year-pipeline.ts` says
+ * why the two differ). "Busy" means OUR gate refused a permit, and nothing else: a provider's
+ * OWN refusal (an iTunes 403/429, a Deezer quota body or 429) is never a 429 here. It is a
+ * skip, as an unconfigured provider is -- a 200 listing it in `skipped`, held `s-maxage=60`
+ * whether final or not (a refusal alone is not `transient`, so it never makes the body
+ * `no-store`) -- and never counts toward the 500.
  *
  * The body is built by the driver field by field; nothing is added or spread here.
  */
@@ -325,6 +343,7 @@ async function handleStage(
   const maxAge = stagedEdgeMaxAgeSeconds({
     final: outcome.result.final,
     skipped: outcome.result.skipped !== undefined,
+    transient: outcome.transient,
     sourceTtlsSeconds: outcome.sourceTtlsSeconds,
   });
   res.setHeader('Cache-Control', stagedCacheControl(maxAge));

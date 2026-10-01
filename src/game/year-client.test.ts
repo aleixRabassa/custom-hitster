@@ -315,6 +315,46 @@ describe('lookupYear', () => {
     }
   });
 
+  it('should pass a 200 retryAfterMs through when it is a usable number', async () => {
+    // The resolve lane's back-off after a provisional year decided beside a busy provider: the
+    // resolver sleeps on it, so it must reach the resolver intact -- zero included.
+    for (const retryAfterMs of [1_100, 0]) {
+      const body: YearLookupResult = {
+        ...SUCCESS,
+        confidence: 'low',
+        source: 'deezer',
+        final: false,
+        retryAfterMs,
+      };
+      const { fetchImpl } = stubFetch({ body });
+
+      expect(await lookupYear(TRACK, { fetchImpl, stage: 'resolve' })).toEqual({
+        ok: true,
+        result: body,
+      });
+    }
+  });
+
+  it('should drop a junk 200 retryAfterMs and keep the answer', async () => {
+    // Dropped, never a reason to reject the body: the year beside it is still good, and a lost
+    // hint only means no back-off. Each of these would otherwise reach `sleep()`.
+    const provisional: YearLookupResult = {
+      ...SUCCESS,
+      confidence: 'low',
+      source: 'deezer',
+      final: false,
+    };
+
+    for (const junk of [-1, Number.NaN, Number.POSITIVE_INFINITY, '1100', null, {}]) {
+      const { fetchImpl } = stubFetch({ body: { ...provisional, retryAfterMs: junk } });
+
+      const outcome = await lookupYear(TRACK, { fetchImpl, stage: 'resolve' });
+
+      expect(outcome).toEqual({ ok: true, result: provisional });
+      if (outcome.ok) expect(outcome.result).not.toHaveProperty('retryAfterMs');
+    }
+  });
+
   it('should reject an impossible year and confidence combination', async () => {
     // `{year: 1975, confidence: 'none'}` would put a year on the card while telling Phase 6 not
     // to show one. The shared union rules it out server-side; this is the client-side guard.

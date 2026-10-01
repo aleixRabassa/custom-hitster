@@ -230,10 +230,14 @@ export interface Confirmation {
   agreedBy: readonly [YearProviderId, YearProviderId];
 }
 
-/** A provider's position in the shipped plan; one not in it sorts last, stably. */
-function planRank(provider: YearProviderId): number {
-  const index = YEAR_PROVIDER_PLAN.findIndex((step) => step.provider === provider);
-  return index === -1 ? YEAR_PROVIDER_PLAN.length : index;
+/**
+ * A provider's position in `plan`; one not in it sorts last, stably. The plan is a PARAMETER,
+ * not the shipped constant, so `agreedBy` follows whatever plan the driver was handed -- with
+ * the shipped plan as every caller's default, the two cannot differ in production.
+ */
+function planRank(provider: YearProviderId, plan: ProviderPlan): number {
+  const index = plan.findIndex((step) => step.provider === provider);
+  return index === -1 ? plan.length : index;
 }
 
 /**
@@ -245,7 +249,10 @@ function planRank(provider: YearProviderId): number {
  * where two pairs disagree (§5.1 rule 1). Voters are collected per PROVIDER in a set, which
  * is what makes Deezer's two dates one voter even if a caller passed its answer twice.
  */
-export function findConfirmation(answers: readonly ProviderAnswer[]): Confirmation | null {
+export function findConfirmation(
+  answers: readonly ProviderAnswer[],
+  plan: ProviderPlan = YEAR_PROVIDER_PLAN,
+): Confirmation | null {
   const votersByYear = new Map<number, Set<YearProviderId>>();
   for (const answer of answers) {
     for (const year of voterYears(answer)) {
@@ -258,7 +265,7 @@ export function findConfirmation(answers: readonly ProviderAnswer[]): Confirmati
   let best: Confirmation | null = null;
   for (const [year, voters] of votersByYear) {
     if (voters.size < 2 || (best !== null && year >= best.year)) continue;
-    const [first, second] = [...voters].sort((a, b) => planRank(a) - planRank(b));
+    const [first, second] = [...voters].sort((a, b) => planRank(a, plan) - planRank(b, plan));
     if (first === undefined || second === undefined) continue;
     best = { year, agreedBy: [first, second] };
   }
@@ -326,8 +333,9 @@ function keptByTier(
 export function decideYear(
   answers: readonly ProviderAnswer[],
   trust: readonly TrustTier[] = UNCONFIRMED_TRUST,
+  plan: ProviderPlan = YEAR_PROVIDER_PLAN,
 ): YearDecision {
-  const confirmation = findConfirmation(answers);
+  const confirmation = findConfirmation(answers, plan);
   if (confirmation !== null) {
     return {
       year: confirmation.year,
@@ -432,7 +440,7 @@ export type Frontier = { kind: 'ask'; providers: YearProviderId[] } | { kind: 'd
 export interface FrontierState {
   /** Every answer obtained so far, from either stage (cached or fresh). */
   answers: readonly ProviderAnswer[];
-  /** Providers never to ask again in this call: skipped, failed or busy. */
+  /** Providers never to ask again in this call: skipped (not configured or refused) or failed. */
   excluded: ReadonlySet<YearProviderId>;
 }
 
@@ -457,7 +465,7 @@ export interface FrontierState {
  *   asking two could spend a request the stop rule would have saved.
  */
 export function nextFrontier(plan: ProviderPlan, stage: YearStage, state: FrontierState): Frontier {
-  if (findConfirmation(state.answers) !== null) return { kind: 'done' };
+  if (findConfirmation(state.answers, plan) !== null) return { kind: 'done' };
 
   const answered = new Set(state.answers.map((answer) => answer.provider));
   const candidates = plan.filter(

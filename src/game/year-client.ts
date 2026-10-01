@@ -183,6 +183,12 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
  * page, a rewritten route), not to re-implement the server's types. `agreedBy` and `skipped`
  * pass through untouched with the rest of the record: nothing below React branches on them.
  *
+ * `retryAfterMs` is the one optional field that IS checked, because the resolver sleeps on it
+ * (the resolve lane's back-off after a 200 decided beside a busy provider): it passes through
+ * only when it is a finite, non-negative number -- the same rule as a 429's -- and is DROPPED
+ * otherwise. Dropped rather than rejected: the year beside it is still good, and a body that
+ * lost its hint just means no back-off, which is what every answer without one gets anyway.
+ *
  * `final` MUST be a boolean (2026-09-30). It is the only field that tells pending, provisional
  * and final apart, so a body without it cannot be acted on at all -- and the body most likely to
  * lack it is the stage-less legacy MusicBrainz-only one, edge-cached for 30 days, which any
@@ -209,7 +215,18 @@ function asLookupResult(body: unknown): YearLookupResult | undefined {
 
   if (typeof record['final'] !== 'boolean') return undefined;
 
-  return record as unknown as YearLookupResult;
+  // Rebuilt without the hint rather than `delete`d from the parsed body, then put back only when
+  // it is usable -- see the doc comment above.
+  const { retryAfterMs, ...rest } = record;
+  const result = rest as unknown as YearLookupResult;
+  if (isRetryAfterMs(retryAfterMs)) result.retryAfterMs = retryAfterMs;
+
+  return result;
+}
+
+/** A usable back-off hint from a response body: a finite, non-negative number of ms. */
+function isRetryAfterMs(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
 }
 
 /** The body's `code`, when it is one the server is known to send. */
@@ -231,9 +248,7 @@ function errorCodeFrom(body: unknown): YearErrorCode | undefined {
  */
 function retryAfterFrom(body: unknown, response: YearFetchResponse): number | undefined {
   const fromBody = asRecord(body)?.['retryAfterMs'];
-  if (typeof fromBody === 'number' && Number.isFinite(fromBody) && fromBody >= 0) {
-    return fromBody;
-  }
+  if (isRetryAfterMs(fromBody)) return fromBody;
 
   const header = Number.parseFloat(response.headers.get('Retry-After') ?? '');
   if (Number.isFinite(header) && header >= 0) return header * 1000;

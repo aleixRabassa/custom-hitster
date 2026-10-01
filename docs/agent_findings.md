@@ -5673,3 +5673,50 @@ Phase 2's decision 15 that the full joined artist string is queried before the p
   defect, separate from the ladder. Under the vote the card still shows 2011, because iTunes and
   Deezer agree on it; the wrong MusicBrainz year shows on the stage-less legacy path, and would
   show on the staged one wherever the stores are silent.
+
+## 2026-10-01 — FIXED: an edge-cached non-final `verify` answer turned a two-second outage into a dropped card
+
+Found by the branch review of `year-fetch-rework` (`docs/reviews/review.year-fetch-rework.md`, B1).
+The staged `/api/year` sent every non-final 200 as `public, s-maxage=60, stale-while-revalidate=60`
+(plan 2 step 11's "about 60 s for a provisional answer"). That window is right for resolve's
+ordinary hand-off to verify, and wrong for a non-final answer caused by a provider FAILING: the
+client's verify lane treats `final: false` as a transient and retries **the same URL** (no
+cache-buster, no `cache:` option in `year-client.ts`) after ~0.5 s and ~1 s, then defers and spends
+its second pass — the current card at once, because `pickVerify` puts it first. All six retries hit
+Vercel's edge copy rather than the function, so `settleExhausted` ran about four seconds after a
+two-second blip: a final null that drops the card with "Keep cards with no year found" OFF, or a
+provisional year frozen at `low`. Nothing local could see it — no test runs behind a CDN.
+
+The fix keeps the 60 s for a plain provisional answer and sends `Cache-Control: no-store` whenever
+the answer is non-final AND a provider failed or was busy in that call (`transient` on `runStage`'s
+ok outcome, read by `stagedEdgeMaxAgeSeconds`). It is the rule `withAnswerCache` already followed for
+Redis — a failure is a statement about the provider right now, not about the track — applied to the
+edge. The lesson generalises: **an edge `Cache-Control` on a response the client is designed to
+retry must be decided by whether the client will retry it**, not only by how stale the answer may
+safely get.
+
+The same review changed three neighbouring behaviours, each by the developer's ruling: a `resolve`
+with an answer in hand no longer turns one busy provider into a 429 (it decides, non-final, so the
+fast Deezer year reaches the player — `verify` keeps the 429 because the client counts a non-final
+verify 200 as an attempt); an exhausted resolve hands the card to verify instead of settling null
+(reversing plan 3 step 4); and a store lookup with no `durationMs` no longer writes its (necessarily
+null) answer under a key that carries no duration — and, after the re-review, the Deezer and iTunes
+adapters send such a lookup no request at all, since store-match cannot verify a row without the
+target's length.
+
+**Correction to the 2026-09-28 locale entry** (which says `App.tsx` reads `storage ?? localStorage`
+directly and "is survivable only because it is inside the boundary"): it was not survivable. A
+throwing `localStorage` getter crashed `App` on its first render, and Start over could not clear a
+storage it could not reach, so every reload crashed again. Since 2026-10-01 every first-render read —
+the session in `useGameSession`, the library and the prefs in `App.tsx`, `LocaleProvider` and
+`ErrorBoundary` — goes through the one guard in `src/game/browser-storage.ts`, and `App.test.tsx`
+renders the app with a throwing getter. The resolver header's "one client never holds two
+MusicBrainz lookups" was corrected rather than enforced: `verify` re-running a cold `resolve`
+frontier is plan 2's design, kept so a card whose first MusicBrainz try failed still gets its vote.
+
+After the review the developer separated two kinds of "busy" ("no cap while busy; if the IP is
+refused, stop"). Our own gate refusing a permit stays `busy`, retried with no cap. A provider
+refusing us itself (an iTunes 403/429, a Deezer quota body `code: 4` or 700, a Deezer 429) is now a
+`refused` SKIP, counted absent like `not-configured`. Before, a long Apple throttle of Vercel's IPs
+would have left every card provisional for ever, so the PDF never printed and, with the option OFF, a
+provisional start card held the loading screen.

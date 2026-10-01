@@ -233,9 +233,10 @@ describe('ttlFor', () => {
     // are global across all users. The staged path recomputes the vote from its cache
     // entries on every call, so a FINAL answer with nothing skipped may be held at the edge
     // for at most the SHORTEST TTL among those entries; anything provisional, or final only
-    // because a provider was skipped, gets the short window. An earlier two-tier version of
-    // this file broke the old per-tier rule on `low`: 30 days in Redis against 1 day at the
-    // edge.
+    // because a provider was skipped, gets the short window -- and a provisional answer built
+    // on a provider that failed or was busy gets NO window at all, because the client retries
+    // it on the same URL. An earlier two-tier version of this file broke the old per-tier
+    // rule on `low`: 30 days in Redis against 1 day at the edge.
     const entries: ProviderAnswer[] = [
       { provider: 'deezer', year: 1991, isrcYear: 1991 },
       { provider: 'musicbrainz', year: 1991, confidence: 'low', source: 'recording' },
@@ -248,20 +249,26 @@ describe('ttlFor', () => {
       const edge = stagedEdgeMaxAgeSeconds({
         final: true,
         skipped: false,
+        transient: false,
         sourceTtlsSeconds: built,
       });
       expect(edge).toBeLessThanOrEqual(Math.min(...built));
     }
 
-    expect(stagedEdgeMaxAgeSeconds({ final: false, skipped: false, sourceTtlsSeconds: ttls })).toBe(
-      PROVISIONAL_EDGE_SECONDS,
-    );
-    expect(stagedEdgeMaxAgeSeconds({ final: true, skipped: true, sourceTtlsSeconds: ttls })).toBe(
-      PROVISIONAL_EDGE_SECONDS,
-    );
-    expect(stagedEdgeMaxAgeSeconds({ final: true, skipped: false, sourceTtlsSeconds: [] })).toBe(
-      PROVISIONAL_EDGE_SECONDS,
-    );
+    const edge = (final: boolean, skipped: boolean, transient: boolean, sources = ttls) =>
+      stagedEdgeMaxAgeSeconds({ final, skipped, transient, sourceTtlsSeconds: sources });
+
+    // Provisional with nothing transient: `resolve`'s ordinary hand-off to `verify`.
+    expect(edge(false, false, false)).toBe(PROVISIONAL_EDGE_SECONDS);
+    expect(edge(true, true, false)).toBe(PROVISIONAL_EDGE_SECONDS);
+    expect(edge(true, false, false, [])).toBe(PROVISIONAL_EDGE_SECONDS);
+    // Provisional because a provider failed or was busy: not held at all, and that wins over
+    // `skipped` -- a failed provider is listed there too.
+    expect(edge(false, false, true)).toBe(0);
+    expect(edge(false, true, true)).toBe(0);
+    // A confirmation beside a failure is final by the stop rule: `transient` changes nothing.
+    expect(edge(true, true, true)).toBe(PROVISIONAL_EDGE_SECONDS);
+    expect(edge(true, false, true)).toBe(Math.min(...ttls));
     // The short window is itself shorter than every entry it could be built from.
     expect(PROVISIONAL_EDGE_SECONDS).toBeLessThan(NO_YEAR_TTL_SECONDS);
 
@@ -616,9 +623,11 @@ describe('withAnswerCache', () => {
   });
 
   it('should pass skipped, failed and busy through without caching them', async () => {
-    // Each is a statement about the provider right now, not about the track.
+    // Each is a statement about the provider right now, not about the track. A cached
+    // refusal would keep the store out of the vote long after it stopped refusing.
     const outcomes: ProviderOutcome[] = [
       { kind: 'skipped', reason: 'not-configured', missingVariable: 'X' },
+      { kind: 'skipped', reason: 'refused', detail: 'HTTP 403' },
       { kind: 'failed', code: 'upstream-unavailable' },
       { kind: 'busy', retryAfterMs: 3_000 },
     ];
@@ -633,6 +642,57 @@ describe('withAnswerCache', () => {
       expect(inner.calls).toBe(2);
       expect(cache.writes).toEqual([]);
     }
+  });
+
+  it('should never write an answer from a lookup with no duration, but still read one', async () => {
+    // `store-match.ts` verifies a row only when both lengths are known, so a length-less
+    // lookup always answers null -- about the request, not the track. The key has no duration
+    // in it, so writing that null would serve it to every card with this artist and title.
+    const withoutDuration: ProviderLookupInput = {
+      rawTitle: INPUT.rawTitle,
+      cleaned: INPUT.cleaned,
+      rawArtist: INPUT.rawArtist,
+      primaryArtist: INPUT.primaryArtist,
+    };
+    const cache = recordingAnswerCache();
+    const inner = fixedLookup('deezer', {
+      kind: 'answer',
+      answer: DEEZER_NULL,
+      cached: false,
+      requestCount: 1,
+    });
+    const wrapped = withAnswerCache(inner, cache);
+
+    expect(await wrapped.lookup(withoutDuration)).toMatchObject({ kind: 'answer', cached: false });
+    expect(await wrapped.lookup(withoutDuration)).toMatchObject({ kind: 'answer', cached: false });
+    expect(inner.calls).toBe(2);
+    expect(cache.writes).toEqual([]);
+
+    // The read is kept: an entry written by a lookup that HAD a duration is evidence about
+    // the track, and a length-less card is served it.
+    const withLength = withAnswerCache(
+      fixedLookup('itunes', {
+        kind: 'answer',
+        answer: ITUNES_ANSWER,
+        cached: false,
+        requestCount: 1,
+      }),
+      cache,
+    );
+    await withLength.lookup(INPUT);
+    const asked = fixedLookup('itunes', {
+      kind: 'answer',
+      answer: ITUNES_NULL,
+      cached: false,
+      requestCount: 1,
+    });
+    expect(await withAnswerCache(asked, cache).lookup(withoutDuration)).toEqual({
+      kind: 'answer',
+      answer: ITUNES_ANSWER,
+      cached: true,
+      requestCount: 0,
+    });
+    expect(asked.calls).toBe(0);
   });
 
   it('should key by the raw artist and the cleaned title, as the batched read does', () => {

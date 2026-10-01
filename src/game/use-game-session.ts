@@ -19,6 +19,7 @@
 
 import { useCallback, useEffect, useReducer, useRef } from 'react';
 
+import { readLocalStorage } from './browser-storage';
 import { clearSession, loadSession, saveSession } from './persistence';
 import {
   cardsPlayed,
@@ -26,7 +27,6 @@ import {
   currentCard,
   gameReducer,
   initialGameState,
-  isCurrentYearPending,
   pendingYearCount,
   resolvedCount,
 } from './reducer';
@@ -58,8 +58,9 @@ export interface StartOptions {
 
 export interface UseGameSessionOptions {
   /**
-   * Defaults to `localStorage`. Injectable so Phase 4's component tests can hand in a stub
-   * instead of depending on a DOM environment's storage.
+   * Defaults to `localStorage`, reached through the guarded `readLocalStorage()` (see
+   * `browser-storage.ts`). Injectable so Phase 4's component tests can hand in a stub instead of
+   * depending on a DOM environment's storage.
    */
   storage?: StorageLike;
 }
@@ -75,7 +76,6 @@ export interface GameSession {
   state: GameState;
   /** Derived, never stored -- see the selector block in `reducer.ts`. */
   currentCard: Card | undefined;
-  isCurrentYearPending: boolean;
   cardsRemaining: number;
   resolvedCount: number;
   /**
@@ -127,7 +127,13 @@ function initializeSession(storage: StorageLike): GameState {
 }
 
 export function useGameSession(options: UseGameSessionOptions = {}): GameSession {
-  const storage = options.storage ?? localStorage;
+  // GUARDED: `App` calls this hook on its first render, so a throwing `localStorage` GETTER
+  // (blocked site data) here was a crash before the front door -- and, since the crash screen's
+  // Start over clears the save through the same unreachable storage, a crash on every reload. A
+  // fallback that remembers nothing plays one unsaved game instead. Still evaluated every render,
+  // as the bare read was; the identity is stable either way (the browser's one `localStorage`, or
+  // the module-level `NO_STORAGE`), so the effects keyed on it do not re-run.
+  const storage = options.storage ?? readLocalStorage();
   const [state, dispatch] = useReducer(gameReducer, storage, initializeSession);
 
   /**
@@ -270,7 +276,6 @@ export function useGameSession(options: UseGameSessionOptions = {}): GameSession
   return {
     state,
     currentCard: currentCard(state),
-    isCurrentYearPending: isCurrentYearPending(state),
     cardsRemaining: cardsRemaining(state),
     resolvedCount: resolvedCount(state),
     pendingYearCount: pendingYearCount(state),

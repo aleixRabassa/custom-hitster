@@ -36,8 +36,8 @@ Several decisions in this repo look like mistakes and are not. If something seem
 | [`docs/plans/plan.google-play-back-button.md`](./docs/plans/plan.google-play-back-button.md)       | Google Play, plan 2 — Android back as an in-app control. **Built 2026-08-12**; device rows wait on plan 1. **Frozen 2026-09-19** — its rows run from plan 3                                                                                                                                                                                                                                                                                          |
 | [`docs/plans/plan.play-store-todo.md`](./docs/plans/plan.play-store-todo.md)                       | Google Play, plan 3 — **THE ONLY EXECUTABLE GOOGLE PLAY FILE.** Everything from the trademark relabel to a staged production rollout. Steps 2, 3 and 8 built 2026-09-19                                                                                                                                                                                                                                                                              |
 | [`docs/plans/plan.year-fetch-rework-mb-fixes.md`](./docs/plans/plan.year-fetch-rework-mb-fixes.md) | Year-fetch rework, plan 1 — the last-segment-first title cleaner and its new families, the `tokenised` rescue rung capped at `low`, a failed release-group request as `upstream-unavailable`, the cache at `v5`. **Built 2026-09-30**; the `tokenised` rung **removed 2026-10-01**, when the query ladder was reordered and the cache went to `v6`                                                                                                   |
-| [`docs/plans/plan.year-fetch-rework-server.md`](./docs/plans/plan.year-fetch-rework-server.md)     | Year-fetch rework, plan 2 — the provider vote in `shared/` (Deezer beside MusicBrainz, then iTunes; two agreeing providers confirm a year), the Deezer and iTunes adapters, a gate and a cache per provider, `/api/year` split into `resolve` and `verify` stages. **Built 2026-09-30**; step 15's preview smoke test outstanding                                                                                                                    |
-| [`docs/plans/plan.year-fetch-rework-game.md`](./docs/plans/plan.year-fetch-rework-game.md)         | Year-fetch rework, plan 3 — the game layer: provisional years, `keepYearless`, the two-lane resolver, persistence, the PDF gate. **Built 2026-09-30**; step 11's preview smoke test outstanding                                                                                                                                                                                                                                                      |
+| [`docs/plans/plan.year-fetch-rework-server.md`](./docs/plans/plan.year-fetch-rework-server.md)     | Year-fetch rework, plan 2 — the provider vote in `shared/` (Deezer beside MusicBrainz, then iTunes; two agreeing providers confirm a year), the Deezer and iTunes adapters, a gate and a cache per provider, `/api/year` split into `resolve` and `verify` stages. **Built 2026-09-30**; steps 10–11 **amended 2026-10-01** by the branch review (busy, provider refusals, the edge); step 15's preview smoke test outstanding                       |
+| [`docs/plans/plan.year-fetch-rework-game.md`](./docs/plans/plan.year-fetch-rework-game.md)         | Year-fetch rework, plan 3 — the game layer: provisional years, `keepYearless`, the two-lane resolver, persistence, the PDF gate. **Built 2026-09-30**; step 4's deferred pass **reversed 2026-10-01** by the branch review; step 11's preview smoke test outstanding                                                                                                                                                                                 |
 | [`docs/plans/plan.year-fetch-rework-ui.md`](./docs/plans/plan.year-fetch-rework-ui.md)             | Year-fetch rework, plan 4 — the reveal's provisional-year slot, the picker's "Keep cards with no year found" checkbox and its remembered choice, copy in three languages, the blank PDF year. **Built 2026-09-30**; step 10's preview checks outstanding                                                                                                                                                                                             |
 | [`docs/spikes/spike.year-fetch-rework.md`](./docs/spikes/spike.year-fetch-rework.md)               | Year-fetch spike — why 21% of real cards get no year, what title rewrites and other providers recover, and which providers a paid app may use (not Deezer, not iTunes; MusicBrainz needs a plan or a mirror). **Measured 2026-09-29, and turned into the four `plan.year-fetch-rework-*.md` plans above**; film-score, Disney and anime decks measured 2026-09-30 (§13); **Discogs dropped and the lone-answer order decided the same day (§13.12)** |
 | [`docs/spikes/spike.ai-year-fetch.md`](./docs/spikes/spike.ai-year-fetch.md)                       | LLM spike — one streamed request to `gemini-3.8-flash` / `gpt-6-luna` instead of the providers. Licence-clean when paid, ~15–20× faster per deck, **but past its cutoff the model guessed a wrong year on 40 of 40 tracks**, so it cannot be the only source. **Two free-tier probes 2026-09-30, nothing built**                                                                                                                                     |
@@ -596,11 +596,24 @@ Re-adding it is a plan step, a trust tier, a `YearProviderId` member and an adap
   **A partial failure beside an answer is a 200 with `final: false`, never a 502** — a 502 would throw
   away a year the client can show while it retries; `upstream-unavailable` (502) means something
   failed AND nothing answered. `busy` (429 + `retryAfterMs`, from whichever provider's gate was full)
-  stops the call at once, and what the same frontier obtained is already cached for the next call.
+  stops the call at once, and what the same frontier obtained is already cached for the next call —
+  **except on a `resolve` with an answer in hand** (2026-10-01, the developer's ruling): there a busy
+  provider ends the asking and the call decides, a `200` with `final: false` (final only if the answers
+  in hand confirm), so a fast Deezer year reaches the player while MusicBrainz's gate is full. **That
+  200 still carries the busy provider's `retryAfterMs` in its body** (unless final), and the client's
+  resolve lane sleeps on it before its next card exactly as on a 429 — without it the lane would fire
+  the next card straight back into the full gate while `verify` re-asks MusicBrainz for this one, two
+  waiters per client. **`verify`
+  keeps the 429 on purpose**: the client counts a non-final verify 200 as a transient attempt and
+  settles the card exhausted after six, while it sleeps on a 429 without counting. **And a non-final
+  answer built on a failed or busy provider is `Cache-Control: no-store`** (2026-10-01, review B1): the
+  verify lane retries the SAME URL within a second, so an edge copy would serve every retry the same
+  failure and settle the card exhausted — a final null that drops it. A failure is a statement about
+  the provider right now, the rule `withAnswerCache` already follows.
 - **`verify` re-runs `resolve`'s frontiers first, and that is not a second resolve** (`STAGES_RUN` in
   `api/_lib/year-pipeline.ts`). On a warm cache every `resolve` provider was already answered by the
   batched read, so those frontiers are empty and `verify` asks only iTunes. They matter when the cache
-  does not hold them — `vercel dev`, an evicted entry, a `resolve` whose MusicBrainz failed — because
+  does not hold them — `vercel dev`, an evicted entry, a `resolve` whose MusicBrainz failed or was busy — because
   `verify` is the stage the client treats as the last word. It reads `resolve`'s answers from Redis,
   never from the client, so no client can put a year into the cache.
 - **Every provider's answer is cached on its own, so a reorder needs no bump.** The stores live under
@@ -610,7 +623,14 @@ Re-adding it is a plan step, a trust tier, a `YearProviderId` member and an adap
   card is one Redis command. The vote is recomputed on every call and no key encodes the order. A
   cached final vote (`yearfinal:`) was rejected because it would need a bump on every plan change and
   would pin a final reached while a provider was skipped. The edge gets at most the shortest source
-  TTL for a final answer with nothing skipped, and ~60 s otherwise.
+  TTL for a final answer with nothing skipped, `no-store` for a non-final answer after a failure or a
+  busy provider, and ~60 s otherwise. **A store lookup with no `durationMs` is never WRITTEN to its
+  answer cache** (review W3): it can verify no row, so its null says nothing about the track, and the
+  key carries no duration, so it would be served for a day to every card with the same artist and
+  title. It still reads the cache. **And it sends no request at all**: the Deezer and iTunes adapters
+  return that null with no gate permit and no fetch when `durationMs` is undefined, because spending a
+  Deezer search and a slot on the 3 s global iTunes gate would buy a null known in advance; the
+  no-write rule in `withAnswerCache` is the second guard behind them.
 - **The stage-less `/api/year` is the old MusicBrainz-only path, byte for byte, and it stays** for
   tabs still running the pre-vote client: the service worker waits rather than calling `skipWaiting`,
   so such a tab lives until every tab closes, and it drops any card that comes back `null`. **It still
@@ -622,10 +642,17 @@ Three as-built facts. **The handler's tests are `api/_lib/year-endpoint.test.ts`
 `api/year.test.ts`** (the plan's name): `vercel.json` deploys every `api/*.ts` as a function, so a test
 beside the handler would ship as `/api/year.test`, importing Vitest at runtime; `_`-prefixed paths are
 not routed. **`api/_lib/store-http.ts` is the one gated GET both store adapters share** — a permit, one
-GET, and every failure mapped to an outcome arm (refusal → `busy`, network error or 5xx → transient
+GET, and every failure mapped to an outcome arm (a refused gate PERMIT → `busy`, the provider's own
+refusal → a `refused` skip, network error or 5xx → transient
 `failed`, any other non-2xx or a non-JSON body → `unexpected-payload`) — so Deezer and iTunes cannot
 drift on the promise that an adapter never throws. Deezer's quota error is `{"error":{"code":4}}` with
-**HTTP 200**, so it is read from the body; iTunes' 403 and 429 are `busy`; and Deezer fetches
+**HTTP 200**, so it is read from the body; it, a Deezer 429 and iTunes' 403 and 429 are a **`refused`
+skip, not `busy`** (2026-10-01, the developer's ruling: "no cap while busy; if the IP is refused,
+stop"). Only our OWN gate being full is busy, and that is retried with no cap. A provider shutting us
+out is left out of the call like a `not-configured` one, listed in `skipped`, warned once per cold
+start, and the vote decides without it, so no card waits for ever on a provider that refuses. With
+the option OFF a card can therefore settle without iTunes' vote, or as a final null if nothing else
+answered. The ~60 s "final with something skipped" edge window is what lets it heal; and Deezer fetches
 `track/{id}` for at most `DEEZER_TRACK_FETCH_LIMIT` = 3 verified hits, because a fourth found no year
 the third had not. And **the licences of spike §10.1 still stand**: Deezer and iTunes may not be used
 in a paid app, and MusicBrainz needs a plan or a mirror. The developer set that aside because the app
@@ -650,12 +677,22 @@ test sites. It is additive — **no save-format bump**, the `startIndex` precede
   guaranteed after a resume or a retry. A final number replaces a provisional year on **every** card,
   the one the player is reading included.
 - **The resolver runs TWO LANES, ONE REQUEST IN FLIGHT PER STAGE** (`resolver.ts`'s header). One slot
-  per stage because each stage sits behind its own provider gates on the server, and **one client must
-  never hold two MusicBrainz lookups** against a gate shared by every user — which a single queue with
-  two slots would allow. One resolver rather than two workers because the resolve-to-verify hand-off
+  per stage because each stage sits behind its own provider gates on the server, and a single queue with
+  two slots would let **one client hold two MusicBrainz lookups** against a gate shared by every user as
+  a matter of course. **One slot per stage NORMALLY means one MusicBrainz lookup per client, not
+  always** (corrected 2026-10-01): the server's `verify` re-runs `resolve`'s frontiers, so a card with
+  no cached `mbyear:` entry (its resolve-stage lookup failed or met a busy gate, the entry was
+  evicted, or always under `vercel dev`) has its `verify` call MusicBrainz while the resolve lane may
+  be calling it for another card. In the busy case — the common one under contention — the resolve
+  lane sleeps the server's `retryAfterMs` instead of firing the next card into the full gate — which
+  cuts the waiters, but does NOT guarantee one: the verify re-ask usually meets the same full gate,
+  429s and sleeps about as long, so the two lanes can wake together and each send a lookup. Accepted rather than "fixed" by skipping MusicBrainz in `verify`, which would lose its vote —
+  the best coverage of old catalogue and the only "first release" date — on exactly the cards whose
+  first try failed. One resolver rather than two workers because the resolve-to-verify hand-off
   would land in the hook (whose header forbids logic), there would be two teardowns, and nothing would
   push the start card into verification while the loading screen waits on it. "Do not optimise into a
-  parallel fetch" still stands, per lane. On a 429 **only that lane sleeps**, then picks again; one
+  parallel fetch" still stands, per lane. On a 429 **only that lane sleeps**, then picks again — and the resolve lane also sleeps after a
+  non-final `resolve` 200 that carries `retryAfterMs` (a busy provider beside an answer); one
   `AbortController` and one `stop()` end both, and `not-configured` halts both.
 - **Every card is in one of three stage states** — `needs-resolve`, `needs-verify`, `final` — **seeded
   from the deck**: an undefined year needs resolve, a `yearProvisional` year needs verify (a resumed
@@ -674,12 +711,21 @@ test sites. It is additive — **no save-format bump**, the `startIndex` precede
   failed transiently, so its year (if any) is shown provisionally and the card is retried like any
   transient failure.
 - **Exhausted verify settles the card FINAL at the best single answer it has** (spike §10.3): its
-  provisional year at `low`, or a final `null` if resolve found nothing either. Otherwise the card waits
-  for ever, and the PDF with it. The resolve lane's deferred pass settles null exactly as it always did.
+  provisional year at `low`, or a final `null` if resolve found nothing either (or never answered).
+  Otherwise the card waits for ever, and the PDF with it. **An exhausted RESOLVE hands the card to
+  verify rather than settling null** (2026-10-01, the developer's ruling, reversing plan 3 step 4's
+  "settles null exactly as today"): a provider outage must not drop cards on the client when the
+  server was built never to turn a transient failure into a final "no year", and `verify` asks more
+  providers. So an exhausted verify is now the only route to a null after transient failures; a 400
+  still settles null at once.
 - **The year selectors now disagree ON PURPOSE.** `isCurrentYearPending` stays "`year` is undefined",
   because a provisional card SHOWS its year; `resolvedCount` excludes provisional cards, so
   `pendingYearCount` counts them as pending and the PDF waits for verification. Two questions, two
   answers — do not "fix" one to match the other; the comment above `pendingYearCount` says the same.
+  **Since 2026-10-01 nothing in production reads `isCurrentYearPending`** (the reveal reads
+  `yearStateOf`, and the review removed the field from `useGameSession`'s return). The selector is
+  kept, with its tests, as the definition of "pending"; wiring it back into a screen beside
+  `yearStateOf` would reintroduce two readings of one state.
 
 **"KEEP CARDS WITH NO YEAR FOUND" IS A SESSION OPTION AS OF 2026-09-30, DEFAULT OFF, AND IT DECIDES
 THREE THINGS: THE GATE, THE DROP AND THE PDF'S BLANK YEAR**
@@ -1209,7 +1255,7 @@ something `plan.md` had already resolved, so read these before "fixing" the code
 
 - `src/` = browser (may use the `@/` alias and DOM APIs) · `api/` = Node · `shared/` = both, so **no DOM and no Node APIs**.
 - **`shared/` holds the DECISION half of the year vote as of 2026-09-30.** `shared/year-providers.ts` = the provider plan, the trust order, the voter rule, the confirmation, the frontier, `isrcYear` and the provider cache key; `shared/store-match.ts` = whether a Deezer or iTunes row is the SAME recording (equal cleaned title, every primary-artist token in the credit — deliberately NOT `artistMatchesExact` — a duration within tolerance where a length-less row fails, and the earliest verified row wins). Both sit beside `shared/year.ts` and are node-tested with no HTTP. The BINDING half is `api/_lib/`: `year-pipeline.ts` (the thin driver), `provider-lookup.ts` (the adapter contract), `deezer.ts` and `itunes.ts` over `store-http.ts`, and `musicbrainz-provider.ts` (wraps `resolveYear` whole). A vote rule that starts growing in the driver belongs in `shared/year-providers.ts`, same rule as `gestures.ts`. `store-match.ts`'s mutation guard lives in `api/_lib/year-votes.test.ts`, because the captured payloads are Node-side fixtures and a `shared/` test importing `api/` would drag them into the browser typecheck.
-- **`src/` has four subtrees, and which one a file belongs in is a real decision.** `src/game/` = the session (reducer, shuffle, resolver, persistence, gesture _decisions_, the playlist client, the error-copy map) — pure and framework-free apart from one hook. `src/components/` = presentational React, props in and callbacks out, no session knowledge. `src/hooks/` = the stateful concerns a component should not own (audio, gesture _binding_, the playlist request). `src/components/__fixtures__/` = the shared fixture deck every component test renders from. Logic that starts accumulating in a component belongs in a hook or in `src/game/`.
+- **`src/` has four subtrees, and which one a file belongs in is a real decision.** `src/game/` = the session (reducer, shuffle, resolver, persistence, gesture _decisions_, the playlist client, the error-copy map) — pure and framework-free apart from one hook. `src/components/` = presentational React, props in and callbacks out, no session knowledge. `src/hooks/` = the stateful concerns a component should not own (audio, gesture _binding_, the playlist request). `src/components/__fixtures__/` = the shared fixture deck every component test renders from. **`src/game/browser-storage.ts` is the one other non-pure file there** (2026-10-01): the guarded `window.localStorage` read every first-render caller shares — kept beside `persistence.ts`'s `StorageLike` on purpose, not misplaced. Logic that starts accumulating in a component belongs in a hook or in `src/game/`.
 - **`src/App.tsx` is the ONLY caller of `useGameSession()`**, and the only file that knows all four statuses exist. Screens receive plain data and callbacks. `dispatch` is deliberately not exposed by the hook, so a screen cannot invent a transition the reducer's tests never considered — if a screen seems to need a fifth action, add it to the reducer with its tests.
 - **Both HTTP clients live in `src/game/` and take an injected `fetch`** (`year-client.ts`, `playlist-client.ts`), with a thin hook over each. That is what keeps every status branch a **node-environment** unit test with no jsdom and no network. Anything that accumulates in the hook belongs in the client instead.
 - **The decision/binding split is the house style, and it exists because of what cannot be tested.** Phase 3 did it for the resolver; Phase 5 did it for gestures. `src/game/gestures.ts` holds every threshold and comparison as pure functions over numbers; `src/hooks/useCardGestures.ts` only collects coordinates and dispatches. The reason is specific: **jsdom cannot exercise a drag** — Motion's drag reads element geometry jsdom does not compute, so a simulated pointer sequence tests the double, not the gesture. Thresholds left inline in the hook would be untested full stop. When adding gesture behaviour, the decision goes in `src/game/`, not the hook.

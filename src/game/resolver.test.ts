@@ -731,6 +731,55 @@ describe('createYearResolver back-pressure', () => {
     expect(harness.sleeps).toEqual([1_500]);
   });
 
+  it('should back the resolve lane off after a provisional 200 that carries retryAfterMs', async () => {
+    // A `resolve` decided beside a busy provider (MusicBrainz's gate full): the year is shown at
+    // once, but the 200 carries the 429's back-off, and the resolve lane must sleep it before its
+    // next card instead of sending a second lookup to the full gate. The card itself is handed
+    // to verify exactly as any provisional one -- and the verify lane takes it WHILE the resolve
+    // lane is parked, which is what makes the verify re-ask the one lookup waiting.
+    const busy: YearLookupOutcome = {
+      ok: true,
+      result: { ...PROVISIONAL.result, retryAfterMs: 1_100 },
+    };
+    const harness = createHarness(
+      [card('a'), card('b')],
+      (cardId, _attempt, stage) => {
+        if (stage === 'verify') return OK;
+        return cardId === 'a' ? busy : PROVISIONAL;
+      },
+      { holdSleeps: true },
+    );
+    harness.resolver.start();
+    await harness.flush();
+
+    expect(harness.sleeps).toEqual([1_100]);
+    expect(harness.callsIn('resolve')).toEqual(['a']);
+    expect(harness.callsIn('verify')).toEqual(['a']);
+    expect(harness.resolved).toEqual([
+      { cardId: 'a', year: 1980, confidence: 'low', provisional: true },
+      { cardId: 'a', year: 1975, confidence: 'high' },
+    ]);
+
+    harness.releaseSleeps();
+    await harness.flush();
+
+    // `a` is not resolved again -- the back-off is not a retry -- and `b` follows. No transient
+    // back-off (500 ms) appears: the busy 200 consumed no attempt.
+    expect(harness.callsIn('resolve')).toEqual(['a', 'b']);
+    expect(harness.callsIn('verify')).toEqual(['a', 'b']);
+    expect(harness.sleeps).toEqual([1_100]);
+  });
+
+  it('should not back off after a provisional 200 without retryAfterMs', async () => {
+    // The ordinary hand-off: nobody was busy, so the resolve lane goes straight to its next card.
+    const harness = createHarness([card('a'), card('b')], twoStage);
+    harness.resolver.start();
+    await harness.flush();
+
+    expect(harness.sleeps).toEqual([]);
+    expect(harness.callsIn('resolve')).toEqual(['a', 'b']);
+  });
+
   it('should add jitter so two tabs do not resynchronise onto the same gate', async () => {
     // The harness pins `random` to 0 everywhere else so delays are exact; here it is 1 to prove
     // the jitter is actually wired in.
@@ -766,7 +815,7 @@ describe('createYearResolver error handling', () => {
     await harness.flush();
 
     // Three attempts in the main pass, so two back-offs: 500 then 1000.
-    expect(harness.calls.filter((id) => id === 'a')).toHaveLength(3 + 3);
+    expect(harness.callsIn('resolve')).toHaveLength(3 + 3);
     expect(harness.sleeps.slice(0, 2)).toEqual([500, 1_000]);
   });
 
@@ -813,19 +862,120 @@ describe('createYearResolver error handling', () => {
     expect(harness.resolved.at(-1)).toEqual({ cardId: 'a', year: 1975, confidence: 'high' });
   });
 
-  it('should settle a card at null/none after the resolve deferred pass also fails', async () => {
-    // Exactly as before the two stages: a card resolve could not reach at all settles final null
-    // and never enters verify -- a transient failure is never sent on as "found nothing".
-    const harness = createHarness([card('a'), card('b')], (cardId) =>
-      cardId === 'a' ? fail('network') : OK,
+  it('should hand an exhausted resolve off to verify', async () => {
+    // 2026-10-01, reversing plan 3 step 4: a card resolve could not reach at all is NOT settled
+    // null -- a transient failure is never a final "no year", and with yearless cards dropped a
+    // null would take the card out of the deck. It goes on to verify, which asks more providers,
+    // and reports nothing until verify answers.
+    const harness = createHarness([card('a'), card('b')], (cardId, _attempt, stage) => {
+      if (stage === 'verify') return OK;
+      return cardId === 'a' ? fail('network') : PROVISIONAL;
+    });
+    harness.resolver.start();
+    await harness.flush();
+
+    // Three attempts in each resolve pass, then ONE verify request that answers.
+    expect(harness.callsIn('resolve')).toEqual(['a', 'a', 'a', 'b', 'a', 'a', 'a']);
+    expect(harness.callsIn('verify')).toEqual(['b', 'a']);
+    expect(harness.resolved.filter((r) => r.cardId === 'a')).toEqual([
+      { cardId: 'a', year: 1975, confidence: 'high' },
+    ]);
+  });
+
+  it('should settle null only after verify is exhausted too', async () => {
+    // The only route to a null after transient failures: both stages ran out. The card has no
+    // provisional year, so the exhausted verify's best answer is a final null.
+    const harness = createHarness([card('a')], () => fail('upstream-unavailable'));
+    harness.resolver.start();
+    await harness.flush();
+
+    expect(harness.callsIn('resolve')).toHaveLength(3 + 3);
+    expect(harness.callsIn('verify')).toHaveLength(3 + 3);
+    expect(harness.resolved).toEqual([{ cardId: 'a', year: null, confidence: 'none' }]);
+  });
+
+  it('should hand an exhausted resolve of the start card to the front of verify', async () => {
+    // The current-card routing still holds on the new path. `s` is the start card -- the verify
+    // lane's seeded "current card", never `prioritize`d -- and its resolve always fails; `b` and `c` resolve
+    // provisionally and then keep the verify lane busy with failing retries. The moment `s`'s
+    // deferred pass runs out it is the verify lane's next pick, ahead of the backlog.
+    const harness = createHarness([card('s'), card('b'), card('c')], (cardId, _attempt, stage) => {
+      if (cardId === 's') return stage === 'resolve' ? fail('network') : OK;
+      return stage === 'resolve' ? PROVISIONAL : fail('upstream-unavailable');
+    });
+    harness.resolver.start();
+    await harness.flush();
+
+    // `s` cuts in between `c`'s first and second attempts, ahead of `b`'s deferred pass too.
+    expect(harness.callsIn('verify')).toEqual([
+      'b',
+      'b',
+      'b',
+      'c',
+      's',
+      'c',
+      'c',
+      'b',
+      'b',
+      'b',
+      'c',
+      'c',
+      'c',
+    ]);
+    // The new hand-off shares the old one's queue, so the lanes still hold one request each.
+    expect(harness.maxInFlight).toEqual({ resolve: 1, verify: 1 });
+    expect(harness.resolved.filter((r) => r.cardId === 's')).toEqual([
+      { cardId: 's', year: 1975, confidence: 'high' },
+    ]);
+  });
+
+  it('should hand a prioritized card that exhausts its resolve to the front of verify, once', async () => {
+    // The `prioritize` path through an exhausted resolve, on a card that is NOT the seeded
+    // current card (`a` is). The player jumps to `p` while `a` is in flight, so `p` is urgent:
+    // its main pass runs out and the one-shot jump must be CLEARED -- otherwise it would be
+    // retried in a loop instead of deferred -- so the walk continues at `b`. The player is
+    // still on `p` when its deferred pass starts, and makes it urgent again; running out there
+    // hands it to verify, where `prioritize` has made it the current card, so it is the verify
+    // lane's next pick ahead of `a` and `b`, whose failing verifies are the backlog.
+    const harness = createHarness(
+      [card('a'), card('b'), card('p')],
+      (cardId, _attempt, stage) => {
+        if (cardId === 'p') return stage === 'resolve' ? fail('network') : OK;
+        return stage === 'resolve' ? PROVISIONAL : fail('upstream-unavailable');
+      },
+      {
+        onLookup: (cardId, h, stage) => {
+          if (stage !== 'resolve') return;
+          const resolves = h.callsIn('resolve');
+          // A jump that is never cleared retries `p` for ever; stop, so that fails as an
+          // assertion below rather than as a hung worker.
+          if (resolves.length > 20) h.resolver.stop();
+          if (cardId === 'a') h.resolver.prioritize('p');
+          // `p`'s first deferred-pass attempt: the fourth resolve request for it.
+          if (cardId === 'p' && resolves.filter((id) => id === 'p').length === 4) {
+            h.resolver.prioritize('p');
+          }
+        },
+      },
     );
     harness.resolver.start();
     await harness.flush();
 
-    // Three attempts in each pass, and only then does it settle -- terminally.
-    expect(harness.calls.filter((id) => id === 'a')).toHaveLength(6);
-    expect(harness.callsIn('verify')).toEqual([]);
-    expect(harness.resolved).toContainEqual({ cardId: 'a', year: null, confidence: 'none' });
+    // Urgent main pass, the walk resumed at `b`, then the deferred pass: six `p`s, never more.
+    expect(harness.callsIn('resolve')).toEqual(['a', 'p', 'p', 'p', 'b', 'p', 'p', 'p']);
+
+    // Requested in verify exactly once, and it is the very next verify request after the
+    // hand-off -- ahead of the backlog, which is still being worked through after it.
+    const order = harness.signals.map(({ cardId, stage }) => `${stage}:${cardId}`);
+    const handOff = order.lastIndexOf('resolve:p');
+    expect(harness.callsIn('verify').filter((id) => id === 'p')).toHaveLength(1);
+    expect(order.slice(handOff + 1).find((call) => call.startsWith('verify:'))).toBe('verify:p');
+    expect(order.slice(order.indexOf('verify:p') + 1)).toContain('verify:b');
+
+    expect(harness.maxInFlight).toEqual({ resolve: 1, verify: 1 });
+    expect(harness.resolved.filter((r) => r.cardId === 'p')).toEqual([
+      { cardId: 'p', year: 1975, confidence: 'high' },
+    ]);
   });
 
   it('should stop the whole crawl on not-configured', async () => {

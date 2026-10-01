@@ -54,6 +54,7 @@ import { Component } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
 
 import { useCopy } from '../hooks/useLocale';
+import { readLocalStorage } from '../game/browser-storage';
 import { clearSession } from '../game/persistence';
 import type { StorageLike } from '../game/persistence';
 
@@ -116,8 +117,9 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       throws, which matters more here than anywhere else: this is the escape hatch, so it must not
       be able to fail in a way that leaves the player stuck on this screen.
     */
-    const storage = this.props.storage ?? readLocalStorage();
-    if (storage) clearSession(storage);
+    // GUARDED: a throwing `localStorage` getter here would be an exception inside the error screen
+    // (see `browser-storage.ts`). Unreachable storage clears nothing, which beats a white page.
+    clearSession(this.props.storage ?? readLocalStorage());
 
     this.doReload();
   };
@@ -197,20 +199,4 @@ function CrashScreen({ onReload, onStartOver }: { onReload: () => void; onStartO
       </div>
     </main>
   );
-}
-
-/**
- * `localStorage`, or nothing.
- *
- * Reading the property can THROW rather than return null -- Safari in private mode has historically
- * done exactly that -- and a throw here would be an exception inside the error screen, i.e. a white
- * page in the one component whose job is to prevent one. Failing to clear a save is a much better
- * outcome than that.
- */
-function readLocalStorage(): StorageLike | null {
-  try {
-    return window.localStorage;
-  } catch {
-    return null;
-  }
 }

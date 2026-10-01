@@ -238,15 +238,72 @@ describe('/api/year?stage=', () => {
     expect(musicBrainzFetches).toBe(0);
   });
 
-  it('should map busy to 429 with retryAfterMs and Retry-After', async () => {
+  it('should map a refused gate permit to 429 with retryAfterMs and Retry-After', async () => {
+    // `verify`: any busy provider is a 429, answers in hand or not. `busy` is ONLY our own
+    // gate refusing a permit (other players hold iTunes' shared slot) -- Apple's own 403/429 is
+    // a refused skip, the test after the next one.
     script('deezer', answer({ provider: 'deezer', year: 1990, isrcYear: 2010 }));
-    script('musicbrainz', { kind: 'busy', retryAfterMs: 1_100 });
+    script(
+      'musicbrainz',
+      answer({ provider: 'musicbrainz', year: 1974, confidence: 'high', source: 'release-group' }),
+    );
+    script('itunes', { kind: 'busy', retryAfterMs: 1_100 });
 
-    const response = await request({ ...TRACK_QUERY, stage: 'resolve' });
+    const response = await request({ ...TRACK_QUERY, stage: 'verify' });
 
     expect(response.status).toBe(429);
     expect(response.body).toMatchObject({ code: 'rate-limited', retryAfterMs: 1_100 });
     expect(response.headers['Retry-After']).toBe('2');
+  });
+
+  it('should answer a busy resolve with an answer in hand as a 200 the edge does not store', async () => {
+    // Deezer's year is shown at once rather than thrown away with a 429; the busy MusicBrainz
+    // is asked again by `verify`, so nothing may cache this body. The 429's wait rides in the
+    // BODY, for the client's resolve lane to back off on -- never as a `Retry-After` on a 200.
+    script('deezer', answer({ provider: 'deezer', year: 1990, isrcYear: 1990 }));
+    script('musicbrainz', { kind: 'busy', retryAfterMs: 1_100 });
+
+    const response = await request({ ...TRACK_QUERY, stage: 'resolve' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      year: 1990,
+      source: 'deezer',
+      final: false,
+      retryAfterMs: 1_100,
+    });
+    expect(response.body).not.toHaveProperty('skipped');
+    expect(response.headers['Cache-Control']).toBe('no-store');
+    expect(response.headers['Retry-After']).toBeUndefined();
+  });
+
+  it("should answer iTunes' own 403 as a final 200 with iTunes skipped, never a 429", async () => {
+    // The developer's decision (2026-10-01): Apple refusing us is a skip, not back-pressure.
+    // The vote decides without iTunes at once -- MusicBrainz's `high`, unconfirmed -- and the
+    // edge holds it only the short skipped window, so the card heals once Apple stops refusing.
+    script('deezer', answer({ provider: 'deezer', year: 1990, isrcYear: 2010 }));
+    script(
+      'musicbrainz',
+      answer({ provider: 'musicbrainz', year: 1974, confidence: 'high', source: 'release-group' }),
+    );
+    script('itunes', { kind: 'skipped', reason: 'refused', detail: 'HTTP 403' });
+
+    const response = await request({ ...TRACK_QUERY, stage: 'verify' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      year: 1974,
+      confidence: 'low',
+      source: 'release-group',
+      final: true,
+      skipped: ['itunes'],
+    });
+    expect(response.body).not.toHaveProperty('retryAfterMs');
+    expect(response.headers['Retry-After']).toBeUndefined();
+    expect(response.headers['Cache-Control']).toBe(
+      'public, s-maxage=60, stale-while-revalidate=60',
+    );
+    expect(control.calls['itunes']).toBe(1);
   });
 
   it('should map every provider failing to 502 upstream-unavailable', async () => {
@@ -262,6 +319,33 @@ describe('/api/year?stage=', () => {
         message: 'No year provider could be reached right now. Please try again.',
       },
     });
+  });
+
+  it('should not count a refused provider toward the not-configured 500', async () => {
+    // Every provider skipped, one of them because it REFUSED us: a refusing provider is
+    // configured, so "nothing can run" is false. Nothing answered and nothing failed, so the
+    // finality rule makes it a final null, held the short skipped window.
+    const notConfigured: ProviderOutcome = {
+      kind: 'skipped',
+      reason: 'not-configured',
+      missingVariable: 'SOME_VARIABLE',
+    };
+    script('deezer', { kind: 'skipped', reason: 'refused', detail: 'quota error code 4' });
+    script('musicbrainz', notConfigured);
+    script('itunes', notConfigured);
+
+    const response = await request({ ...TRACK_QUERY, stage: 'verify' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      year: null,
+      confidence: 'none',
+      final: true,
+      skipped: ['deezer', 'musicbrainz', 'itunes'],
+    });
+    expect(response.headers['Cache-Control']).toBe(
+      'public, s-maxage=60, stale-while-revalidate=60',
+    );
   });
 
   it('should map every provider not-configured to 500 not-configured', async () => {
@@ -324,6 +408,20 @@ describe('/api/year?stage=', () => {
     expect(response.headers['Cache-Control']).toBe(
       'public, s-maxage=60, stale-while-revalidate=60',
     );
+  });
+
+  it('should never let the edge store a provisional answer built on a failed provider', async () => {
+    // The client retries a non-final answer on the SAME URL within a second or two. An edge
+    // copy would answer every retry with this body until the card was settled exhausted --
+    // as a final null, which drops it -- so a failure this call means `no-store`.
+    script('deezer', answer({ provider: 'deezer', year: 1990, isrcYear: 1990 }));
+    script('musicbrainz', { kind: 'failed', code: 'upstream-unavailable' });
+
+    const response = await request({ ...TRACK_QUERY, stage: 'resolve' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ final: false, skipped: ['musicbrainz'] });
+    expect(response.headers['Cache-Control']).toBe('no-store');
   });
 
   it('should give a final answer reached with a provider skipped about 60 seconds', async () => {

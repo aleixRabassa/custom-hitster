@@ -465,6 +465,24 @@ describe('App', () => {
     expect(screen.queryByTestId('hud')).toBeNull();
   });
 
+  it('should reach the welcome screen when reading localStorage itself throws', () => {
+    // Blocked site data: the `localStorage` GETTER throws, before any `getItem`. App reads storage
+    // three ways on its first render -- the saved game (`useGameSession`), the library, the prefs --
+    // and until 2026-10-01 only the prefs read was guarded, so this was a crash screen whose Start
+    // over could clear nothing, i.e. a crash on every reload. No `storage` prop on purpose: the
+    // injected stub would bypass the very fallback under test.
+    stubHangingYearApi();
+    const getter = vi.spyOn(window, 'localStorage', 'get').mockImplementation(() => {
+      throw new DOMException('The operation is insecure.', 'SecurityError');
+    });
+
+    render(<App fetchImpl={playlistFetch(200, playlistResult())} />);
+
+    expect(getter).toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: COPY.welcome.enter }));
+    expect(screen.queryByLabelText(COPY.landing.playlistLinkLabel(0))).not.toBeNull();
+  });
+
   it('should not show the welcome screen again after an exit', async () => {
     // Exit goes through `ended`, and the welcome flag is set for the session -- so a player who
     // quits a game lands on the picker, not on the rules.
@@ -2337,7 +2355,11 @@ describe('App', () => {
       await waitFor(() => {
         expect(screen.queryByTestId('hud')).not.toBeNull();
       });
-      expect(savedSession(storage).status).toBe('playing');
+      // The save is written by an effect AFTER the render that shows the HUD, so under a loaded
+      // full-suite run the storage read can land between the two: wait for it too.
+      await waitFor(() => {
+        expect(savedSession(storage).status).toBe('playing');
+      });
       expect(savedSession(storage).deck.every((card) => card.year === undefined)).toBe(true);
     });
 

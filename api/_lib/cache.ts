@@ -182,17 +182,33 @@ export function answerTtlFor(answer: ProviderAnswer): number {
 export const PROVISIONAL_EDGE_SECONDS = 60;
 
 /**
- * How long the edge may hold a staged (`?stage=`) answer.
+ * How long the edge may hold a staged (`?stage=`) answer. `0` means not at all: the handler
+ * sends `no-store` for it (`stagedCacheControl()` in `api/year.ts`).
  *
+ * - **Provisional BECAUSE OF A TRANSIENT PROBLEM** (`transient`: a provider failed or was busy
+ *   on this call, and nothing confirmed): `0`. Checked FIRST, so it wins over the skipped and
+ *   the provisional branches below -- a failed provider is listed in `skipped` too. It is the
+ *   rule `withAnswerCache` follows, applied to the body: a failure or a busy gate is a
+ *   statement about the provider RIGHT NOW, not about the track, and a body built on one is
+ *   exactly what the client must not get back. Its verify lane retries a non-final answer on
+ *   the SAME URL within a second or two; an edge copy would answer every retry with the same
+ *   degraded body until the retries ran out, and an exhausted card with no year is settled
+ *   as a final null, which drops it from the deck.
  * - **Final, nothing skipped**: at most the SHORTEST TTL among the cache entries it was built
  *   from. That is the "Redis outlives the edge" rule restated per answer: the vote is
  *   recomputed from those entries on every call, so the edge must not keep serving a vote
  *   after the first entry under it could have expired and changed it.
- * - **Provisional, or final with a provider skipped**: `PROVISIONAL_EDGE_SECONDS`. A
- *   provisional answer is by definition about to change, and a final reached without a
- *   provider is final only for as long as that provider stays skipped -- pinning it for a
- *   month would keep the degraded answer long after the configuration is fixed. This is the
- *   failure the rejected `yearfinal:` key would have had, moved to the edge.
+ * - **Provisional with nothing transient, or final with a provider skipped**:
+ *   `PROVISIONAL_EDGE_SECONDS`. The first is `resolve`'s ordinary hand-off to `verify` (nobody
+ *   failed; iTunes simply belongs to the other stage), and is by definition about to change;
+ *   a final reached without a provider is final only for as long as that provider stays
+ *   skipped -- pinning it for a month would keep the degraded answer long after the
+ *   configuration is fixed, or long after a store that refused us (a 403, a quota body)
+ *   stopped refusing. This is the failure the rejected `yearfinal:` key would have had,
+ *   moved to the edge.
+ *
+ * `transient` on a FINAL answer changes nothing: a confirmation reached beside a failure is
+ * final by the stop rule, and it keeps the short window through `skipped`.
  *
  * `sourceTtlsSeconds` empty (no entry at all) takes the short branch too: there is nothing
  * for the edge to be bounded by.
@@ -200,8 +216,10 @@ export const PROVISIONAL_EDGE_SECONDS = 60;
 export function stagedEdgeMaxAgeSeconds(answer: {
   final: boolean;
   skipped: boolean;
+  transient: boolean;
   sourceTtlsSeconds: readonly number[];
 }): number {
+  if (!answer.final && answer.transient) return 0;
   if (!answer.final || answer.skipped || answer.sourceTtlsSeconds.length === 0) {
     return PROVISIONAL_EDGE_SECONDS;
   }
@@ -443,15 +461,29 @@ export function providerAnswerKey(provider: YearProviderId, input: ProviderLooku
 }
 
 /**
- * Wrap a STORE adapter in the answer cache: read before asking, write every answer after.
+ * Wrap a STORE adapter in the answer cache: read before asking, write the answer after --
+ * unless the lookup had no duration (below).
  *
  * Applied to Deezer and iTunes only, never to MusicBrainz (whose `resolveYear()` owns its own
  * `mbyear:` entry). The key never encodes the plan, so the plan's order never touches a key.
  *
  * Only an `answer` is written -- a `year: null` one included, with the shorter TTL, because
- * "asked and found nothing" is worth not asking again for a day. `skipped`, `failed` and
- * `busy` pass straight through uncached: each is a statement about the provider right now,
- * not about the track, and caching one would poison the key.
+ * "asked and found nothing" is worth not asking again for a day. `skipped` (either reason,
+ * the store's own `refused` included), `failed` and `busy` pass straight through uncached:
+ * each is a statement about the provider right now, not about the track, and caching one
+ * would poison the key -- a cached refusal would keep a store out of the vote long after it
+ * stopped refusing.
+ *
+ * A LOOKUP WITH NO DURATION IS NEVER WRITTEN, and it is the same rule seen from the input's
+ * side. `shared/store-match.ts` verifies a row only when BOTH lengths are known, so such a
+ * lookup cannot verify anything and always answers a null year -- a statement about the
+ * REQUEST, not about the track. Both store adapters already answer it without sending anything
+ * (`requestCount: 0`); this is the second guard, for an adapter that someday does not. The key
+ * carries no duration (artist and cleaned title only), so writing that null would serve it for
+ * a day to every card with the same artist and title, including the ones that do have a length
+ * and would have matched. The READ is kept: an entry written by a lookup that had a duration is
+ * real evidence about the track, whoever asks -- and it is the one way a length-less card can
+ * still get a store year.
  *
  * The driver has usually just read this key in its batched read, so a cold card pays one
  * extra single-key read here. Accepted, as `resolveYear()` repeating its own check is: it
@@ -471,7 +503,7 @@ export function withAnswerCache(
       if (hit !== undefined) return { kind: 'answer', answer: hit, cached: true, requestCount: 0 };
 
       const outcome = await lookup.lookup(input);
-      if (outcome.kind === 'answer') {
+      if (outcome.kind === 'answer' && input.durationMs !== undefined) {
         await cache.setAnswer(key, outcome.answer, answerTtlFor(outcome.answer));
       }
       return outcome;
