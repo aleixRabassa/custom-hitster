@@ -99,14 +99,14 @@ describe.each(LOCALES)('the %s catalogue', (locale) => {
     // They share one slot under the year (plan.year-fetch-rework-ui.md): "confirming" is
     // progress, "unconfirmed" a warning, "pending" no year yet. A translation that collapsed two
     // of them would tell a player a year is final when it is not, or the reverse.
-    const { yearProvisional, yearUnconfirmed, yearPending } = catalogue.copy.card;
+    const { yearProvisional, yearUnconfirmed, yearUnverified, yearPending } = catalogue.copy.card;
 
-    expect(new Set([yearProvisional, yearUnconfirmed, yearPending]).size).toBe(3);
+    expect(new Set([yearProvisional, yearUnconfirmed, yearUnverified, yearPending]).size).toBe(4);
   });
 
   it('should keep the two deal options distinct', () => {
     // Two checkboxes with one name are two boxes a screen-reader player cannot tell apart.
-    expect(catalogue.copy.landing.skipYearless).not.toBe(catalogue.copy.landing.skipUnconfirmed);
+    expect(catalogue.copy.landing.dealYearless).not.toBe(catalogue.copy.landing.dealUnconfirmed);
   });
 
   it('should give each of the five playlist rows a distinct label', () => {

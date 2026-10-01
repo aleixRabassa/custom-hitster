@@ -31,17 +31,18 @@ function renderLanding(props: Partial<Parameters<typeof LandingScreen>[0]> = {})
   const onSubmit = props.onSubmit ?? vi.fn();
   const onBack = props.onBack ?? vi.fn();
   const onRemoveSaved = props.onRemoveSaved ?? vi.fn();
-  const onSkipYearlessChange = props.onSkipYearlessChange ?? vi.fn();
-  const onSkipUnconfirmedChange = props.onSkipUnconfirmedChange ?? vi.fn();
+  const onDealYearlessChange = props.onDealYearlessChange ?? vi.fn();
+  const onDealUnconfirmedChange = props.onDealUnconfirmedChange ?? vi.fn();
   const rendered = render(
     <LandingScreen
       onSubmit={onSubmit}
       onBack={onBack}
       isLoading={props.isLoading ?? false}
-      skipYearless={props.skipYearless ?? true}
-      onSkipYearlessChange={onSkipYearlessChange}
-      skipUnconfirmed={props.skipUnconfirmed ?? false}
-      onSkipUnconfirmedChange={onSkipUnconfirmedChange}
+      // A fresh profile's defaults: yearless cards dropped, unconfirmed ones dealt.
+      dealYearless={props.dealYearless ?? false}
+      onDealYearlessChange={onDealYearlessChange}
+      dealUnconfirmed={props.dealUnconfirmed ?? true}
+      onDealUnconfirmedChange={onDealUnconfirmedChange}
       {...(props.errorCode ? { errorCode: props.errorCode } : {})}
       // Defaults to empty, which is the first-time visitor's screen and the one every assertion
       // written before the library existed was written against.
@@ -55,8 +56,8 @@ function renderLanding(props: Partial<Parameters<typeof LandingScreen>[0]> = {})
     onSubmit,
     onBack,
     onRemoveSaved,
-    onSkipYearlessChange,
-    onSkipUnconfirmedChange,
+    onDealYearlessChange,
+    onDealUnconfirmedChange,
   };
 }
 
@@ -485,12 +486,12 @@ describe('LandingScreen', () => {
 
   describe('the deal options', () => {
     /** The boxes, by their VISIBLE captions -- which is what fails if an `aria-label` ever returns. */
-    function skipYearlessBox(): HTMLInputElement {
-      return screen.getByRole('checkbox', { name: COPY.landing.skipYearless }) as HTMLInputElement;
+    function dealYearlessBox(): HTMLInputElement {
+      return screen.getByRole('checkbox', { name: COPY.landing.dealYearless }) as HTMLInputElement;
     }
-    function skipUnconfirmedBox(): HTMLInputElement {
+    function dealUnconfirmedBox(): HTMLInputElement {
       return screen.getByRole('checkbox', {
-        name: COPY.landing.skipUnconfirmed,
+        name: COPY.landing.dealUnconfirmed,
       }) as HTMLInputElement;
     }
 
@@ -498,8 +499,8 @@ describe('LandingScreen', () => {
       renderLanding();
 
       for (const [box, caption] of [
-        [skipYearlessBox(), COPY.landing.skipYearless],
-        [skipUnconfirmedBox(), COPY.landing.skipUnconfirmed],
+        [dealYearlessBox(), COPY.landing.dealYearless],
+        [dealUnconfirmedBox(), COPY.landing.dealUnconfirmed],
       ] as const) {
         expect(box.type).toBe('checkbox');
         expect(box.closest('label')?.textContent).toBe(caption);
@@ -518,30 +519,30 @@ describe('LandingScreen', () => {
 
       // `compareDocumentPosition`: FOLLOWING means the argument comes after the node.
       expect(
-        add.compareDocumentPosition(skipYearlessBox()) & Node.DOCUMENT_POSITION_FOLLOWING,
+        add.compareDocumentPosition(dealYearlessBox()) & Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
       expect(
-        skipYearlessBox().compareDocumentPosition(skipUnconfirmedBox()) &
+        dealYearlessBox().compareDocumentPosition(dealUnconfirmedBox()) &
           Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
       expect(
-        skipUnconfirmedBox().compareDocumentPosition(start) & Node.DOCUMENT_POSITION_FOLLOWING,
+        dealUnconfirmedBox().compareDocumentPosition(start) & Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
     });
 
     it('should report each box on its own callback, never as a press of Start', () => {
-      const { onSkipYearlessChange, onSkipUnconfirmedChange, onSubmit } = renderLanding({
-        skipYearless: true,
-        skipUnconfirmed: false,
+      const { onDealYearlessChange, onDealUnconfirmedChange, onSubmit } = renderLanding({
+        dealYearless: false,
+        dealUnconfirmed: true,
       });
 
-      fireEvent.click(skipYearlessBox());
-      expect(onSkipYearlessChange).toHaveBeenCalledExactlyOnceWith(false);
-      expect(onSkipUnconfirmedChange).not.toHaveBeenCalled();
+      fireEvent.click(dealYearlessBox());
+      expect(onDealYearlessChange).toHaveBeenCalledExactlyOnceWith(true);
+      expect(onDealUnconfirmedChange).not.toHaveBeenCalled();
 
-      fireEvent.click(skipUnconfirmedBox());
-      expect(onSkipUnconfirmedChange).toHaveBeenCalledExactlyOnceWith(true);
-      expect(onSkipYearlessChange).toHaveBeenCalledOnce();
+      fireEvent.click(dealUnconfirmedBox());
+      expect(onDealUnconfirmedChange).toHaveBeenCalledExactlyOnceWith(false);
+      expect(onDealYearlessChange).toHaveBeenCalledOnce();
 
       expect(onSubmit).not.toHaveBeenCalled();
     });
@@ -551,33 +552,33 @@ describe('LandingScreen', () => {
       const { rerender } = render(
         <LandingScreen
           {...props}
-          skipYearless={false}
-          onSkipYearlessChange={vi.fn()}
-          skipUnconfirmed
-          onSkipUnconfirmedChange={vi.fn()}
+          dealYearless={false}
+          onDealYearlessChange={vi.fn()}
+          dealUnconfirmed
+          onDealUnconfirmedChange={vi.fn()}
         />,
       );
-      expect(skipYearlessBox().checked).toBe(false);
-      expect(skipUnconfirmedBox().checked).toBe(true);
+      expect(dealYearlessBox().checked).toBe(false);
+      expect(dealUnconfirmedBox().checked).toBe(true);
 
       rerender(
         <LandingScreen
           {...props}
-          skipYearless
-          onSkipYearlessChange={vi.fn()}
-          skipUnconfirmed={false}
-          onSkipUnconfirmedChange={vi.fn()}
+          dealYearless
+          onDealYearlessChange={vi.fn()}
+          dealUnconfirmed={false}
+          onDealUnconfirmedChange={vi.fn()}
         />,
       );
-      expect(skipYearlessBox().checked).toBe(true);
-      expect(skipUnconfirmedBox().checked).toBe(false);
+      expect(dealYearlessBox().checked).toBe(true);
+      expect(dealUnconfirmedBox().checked).toBe(false);
     });
 
     it('should disable both while loading', () => {
       renderLanding({ isLoading: true });
 
-      expect(skipYearlessBox().disabled).toBe(true);
-      expect(skipUnconfirmedBox().disabled).toBe(true);
+      expect(dealYearlessBox().disabled).toBe(true);
+      expect(dealUnconfirmedBox().disabled).toBe(true);
     });
 
     it('should carry focus-visible:focus-ring and touch-target', () => {
@@ -585,7 +586,7 @@ describe('LandingScreen', () => {
       // the press area -- on the input it would grow the painted box.
       renderLanding();
 
-      for (const box of [skipYearlessBox(), skipUnconfirmedBox()]) {
+      for (const box of [dealYearlessBox(), dealUnconfirmedBox()]) {
         expect(box.className).toContain('focus-visible:focus-ring');
         // The painted box: the native one is replaced, and its checked fill is the accent TOKEN. A
         // misspelt token would emit no rule at all, so the classes are pinned here as the canary.
@@ -596,14 +597,26 @@ describe('LandingScreen', () => {
         // `<input>` inherits its font from the wrapper.
         expect(box.closest('label')?.className).not.toContain('text-sm');
       }
-      expect(screen.getByText(COPY.landing.skipYearless).className).toContain('text-sm');
-      expect(screen.getByText(COPY.landing.skipUnconfirmed).className).toContain('text-sm');
+      expect(screen.getByText(COPY.landing.dealYearless).className).toContain('text-sm');
+      expect(screen.getByText(COPY.landing.dealUnconfirmed).className).toContain('text-sm');
+    });
+
+    it("should colour the captions like the picker's other captions", () => {
+      // 2026-10-01, the developer's request: the options read in the same colour as "Playlist
+      // link" and the other labels on this screen, not brighter. A token, never an opacity.
+      renderLanding();
+
+      for (const caption of [COPY.landing.dealYearless, COPY.landing.dealUnconfirmed]) {
+        const className = screen.getByText(caption).className;
+        expect(className).toContain('text-fg-secondary');
+        expect(className).not.toMatch(/(^|\s)text-fg(\s|$)/);
+      }
     });
 
     it('should keep pt-8 and gap-8', () => {
       // The equal-height contract with the welcome screen and the column's one standard margin,
       // re-read with the options on screen: they are IN the form, so neither number had to move.
-      const { container } = renderLanding({ skipUnconfirmed: true });
+      const { container } = renderLanding({ dealYearless: true });
 
       const main = container.querySelector('main');
       expect(main?.className).toContain('pt-8');
@@ -919,8 +932,8 @@ describe('LandingScreen', () => {
     // The two deal options' captions (2026-10-01) are READ by this audit, asserted first so the
     // proxy below cannot pass them by omission -- the 2026-09-19 `download` lesson. Neither is
     // subtracted: neither carries anything year-shaped, and that is the point.
-    expect(text).toContain(COPY.landing.skipYearless);
-    expect(text).toContain(COPY.landing.skipUnconfirmed);
+    expect(text).toContain(COPY.landing.dealYearless);
+    expect(text).toContain(COPY.landing.dealUnconfirmed);
 
     for (const card of fixtureDeck) {
       expect(text).not.toContain(card.title);
@@ -1475,10 +1488,10 @@ describe('LandingScreen in another language', () => {
           onSubmit={vi.fn()}
           onBack={vi.fn()}
           isLoading={false}
-          skipYearless
-          onSkipYearlessChange={vi.fn()}
-          skipUnconfirmed={false}
-          onSkipUnconfirmedChange={vi.fn()}
+          dealYearless={false}
+          onDealYearlessChange={vi.fn()}
+          dealUnconfirmed
+          onDealUnconfirmedChange={vi.fn()}
           {...(props.errorCode ? { errorCode: props.errorCode } : {})}
           savedPlaylists={props.savedPlaylists ?? []}
           onRemoveSaved={vi.fn()}

@@ -102,7 +102,7 @@ const INK = { text: 20, muted: 110, rule: 170 } as const;
 const QR_PIXELS = 512;
 
 /**
- * @param keepYearless The SESSION's `GameState.keepYearless` (the picker's "Skip cards with no year found", inverted),
+ * @param keepYearless The SESSION's `GameState.keepYearless` (the picker's "Deal cards with no year found"),
  *   never the picker's current preference. It decides whether a final `year: null` card is printed
  *   -- with its year left blank, see `drawBack` -- or left out and counted. A provisional year is
  *   left out either way: `selectPrintableCards` owns that rule.

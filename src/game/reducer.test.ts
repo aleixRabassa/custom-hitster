@@ -1991,8 +1991,8 @@ describe('yearStateOf and the year selectors', () => {
 });
 
 // ===========================================================================
-//  skipUnconfirmed (2026-10-01): the picker's "Skip cards with an unconfirmed
-//  year". A FINAL `low` year drops its card by the same rule as a final null;
+//  skipUnconfirmed (2026-10-01): the picker's "Deal cards with an unconfirmed
+//  year", UNTICKED. A FINAL `low` year drops its card by the same rule as a final null;
 //  a PROVISIONAL year (always `low`) never does.
 // ===========================================================================
 
@@ -2132,5 +2132,86 @@ describe('gameReducer with skipUnconfirmed', () => {
     });
     expect(kept.deck).toHaveLength(4);
     expect(currentCard(kept)?.id).toBe('here');
+  });
+
+  // =========================================================================
+  //  An UNVERIFIED year (2026-10-01): verify ran out of retries -- an outage,
+  //  or no connection -- so the year was never put to a second provider. It is
+  //  unchecked, not unconfirmed, and skipping unconfirmed years must not drop it.
+  // =========================================================================
+
+  it('should keep an unverified low year and mark the card', () => {
+    let state = deal(CARDS, { keepYearless: KEEPS_YEARLESS });
+    const first = firstCardId(state);
+    state = gameReducer(state, provisional(first, 1980));
+    state = gameReducer(state, {
+      type: 'YEAR_RESOLVED',
+      cardId: first,
+      year: 1980,
+      confidence: 'low',
+      unverified: true,
+    });
+
+    const kept = state.deck.find((c) => c.id === first);
+    expect(kept).toMatchObject({ year: 1980, yearConfidence: 'low', yearUnverified: true });
+    expect(kept).not.toHaveProperty('yearProvisional');
+    expect(state.deck).toHaveLength(CARDS.length);
+    // Final, so the gate opens on it.
+    expect(state.status).toBe('playing');
+  });
+
+  it('should ignore the unverified mark on a null, which keeps its old rule', () => {
+    // The null case is unchanged: a final null still drops while yearless cards are dropped, and
+    // the card never carries the mark.
+    let state = deal(CARDS);
+    const first = firstCardId(state);
+    state = gameReducer(state, {
+      type: 'YEAR_RESOLVED',
+      cardId: first,
+      year: null,
+      confidence: 'none',
+      unverified: true,
+    });
+    expect(state.deck.some((c) => c.id === first)).toBe(false);
+
+    let keeping = deal(CARDS, { keepYearless: KEEPS_YEARLESS });
+    const id = firstCardId(keeping);
+    keeping = gameReducer(keeping, {
+      type: 'YEAR_RESOLVED',
+      cardId: id,
+      year: null,
+      confidence: 'none',
+      unverified: true,
+    });
+    expect(keeping.deck.find((c) => c.id === id)).not.toHaveProperty('yearUnverified');
+  });
+
+  it('should keep unverified cards through a Restart re-deal and a RESUME', () => {
+    const cards = [
+      card('unconfirmed', { year: 1979, yearConfidence: 'low' }),
+      card('unchecked', { year: 1981, yearConfidence: 'low', yearUnverified: true }),
+      card('pending'),
+    ];
+    expect(
+      deal(cards)
+        .deck.map((c) => c.id)
+        .sort(),
+    ).toEqual(['pending', 'unchecked']);
+
+    const session: PersistedSession = {
+      version: 2,
+      playlists: [PLAYLIST],
+      seed: 'persisted-seed',
+      deck: cards,
+      currentIndex: 1,
+      startIndex: 0,
+      isFlipped: false,
+      status: 'playing',
+      keepYearless: false,
+      skipUnconfirmed: true,
+    };
+    const resumed = gameReducer(initialGameState, { type: 'RESUME', session });
+    expect(resumed.deck.map((c) => c.id)).toEqual(['unchecked', 'pending']);
+    expect(currentCard(resumed)?.id).toBe('unchecked');
   });
 });

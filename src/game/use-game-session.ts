@@ -48,15 +48,16 @@ export interface StartOptions {
   seed?: string;
   startCardId?: string;
   /**
-   * Whether a final "no year" keeps its card -- the picker's "Skip cards with no year found",
-   * inverted (plan.year-fetch-rework-game.md; relabelled 2026-10-01), fixed for the
+   * Whether a final "no year" keeps its card -- the picker's "Deal cards with no year found"
+   * (plan.year-fetch-rework-game.md; relabelled 2026-10-01), fixed for the
    * session -- see `GameState.keepYearless`. REQUIRED, like `START.keepYearless`, so no call site
    * can forget to decide it: the picker and the link deal pass the remembered preference, and
    * Restart passes the session's own `state.keepYearless`, never the picker's current value.
    */
   keepYearless: boolean;
   /**
-   * The picker's "Skip cards with an unconfirmed year" (2026-10-01) -- see
+   * Whether a final unconfirmed year drops its card -- the picker's "Deal cards with an
+   * unconfirmed year", inverted (2026-10-01) -- see
    * `GameState.skipUnconfirmed`. Required and sourced exactly like `keepYearless`.
    */
   skipUnconfirmed: boolean;

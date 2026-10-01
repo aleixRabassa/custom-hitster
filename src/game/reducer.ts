@@ -46,7 +46,10 @@ interface DropRules {
  *
  * - A final `null` is dropped unless the session keeps yearless cards (reversal 2026-08-05).
  * - A final year at `low` -- one no second provider confirmed -- is dropped when the session skips
- *   unconfirmed years (2026-10-01).
+ *   unconfirmed years (2026-10-01). NOT one marked `yearUnverified`: that year was never put to a
+ *   second provider (verify ran out of retries -- an outage, or no connection), so it is unchecked
+ *   rather than unconfirmed, and dropping it would delete cards for a network blip, permanently
+ *   (the deck, the save and Restart all lose it).
  *
  * ONLY A FINAL ANSWER COUNTS, and the `yearProvisional` check is load-bearing: a provisional year is
  * always `low`, and Restart re-deals `state.deck` through `START`, so a confidence-only test would
@@ -54,11 +57,12 @@ interface DropRules {
  * has nothing to judge yet.
  */
 function isDroppedAnswer(
-  card: Pick<Card, 'year' | 'yearConfidence' | 'yearProvisional'>,
+  card: Pick<Card, 'year' | 'yearConfidence' | 'yearProvisional' | 'yearUnverified'>,
   rules: DropRules,
 ): boolean {
   if (card.yearProvisional === true || card.year === undefined) return false;
   if (card.year === null) return !rules.keepYearless;
+  if (card.yearUnverified === true) return false;
 
   return rules.skipUnconfirmed && card.yearConfidence === 'low';
 }
@@ -94,8 +98,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         seed,
       );
 
-      // Nothing left to deal. Reachable two ways -- an empty `cards` argument, and (only while
-      // yearless cards are dropped) a deck whose every card was already known to be yearless --
+      // Nothing left to deal. Reachable two ways -- an empty `cards` argument, and (only while the
+      // session drops cards) a deck whose every card already held an answer `isDroppedAnswer` drops --
       // and `preparing` would be a loading screen waiting on a lookup that can never be
       // dispatched.
       if (deck.length === 0) {
@@ -134,7 +138,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
 
       // =======================================================================
       //  THE GATE IS SKIPPED WHEN THE START CARD'S ANSWER IS ALREADY FINAL --
-      //  AND ALWAYS WHEN THE SESSION KEEPS YEARLESS CARDS.
+      //  AND ALWAYS WHEN THE SESSION CAN DROP NOTHING (see the end of this block).
       //
       //  The gate waits for the CURRENT card's answer to be FINAL -- card 1 for
       //  every deal except one from a mid-game link, which starts the player on
@@ -244,10 +248,23 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       //     decision removes. The one blanket failure is already exempt:
       //     `not-configured` dispatches `YEAR_LOOKUPS_UNAVAILABLE` instead of a
       //     hundred nulls, so a deployment with no `MUSICBRAINZ_USER_AGENT`
-      //     yields a yearless deck rather than an empty one.
+      //     yields a yearless deck rather than an empty one. A YEAR settled the
+      //     same way is different since 2026-10-01: it arrives `unverified`, and
+      //     `isDroppedAnswer` keeps it even when the session skips unconfirmed
+      //     years -- there is a year to play, it just could not be checked.
       // =======================================================================
+      // Honoured only beside a numeric `low` year -- the one shape `Card.yearUnverified` may take,
+      // and the one `validateCard` accepts back from a save.
+      const isUnverified =
+        action.unverified === true &&
+        typeof action.year === 'number' &&
+        action.confidence === 'low';
       const isDropped = isDroppedAnswer(
-        { year: action.year, yearConfidence: action.confidence },
+        {
+          year: action.year,
+          yearConfidence: action.confidence,
+          ...(isUnverified ? { yearUnverified: true as const } : {}),
+        },
         state,
       );
 
@@ -293,6 +310,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         // it, so the card reads as final. A kept null lands here too, beside its `none`.
         const updated: Card = { ...card, year: action.year, yearConfidence: action.confidence };
         delete updated.yearProvisional;
+        delete updated.yearUnverified;
+        if (isUnverified) updated.yearUnverified = true;
         deck.push(updated);
       });
 
@@ -300,10 +319,10 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       // replaced by a second `START`. Dropping it is the correct answer.
       if (!matched) return state;
 
-      // Every card in the deck turned out to be yearless. Only reachable while yearless cards are
-      // dropped, and only when every provider answers for every track and knows none of them, so
-      // it is rare rather than impossible -- and `ended` is the only honest destination, since
-      // there is nothing left to play.
+      // Every card in the deck turned out to be dropped -- yearless, or (with `skipUnconfirmed`)
+      // unconfirmed. Only reachable while the session drops cards, and only when every track got a
+      // dropped answer, so it is rare rather than impossible -- and `ended` is the only honest
+      // destination, since there is nothing left to play.
       if (deck.length === 0) {
         return {
           ...state,
@@ -525,7 +544,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
          after a filter it can be off the end, and it must not be left pointing at
          a different card than the player left off on.
 
-         What moves it is the count of YEARLESS cards before it, and only those.
+         What moves it is the count of DROPPED cards before it (`isDroppedAnswer`:
+         a final null, or a final `low` with `skipUnconfirmed`), and only those.
          Since 2026-09-29 the cards before the index are not necessarily resolved
          -- a shared link can start the player mid-deck, and the crawl reaches the
          cards before the start card last -- but an unresolved card is

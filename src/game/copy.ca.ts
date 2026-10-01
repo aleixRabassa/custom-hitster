@@ -54,8 +54,8 @@ export const COPY_CA = {
     removeRow: (position: number) => `Treu la playlist ${position}`,
     addRow: 'Afegeix una altra playlist',
     // 2026-10-01 PROPOSALS, not yet read by a native speaker (docs/development.md §5).
-    skipYearless: 'Salta les cartes sense any',
-    skipUnconfirmed: "Salta les cartes amb l'any sense confirmar",
+    dealYearless: 'Reparteix les cartes sense any',
+    dealUnconfirmed: "Reparteix les cartes amb l'any sense confirmar",
     atMaxRows: (maxPlaylists: number) => `El màxim és de ${maxPlaylists} playlists per baralla.`,
     start: 'Comença',
     starting: 'Carregant…',
@@ -111,6 +111,8 @@ export const COPY_CA = {
     yearUnknown: 'Any desconegut',
     yearUnknownDetail: 'Comprova-ho pel teu compte',
     yearUnconfirmed: 'Any sense confirmar',
+    // 2026-10-01 PROPOSAL, not yet read by a native speaker.
+    yearUnverified: "No s'ha pogut comprovar l'any",
     // 2026-09-30 PROPOSALS, not yet read by a native speaker (docs/development.md §5).
     yearProvisional: "Confirmant l'any",
   },
@@ -157,6 +159,8 @@ export const COPY_CA = {
     save: 'Desa aquesta playlist',
     saved: 'Desada a les teves playlists',
     print: 'Imprimeix les cartes en PDF',
+    // 2026-10-01 PROPOSAL, not yet read by a native speaker.
+    printTitle: 'Imprimeix aquesta baralla',
     // 2026-10-01 PROPOSAL, not yet read by a native speaker (docs/development.md §5).
     blankUnconfirmed: 'Deixa en blanc els anys sense confirmar',
     printing: (completed: number, total: number) => `Generant el PDF… ${completed}/${total}`,

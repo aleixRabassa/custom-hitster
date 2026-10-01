@@ -111,6 +111,11 @@ export interface EndScreenProps {
    * preference, so "Play again" and this screen's export agree with the deck that was played.
    */
   keepYearless: boolean;
+  /**
+   * Whether this session dropped cards with an unconfirmed year, from `state.skipUnconfirmed`.
+   * Straight through to `DeckActions`, which hides the PDF's blank-years option when it is on.
+   */
+  skipUnconfirmed: boolean;
 }
 
 export function EndScreen({
@@ -127,6 +132,7 @@ export function EndScreen({
   deck,
   pendingYearCount,
   keepYearless,
+  skipUnconfirmed,
 }: EndScreenProps) {
   const copy = useCopy();
   return (
@@ -202,9 +208,14 @@ export function EndScreen({
         extraction rather than a side effect of it.
       */}
       <section className="flex w-full max-w-content flex-col gap-3">
-        <h2 className="text-sm text-fg-secondary">{copy.end.keepDeckHeading}</h2>
-
         <DeckActions
+          // The section heading follows the view, as the game screen's dialog title does: "Print
+          // this deck" while the print view is open (2026-10-01).
+          renderHeading={(view) => (
+            <h2 className="text-sm text-fg-secondary">
+              {view === 'print' ? copy.deckActions.printTitle : copy.end.keepDeckHeading}
+            </h2>
+          )}
           playlistIds={playlistIds}
           playlistName={playlistName}
           seed={seed}
@@ -214,6 +225,7 @@ export function EndScreen({
           deck={deck}
           pendingYearCount={pendingYearCount}
           keepYearless={keepYearless}
+          skipUnconfirmed={skipUnconfirmed}
         />
       </section>
 

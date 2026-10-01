@@ -102,6 +102,16 @@ export interface Card {
    * so no save-format bump (the `startIndex` precedent).
    */
   yearProvisional?: true;
+  /**
+   * Present ONLY as `true`, ONLY beside a FINAL numeric `year` at `low`, and written ONLY by the
+   * reducer (2026-10-01): the `verify` stage could not be ASKED -- its retries ran out on
+   * transient failures (a provider outage, or the device offline) -- so the card settled at its
+   * provisional year without a verdict. Different from an ordinary `low` year, where a second
+   * provider answered and did not agree: this one is unchecked, not doubtful. So the session's
+   * "skip unconfirmed years" never drops it (`isDroppedAnswer`), and the reveal says it could not
+   * be checked instead of "Unconfirmed year". Additive, so no save-format bump.
+   */
+  yearUnverified?: true;
 }
 
 /** Playlist-level metadata, for showing the player what deck they are about to play. */

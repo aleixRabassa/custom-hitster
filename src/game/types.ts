@@ -111,20 +111,21 @@ export interface GameState {
   /** Whether the current card is showing its revealed side. Reset by `NEXT`. */
   isFlipped: boolean;
   /**
-   * The picker's "Keep cards with no year found" -- "Skip cards with no year found" UNTICKED since
-   * 2026-10-01, see below -- (plan.year-fetch-rework-game.md, spike
+   * The picker's "Deal cards with no year found" (spike §12.8's "Keep cards with no year found";
+   * plan.year-fetch-rework-game.md, spike
    * §12.8), fixed for the whole session at `START`. When true, a final null KEEPS the card
    * with `year: null` and nothing gates on a year, so the game starts at once; when false,
    * a final null drops the card and the start card's answer must be FINAL before play.
    * Restart re-deals with this value, never the picker's current preference.
    *
-   * THE PICKER SHOWS THE INVERSE since 2026-10-01: its checkbox reads "Skip cards with no year
-   * found", checked exactly when this is FALSE. Only the binding in `App.tsx` inverts; the model,
-   * the save and `prefs.ts` keep this polarity, so no stored value changed meaning.
+   * For a few hours on 2026-10-01 the picker showed this INVERTED as "Skip cards with no year
+   * found"; the developer then asked for "Deal ..." with the box meaning this value again. The
+   * model, the save and `prefs.ts` kept this polarity throughout, so no stored value changed.
    */
   keepYearless: boolean;
   /**
-   * The picker's "Skip cards with an unconfirmed year" (2026-10-01), fixed for the session at
+   * The picker's "Deal cards with an unconfirmed year" UNTICKED (2026-10-01 -- the checkbox is this
+   * value inverted, and `App.tsx` is the one place that inverts it), fixed for the session at
    * `START` exactly like `keepYearless`. When true, a card whose FINAL answer is a year at `low`
    * confidence -- a year no second provider confirmed, which the reveal labels "Unconfirmed year"
    * -- is REMOVED from the deck, by the same rule and at the same three entry points as a final
@@ -205,7 +206,17 @@ export type GameAction =
  * stays pending. That is only expressible because this action cannot carry it.
  */
 export type YearResolvedAction =
-  | { type: 'YEAR_RESOLVED'; cardId: string; year: number | null; confidence: YearConfidence }
+  | {
+      type: 'YEAR_RESOLVED';
+      cardId: string;
+      year: number | null;
+      confidence: YearConfidence;
+      /**
+       * The resolver gave up on `verify` (2026-10-01): this final answer is the provisional year,
+       * kept without a verdict. Honoured only beside a numeric year -- see `Card.yearUnverified`.
+       */
+      unverified?: true;
+    }
   | { type: 'YEAR_RESOLVED'; cardId: string; year: number; confidence: 'low'; provisional: true };
 
 /**

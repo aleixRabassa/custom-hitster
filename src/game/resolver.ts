@@ -123,7 +123,7 @@ import type { YearLookupOutcome } from './year-client';
  *   reports nothing, and the card simply stays pending.
  */
 export type ResolvedYear =
-  | { cardId: string; year: number | null; confidence: YearConfidence }
+  | { cardId: string; year: number | null; confidence: YearConfidence; unverified?: true }
   | { cardId: string; year: number; confidence: 'low'; provisional: true };
 
 /**
@@ -701,11 +701,17 @@ export function createYearResolver(deck: readonly Card[], deps: ResolverDeps): Y
    * A card whose verify will never answer: final at the best single answer it has -- its
    * provisional year at `low`, or a final null if resolve found nothing either (or never answered
    * at all -- an exhausted resolve hands its card here with no provisional year).
+   *
+   * The year is reported `unverified` (2026-10-01, the developer's ruling): nobody said this year
+   * was wrong, we could not ask -- typically a provider outage or a device that lost its
+   * connection, which exhausts every card in flight within seconds. Without the mark the reducer
+   * reads it as an ordinary unconfirmed year and, in a session that skips those, drops it for
+   * good. The null keeps its old meaning, and its old accepted cost (`reducer.ts`'s gate notes).
    */
   function settleExhausted(cardId: string): void {
     const year = provisionalYear.get(cardId);
     if (year === undefined) settleFinal(cardId, null, 'none');
-    else settleFinal(cardId, year, 'low');
+    else settleFinal(cardId, year, 'low', true);
   }
 
   // ---- Shared -----------------------------------------------------------------
@@ -720,12 +726,19 @@ export function createYearResolver(deck: readonly Card[], deps: ResolverDeps): Y
     }
   }
 
-  function settleFinal(cardId: string, year: number | null, confidence: YearConfidence): void {
+  function settleFinal(
+    cardId: string,
+    year: number | null,
+    confidence: YearConfidence,
+    unverified = false,
+  ): void {
     stageOf.set(cardId, 'final');
     // A null is always `none`, whatever the body said: the final arm must never carry a
-    // null with a confidence the reveal would read as a year.
+    // null with a confidence the reveal would read as a year. Nor an `unverified` mark.
     const resolved: ResolvedYear =
-      year === null ? { cardId, year: null, confidence: 'none' } : { cardId, year, confidence };
+      year === null
+        ? { cardId, year: null, confidence: 'none' }
+        : { cardId, year, confidence, ...(unverified ? { unverified: true as const } : {}) };
     report(() => {
       deps.onResolved(resolved);
     });

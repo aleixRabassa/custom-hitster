@@ -64,6 +64,7 @@ function renderScreen(props: {
   onSavePlaylist?: () => void;
   pendingYearCount?: number;
   keepYearless?: boolean;
+  skipUnconfirmed?: boolean;
   isPlayable?: boolean;
   notice?: ReactNode;
 }) {
@@ -92,6 +93,7 @@ function renderScreen(props: {
       isPlaylistSaved={false}
       pendingYearCount={props.pendingYearCount ?? 0}
       keepYearless={props.keepYearless ?? false}
+      skipUnconfirmed={props.skipUnconfirmed ?? false}
       notice={props.notice}
     />
   );
@@ -600,6 +602,24 @@ describe('GameScreen', () => {
     render(renderScreen({ card: noYearCard, keepYearless: false }));
     fireEvent.click(screen.getByRole('button', { name: COPY.controls.keepDeck }));
     expect(document.body.textContent ?? '').toContain(COPY.deckActions.sheetSummary(0));
+  });
+
+  it("should hand the session's skipUnconfirmed to DeckActions", () => {
+    // Observed through the print view's blank-years option, which a session that drops
+    // unconfirmed years does not offer (2026-10-01).
+    const blankBox = () =>
+      screen.queryByRole('checkbox', { name: COPY.deckActions.blankUnconfirmed });
+
+    render(renderScreen({ skipUnconfirmed: true }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.controls.keepDeck }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
+    expect(blankBox()).toBeNull();
+
+    cleanup();
+    render(renderScreen({ skipUnconfirmed: false }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.controls.keepDeck }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
+    expect(blankBox()).not.toBeNull();
   });
 
   it('should leave the audio element sourceless for a card with no preview', () => {

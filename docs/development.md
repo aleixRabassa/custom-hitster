@@ -402,6 +402,22 @@ only when the developer asks.
 | 4   | **A native speaker's read** of `Salta les cartes sense any`, `Salta les cartes amb l'any sense confirmar`, `Deixa en blanc els anys sense confirmar` and `Dejar en blanco los años no confirmados`.                                           | Pending |
 | 5   | **A screen reader over the boxes**: each is announced by its caption and its checked state, with the native box hidden by `appearance-none`.                                                                                                  | Pending |
 
+**Relabelled the same afternoon**: the picker's pair now reads "Deal cards with no year found"
+(unchecked by default) and "Deal cards with an unconfirmed year" (checked by default), both dealing
+when ticked; the captions are `text-fg-secondary`; and Print opens a "Print this deck" view holding
+"Leave unconfirmed years blank". Row 2 above now reads with the second box UNticked, and row 4's
+strings are now `Reparteix les cartes sense any`, `Reparteix les cartes amb l'any sense confirmar`,
+`Imprimeix aquesta baralla`, `Deixa en blanc els anys sense confirmar` (the Spanish are the
+developer's own).
+
+| #   | Check                                                                                                                                                                                                                                         | Status  |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| 6   | **The captions' colour**: both options read in the same grey as "Playlist link" and "+ Add another playlist", not brighter, and still pass contrast on `bg-surface`.                                                                         | Pending |
+| 7   | **The print view in the dialog and on the end screen**: Print opens "Print this deck" (the title changes back on Cancel), the option, sheet count and buttons fit a 320 px phone in all three languages, and focus returns to Print on Cancel. | Pending |
+| 8   | **The print view while years are pending**: the wait, the option and "Print so far" show together, and the full PDF still downloads by itself when the last year lands, honouring the box as ticked at that moment.                        | Pending |
+| 9   | **No blank-years option in a session that skips unconfirmed years**: deal with "Deal cards with an unconfirmed year" unticked, open Print — the option is absent, in the dialog and on the end screen.                                 | Pending |
+| 10  | **Offline mid-game**: with "Deal cards with an unconfirmed year" unticked, turn on airplane mode while cards are verifying — the deck does not shrink, and a card whose year arrived before the cut reveals "No se pudo comprobar el año" rather than "Año sin confirmar". (A card with no year at all still leaves the deck while "Deal cards with no year found" is unticked: accepted.) | Pending |
+
 ### Phase 7 look-and-access verification — nothing here is closed, and no local check can close it
 
 Phase 7's first half landed the `@theme` tokens, the fluid card, `prefers-reduced-motion`, focus
@@ -889,7 +905,7 @@ address bar, a real reload, two real devices, and the TWA sharing Chrome's `loca
 | #   | Check                                                                                                                                                                                                                                                                                                                                  | Status  |
 | --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
 | 1   | **Deal any deck with a notice** (a 100+ track playlist, a combined deck): the banner shows on the loading screen and on the game screen, and **fades out about 10 s after the deal**, whatever it says, not 10 s after the game screen appears (the clock is the container's, so a slow card-1 gate eats into it). The fade is ~0.5 s. | Pending |
-| 2   | **The card does not move** when the banner appears, fades or is closed: on the game screen it is out of flow, anchored above the HUD. **On a short phone** (the column already fills the screen), check the banner is not pushed past the top of the screen; if it is, that is the accepted cost to weigh.                             | Pending |
+| 2   | **The card does not move** when the banner appears, fades or is closed: on the game screen it is out of flow, anchored above the HUD — and **on the loading screen** ("Dealing your deck…") the spinner and its two lines do not move either, the banner anchored above them. **On a short phone** (the column already fills the screen), check the banner is not pushed past the top of the screen; if it is, that is the accepted cost to weigh.                             | Pending |
 | 3   | **Lock the phone, or switch apps, within 10 s of the deal**: on return the banner is still there, and fades only after the rest of its 10 visible seconds. **Closed by hand** it goes at once and does not come back.                                                                                                                  | Pending |
 
 ### The suggestion multi-select — built 2026-08-12, and the gesture itself is the part nothing local runs

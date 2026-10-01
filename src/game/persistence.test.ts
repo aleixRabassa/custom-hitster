@@ -583,6 +583,45 @@ describe('provisional years and keepYearless', () => {
     }
   });
 
+  it('should round-trip yearUnverified', () => {
+    // Without it, a reload would turn an unchecked year into an ordinary unconfirmed one, and a
+    // session that skips those would delete the card on RESUME (2026-10-01).
+    const storage = memoryStorage();
+    const state: GameState = {
+      ...session(),
+      deck: [
+        card('a', { year: 1975, yearConfidence: 'low', yearUnverified: true }),
+        card('b', { year: 1980, yearConfidence: 'low' }),
+      ],
+      currentIndex: 0,
+    };
+
+    saveSession(state, storage);
+    const deck = loadSession(storage)?.deck ?? [];
+
+    expect(deck[0]).toMatchObject({ year: 1975, yearConfidence: 'low', yearUnverified: true });
+    expect(deck[1]).not.toHaveProperty('yearUnverified');
+  });
+
+  it('should reject yearUnverified anywhere the reducer never writes it', () => {
+    const bad = [
+      { year: null, yearConfidence: 'none', yearUnverified: true },
+      { yearUnverified: true },
+      { year: 1975, yearConfidence: 'low', yearUnverified: false },
+      { year: 1975, yearConfidence: 'low', yearUnverified: 'true' },
+      { year: 1975, yearConfidence: 'low', yearProvisional: true, yearUnverified: true },
+      { year: 1975, yearConfidence: 'high', yearUnverified: true },
+    ];
+
+    for (const overrides of bad) {
+      const storage = memoryStorage();
+      const payload = validPayload();
+      seed(storage, { ...payload, deck: [payload.deck[0], { ...card('b'), ...overrides }] });
+
+      expect(loadSession(storage)).toBeNull();
+    }
+  });
+
   it('should round-trip keepYearless', () => {
     for (const keepYearless of [true, false]) {
       const storage = memoryStorage();

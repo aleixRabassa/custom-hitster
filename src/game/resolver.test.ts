@@ -449,7 +449,8 @@ describe('createYearResolver stages', () => {
     expect(harness.callsIn('verify')).toHaveLength(3 + 3);
     expect(harness.resolved).toEqual([
       { cardId: 'a', year: 1980, confidence: 'low', provisional: true },
-      { cardId: 'a', year: 1980, confidence: 'low' },
+      // Marked: verify was never answered, so the year is unchecked rather than unconfirmed.
+      { cardId: 'a', year: 1980, confidence: 'low', unverified: true },
     ]);
   });
 
@@ -458,7 +459,9 @@ describe('createYearResolver stages', () => {
     harness.resolver.start();
     await harness.flush();
 
-    expect(harness.resolved).toEqual([{ cardId: 'a', year: 1966, confidence: 'low' }]);
+    expect(harness.resolved).toEqual([
+      { cardId: 'a', year: 1966, confidence: 'low', unverified: true },
+    ]);
   });
 
   it('should settle an exhausted empty card final at null', async () => {
@@ -480,7 +483,12 @@ describe('createYearResolver stages', () => {
     await harness.flush();
 
     expect(harness.callsIn('verify')).toEqual(['a']);
-    expect(harness.resolved.at(-1)).toEqual({ cardId: 'a', year: 1980, confidence: 'low' });
+    expect(harness.resolved.at(-1)).toEqual({
+      cardId: 'a',
+      year: 1980,
+      confidence: 'low',
+      unverified: true,
+    });
   });
 
   it('should defer an exhausted verify card behind the rest of the queue', async () => {

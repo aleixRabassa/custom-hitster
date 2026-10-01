@@ -62,6 +62,7 @@ function renderEnd(overrides: Partial<EndScreenProps> = {}) {
     deck: fixtureDeck.filter((card) => typeof card.year === 'number'),
     pendingYearCount: 0,
     keepYearless: false,
+    skipUnconfirmed: false,
     ...overrides,
   };
 
@@ -157,6 +158,24 @@ describe('EndScreen', () => {
     expect(screen.queryByRole('button', { name: COPY.deckActions.copyLink })).not.toBeNull();
     expect(screen.queryByRole('button', { name: COPY.deckActions.save })).not.toBeNull();
     expect(screen.queryByRole('button', { name: COPY.deckActions.print })).not.toBeNull();
+  });
+
+  it('should head the section "Print this deck" while the print view is open', () => {
+    // The same rule the game screen's dialog title follows (2026-10-01).
+    renderEnd();
+    expect(screen.queryByRole('heading', { name: COPY.end.keepDeckHeading })).not.toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
+    expect(screen.queryByRole('heading', { name: COPY.deckActions.printTitle })).not.toBeNull();
+    expect(screen.queryByRole('heading', { name: COPY.end.keepDeckHeading })).toBeNull();
+  });
+
+  it("should hand the session's skipUnconfirmed to DeckActions", () => {
+    // Observed through the print view's blank-years option, absent when the session dropped its
+    // unconfirmed years (2026-10-01).
+    renderEnd({ skipUnconfirmed: true });
+    fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
+    expect(screen.queryByRole('checkbox', { name: COPY.deckActions.blankUnconfirmed })).toBeNull();
   });
 
   it("should hand the session's keepYearless to DeckActions", () => {

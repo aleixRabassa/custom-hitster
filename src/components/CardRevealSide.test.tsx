@@ -209,6 +209,21 @@ describe('CardRevealSide', () => {
       expect(screen.queryByText(COPY.card.yearProvisional)).toBeNull();
     });
 
+    it('should show COPY.card.yearUnverified, not yearUnconfirmed, for an unchecked year', () => {
+      // 2026-10-01: verify could not be asked (an outage, or no connection), so the reveal says
+      // the year could not be checked -- unchecked, not doubtful. Still the warning amber.
+      const unchecked: Card = { ...lowConfidenceCard, yearUnverified: true };
+      expect(yearStateOf(unchecked)).toBe('final');
+      render(<CardRevealSide card={unchecked} />);
+
+      expect(screen.queryByText('1979')).not.toBeNull();
+      const notice = screen.getByText(COPY.card.yearUnverified);
+      expect(notice.className).toContain('text-warning');
+      expect(screen.queryByText(COPY.card.yearUnconfirmed)).toBeNull();
+      // Inside the reveal's one live region, like every other notice in this slot.
+      expect(notice.closest('[role="status"]')).not.toBeNull();
+    });
+
     it('should show COPY.card.yearUnknown for a kept yearless card', () => {
       // A session dealt with `keepYearless` keeps a final null: this branch is live again.
       expect(yearStateOf(noYearCard)).toBe('final');

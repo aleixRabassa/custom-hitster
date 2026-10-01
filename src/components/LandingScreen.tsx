@@ -238,23 +238,25 @@ export interface LandingScreenProps {
    */
   errorCode?: StartFailureCode;
   /**
-   * The "Skip cards with no year found" checkbox, CONTROLLED. It replaced "Keep cards with no year
-   * found" (spike §12.8) on 2026-10-01 and is that option INVERTED: checked means a final "no year"
-   * drops its card. Named for what the box SAYS; `App.tsx` maps it onto the stored `keepYearless`.
+   * The "Deal cards with no year found" checkbox, CONTROLLED: checked means a card whose final
+   * answer is "no year" stays in the deck -- the stored `keepYearless`, under the label it has had
+   * since the afternoon of 2026-10-01 (it read "Skip cards with no year found", inverted, that
+   * morning). Named for what the box SAYS.
    *
    * A value and a change callback rather than a wider `onSubmit`, because the same value has to
    * reach a deal that never passes through this screen: a share link. `App.tsx` owns the state,
    * seeds it from `prefs.ts` and remembers every change, and hands it to every `start()`. REQUIRED,
    * like `onBack`, so no host can render a checkbox that silently does nothing.
    */
-  skipYearless: boolean;
-  onSkipYearlessChange: (skipYearless: boolean) => void;
+  dealYearless: boolean;
+  onDealYearlessChange: (dealYearless: boolean) => void;
   /**
-   * The "Skip cards with an unconfirmed year" checkbox (2026-10-01), CONTROLLED and owned exactly
-   * like the one above. Checked drops a card whose final year no second provider confirmed.
+   * The "Deal cards with an unconfirmed year" checkbox (2026-10-01), CONTROLLED and owned exactly
+   * like the one above. Checked KEEPS a card whose final year no second provider confirmed, so it
+   * is the stored `skipUnconfirmed` INVERTED -- `App.tsx` is the one place that inverts it.
    */
-  skipUnconfirmed: boolean;
-  onSkipUnconfirmedChange: (skipUnconfirmed: boolean) => void;
+  dealUnconfirmed: boolean;
+  onDealUnconfirmedChange: (dealUnconfirmed: boolean) => void;
 }
 
 export function LandingScreen({
@@ -264,10 +266,10 @@ export function LandingScreen({
   errorCode,
   savedPlaylists = [],
   onRemoveSaved,
-  skipYearless,
-  onSkipYearlessChange,
-  skipUnconfirmed,
-  onSkipUnconfirmedChange,
+  dealYearless,
+  onDealYearlessChange,
+  dealUnconfirmed,
+  onDealUnconfirmedChange,
 }: LandingScreenProps) {
   const { copy, errorMessages } = useLocale();
   const [rows, setRows] = useState<PlaylistRow[]>(() => [{ id: 'row-1', value: '' }]);
@@ -823,14 +825,16 @@ export function LandingScreen({
           {/*
           ===============================================================================
            THE DEAL OPTIONS (2026-10-01), BETWEEN THE ROWS AND START, because they qualify
-           the press below them rather than any one row. Both SKIP when checked:
+           the press below them rather than any one row. Both DEAL when checked (the
+           developer's second wording of the day; the morning's pair read "Skip ..." and
+           skipped when checked):
 
-           - "Skip cards with no year found" -- the 2026-09-30 "Keep cards with no year
-             found" (spike §12.8), relabelled and INVERTED so the box does what it says.
-             Checked by default, because the default behaviour did not change: a final
-             "no year" still drops its card unless the player unticks it.
-           - "Skip cards with an unconfirmed year" -- new: a card whose final year no
-             second provider confirmed is dropped. Unchecked by default.
+           - "Deal cards with no year found" -- the 2026-09-30 "Keep cards with no year
+             found" (spike §12.8) under a new label, same polarity. Unchecked by default,
+             because the default behaviour never changed: a final "no year" drops its card.
+           - "Deal cards with an unconfirmed year" -- a card whose final year no second
+             provider confirmed stays. Checked by default, for the same reason: such a card
+             was always dealt, and the player unticks this to drop it.
 
            CONTROLLED: the values and their change callbacks are `App.tsx`'s, which
            remembers them (`src/game/prefs.ts`) and hands them to every deal -- including a
@@ -845,16 +849,16 @@ export function LandingScreen({
         */}
           <div className={OPTION_GROUP_CLASS_NAME}>
             <OptionCheckbox
-              label={copy.landing.skipYearless}
-              checked={skipYearless}
+              label={copy.landing.dealYearless}
+              checked={dealYearless}
               disabled={isLoading}
-              onChange={onSkipYearlessChange}
+              onChange={onDealYearlessChange}
             />
             <OptionCheckbox
-              label={copy.landing.skipUnconfirmed}
-              checked={skipUnconfirmed}
+              label={copy.landing.dealUnconfirmed}
+              checked={dealUnconfirmed}
               disabled={isLoading}
-              onChange={onSkipUnconfirmedChange}
+              onChange={onDealUnconfirmedChange}
             />
           </div>
 

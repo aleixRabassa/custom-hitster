@@ -21,7 +21,11 @@
  *    high         -> final. The year, plain. Trust it.
  *    low          -> final. The year, plus an explicit "unconfirmed" marker.
  *                    Showing a possibly-wrong year beats showing none, PROVIDED it
- *                    is always marked (plan.md §5, decided 2026-08-04).
+ *                    is always marked (plan.md §5, decided 2026-08-04). A `low`
+ *                    year marked `yearUnverified` (verify could not be asked --
+ *                    an outage or no connection, 2026-10-01) says "Year could not
+ *                    be checked" instead, in the same amber: unchecked, not
+ *                    doubtful.
  *    none         -> final, `year: null`. Every provider was asked. Reaches a live
  *                    deck when the session keeps yearless cards -- see below.
  *
@@ -61,7 +65,7 @@
  * only for a resumed save taken before that reversal.
  *
  * It is reachable in ordinary play again (plan.year-fetch-rework-game.md, spike §12.8): a session
- * dealt with `keepYearless` -- the picker's "Skip cards with no year found" UNTICKED (it was "Keep cards with no year found" until 2026-10-01) -- keeps a card whose
+ * dealt with `keepYearless` -- the picker's "Deal cards with no year found" ticked (first "Keep cards with no year found", then briefly the inverted "Skip ...", on 2026-10-01) -- keeps a card whose
  * FINAL answer is null, and this is the face it shows. With the option off the reducer still drops
  * those cards, and the branch still serves a pre-reversal save. Its markup is unchanged: it is the
  * display that is correct for a yearless card wherever one comes from, and it is asserted in this
@@ -221,7 +225,8 @@ function YearSlot({ card }: { card: Card }) {
 }
 
 /**
- * The one line under a year: "Confirming year", "Unconfirmed year", or nothing -- but always the
+ * The one line under a year: "Confirming year", "Unconfirmed year", "Year could not be checked", or
+ * nothing -- but always the
  * same `<p>` with `min-h-lh`, so the line's height is reserved in every year-number state and a
  * provisional year confirmed as `high` does not recentre the face (see the header). The empty
  * case is `aria-hidden` so the reserved line is not an empty node in the live region.
@@ -236,7 +241,11 @@ function YearNotice({ card, isProvisional }: { card: Card; isProvisional: boolea
     return <p className="min-h-lh text-sm text-fg-secondary">{copy.card.yearProvisional}</p>;
   }
   if (card.yearConfidence === 'low') {
-    return <p className="min-h-lh text-sm text-warning">{copy.card.yearUnconfirmed}</p>;
+    return (
+      <p className="min-h-lh text-sm text-warning">
+        {card.yearUnverified === true ? copy.card.yearUnverified : copy.card.yearUnconfirmed}
+      </p>
+    );
   }
 
   return <p aria-hidden="true" className="min-h-lh text-sm" />;

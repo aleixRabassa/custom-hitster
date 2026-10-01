@@ -47,8 +47,8 @@ export const COPY_ES = {
     removeRow: (position: number) => `Quitar playlist ${position}`,
     addRow: 'Añadir otra playlist',
     // The developer's own wording (2026-10-01).
-    skipYearless: 'Saltar cartas sin año',
-    skipUnconfirmed: 'Saltar cartas con año no confirmado',
+    dealYearless: 'Repartir cartas sin año',
+    dealUnconfirmed: 'Repartir cartas con año no confirmado',
     atMaxRows: (maxPlaylists: number) => `El máximo son ${maxPlaylists} playlists por mazo.`,
     start: 'Empezar',
     starting: 'Cargando…',
@@ -104,6 +104,7 @@ export const COPY_ES = {
     yearUnknown: 'Año desconocido',
     yearUnknownDetail: 'Compruébalo por tu cuenta',
     yearUnconfirmed: 'Año sin confirmar',
+    yearUnverified: 'No se pudo comprobar el año',
     // 2026-09-30 PROPOSALS, not yet read by a native speaker (docs/development.md §5).
     yearProvisional: 'Confirmando año',
   },
@@ -150,6 +151,8 @@ export const COPY_ES = {
     save: 'Guardar esta playlist',
     saved: 'Guardada en tus playlists',
     print: 'Imprimir como cartas en PDF',
+    // The developer's own wording (2026-10-01).
+    printTitle: 'Imprimir este mazo',
     // 2026-10-01 PROPOSAL, not yet read by a native speaker (docs/development.md §5).
     blankUnconfirmed: 'Dejar en blanco los años no confirmados',
     printing: (completed: number, total: number) => `Creando PDF… ${completed}/${total}`,

@@ -179,6 +179,12 @@ export interface GameScreenProps {
    */
   keepYearless: boolean;
   /**
+   * Whether this session drops cards with an unconfirmed year, from `state.skipUnconfirmed`.
+   * Straight through to `DeckActionsDialog`, which hides the PDF's blank-years option when it is
+   * on (2026-10-01). Nothing here renders it.
+   */
+  skipUnconfirmed: boolean;
+  /**
    * The notice banner, or null.
    *
    * Passed in as a NODE rather than as three booleans, because dismissal is container state
@@ -224,6 +230,7 @@ export function GameScreen({
   isPlaylistSaved,
   pendingYearCount,
   keepYearless,
+  skipUnconfirmed,
   notice,
 }: GameScreenProps) {
   const copy = useCopy();
@@ -602,6 +609,7 @@ export function GameScreen({
           deck={deck}
           pendingYearCount={pendingYearCount}
           keepYearless={keepYearless}
+          skipUnconfirmed={skipUnconfirmed}
           onClose={() => {
             setIsDeckActionsOpen(false);
           }}

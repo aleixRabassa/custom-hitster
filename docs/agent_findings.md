@@ -5748,3 +5748,51 @@ utility was confirmed present in the built CSS (`peer-checked:block`, `checked:b
 `group-hover:*`, `has-disabled:*`, `divide-border`). A browser screenshot was attempted under
 `pnpm dev` and the Chrome extension timed out, so nothing about its look has been seen yet
 (`docs/development.md` §5).
+
+## 2026-10-01 — `/favicon.ico` answered 404 in production; added a small ICO
+
+The icons were already derived from `visual-assets/logo-master/logo.png` (the production
+`logo.webp` is byte-identical to `public/logo.webp`, and a fresh LANCZOS downscale of the master
+matches it), so regenerating them would have changed nothing. What was missing was the
+conventional root path: `https://playlistjitster.vercel.app/favicon.ico` returned **404**, and
+tools that look for a site icon without parsing the HTML — Vercel's dashboard among them — ask
+for exactly that path. `public/favicon.ico` is now a 16/32/48 ICO (6,938 bytes) cut from the
+master with the black floor raised to `#0a0a0a` (`point(lambda v: max(v, 10))`). No `<link>`
+names it, so browsers keep reading the WebP and make no extra request, and `globPatterns` has no
+`ico`, so the service worker does not precache it. At 16px the wordmark is unreadable; that is
+the master's design, not the downscale. Whether the Vercel dashboard picks it up is unverified
+until the next production deploy.
+
+## 2026-10-01 — The picker's options now DEAL when ticked; Print always opens a "Print this deck" view
+
+Later the same day the developer reversed the morning's "Skip ..." pair: the picker now reads
+"Deal cards with no year found" / "Deal cards with an unconfirmed year" (Spanish "Repartir cartas
+sin año" / "Repartir cartas con año no confirmado"), each dealing its cards when ticked. Three
+conclusions worth not re-deriving:
+
+- **Still only the UI moved.** `keepYearless` and `skipUnconfirmed` kept their stored polarity
+  through both relabels. The yearless box is now `keepYearless` straight; the unconfirmed box is
+  `skipUnconfirmed` inverted, in `App.tsx` only. The second box reads CHECKED on a fresh profile —
+  the default (unconfirmed years play) never changed.
+- **The blank-years option could not live in the wait alone.** The developer asked for it beside
+  "Print so far", but the wait renders only while years are pending, so on a resolved deck the box
+  would have been unreachable. Asked, the developer chose for Print to open a view every time:
+  one more press on a resolved deck. The view's title ("Print this deck") is the host's heading,
+  passed down as `renderHeading(view)` because the view is `DeckActions`' state; a lifted
+  `isPrintViewOpen` would have made every `DeckActions` test need a stateful wrapper.
+- **The background review of `d9c4ae1` found an outage path that drops cards** with
+  `skipUnconfirmed` on: an exhausted verify settles a provisional year FINAL at `low`, which
+  `isDroppedAnswer` then removes. The relabel does not change it (the unconfirmed box UNticked is
+  the same `skipUnconfirmed: true`). Unfixed; it needs a decision.
+
+## 2026-10-01 — An exhausted verify's year is "unchecked", not "unconfirmed"
+
+`settleExhausted` used to report the provisional year as a plain final `low`, so the reducer could
+not tell "a second provider answered and disagreed" from "we never got to ask". With "Deal cards
+with an unconfirmed year" unticked, the second was dropped like the first — permanently (deck, save
+and Restart all lose it) — and going offline mid-game exhausts every card in flight within seconds
+(six transient failures: two passes of three, 0.5 s and 1 s apart; a 429 never counts). The
+resolver now reports `unverified: true`, the reducer stores `Card.yearUnverified`, `isDroppedAnswer`
+exempts it, and the reveal says "Year could not be checked". The PDF never waited on it either way:
+exhaustion is what makes a card final. A null settled the same way is unchanged and still drops
+while yearless cards are dropped — the remaining offline loss, left to the developer.

@@ -1,7 +1,7 @@
 /**
  * One labelled on/off option: a native checkbox, restyled, inside its own `<label>` (2026-10-01).
  *
- * Shared by the picker's deal options ("Skip cards with no year found", "Skip cards with an
+ * Shared by the picker's deal options ("Deal cards with no year found", "Deal cards with an
  * unconfirmed year") and the PDF export's "Leave unconfirmed years blank", so the three read as one
  * control and the rules below live in one place. Presentational: the value and its change callback
  * are the host's.
@@ -59,7 +59,7 @@ export function OptionCheckbox({
             onChange(event.target.checked);
           }}
           disabled={disabled}
-          className="peer size-5 cursor-pointer appearance-none rounded-md border-2 border-border-strong bg-page group-hover:border-border-hover checked:border-accent checked:bg-accent group-hover:checked:border-accent-hover group-hover:checked:bg-accent-hover focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)"
+          className="peer size-5 cursor-pointer appearance-none rounded-md border-2 border-border-strong bg-page group-hover:enabled:border-border-hover checked:border-accent checked:bg-accent group-hover:enabled:checked:border-accent-hover group-hover:enabled:checked:bg-accent-hover focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)"
         />
         <svg
           aria-hidden="true"
@@ -69,12 +69,17 @@ export function OptionCheckbox({
           strokeWidth={2.5}
           strokeLinecap="round"
           strokeLinejoin="round"
-          className="pointer-events-none absolute inset-0 m-auto hidden size-3.5 text-on-accent peer-checked:block"
+          className="pointer-events-none absolute inset-0 m-auto hidden size-3.5 text-on-accent peer-checked:block peer-disabled:opacity-(--opacity-disabled)"
         >
           <path d="M3.5 8.5l3 3 6-7" />
         </svg>
       </span>
-      <span className="text-sm text-fg">{label}</span>
+      {/*
+        `text-fg-secondary`, the picker's other captions' colour ("Playlist link", "+ Add another
+        playlist", the section headings) -- the developer's request, 2026-10-01: in `text-fg` the
+        two options read brighter than everything around them.
+      */}
+      <span className="text-sm text-fg-secondary">{label}</span>
     </label>
   );
 }

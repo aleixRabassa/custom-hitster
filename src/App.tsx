@@ -362,9 +362,9 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
   const [savedPlaylists, setSavedPlaylists] = useState(() => loadLibrary(libraryStorage));
 
   /**
-   * The picker's two deal options: "Skip cards with no year found" (plan.year-fetch-rework-ui.md
+   * The picker's two deal options: "Deal cards with no year found" (plan.year-fetch-rework-ui.md
    * step 5, where it read "Keep cards with no year found" -- stored as `keepYearless`, see below) and
-   * "Skip cards with an unconfirmed year" (2026-10-01).
+   * "Deal cards with an unconfirmed year" (2026-10-01, stored inverted as `skipUnconfirmed`).
    *
    * ===========================================================================
    *  THE PREFERENCE, NOT THE SESSION'S VALUE -- AND THE TWO ARE DIFFERENT THINGS.
@@ -396,10 +396,12 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
     beside it: `savePrefs` rebuilds the WHOLE record, and saving a field from a stale copy of the
     other would undo it.
 
-    THE "SKIP CARDS WITH NO YEAR FOUND" CHECKBOX IS `keepYearless` INVERTED, and this is the one
-    place that inverts it: `LandingScreen` takes `skipYearless` so its prop reads like its label,
-    while the model, the save and `prefs.ts` kept the old polarity so no stored value changed
-    meaning.
+    THE "DEAL CARDS WITH AN UNCONFIRMED YEAR" CHECKBOX IS `skipUnconfirmed` INVERTED, and this is
+    the one place that inverts it: `LandingScreen` takes `dealUnconfirmed` so its prop reads like
+    its label, while the model, the save and `prefs.ts` kept the stored polarity so no stored value
+    changed meaning. "Deal cards with no year found" IS `keepYearless`, uninverted. (Both boxes read
+    "Skip ..." and skipped when ticked on the morning of 2026-10-01; the developer reversed that the
+    same day. Only the labels and this mapping moved, never the stored fields.)
   */
   const handlePrefsChange = useCallback(
     (change: Partial<Prefs>) => {
@@ -415,15 +417,15 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
     },
     [prefs, prefsStorage],
   );
-  const handleSkipYearlessChange = useCallback(
-    (skipYearless: boolean) => {
-      handlePrefsChange({ keepYearless: !skipYearless });
+  const handleDealYearlessChange = useCallback(
+    (dealYearless: boolean) => {
+      handlePrefsChange({ keepYearless: dealYearless });
     },
     [handlePrefsChange],
   );
-  const handleSkipUnconfirmedChange = useCallback(
-    (next: boolean) => {
-      handlePrefsChange({ skipUnconfirmed: next });
+  const handleDealUnconfirmedChange = useCallback(
+    (dealUnconfirmed: boolean) => {
+      handlePrefsChange({ skipUnconfirmed: !dealUnconfirmed });
     },
     [handlePrefsChange],
   );
@@ -840,10 +842,10 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
       {...(startFailureCode ? { errorCode: startFailureCode } : {})}
       savedPlaylists={savedPlaylists}
       onRemoveSaved={handleRemoveSaved}
-      skipYearless={!keepYearless}
-      onSkipYearlessChange={handleSkipYearlessChange}
-      skipUnconfirmed={skipUnconfirmed}
-      onSkipUnconfirmedChange={handleSkipUnconfirmedChange}
+      dealYearless={keepYearless}
+      onDealYearlessChange={handleDealYearlessChange}
+      dealUnconfirmed={!skipUnconfirmed}
+      onDealUnconfirmedChange={handleDealUnconfirmedChange}
     />
   );
 
@@ -959,6 +961,7 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
         // The SESSION's value, never the picker's preference: whether this deck's PDF prints its
         // yearless cards with a blank year is a fact about the game that was dealt.
         keepYearless={state.keepYearless}
+        skipUnconfirmed={state.skipUnconfirmed}
       />
     );
   }
@@ -1011,8 +1014,9 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
         onSavePlaylist={handleSavePlaylist}
         isPlaylistSaved={isPlaylistSaved}
         pendingYearCount={pendingYearCount}
-        // The session's value, as on the end screen -- see there.
+        // The session's values, as on the end screen -- see there.
         keepYearless={state.keepYearless}
+        skipUnconfirmed={state.skipUnconfirmed}
         notice={noticeBanner}
       />
     </Suspense>

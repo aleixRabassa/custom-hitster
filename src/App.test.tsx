@@ -2251,17 +2251,20 @@ describe('App', () => {
     const LINK_SEARCH = `?playlist=${PLAYLIST.id}&seed=${LINK_SEED}`;
 
     /**
-     * The picker's "Skip cards with no year found", by its visible caption. CHECKED BY DEFAULT since
-     * 2026-10-01 -- it is `keepYearless` inverted -- so one click is what keeps yearless cards.
+     * The picker's "Deal cards with no year found", by its visible caption. It IS `keepYearless`,
+     * so it is unchecked by default and one click is what keeps yearless cards.
      */
-    function skipYearlessBox(): HTMLInputElement {
-      return screen.getByRole('checkbox', { name: COPY.landing.skipYearless }) as HTMLInputElement;
+    function dealYearlessBox(): HTMLInputElement {
+      return screen.getByRole('checkbox', { name: COPY.landing.dealYearless }) as HTMLInputElement;
     }
 
-    /** The picker's "Skip cards with an unconfirmed year", unchecked by default. */
-    function skipUnconfirmedBox(): HTMLInputElement {
+    /**
+     * The picker's "Deal cards with an unconfirmed year": `skipUnconfirmed` INVERTED, so it is
+     * checked by default and one click is what drops unconfirmed cards.
+     */
+    function dealUnconfirmedBox(): HTMLInputElement {
       return screen.getByRole('checkbox', {
-        name: COPY.landing.skipUnconfirmed,
+        name: COPY.landing.dealUnconfirmed,
       }) as HTMLInputElement;
     }
 
@@ -2273,7 +2276,7 @@ describe('App', () => {
       return JSON.parse(storage.map.get(PREFS_STORAGE_KEY) ?? 'null');
     }
 
-    it('should deal with keepYearless when "Skip cards with no year found" is unticked', async () => {
+    it('should deal with keepYearless when "Deal cards with no year found" is ticked', async () => {
       // Every lookup finds nothing. With the option OFF that is the collapse to the picker's
       // `no-years-found` warning (asserted above); ON, every card stays and the game plays on.
       stubDroppingYearApi();
@@ -2281,7 +2284,7 @@ describe('App', () => {
       renderApp(playlistFetch(200, playlistResult()), storage);
 
       enterPicker();
-      fireEvent.click(skipYearlessBox());
+      fireEvent.click(dealYearlessBox());
       startPlaylist();
 
       await waitFor(() => {
@@ -2305,16 +2308,16 @@ describe('App', () => {
 
       renderApp(fetchImpl, storage);
       enterPicker();
-      // The default behaviour is unchanged -- yearless cards are dropped -- so the box reads checked.
-      expect(skipYearlessBox().checked).toBe(true);
-      expect(skipUnconfirmedBox().checked).toBe(false);
+      // The defaults: yearless cards are dropped, unconfirmed ones are dealt.
+      expect(dealYearlessBox().checked).toBe(false);
+      expect(dealUnconfirmedBox().checked).toBe(true);
 
-      fireEvent.click(skipYearlessBox());
-      expect(skipYearlessBox().checked).toBe(false);
+      fireEvent.click(dealYearlessBox());
+      expect(dealYearlessBox().checked).toBe(true);
       expect(storedPrefs(storage)).toEqual({ keepYearless: true, skipUnconfirmed: false });
 
       // The second box writes its own field and keeps the first one's.
-      fireEvent.click(skipUnconfirmedBox());
+      fireEvent.click(dealUnconfirmedBox());
       expect(storedPrefs(storage)).toEqual({ keepYearless: true, skipUnconfirmed: true });
 
       // A reload: a fresh mount over the same storage shows the remembered value on its first
@@ -2322,18 +2325,18 @@ describe('App', () => {
       cleanup();
       renderApp(fetchImpl, storage);
       enterPicker();
-      expect(skipYearlessBox().checked).toBe(false);
-      expect(skipUnconfirmedBox().checked).toBe(true);
+      expect(dealYearlessBox().checked).toBe(true);
+      expect(dealUnconfirmedBox().checked).toBe(false);
 
       // And turning them back is remembered too.
-      fireEvent.click(skipYearlessBox());
-      fireEvent.click(skipUnconfirmedBox());
+      fireEvent.click(dealYearlessBox());
+      fireEvent.click(dealUnconfirmedBox());
       expect(storedPrefs(storage)).toEqual({ keepYearless: false, skipUnconfirmed: false });
       cleanup();
       renderApp(fetchImpl, storage);
       enterPicker();
-      expect(skipYearlessBox().checked).toBe(true);
-      expect(skipUnconfirmedBox().checked).toBe(false);
+      expect(dealYearlessBox().checked).toBe(false);
+      expect(dealUnconfirmedBox().checked).toBe(true);
     });
 
     it("should deal a share link with the recipient's remembered choice", async () => {
@@ -2429,7 +2432,7 @@ describe('App', () => {
       renderApp(playlistFetch(200, playlistResult()), storage);
 
       enterPicker();
-      fireEvent.click(skipYearlessBox());
+      fireEvent.click(dealYearlessBox());
       startPlaylist();
 
       await waitFor(() => {
@@ -2443,9 +2446,9 @@ describe('App', () => {
       expect(savedSession(storage).deck.every((card) => card.year === undefined)).toBe(true);
     });
 
-    it('should drop unconfirmed cards when "Skip cards with an unconfirmed year" is ticked', async () => {
-      // Every lookup settles FINAL at `low` -- a year no second provider confirmed. Unticked, that
-      // is an ordinary playable deck; ticked, every card leaves and the deck collapses to the
+    it('should drop unconfirmed cards when "Deal cards with an unconfirmed year" is unticked', async () => {
+      // Every lookup settles FINAL at `low` -- a year no second provider confirmed. Ticked (the
+      // default), that is an ordinary playable deck; unticked, every card leaves and the deck collapses to the
       // picker's warning, exactly as a deck of final nulls does with the other option.
       vi.stubGlobal(
         'fetch',
@@ -2471,14 +2474,14 @@ describe('App', () => {
       renderApp(playlistFetch(200, playlistResult()), storage);
 
       enterPicker();
-      fireEvent.click(skipUnconfirmedBox());
+      fireEvent.click(dealUnconfirmedBox());
       startPlaylist();
 
       expect(await screen.findByText(PLAYLIST_ERROR_MESSAGES['no-years-found'])).not.toBeNull();
       expect(storedPrefs(storage)).toEqual({ keepYearless: false, skipUnconfirmed: true });
     });
 
-    it('should play unconfirmed cards with "Skip cards with an unconfirmed year" unticked', async () => {
+    it('should play unconfirmed cards with "Deal cards with an unconfirmed year" ticked', async () => {
       vi.stubGlobal(
         'fetch',
         vi.fn(() =>
@@ -2562,7 +2565,7 @@ describe('App', () => {
 
       renderApp(playlistFetch(200, playlistResult()));
       enterPicker();
-      fireEvent.click(skipYearlessBox());
+      fireEvent.click(dealYearlessBox());
       startPlaylist();
 
       await waitFor(() => {

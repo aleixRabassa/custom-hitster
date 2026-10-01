@@ -27,7 +27,7 @@ import { pdfFileName, sanitizeForPdf } from '../game/pdf-text';
 import { LOCALES } from '../game/locale';
 import { LocaleContext } from '../hooks/useLocale';
 import { sheetsForDeck } from '../hooks/usePdfExport';
-import type { DeckActionsProps } from './DeckActions';
+import type { DeckActionsProps, DeckActionsView } from './DeckActions';
 
 /**
  * Both halves of the export are doubled, and neither is doubled for speed.
@@ -115,10 +115,20 @@ function renderActions(overrides: Partial<DeckActionsProps> = {}) {
     pendingYearCount: 0,
     // The option off, which is the default a fresh profile deals with. Its own block turns it on.
     keepYearless: false,
+    skipUnconfirmed: false,
     ...overrides,
   };
 
   return { ...render(<DeckActions {...props} />), props };
+}
+
+/**
+ * Print a resolved deck: the actions view's Print OPENS the print view (2026-10-01), and the print
+ * view's own Print -- the same label -- is the press that exports.
+ */
+function printDeck(label: string = COPY.deckActions.print): void {
+  fireEvent.click(screen.getByRole('button', { name: label }));
+  fireEvent.click(screen.getByRole('button', { name: label }));
 }
 
 /**
@@ -445,11 +455,12 @@ describe('DeckActions', () => {
             deck={fixtureDeck.filter((card) => typeof card.year === 'number')}
             pendingYearCount={0}
             keepYearless={false}
+            skipUnconfirmed={false}
           />
         </LocaleContext.Provider>,
       );
 
-      fireEvent.click(screen.getByRole('button', { name: copy.deckActions.print }));
+      printDeck(copy.deckActions.print);
 
       await waitFor(() => {
         expect(screen.queryByText(copy.deckActions.exportDone)).not.toBeNull();
@@ -476,7 +487,7 @@ describe('DeckActions', () => {
       delete pending.year;
       renderActions({ deck: [pending] });
 
-      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
+      printDeck();
 
       expect(screen.getByRole('status').textContent).toBe(COPY.deckActions.exportEmpty);
       /*
@@ -526,7 +537,8 @@ describe('DeckActions', () => {
       expect(screen.queryByText(COPY.deckActions.waitingHeading)).not.toBeNull();
       expect(screen.queryByText(COPY.deckActions.waitingDetail(1))).not.toBeNull();
 
-      // The last one lands: the wait is over and the export has taken over the panel.
+      // The last one lands: the wait is over, the export has started, and the print view now
+      // offers the full Print in place of "Print so far".
       rerender(<DeckActions {...props} pendingYearCount={0} />);
       expect(screen.queryByText(COPY.deckActions.waitingHeading)).toBeNull();
       /*
@@ -684,7 +696,7 @@ describe('DeckActions', () => {
         COPY.deckActions.sheetSummary(sheetsForDeck(fixtureDeck, true)),
       );
 
-      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
+      printDeck();
       await waitFor(() => {
         expect(screen.queryByText(COPY.deckActions.exportDonePartial(1))).not.toBeNull();
       });
@@ -695,7 +707,7 @@ describe('DeckActions', () => {
       toDataURLMock.mockClear();
       renderActions({ deck: fixtureDeck, keepYearless: false });
 
-      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
+      printDeck();
       await waitFor(() => {
         expect(screen.queryByText(COPY.deckActions.exportDonePartial(2))).not.toBeNull();
       });
@@ -705,7 +717,7 @@ describe('DeckActions', () => {
     it('should draw title and artist but no year for a kept yearless card', async () => {
       renderActions({ deck: [noYearCard], keepYearless: true });
 
-      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
+      printDeck();
       await waitFor(() => {
         expect(screen.queryByText(COPY.deckActions.exportDone)).not.toBeNull();
       });
@@ -728,7 +740,7 @@ describe('DeckActions', () => {
     it('should draw the year for a final card as before', async () => {
       renderActions({ deck: [highConfidenceCard], keepYearless: true });
 
-      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
+      printDeck();
       await waitFor(() => {
         expect(screen.queryByText(COPY.deckActions.exportDone)).not.toBeNull();
       });
@@ -763,8 +775,15 @@ describe('DeckActions', () => {
       }) as HTMLInputElement;
     }
 
-    it('should render the option unticked, between Save and Print', () => {
+    it('should render the option only in the print view, unticked, above its Print', () => {
+      // 2026-10-01, the developer's request: the option sits in the print view, beside the press it
+      // qualifies, and no longer among the three actions.
       renderActions();
+      expect(
+        screen.queryByRole('checkbox', { name: COPY.deckActions.blankUnconfirmed }),
+      ).toBeNull();
+
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
 
       const box = blankUnconfirmedBox();
       expect(box.checked).toBe(false);
@@ -772,16 +791,63 @@ describe('DeckActions', () => {
       expect(box.closest('label')?.className).toContain('touch-target');
       expect(box.hasAttribute('value')).toBe(false);
 
-      const save = screen.getByRole('button', { name: COPY.deckActions.save });
       const print = screen.getByRole('button', { name: COPY.deckActions.print });
-      expect(save.compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       expect(box.compareDocumentPosition(print) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it('should not offer the option when the session skips unconfirmed years', async () => {
+      // 2026-10-01, the developer's call: such a session has already dropped every card whose final
+      // year is `low`, so the box could change nothing in the file. Absent in both states of the
+      // view, and the export still runs with the year printed as usual.
+      const { rerender, props } = renderActions({ skipUnconfirmed: true, pendingYearCount: 2 });
+
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
+      expect(
+        screen.queryByRole('checkbox', { name: COPY.deckActions.blankUnconfirmed }),
+      ).toBeNull();
+      expect(screen.queryByRole('button', { name: COPY.deckActions.printPartial })).not.toBeNull();
+
+      rerender(<DeckActions {...props} pendingYearCount={0} />);
+      expect(
+        screen.queryByRole('checkbox', { name: COPY.deckActions.blankUnconfirmed }),
+      ).toBeNull();
+      await waitFor(() => {
+        expect(screen.queryByText(COPY.deckActions.exportDone)).not.toBeNull();
+      });
+    });
+
+    it('should offer the option in such a session while it holds an unverified card', async () => {
+      // An unverified year (verify could not be asked) survives `skipUnconfirmed`, so the box can
+      // blank it, and is offered again (2026-10-01).
+      const unchecked = { ...lowConfidenceCard, yearUnverified: true as const };
+      renderActions({ skipUnconfirmed: true, deck: [unchecked, highConfidenceCard] });
+
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
+      fireEvent.click(blankUnconfirmedBox());
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
+      await waitFor(() => {
+        expect(screen.queryByText(COPY.deckActions.exportDone)).not.toBeNull();
+      });
+
+      expect(drawnTexts()).not.toContain(String(unchecked.year));
+      expect(drawnTexts()).toContain(String(highConfidenceCard.year));
+    });
+
+    it('should sit beside "Print so far" while years are pending', () => {
+      renderActions({ pendingYearCount: 2 });
+
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
+
+      const partial = screen.getByRole('button', { name: COPY.deckActions.printPartial });
+      expect(
+        blankUnconfirmedBox().compareDocumentPosition(partial) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
     });
 
     it('should print an unconfirmed year by default', async () => {
       renderActions({ deck: [lowConfidenceCard] });
 
-      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
+      printDeck();
       await waitFor(() => {
         expect(screen.queryByText(COPY.deckActions.exportDone)).not.toBeNull();
       });
@@ -792,6 +858,7 @@ describe('DeckActions', () => {
     it('should leave only the unconfirmed year blank when ticked', async () => {
       renderActions({ deck: [lowConfidenceCard, highConfidenceCard] });
 
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
       fireEvent.click(blankUnconfirmedBox());
       expect(blankUnconfirmedBox().checked).toBe(true);
       fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
@@ -808,6 +875,66 @@ describe('DeckActions', () => {
       // The confirmed year is still printed.
       expect(texts).toContain(String(highConfidenceCard.year));
       for (const text of texts.flat()) expect(text).not.toBe('null');
+    });
+  });
+
+  describe('the print view', () => {
+    it('should open on a resolved deck without exporting', () => {
+      // 2026-10-01: Print opens "Print this deck" even when every year is in -- the view is where
+      // the blank-years option lives, so exporting at once would leave it unreachable.
+      const { container, props } = renderActions();
+
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
+
+      expect(saveMock).not.toHaveBeenCalled();
+      expect(screen.queryByRole('button', { name: COPY.deckActions.copyLink })).toBeNull();
+      expect(screen.queryByRole('button', { name: COPY.deckActions.cancel })).not.toBeNull();
+      expect(screen.queryByText(COPY.deckActions.waitingHeading)).toBeNull();
+      expect(container.textContent ?? '').toContain(
+        COPY.deckActions.sheetSummary(sheetsForDeck(props.deck, props.keepYearless)),
+      );
+    });
+
+    it('should ask the host for the heading of the view on show', () => {
+      const renderHeading = (view: DeckActionsView) => <h2 data-testid="heading">{view}</h2>;
+      renderActions({ renderHeading });
+      expect(screen.getByTestId('heading').textContent).toBe('actions');
+
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
+      expect(screen.getByTestId('heading').textContent).toBe('print');
+
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.cancel }));
+      expect(screen.getByTestId('heading').textContent).toBe('actions');
+    });
+
+    it('should move focus to Cancel on the way in and back to Print on the way out', () => {
+      renderActions();
+
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
+      expect(document.activeElement?.textContent).toBe(COPY.deckActions.cancel);
+
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.cancel }));
+      expect(document.activeElement).toBe(
+        screen.getByRole('button', { name: COPY.deckActions.print }),
+      );
+    });
+
+    it('should keep the option across a Cancel, for as long as the panel is open', () => {
+      // The option is the PANEL's state, not the view's: Cancel and Print again find it as left.
+      renderActions();
+
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
+      fireEvent.click(screen.getByRole('checkbox', { name: COPY.deckActions.blankUnconfirmed }));
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.cancel }));
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
+
+      expect(
+        (
+          screen.getByRole('checkbox', {
+            name: COPY.deckActions.blankUnconfirmed,
+          }) as HTMLInputElement
+        ).checked,
+      ).toBe(true);
     });
   });
 

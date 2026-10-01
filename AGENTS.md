@@ -38,7 +38,7 @@ Several decisions in this repo look like mistakes and are not. If something seem
 | [`docs/plans/plan.year-fetch-rework-mb-fixes.md`](./docs/plans/plan.year-fetch-rework-mb-fixes.md) | Year-fetch rework, plan 1 — the last-segment-first title cleaner and its new families, the `tokenised` rescue rung capped at `low`, a failed release-group request as `upstream-unavailable`, the cache at `v5`. **Built 2026-09-30**; the `tokenised` rung **removed 2026-10-01**, when the query ladder was reordered and the cache went to `v6`                                                                                                   |
 | [`docs/plans/plan.year-fetch-rework-server.md`](./docs/plans/plan.year-fetch-rework-server.md)     | Year-fetch rework, plan 2 — the provider vote in `shared/` (Deezer beside MusicBrainz, then iTunes; two agreeing providers confirm a year), the Deezer and iTunes adapters, a gate and a cache per provider, `/api/year` split into `resolve` and `verify` stages. **Built 2026-09-30**; steps 10–11 **amended 2026-10-01** by the branch review (busy, provider refusals, the edge); step 15's preview smoke test outstanding                       |
 | [`docs/plans/plan.year-fetch-rework-game.md`](./docs/plans/plan.year-fetch-rework-game.md)         | Year-fetch rework, plan 3 — the game layer: provisional years, `keepYearless`, the two-lane resolver, persistence, the PDF gate. **Built 2026-09-30**; step 4's deferred pass **reversed 2026-10-01** by the branch review; step 11's preview smoke test outstanding                                                                                                                                                                                 |
-| [`docs/plans/plan.year-fetch-rework-ui.md`](./docs/plans/plan.year-fetch-rework-ui.md)             | Year-fetch rework, plan 4 — the reveal's provisional-year slot, the picker's "Keep cards with no year found" checkbox (since 2026-10-01 the inverted "Skip cards with no year found", beside "Skip cards with an unconfirmed year") and its remembered choice, copy in three languages, the blank PDF year. **Built 2026-09-30**; step 10's preview checks outstanding                                                                               |
+| [`docs/plans/plan.year-fetch-rework-ui.md`](./docs/plans/plan.year-fetch-rework-ui.md)             | Year-fetch rework, plan 4 — the reveal's provisional-year slot, the picker's "Keep cards with no year found" checkbox (since 2026-10-01 "Deal cards with no year found", beside "Deal cards with an unconfirmed year") and its remembered choice, copy in three languages, the blank PDF year. **Built 2026-09-30**; step 10's preview checks outstanding                                                                               |
 | [`docs/spikes/spike.year-fetch-rework.md`](./docs/spikes/spike.year-fetch-rework.md)               | Year-fetch spike — why 21% of real cards get no year, what title rewrites and other providers recover, and which providers a paid app may use (not Deezer, not iTunes; MusicBrainz needs a plan or a mirror). **Measured 2026-09-29, and turned into the four `plan.year-fetch-rework-*.md` plans above**; film-score, Disney and anime decks measured 2026-09-30 (§13); **Discogs dropped and the lone-answer order decided the same day (§13.12)** |
 | [`docs/spikes/spike.ai-year-fetch.md`](./docs/spikes/spike.ai-year-fetch.md)                       | LLM spike — one streamed request to `gemini-3.8-flash` / `gpt-6-luna` instead of the providers. Licence-clean when paid, ~15–20× faster per deck, **but past its cutoff the model guessed a wrong year on 40 of 40 tracks**, so it cannot be the only source. **Two free-tier probes 2026-09-30, nothing built**                                                                                                                                     |
 
@@ -219,8 +219,9 @@ picker. Share links and resumed sessions skip the welcome screen and rely on det
 the translations has been read by a native speaker**, and the screen-reader pronunciation is unverified:
 rows in [`docs/development.md`](./docs/development.md) §5. That includes the three keys the year-fetch
 rework added on 2026-09-30 — `COPY.card.yearProvisional` ("Confirming year") — and the three option
-labels of 2026-10-01 (`COPY.landing.skipYearless`, `COPY.landing.skipUnconfirmed`,
-`COPY.deckActions.blankUnconfirmed`; the Spanish picker labels are the developer's own wording), whose
+labels of 2026-10-01 (`COPY.landing.dealYearless`, `COPY.landing.dealUnconfirmed`,
+`COPY.deckActions.blankUnconfirmed`, `COPY.deckActions.printTitle`; the Spanish picker labels and print
+title are the developer's own wording), whose
 other translations are **unreviewed proposals**, said so in their own comments.
 
 **A LEFT SWIPE STEPS BACK ONE CARD AS OF 2026-09-18, A RIGHT SWIPE STILL ADVANCES, AND THE DECK IS NO
@@ -721,7 +722,16 @@ test sites. It is additive — **no save-format bump**, the `startIndex` precede
   "settles null exactly as today"): a provider outage must not drop cards on the client when the
   server was built never to turn a transient failure into a final "no year", and `verify` asks more
   providers. So an exhausted verify is now the only route to a null after transient failures; a 400
-  still settles null at once.
+  still settles null at once. **An exhausted verify's YEAR is marked `yearUnverified`** (2026-10-01,
+  the developer's ruling): it is the provisional year with no verdict — verify could not be ASKED,
+  typically an outage or a device offline, which exhausts every card in flight within seconds —
+  so "skip unconfirmed years" never drops it (`isDroppedAnswer`), and the reveal reads "Year could
+  not be checked" (`COPY.card.yearUnverified`, same amber) instead of "Unconfirmed year". Stored on
+  the card, copied by `validateCard` only as `true` beside a numeric, non-provisional year, written
+  only on a FINAL answer; additive, no save bump. It is never retried, on resume either. **The null
+  keeps its old rule and cost**: an exhausted card with no year still drops while yearless cards are
+  dropped. Merging "unchecked" back into "unconfirmed" is the edit to refuse — it deletes cards,
+  permanently, for a network blip.
 - **The year selectors now disagree ON PURPOSE.** `isCurrentYearPending` stays "`year` is undefined",
   because a provisional card SHOWS its year; `resolvedCount` excludes provisional cards, so
   `pendingYearCount` counts them as pending and the PDF waits for verification. Two questions, two
@@ -731,26 +741,31 @@ test sites. It is additive — **no save-format bump**, the `startIndex` precede
   kept, with its tests, as the definition of "pending"; wiring it back into a screen beside
   `yearStateOf` would reintroduce two readings of one state.
 
-**THE PICKER HAS TWO DEAL OPTIONS AS OF 2026-10-01, AND BOTH SKIP WHEN TICKED: "SKIP CARDS WITH NO YEAR
-FOUND" (CHECKED BY DEFAULT) AND "SKIP CARDS WITH AN UNCONFIRMED YEAR" (UNCHECKED BY DEFAULT).** The first
-is the 2026-09-30 **"Keep cards with no year found"** ([`plan.year-fetch-rework-ui.md`](./docs/plans/plan.year-fetch-rework-ui.md),
-spike §12.8) relabelled and **INVERTED** at the developer's request, so the box does what it says; its
-hint ("useful to print the whole deck…") was deleted with `COPY.landing.keepYearlessHint` and the
-`aria-describedby`. **The model did NOT invert**: `GameState.keepYearless`, the save and `prefs.ts` keep
-the old polarity, so no stored value changed meaning and the default behaviour (drop yearless cards) is
-unchanged — which is why the box now reads CHECKED on a fresh profile. **The one inversion is in
-`App.tsx`** (`skipYearless={!keepYearless}`); `LandingScreen` takes `skipYearless` so its prop reads like
-its label. "Fixing" the polarity by renaming `keepYearless` everywhere is a save-format change for no
-behaviour, and is the edit to refuse. The second option is **`GameState.skipUnconfirmed`**, built
+**THE PICKER HAS TWO DEAL OPTIONS AS OF 2026-10-01, AND BOTH DEAL WHEN TICKED: "DEAL CARDS WITH NO YEAR
+FOUND" (UNCHECKED BY DEFAULT) AND "DEAL CARDS WITH AN UNCONFIRMED YEAR" (CHECKED BY DEFAULT).** The labels
+moved twice that day, at the developer's request: in the morning the pair read "Skip cards with no year
+found" / "Skip cards with an unconfirmed year" and skipped when ticked; by the afternoon they read
+"Deal …" (Spanish "Repartir cartas sin año" / "Repartir cartas con año no confirmado") and deal when
+ticked. The first is the 2026-09-30 **"Keep cards with no year found"**
+([`plan.year-fetch-rework-ui.md`](./docs/plans/plan.year-fetch-rework-ui.md), spike §12.8) under a new
+label and its original polarity; its hint ("useful to print the whole deck…") was deleted with
+`COPY.landing.keepYearlessHint` and the `aria-describedby`. **The model never inverted**:
+`GameState.keepYearless`, `GameState.skipUnconfirmed`, the save and `prefs.ts` kept their polarity
+through both relabels, so no stored value changed meaning and the default behaviour (drop yearless
+cards, deal unconfirmed ones) never changed — which is why the second box reads CHECKED on a fresh
+profile. **The one inversion is in `App.tsx`** (`dealUnconfirmed={!skipUnconfirmed}`;
+`dealYearless={keepYearless}` is straight); `LandingScreen` takes `dealYearless` / `dealUnconfirmed`
+so its props read like its labels. "Fixing" the polarity by renaming the stored fields is a
+save-format change for no behaviour, and is the edit to refuse. The second option is **`GameState.skipUnconfirmed`**, built
 exactly like `keepYearless`: required on `START` and in `GameState`, optional in the save (absent =
 `false`, no version bump), and remembered in the same prefs record. Both boxes are `OptionCheckbox`
 (`src/components/OptionCheckbox.tsx`) inside one bordered group — a native checkbox with
 `appearance-none` and a painted tick, shared with the PDF option below.
 
-What the two decide, per session. **`keepYearless` ON** (yearless box unticked): a card whose final answer
+What the two decide, per session. **`keepYearless` ON** (yearless box ticked): a card whose final answer
 is null STAYS, with `confidence: 'none'`, plays as "Year unknown", and the PDF prints it with the year area
 blank. **`skipUnconfirmed` ON**: a card whose FINAL answer is a year at `low` — one no second provider
-confirmed, which the reveal labels "Unconfirmed year" — is REMOVED, by the same rule, at the same three
+confirmed, which the reveal labels "Unconfirmed year" (the unconfirmed box UNticked) — is REMOVED, by the same rule, at the same three
 entry points (`START`, `YEAR_RESOLVED`, `RESUME`) and with the same index arithmetic as a final null. Both
 rules are ONE function, `isDroppedAnswer` in `reducer.ts`. **The gate is skipped only when the session can
 drop NOTHING** (`keepYearless && !skipUnconfirmed`): with `skipUnconfirmed` the start card's provisional
@@ -782,20 +797,37 @@ year may still settle at `low`, so `keepYearless` alone no longer goes straight 
 - **The markup's traps are pinned in `OptionCheckbox`'s header.** `touch-target` is on the `<label>`
   (the press area); `focus-visible:focus-ring` is on the input, which is also the painted box; `text-sm` is
   on the caption `<span>`, not the label — the 2026-09-21 preflight trap; no `aria-label` (the caption is
-  the name, WCAG 2.5.3) and no `value`, because the leak audit reads `value`.
+  the name, WCAG 2.5.3) and no `value`, because the leak audit reads `value`. The caption is
+  `text-fg-secondary`, the picker's other captions' colour, at the developer's request — `text-fg` read
+  brighter than everything around it.
 - **Nothing about it has been seen outside jsdom** — the restyled boxes at 320px, a printed blank year and a
   screen reader over a provisional-to-final change are rows in [`docs/development.md`](./docs/development.md)
   §5, beside plan 4's step 10 preview checks.
 
-**THE PDF DIALOG HAS "LEAVE UNCONFIRMED YEARS BLANK" AS OF 2026-10-01** (`COPY.deckActions.blankUnconfirmed`,
+**THE PDF EXPORT HAS "LEAVE UNCONFIRMED YEARS BLANK" AS OF 2026-10-01** (`COPY.deckActions.blankUnconfirmed`,
 the developer's wording): ticked, a card whose final year is `low` is printed with its title and artist and
 NO year — the same blank a kept yearless card prints with — for the player to write in. It changes what is
 DRAWN, never which cards are printed, so the sheet count is the same either way. The decision is the pure
 `printedYear(card, { blankUnconfirmed })` in `pdf-sheet.ts`; `drawBack` only skips the year's `text` call
 when it answers `null`. **Local state in `DeckActions`, default OFF and NOT remembered** — a choice about
 the next file, not about the game, so it resets when the panel closes — passed per call to `exportDeck`,
-including the wait's auto-export and "Print so far". The checkbox is an `<input>`, so it is in the dialog's
-Tab cycle between Save and Print (`FOCUSABLE` already names inputs).
+including the wait's auto-export and "Print so far". **It lives in the PRINT VIEW, and Print now
+ALWAYS opens that view** (the developer's choice, later on 2026-10-01): the option was asked to sit
+beside "Print so far", but the wait is reached only while years are pending, so on a resolved deck it
+would have been unreachable. So `DeckActions`' Print opens "Print this deck" (`COPY.deckActions.printTitle`)
+— the sheet count (resolved) or the wait (pending), the option, one press that exports (Print, or
+"Print so far" while waiting) and Cancel — and a resolved deck now costs one more press than before.
+The pending case behaves as it did: opening the view is the press that starts the wait, and the wait
+still exports by itself when the last year lands, then turns into the resolved view in place.
+**The title changes for that view only**: the dialog stays "Keep this deck" over the three actions. The
+view is `DeckActions`' state and the heading is the host's element, so the host passes
+`renderHeading(view)` and `DeckActions` renders it first, in a fragment — the dialog's `<h2>` (still the
+one `aria-labelledby` names) and the end screen's section heading both follow it. Focus goes to Cancel on
+the way in and back to Print on the way out. The checkbox is an `<input>`, so it is in the dialog's Tab
+cycle inside the print view (`FOCUSABLE` already names inputs). **It is NOT offered when the session
+skips unconfirmed years** (`state.skipUnconfirmed`, threaded beside `keepYearless` to `DeckActions`;
+the developer's call): that session has already dropped every final `low` card, so the box could
+change nothing.
 
 **What is left in Phase 8 is entirely MANUAL VERIFICATION, and it is now the project's largest gap.** Nothing is waiting on a decision or on code. Everything automatable is automated, and the ceiling is genuinely low here — jsdom paints nothing, evaluates no media query, computes no layout and has no accessibility tree — so what remains needs a deployment, a printer, a phone and a screen reader. Scoped row by row in [`docs/development.md`](./docs/development.md) §5, gaps in its §8. **Run the screen-reader pass over one flip first**: it is the only check on the app's only live region, which is what makes the game's payoff audible at all, and it has now been carried by two phases without being run.
 
@@ -968,7 +1000,7 @@ that run on BOTH builds, so "half passed" means the sideloaded half; the Play-si
 
 **`src/components/ErrorBoundary.tsx` is the only class component in the app, and its fallback MUST NEVER render the caught error's message or stack.** `componentDidCatch` has no hook equivalent, which is why it is a class. It wraps `<App />` from **`main.tsx`, outside it** — a boundary catches only what is below it, so one rendered inside `App` would be unmounted by the very exception it exists to catch. The leak rule is the load-bearing part: every prop in the app flows through the tree it catches and the deck is in there, so an error string can quote a track title, artist or year. State holds a **boolean, not the `Error`**, so the leak is unavailable rather than merely avoided; the detail goes to `console.error`, which is not a rendered surface. **"Show the error so the player can report it" is the natural next change and it is the one that turns a crash screen into a spoiler** — `ErrorBoundary.test.tsx` throws an error containing a fixture card's title, artist and year and asserts all three are absent.
 
-**An `ended` session with an EMPTY deck goes to the landing screen with a warning, not to the end screen.** A card whose FINAL year answer is null is removed from the deck while the session drops yearless cards (the default — "Skip cards with no year found" ticked), and since 2026-10-01 a final `low` card while it skips unconfirmed years, so a playlist the provider vote cannot place drains to zero; a session that drops neither never shrinks, so `deckCollapsed` can fire only on an empty deal and the check stays exact in every mode; that used to reach the end screen reading "Deck finished" over a count of **0**. `App.tsx` derives `deckCollapsed` from `status === 'ended' && deck.length === 0` — exact, because every other route to `ended` leaves the played cards in the deck — and checks it **before** `endedView`. The warning is `no-years-found`, which is why **`messages.ts` owns `StartFailureCode = PlaylistClientErrorCode | 'no-years-found'`**: the code is produced by the session, not by a fetch, and adding it to the client's own union would make that type claim a code `fetchPlaylist` cannot return. One slot, one union, no fifth view.
+**An `ended` session with an EMPTY deck goes to the landing screen with a warning, not to the end screen.** A card whose FINAL year answer is null is removed from the deck while the session drops yearless cards (the default — "Deal cards with no year found" unticked), and since 2026-10-01 a final `low` card while it skips unconfirmed years, so a playlist the provider vote cannot place drains to zero; a session that drops neither never shrinks, so `deckCollapsed` can fire only on an empty deal and the check stays exact in every mode; that used to reach the end screen reading "Deck finished" over a count of **0**. `App.tsx` derives `deckCollapsed` from `status === 'ended' && deck.length === 0` — exact, because every other route to `ended` leaves the played cards in the deck — and checks it **before** `endedView`. The warning is `no-years-found`, which is why **`messages.ts` owns `StartFailureCode = PlaylistClientErrorCode | 'no-years-found'`**: the code is produced by the session, not by a fetch, and adding it to the client's own union would make that type claim a code `fetchPlaylist` cannot return. One slot, one union, no fifth view.
 
 **Comments in `index.html` are shipped bytes**, unlike comments in `src/` — it is the blocking document on the critical path and nothing strips it. Keep the reasoning in [`docs/architecture.md`](./docs/architecture.md) §3 and one-line pointers in the file. Two literals there are load-bearing: `theme-color` **must** track `--color-page` by hand (a `meta` attribute cannot hold a `var()`), and the favicon is a 20 kB WebP that replaced a **1.26 MB PNG which was costing 6.2 s of LCP** — never restore a large icon.
 
@@ -1013,7 +1045,7 @@ branches**. Since 2026-09-30 the gate waits for `year === undefined` **and for p
 `verify` stage can no longer correct — and `selectPrintableCards(deck, { keepYearless })` leaves
 provisional cards out and COUNTS them in every export, **"Print so far" included** (the developer's
 decision: nothing on paper can still change). A `year === null` card is the option's call: with
-`keepYearless` ON ("Skip cards with no year found" unticked) it is printed with its title and artist in their usual places and
+`keepYearless` ON ("Deal cards with no year found" ticked) it is printed with its title and artist in their usual places and
 the year area **left blank** to write in by hand (`drawBack` skips only the year's `text` call — no
 box, no line, `backLayout()` and the print palette untouched); with it OFF it is dropped, and only a
 resumed pre-reversal save holds one. `options` is required, so no caller can forget to decide the
@@ -1232,7 +1264,7 @@ something `plan.md` had already resolved, so read these before "fixing" the code
 
 - **A card whose year lookup finds nothing is REMOVED from the deck** (`gameReducer`, `YEAR_RESOLVED`)
   — **as of 2026-09-30, a card whose FINAL answer is null is removed, unless the session keeps yearless
-  cards** (`GameState.keepYearless`, shown INVERTED on the picker as "Skip cards with no year found" since 2026-10-01; see the options'
+  cards** (`GameState.keepYearless`, shown on the picker as "Deal cards with no year found" since 2026-10-01; see the options'
   block). A `resolve` that found nothing is not a final null: the card stays PENDING and goes to
   `verify`. This reverses `plan.md` §6's `confidence: 'none'` follow-on, which had it stay and play —
   and the option is the developer's way of asking for that follow-on back, per session. **Low

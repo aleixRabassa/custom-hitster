@@ -55,14 +55,31 @@ export function PreparingScreen({ notice }: PreparingScreenProps) {
       32px below it. See `Footer.tsx`; `PreparingScreen.test.tsx` asserts both.
     */
     <main className="relative flex min-h-dvh flex-col items-center justify-center gap-4 bg-page p-6 pb-20 text-fg">
-      {notice}
-
       {/*
-        `role="status"` rather than `role="alert"`: this is a progress report, so it should be
-        announced politely without interrupting whatever a screen reader is already saying.
+        OUT OF FLOW since 2026-10-01, as on the game screen and for the same reason (the developer's
+        request: the content keeps one fixed position whether a notice is up or not). As the
+        column's first row the banner pushed the spinner and both lines down by half its height,
+        and they jumped back up when it was closed or faded. Anchored to the status block's top edge
+        (`bottom-full`), it grows UPWARD and the column lays out exactly as if it were not there.
+        `GameScreen.tsx` records the cost on a short phone; here the content is three short lines,
+        so the space above is far larger.
       */}
-      <div role="status" className="flex flex-col items-center gap-3 text-center">
+      <div className="relative flex w-full flex-col items-center">
+        {notice == null ? null : (
+          <div
+            data-testid="notice-slot"
+            className="absolute inset-x-0 bottom-full mb-4 flex justify-center"
+          >
+            {notice}
+          </div>
+        )}
+
         {/*
+          `role="status"` rather than `role="alert"`: this is a progress report, so it should be
+          announced politely without interrupting whatever a screen reader is already saying.
+        */}
+        <div role="status" className="flex flex-col items-center gap-3 text-center">
+          {/*
           Under `prefers-reduced-motion: reduce` this is HIDDEN rather than stopped (decision 7) --
           `Spinner` holds the reasoning and the `data-motion` hook. What matters HERE is the
           consequence: the two lines below have to carry every piece of information it conveys,
@@ -70,11 +87,11 @@ export function PreparingScreen({ notice }: PreparingScreenProps) {
           itself the statement that work is in progress, which is what let the resolved/total count
           decision 7 originally leaned on be removed without weakening the claim.
         */}
-        <Spinner />
+          <Spinner />
 
-        <p className="text-lg font-medium">{copy.preparing.heading}</p>
+          <p className="text-lg font-medium">{copy.preparing.heading}</p>
 
-        {/*
+          {/*
           Sets the expectation honestly: the wait is one lookup, not the whole deck.
 
           It used to sit under an "N of M years found" line and exists BECAUSE of it -- without the
@@ -83,7 +100,8 @@ export function PreparingScreen({ notice }: PreparingScreenProps) {
           the sentence stays: it is the only thing on the screen that says the game is about to
           start rather than that a long job is running.
         */}
-        <p className="max-w-narrow text-xs text-fg-muted">{copy.preparing.detail}</p>
+          <p className="max-w-narrow text-xs text-fg-muted">{copy.preparing.detail}</p>
+        </div>
       </div>
 
       {/*

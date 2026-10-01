@@ -174,12 +174,13 @@ export const COPY = {
     removeRow: (position: number) => `Remove playlist ${position}`,
     addRow: 'Add another playlist',
     /**
-     * The picker's two deal options (2026-10-01). Checked SKIPS: the first replaced "Keep cards with
-     * no year found" (spike §12.8) with its inverse, and the second drops a card whose final year no
-     * second provider confirmed. Worded from the developer's Spanish.
+     * The picker's two deal options. Checked DEALS (2026-10-01, the developer's second wording of
+     * the day, reversing the "Skip ..." pair of the same morning): the first keeps a card whose
+     * final answer is "no year" (spike §12.8's "Keep cards with no year found"), the second keeps a
+     * card whose final year no second provider confirmed. Worded from the developer's Spanish.
      */
-    skipYearless: 'Skip cards with no year found',
-    skipUnconfirmed: 'Skip cards with an unconfirmed year',
+    dealYearless: 'Deal cards with no year found',
+    dealUnconfirmed: 'Deal cards with an unconfirmed year',
     atMaxRows: (maxPlaylists: number) => `${maxPlaylists} playlists is the maximum for one deck.`,
     start: 'Start',
     starting: 'Loading…',
@@ -251,6 +252,13 @@ export const COPY = {
     yearUnknown: 'Year unknown',
     yearUnknownDetail: 'Check this one yourself',
     yearUnconfirmed: 'Unconfirmed year',
+    /**
+     * A final year that could NOT be checked (2026-10-01): verify ran out of retries -- a provider
+     * outage, or no connection -- so this is the first provider's year with no second opinion.
+     * Distinct from `yearUnconfirmed`, where a second provider answered and did not agree. A
+     * warning like it, in the same amber.
+     */
+    yearUnverified: 'Year could not be checked',
     /**
      * Beside a PROVISIONAL year (the `resolve` stage answered, `verify` has not). Progress, not a
      * warning: it pairs with `yearUnconfirmed` and disappears when the answer turns final.
@@ -329,6 +337,11 @@ export const COPY = {
     save: 'Save this playlist',
     saved: 'Saved to your playlists',
     print: 'Print as PDF cards',
+    /**
+     * The print view's heading (2026-10-01), in place of the panel's own title while that view is
+     * open. Translated from the developer's Spanish ("Imprimir este mazo").
+     */
+    printTitle: 'Print this deck',
     /**
      * The PDF option (2026-10-01): an unconfirmed year is printed BLANK, to write in by hand. The
      * developer's own wording.

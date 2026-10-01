@@ -62,6 +62,26 @@ describe('PreparingScreen', () => {
     expect(screen.queryByTestId('test-notice')).not.toBeNull();
   });
 
+  it('should float the notice above the status block, out of the column flow', () => {
+    // 2026-10-01, the developer's request: the spinner and its two lines keep one fixed position
+    // whether a notice is up or not, so closing or fading it moves nothing. The same anchoring as
+    // `GameScreen`'s; jsdom computes no layout, so the classes are what is observable.
+    render(<PreparingScreen notice={<p data-testid="test-notice">a notice</p>} />);
+
+    const slot = screen.getByTestId('notice-slot');
+    expect(slot.contains(screen.getByTestId('test-notice'))).toBe(true);
+    expect(slot.className).toContain('absolute');
+    expect(slot.className).toContain('bottom-full');
+    const anchor = slot.parentElement;
+    expect(anchor?.className).toContain('relative');
+    expect(anchor?.contains(screen.getByRole('status'))).toBe(true);
+  });
+
+  it('should render no notice slot when there is no notice', () => {
+    render(<PreparingScreen />);
+    expect(screen.queryByTestId('notice-slot')).toBeNull();
+  });
+
   it('should hide the spinner rather than freeze it under reduced motion', () => {
     // ===================================================================
     //  ONLY HALF OF THIS IS TESTABLE HERE, AND THIS IS THE HALF.

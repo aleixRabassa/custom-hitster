@@ -25,6 +25,7 @@ function renderDialog(overrides: Partial<DeckActionsDialogProps> = {}) {
     deck: fixtureDeck,
     pendingYearCount: 0,
     keepYearless: false,
+    skipUnconfirmed: false,
     onClose: vi.fn(),
     ...overrides,
   };
@@ -107,13 +108,6 @@ describe('DeckActionsDialog', () => {
     fireEvent.keyDown(panel, { key: 'Tab' });
     expect(names()).toContain(COPY.deckActions.save);
 
-    // The print option (2026-10-01) is an `<input>`, so it is in the cycle -- `FOCUSABLE` names
-    // inputs for the copy fallback -- and is found by its name rather than by text content.
-    fireEvent.keyDown(panel, { key: 'Tab' });
-    expect(document.activeElement).toBe(
-      screen.getByRole('checkbox', { name: COPY.deckActions.blankUnconfirmed }),
-    );
-
     fireEvent.keyDown(panel, { key: 'Tab' });
     expect(names()).toContain(COPY.deckActions.print);
 
@@ -137,12 +131,43 @@ describe('DeckActionsDialog', () => {
     const panel = screen.getByRole('dialog');
     fireEvent.keyDown(panel, { key: 'Tab' });
 
-    // Past the disabled save, onto the print option and then Print itself.
+    // Past the disabled save, onto Print.
+    expect(document.activeElement?.textContent).toBe(COPY.deckActions.print);
+  });
+
+  it('should retitle itself "Print this deck" while the print view is open', () => {
+    // 2026-10-01, the developer's choice: the title changes for the print view only, and it is
+    // still the one heading `aria-labelledby` names.
+    renderDialog();
+    const title = () => document.getElementById('deck-actions-title')?.textContent;
+    const dialog = screen.getByRole('dialog');
+
+    expect(title()).toBe(COPY.deckActionsDialog.title);
+    expect(dialog.getAttribute('aria-labelledby')).toBe('deck-actions-title');
+
+    fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
+    expect(title()).toBe(COPY.deckActions.printTitle);
+    expect(dialog.querySelectorAll('h2')).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.cancel }));
+    expect(title()).toBe(COPY.deckActionsDialog.title);
+  });
+
+  it('should cycle Tab through the print view, its option included', () => {
+    // The print option (2026-10-01) is an `<input>`, so it is in the cycle -- `FOCUSABLE` names
+    // inputs for the copy fallback -- and is found by its name rather than by text content.
+    renderDialog();
+    const panel = screen.getByRole('dialog');
+
+    fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
+    // Opening the view put focus on Cancel; Shift+Tab walks back through Print to the option.
+    expect(document.activeElement?.textContent).toBe(COPY.deckActions.cancel);
+    fireEvent.keyDown(panel, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement?.textContent).toBe(COPY.deckActions.print);
+    fireEvent.keyDown(panel, { key: 'Tab', shiftKey: true });
     expect(document.activeElement).toBe(
       screen.getByRole('checkbox', { name: COPY.deckActions.blankUnconfirmed }),
     );
-    fireEvent.keyDown(panel, { key: 'Tab' });
-    expect(document.activeElement?.textContent).toBe(COPY.deckActions.print);
   });
 
   it('should give focus back to the opener when it unmounts', () => {

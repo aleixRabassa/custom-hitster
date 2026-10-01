@@ -51,7 +51,7 @@ const CLOSE_KEY = 'Escape';
  */
 const FOCUSABLE = 'button:not([disabled]), input:not([disabled])';
 
-export type DeckActionsDialogProps = DeckActionsProps & {
+export type DeckActionsDialogProps = Omit<DeckActionsProps, 'renderHeading'> & {
   /** Close and give focus back to whatever opened this. */
   onClose: () => void;
 };
@@ -149,11 +149,19 @@ export function DeckActionsDialog({ onClose, ...deckActions }: DeckActionsDialog
         aria-labelledby="deck-actions-title"
         className="flex w-full max-w-content flex-col gap-4 rounded-lg border border-border-strong bg-surface p-5 text-fg"
       >
-        <h2 id="deck-actions-title" className="text-lg font-semibold">
-          {copy.deckActionsDialog.title}
-        </h2>
-
-        <DeckActions {...deckActions} />
+        {/*
+          The title is the panel's own, except while the print view is open (2026-10-01): then it
+          reads "Print this deck". `DeckActions` owns which view is on show, so it renders this
+          heading through `renderHeading` -- one `<h2>`, always the one `aria-labelledby` names.
+        */}
+        <DeckActions
+          {...deckActions}
+          renderHeading={(view) => (
+            <h2 id="deck-actions-title" className="text-lg font-semibold">
+              {view === 'print' ? copy.deckActions.printTitle : copy.deckActionsDialog.title}
+            </h2>
+          )}
+        />
 
         {/*
           Close last in the DOM, so reading order, visual order and tab order are the same list --

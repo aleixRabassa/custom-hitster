@@ -248,7 +248,7 @@ function validateSession(value: unknown): PersistedSession | null {
   // Optional, with an EXACT default, fixed for a v1 payload exactly as `startIndex` is: a v1 save
   // predates the option by months, so it dropped its yearless cards.
   const keepYearless =
-    version === SESSION_VERSION_LEGACY ? false : validateKeepYearless(record['keepYearless']);
+    version === SESSION_VERSION_LEGACY ? false : validateOptionalFlag(record['keepYearless']);
   if (keepYearless === null) return null;
 
   // The same rule for the 2026-10-01 option: absent (and always on a v1 payload) means `false`.
@@ -273,21 +273,14 @@ function validateSession(value: unknown): PersistedSession | null {
 }
 
 /**
- * Whether the saved session keeps its yearless cards. ABSENT MEANS `false` -- a save written
- * before the option existed dropped them, as every session did then.
+ * A deal option stored as an optional boolean (`keepYearless`, `skipUnconfirmed`). ABSENT MEANS
+ * `false` -- a save written before the option existed did what `false` does: it dropped its
+ * yearless cards, and it kept its unconfirmed ones. Both read through this one function, so the
+ * two cannot drift on what a malformed value means.
  *
  * Present, it must be a boolean. Anything else did not come from this code, and reading it either
- * way would be a guess about whether this deck's nulls should be dropped on resume -- which is
+ * way would be a guess about whether this deck's cards should be dropped on resume -- which is
  * exactly the kind of guess that silently deletes a third of somebody's game.
- */
-function validateKeepYearless(value: unknown): boolean | null {
-  return validateOptionalFlag(value);
-}
-
-/**
- * A deal option stored as an optional boolean: ABSENT MEANS `false`, a boolean is itself, and
- * anything else rejects the save. `keepYearless` and `skipUnconfirmed` both read through it, so
- * the two cannot drift on what a malformed value means.
  */
 function validateOptionalFlag(value: unknown): boolean | null {
   if (value === undefined) return false;
@@ -393,6 +386,7 @@ function validateCard(value: unknown): Card | null {
     year,
     yearConfidence,
     yearProvisional,
+    yearUnverified,
   } = record;
 
   if (typeof id !== 'string' || id === '') return null;
@@ -420,11 +414,29 @@ function validateCard(value: unknown): Card | null {
     return null;
   }
 
+  /*
+    `yearUnverified` (2026-10-01) by the same rule: ONLY `true`, ONLY beside a numeric year at
+    `low`, and never on a provisional card -- the reducer writes it only on a FINAL answer, and an
+    exhausted verify only ever settles at `low`. Copied for the
+    same reason: dropped on a reload, the card would read as an ordinary unconfirmed year, and a
+    session that skips those would delete it on `RESUME`.
+  */
+  if (
+    yearUnverified !== undefined &&
+    (yearUnverified !== true ||
+      typeof year !== 'number' ||
+      yearConfidence !== 'low' ||
+      yearProvisional === true)
+  ) {
+    return null;
+  }
+
   const card: Card = { id, title, artist, durationMs, isPlayable };
   if (previewUrl !== undefined) card.previewUrl = previewUrl;
   if (year !== undefined) card.year = year;
   if (yearConfidence !== undefined) card.yearConfidence = yearConfidence;
   if (yearProvisional === true) card.yearProvisional = true;
+  if (yearUnverified === true) card.yearUnverified = true;
 
   return card;
 }
