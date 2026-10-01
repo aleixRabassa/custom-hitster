@@ -11,8 +11,8 @@
  *  the dedupe, the notice aggregation, which failure is reported, the label --
  *  lives in `deck-merge.ts`, in the same node environment. This file adds a
  *  `useState`, an `AbortController`, a stale-response guard and a
- *  `Promise.all`, and nothing else -- plus one call to `preloaded-years.ts`,
- *  whose load and stamping are tested there.
+ *  `Promise.all`, and nothing else -- plus the calls to `preloaded-years.ts`,
+ *  whose load, capped wait and stamping are tested there.
  *
  *  The same rule `use-game-session.ts` states about itself applies here:
  *  **any logic that starts accumulating here belongs in the client instead.**
@@ -41,7 +41,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { mergePlaylists } from '../game/deck-merge';
 import { fetchPlaylist } from '../game/playlist-client';
-import { applyPreloadedYears, loadPreloadedYears } from '../game/preloaded-years';
+import {
+  PRELOADED_YEARS_MAX_WAIT_MS,
+  applyPreloadedYears,
+  loadPreloadedYears,
+  preloadedYearsWithin,
+} from '../game/preloaded-years';
 import type { MergedDeck } from '../game/deck-merge';
 import type { PlaylistClientErrorCode, PlaylistFetch } from '../game/playlist-client';
 
@@ -102,6 +107,9 @@ export function usePlaylist(options: UsePlaylistOptions = {}): UsePlaylistResult
   const isMountedRef = useRef(true);
   useEffect(() => {
     isMountedRef.current = true;
+    // Start the preloaded years' chunk now, not at the first deal, so it is usually in memory by
+    // the time the player picks a playlist. Memoised and never rejected, so nothing to await here.
+    void loadPreloadedYears(import.meta.env.VITE_PRELOADED_YEARS);
 
     return () => {
       isMountedRef.current = false;
@@ -147,14 +155,15 @@ export function usePlaylist(options: UsePlaylistOptions = {}): UsePlaylistResult
       // sum. `Promise.all` and not `allSettled`: `fetchPlaylist` never rejects -- every failure is
       // an `ok: false` outcome, which is exactly what the merge wants.
       //
-      // The preloaded years' chunk loads alongside them, so it costs no wall clock on a deal
-      // (`preloaded-years.ts`). It never rejects: a failed load is an empty table, and so is
-      // `VITE_PRELOADED_YEARS=off`, the load-test switch.
+      // The preloaded years' chunk was started at mount, so it is usually loaded already; once
+      // the playlists are in, the deal waits for it at most `PRELOADED_YEARS_MAX_WAIT_MS` and then
+      // deals without it (`preloadedYearsWithin`). It never rejects: a failed or late load is an
+      // empty table, and so is `VITE_PRELOADED_YEARS=off`, the load-test switch.
       const tableLoad = loadPreloadedYears(import.meta.env.VITE_PRELOADED_YEARS);
       const outcomes = await Promise.all(
         urls.map((url) => fetchPlaylist(url, { fetchImpl, signal: controller.signal })),
       );
-      const table = await tableLoad;
+      const table = await preloadedYearsWithin(tableLoad, PRELOADED_YEARS_MAX_WAIT_MS);
 
       // Two guards, and they answer different questions: is this hook still alive, and is this
       // response the one we are still waiting for. A response from an aborted request can
@@ -170,7 +179,10 @@ export function usePlaylist(options: UsePlaylistOptions = {}): UsePlaylistResult
       // The suggested playlists' years go on here, on the merged deck, so every deal of a fetched
       // deck -- the picker, a link, "Play the shared deck" -- gets them, and Restart, Play again and
       // a resume (which carry their own years) never pass through. A card the table knows arrives
-      // final: the resolver never asks for it, and the card-1 gate opens at once on one.
+      // final: the resolver never asks for it, and the card-1 gate opens at once on one. Those
+      // other paths are covered by the resolver's cache-first lookup (`withPreloadedYears`, in
+      // `use-game-session.ts`); this stamp is still needed for the gate, which `START` decides
+      // before the resolver exists.
       setState(
         merged.ok
           ? {

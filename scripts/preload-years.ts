@@ -14,10 +14,10 @@
  *
  * WHAT IS KEPT: only an answer some `/api/year` call returned as `final: true` with no provider
  * `skipped`. A card the resolver settled after its retries ran out (a null, or a `yearUnverified`
- * year) is left out, so a later run asks again. `manual` entries are never overwritten.
+ * year) is left out, so a later run asks again. An entry with a `note` is never overwritten.
  *
- * ONLY MISSING TRACKS ARE ASKED, unless `--refresh` re-asks every `providers` entry. The file is
- * written every few answers, so an interrupted run resumes where it stopped.
+ * ONLY MISSING TRACKS ARE ASKED, unless `--refresh` re-asks every entry without a `note`. The file
+ * is written every few answers, so an interrupted run resumes where it stopped.
  */
 
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -82,17 +82,32 @@ async function inProcessFetch(url: string): Promise<InProcessResponse> {
   };
 }
 
+/**
+ * The file as it is, or an empty one ONLY when it does not exist yet. Anything else -- a stray
+ * comma after a hand edit -- throws: read as empty, the next `writeFile` would overwrite the real
+ * file and lose every entry with a `note`.
+ */
 function readFile(): PreloadedYearsFile {
+  let text: string;
   try {
-    return JSON.parse(readFileSync(FILE, 'utf8')) as PreloadedYearsFile;
-  } catch {
-    return { generatedAt: '', playlists: {}, tracks: {} };
+    text = readFileSync(FILE, 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return { generatedAt: '', playlists: {}, tracks: {} };
+    }
+    throw error;
   }
+  return JSON.parse(text) as PreloadedYearsFile;
+}
+
+/** A `note` is what marks the developer's hand correction (since 2026-10-01; before, `source`). */
+function isManual(entry: PreloadedYear | undefined): boolean {
+  return entry?.note !== undefined;
 }
 
 /**
  * Write the file with its tracks in playlist order, so a reviewer reads them playlist by playlist.
- * A `providers` entry no playlist holds any more is dropped; a `manual` one is kept.
+ * An entry no playlist holds any more is dropped, unless it has a `note`.
  */
 function writeFile(file: PreloadedYearsFile): void {
   const tracks: Record<string, PreloadedYear> = {};
@@ -103,7 +118,7 @@ function writeFile(file: PreloadedYearsFile): void {
     }
   }
   for (const [id, entry] of Object.entries(file.tracks)) {
-    if (entry.source === 'manual' && tracks[id] === undefined) tracks[id] = entry;
+    if (isManual(entry) && tracks[id] === undefined) tracks[id] = entry;
   }
 
   file.generatedAt = new Date().toISOString();
@@ -137,7 +152,7 @@ async function main(): Promise<void> {
 
     for (const card of cards) {
       const known = file.tracks[card.id];
-      if (known?.source === 'manual') continue;
+      if (isManual(known)) continue;
       if (known !== undefined && !refresh) continue;
       pending.set(card.id, card);
     }
@@ -159,9 +174,9 @@ async function main(): Promise<void> {
     const resolver = createYearResolver(deck, {
       lookup: async (track, stage, signal) => {
         const outcome = await lookupYear(track, { fetchImpl: inProcessFetch, stage, signal });
-        const card = track as Card;
+        // A final `low` is kept too: any year in the table reads as confirmed (2026-10-01).
         if (outcome.ok && outcome.result.final && outcome.result.skipped === undefined) {
-          finalAnswer.set(card.id, outcome.result);
+          finalAnswer.set(track.id, outcome.result);
         }
         return outcome;
       },
@@ -180,12 +195,10 @@ async function main(): Promise<void> {
             title: card.title,
             artist: card.artist,
             year: answer.year,
-            confidence: answer.confidence,
-            source: 'providers',
           };
           file.tracks[card.id] = entry;
           kept += 1;
-          console.log(`${label}: ${entry.year ?? 'null'} (${entry.confidence})`);
+          console.log(`${label}: ${entry.year ?? 'null'}`);
           sinceWrite += 1;
           if (sinceWrite >= WRITE_EVERY) {
             writeFile(file);

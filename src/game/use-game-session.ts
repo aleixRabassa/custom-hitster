@@ -21,6 +21,7 @@ import { useCallback, useEffect, useReducer, useRef } from 'react';
 
 import { readLocalStorage } from './browser-storage';
 import { clearSession, loadSession, saveSession } from './persistence';
+import { loadPreloadedYears, withPreloadedYears } from './preloaded-years';
 import {
   cardsPlayed,
   cardsRemaining,
@@ -185,8 +186,14 @@ export function useGameSession(options: UseGameSessionOptions = {}): GameSession
       // `fetch` BOUND to the global: the native one is brand-checked, so handing it over
       // unbound and having it called as `options.fetchImpl(...)` threw "Illegal invocation"
       // and every year lookup came back `network`. See `playlist-client.ts`.
-      lookup: (track, stage, signal) =>
-        lookupYear(track, { fetchImpl: globalThis.fetch.bind(globalThis), stage, signal }),
+      //
+      // CACHE FIRST: a track the preloaded table knows is answered final from it, with no request
+      // (`withPreloadedYears`). The table promise is memoised, so this costs nothing per lookup.
+      lookup: withPreloadedYears(
+        (track, stage, signal) =>
+          lookupYear(track, { fetchImpl: globalThis.fetch.bind(globalThis), stage, signal }),
+        loadPreloadedYears(import.meta.env.VITE_PRELOADED_YEARS),
+      ),
       sleep: realSleep,
       // Either arm of `YEAR_RESOLVED` -- final, or provisional -- passed through as the resolver
       // built it. The hook does not look inside: which arm a report is, and what it does to the

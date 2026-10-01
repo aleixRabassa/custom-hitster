@@ -34,6 +34,7 @@ import App from './App';
 import {
   fixtureDeck,
   highConfidenceCard,
+  lowConfidenceCard,
   noYearCard,
   pendingYearCard,
 } from './components/__fixtures__/cards';
@@ -2375,7 +2376,11 @@ describe('App', () => {
       await waitFor(() => {
         expect(screen.queryByTestId('hud')).not.toBeNull();
       });
-      expect(savedSession(storage).keepYearless).toBe(true);
+      // The save is written by an effect AFTER the render that shows the HUD (see the
+      // keepYearless test below): wait for it rather than read it once.
+      await waitFor(() => {
+        expect(savedSession(storage).keepYearless).toBe(true);
+      });
       expect(savedSession(storage).seed).toBe(LINK_SEED);
       await waitFor(() => {
         expect(savedSession(storage).deck.every((card) => card.year === null)).toBe(true);
@@ -2471,8 +2476,6 @@ describe('App', () => {
         title: pendingYearCard.title,
         artist: pendingYearCard.artist,
         year: 2006,
-        confidence: 'high',
-        source: 'providers',
       };
       const storage = memoryStorage();
       renderApp(playlistFetch(200, playlistResult({ cards: [{ ...pendingYearCard }] })), storage);
@@ -2487,6 +2490,48 @@ describe('App', () => {
         expect(savedSession(storage).status).toBe('playing');
       });
       expect(savedSession(storage).deck[0]).toMatchObject({ year: 2006, yearConfidence: 'high' });
+      expect(fetch).not.toHaveBeenCalled();
+    });
+
+    it('should settle a resumed card the preloaded table knows with no lookup', async () => {
+      // A resume never passes through `usePlaylist`'s stamp, so this is the resolver's
+      // cache-first lookup alone: a pending card and a provisional one (owed a verify) both
+      // settle final from the table, and no lookup ever answers -- nor is one ever sent.
+      stubHangingYearApi();
+      const provisionalCard: Card = { ...lowConfidenceCard, yearProvisional: true };
+      for (const [entry, year] of [
+        [pendingYearCard, 2006],
+        [provisionalCard, 1981],
+      ] as const) {
+        preloadedTracks[entry.id] = {
+          title: entry.title,
+          artist: entry.artist,
+          year,
+        };
+      }
+      const storage = memoryStorage();
+      const session: PersistedSession = {
+        version: SESSION_VERSION,
+        playlists: [PLAYLIST],
+        seed: 'seed-1',
+        deck: [{ ...pendingYearCard }, provisionalCard],
+        currentIndex: 0,
+        isFlipped: false,
+        startIndex: 0,
+        status: 'playing',
+        keepYearless: false,
+        skipUnconfirmed: false,
+      };
+      storage.map.set(SESSION_STORAGE_KEY, JSON.stringify(session));
+
+      renderApp(playlistFetch(500, playlistResult()), storage);
+
+      await waitFor(() => {
+        expect(savedSession(storage).deck).toEqual([
+          { ...pendingYearCard, year: 2006, yearConfidence: 'high' },
+          { ...lowConfidenceCard, year: 1981, yearConfidence: 'high' },
+        ]);
+      });
       expect(fetch).not.toHaveBeenCalled();
     });
 

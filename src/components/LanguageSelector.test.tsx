@@ -8,7 +8,7 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { LanguageSelector } from './LanguageSelector';
+import { LanguageSection, LanguageSelector } from './LanguageSelector';
 import { COPY } from '../game/copy';
 import { LANGUAGE_NAMES, LOCALES, type Locale } from '../game/locale';
 
@@ -89,11 +89,37 @@ describe('LanguageSelector', () => {
     for (const button of screen.getAllByRole('button')) {
       expect((button as HTMLButtonElement).disabled).toBe(true);
     }
+    // The selected one keeps full opacity, so it stays distinct from the two already at 0.6.
+    const pressed = screen.getByRole('button', { pressed: true });
+    expect(pressed.className).not.toContain('opacity');
+    for (const button of screen.getAllByRole('button', { pressed: false })) {
+      expect(button.className).toContain('disabled:opacity-(--opacity-disabled)');
+      expect(button.className).toContain('enabled:hover:opacity-100');
+    }
 
     rerender(<LanguageSelector locale="en" onChange={onChange} />);
 
     for (const button of screen.getAllByRole('button')) {
       expect((button as HTMLButtonElement).disabled).toBe(false);
+    }
+  });
+});
+
+describe('LanguageSection', () => {
+  afterEach(cleanup);
+
+  it('should render the copy heading above the selector, and pass the locale and disabled through', () => {
+    render(<LanguageSection locale="es" onChange={vi.fn()} disabled />);
+
+    const heading = screen.getByRole('heading', { level: 2, name: COPY.language.label });
+    const group = screen.getByRole('group', { name: COPY.language.label });
+
+    expect(heading.nextElementSibling).toBe(group);
+    expect(within(group).getByRole('button', { pressed: true }).getAttribute('aria-label')).toBe(
+      LANGUAGE_NAMES.es,
+    );
+    for (const button of within(group).getAllByRole('button')) {
+      expect((button as HTMLButtonElement).disabled).toBe(true);
     }
   });
 });

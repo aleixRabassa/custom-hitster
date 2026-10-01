@@ -16,9 +16,9 @@
  *   theirs. Its `lang` attribute is what makes a screen reader pronounce "Español" as Spanish
  *   under an English page. English is the Union flag, since the copy is British English.
  * - **The group's name is copy** (`copy.language.label`), and since the buttons stopped carrying
- *   words it is a VISIBLE heading too -- rendered by each host (`WelcomeScreen` and, since
- *   2026-10-01, `LandingScreen`) in the same shape as its other section headings -- as well as the
- *   `role="group"`'s `aria-label`.
+ *   words it is a VISIBLE heading too -- rendered by `LanguageSection` below, which both hosts
+ *   (`WelcomeScreen` and, since 2026-10-01, `LandingScreen`) use, in the same shape as their other
+ *   section headings -- as well as the `role="group"`'s `aria-label`.
  * - **`disabled` is the picker's**: every control there is disabled while a request is loading, and
  *   this joins them. The welcome screen has no loading state and never passes it.
  * - **`aria-pressed`, not `disabled`, marks the active one**, so it stays in the tab order and
@@ -37,10 +37,16 @@ export interface LanguageSelectorProps {
 }
 
 const BUTTON_BASE =
-  'touch-target flex items-center justify-center rounded-lg border-2 px-3 py-2 focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)';
+  'touch-target flex items-center justify-center rounded-lg border-2 px-3 py-2 focus-visible:focus-ring disabled:cursor-not-allowed';
+/**
+ * The pressed button is NOT dimmed while disabled (2026-10-01). The unpressed ones already sit at
+ * 0.6, the same value as `--opacity-disabled`, so dimming all three while the picker loads made the
+ * selected language look like the others but for its border. The cursor and the dead hover say
+ * "disabled"; the selection stays legible.
+ */
 const BUTTON_PRESSED = 'border-accent bg-surface-raised';
 const BUTTON_UNPRESSED =
-  'border-border-strong opacity-60 hover:border-border-hover hover:opacity-100';
+  'border-border-strong opacity-60 enabled:hover:border-border-hover enabled:hover:opacity-100 disabled:opacity-(--opacity-disabled)';
 
 /**
  * Every flag is drawn into the same 3:2 box, so the three buttons are one size. The flags' colours
@@ -138,5 +144,22 @@ export function LanguageSelector({ locale, onChange, disabled = false }: Languag
         );
       })}
     </div>
+  );
+}
+
+/**
+ * The language switch as a screen section: the visible heading and the selector under it
+ * (2026-10-01). The welcome screen and the picker both render exactly this, last and in flow, so
+ * their headings and spacing cannot drift apart; why it sits there and not in a corner is recorded
+ * where each host renders it.
+ */
+export function LanguageSection({ locale, onChange, disabled = false }: LanguageSelectorProps) {
+  const copy = useCopy();
+
+  return (
+    <section className="flex w-full max-w-content flex-col items-center gap-3">
+      <h2 className="text-sm text-fg-secondary">{copy.language.label}</h2>
+      <LanguageSelector locale={locale} onChange={onChange} disabled={disabled} />
+    </section>
   );
 }

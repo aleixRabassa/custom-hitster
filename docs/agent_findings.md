@@ -2395,3 +2395,60 @@ else leaves it on.
 - **The load still meets the server caches**: tracks already resolved come back from `mbyear:` / `yearprov:` in
   Redis, so disabling the preload stresses the endpoint and Redis, not necessarily MusicBrainz, Deezer or iTunes.
 - `src/vite-env.d.ts` is new and types the variable; `VITE_PRELOADED_YEARS` is the only `VITE_` variable.
+
+## 2026-10-01 — `pnpm preload-years` must not read a broken JSON as empty
+
+Found in a review of the preload commits. `scripts/preload-years.ts`'s `readFile()` caught every error and returned
+an empty file, and `main()` writes the file right after the playlist loop — so one stray comma from a hand edit,
+followed by a run with explicit playlist ids, overwrote `src/game/preloaded-years.json` and lost every `manual`
+entry (the invariant "never overwrites a `manual` entry"). It now falls back to an empty file only on `ENOENT` and
+rethrows anything else, a parse error included.
+
+## 2026-10-01 — The preloaded years are asked before every year request, not only on a fetched deck
+
+Rule: AGENTS.md / decisions.md § Decks. The developer asked for `preloaded-years.json` to be a cache consulted
+first, by track id, with no request on a hit. The stamp in `usePlaylist` covered only a fetched deck: a resume,
+Restart and Play again reach the resolver with their own cards, so a pending card (a save from before the file, or a
+deal whose chunk failed) or a provisional one still went to `/api/year`.
+
+- **The seam is the resolver's lookup**, its one network dependency: `withPreloadedYears(lookup, tablePromise)`
+  answers a known id final at either stage and never calls `lookup`. Wired in `use-game-session.ts` only.
+- **`ResolverLookup`'s first parameter is now `Card`**, not `TrackRef`: the resolver always passed the card, and
+  the wrapper needs its id. Existing lookups typed on `TrackRef` still fit (parameter contravariance).
+- **The table goes in as a promise**, not loaded by the wrapper: a module-internal `loadPreloadedYears` call
+  would bypass `App.test.tsx`'s mock of the module and hit the real 1000-track JSON in tests.
+- **What it does not change**: a card already final is never looked up, so a save's final answer is kept even
+  where the table (a `manual` correction) disagrees; a `low` entry still settles `low`, i.e. "unconfirmed".
+- `App.test.tsx`'s "share link with the recipient's remembered choice" read the save once right after the HUD
+  appeared and failed once in a full run — the same effect-after-render race its sibling already waits out. It
+  now waits too.
+
+## 2026-10-01 — Every preloaded year is confirmed; a `note` now marks a manual entry
+
+Rule: AGENTS.md / decisions.md § Decks. The developer decided that any year in `src/game/preloaded-years.json`
+counts as confirmed: the entry shape is now `{ title, artist, year: number | null, note?, providerYear? }`, with
+`confidence` and `source` removed from every entry, and a numeric year is read as `high`.
+
+- **97 entries that were `low`** (final provider answers, unconfirmed) now read `high`: their reveal no longer
+  shows "Unconfirmed year", and `skipUnconfirmed` ("Deal cards with an unconfirmed year" unticked) never drops a
+  preloaded year. A preloaded `null` (allowed, none today) is still dropped unless the session keeps yearless cards.
+  This supersedes the previous entry's "a `low` entry still settles `low`".
+- `pnpm preload-years` still keeps a final `low` answer from the vote; it is written without a confidence and read
+  as `high`.
+- **Gotcha: the manual marker moved from `source: "manual"` to the presence of a `note`.** An entry added or
+  corrected by hand WITHOUT a `note` looks like a provider entry, and the next `--refresh` overwrites it. Every
+  hand correction needs a `note` (and its `providerYear`).
+
+## 2026-10-01 — The preloaded-years chunk is waited for at most 2 s, by the deal and by the crawl
+
+Rule: AGENTS.md / decisions.md § Key Rules (`src/game/` purity). The ~170 kB dynamic import could stall (first
+visit with no service worker, a bad connection), and two places awaited it with no limit.
+
+- **The deal**: `usePlaylist` now starts the chunk in its mount effect (so at app mount, every visit, since
+  `App.tsx` calls `usePlaylist` unconditionally) and, once the playlists are in, waits for it at most
+  `PRELOADED_YEARS_MAX_WAIT_MS` (2000, a guess, not measured) through `preloadedYearsWithin`.
+- **Gotcha: capping only the deal moves the hang into the crawl.** `withPreloadedYears` awaited the table on
+  EVERY lookup before falling through, so a stuck chunk stopped every year lookup and, with default prefs, held
+  the card-1 gate on "preparing". It now races the table against one deadline per wrapped lookup, started by its
+  first call: at most 2 s once (the lanes are serial, so a per-lookup cap would cost 2 s per card), and a table
+  that lands later wins every lookup after it.

@@ -5,6 +5,11 @@
   // the root tsconfig.json, which deliberately carries DOM libs for the editor's
   // benefit. This narrowed config is where the Node-vs-DOM boundary is actually
   // enforced, so `lib` intentionally omits DOM.
+  //
+  // `scripts/` is included too (2026-10-01): `scripts/preload-years.ts` runs
+  // under Node, and through its imports it also pulls the `src/game/` modules it
+  // reuses (the clients, the resolver, `preloaded-years.ts`) into this program --
+  // so those must stay free of DOM-only globals and of `import.meta.env`.
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "lib": ["ES2023"],

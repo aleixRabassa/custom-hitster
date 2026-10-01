@@ -47,7 +47,7 @@
 import { MAX_DECK_PLAYLISTS } from '../game/deck-merge';
 import { useCopy, useLocale } from '../hooks/useLocale';
 import { Footer } from './Footer';
-import { LanguageSelector } from './LanguageSelector';
+import { LanguageSection } from './LanguageSelector';
 import type { ReactNode } from 'react';
 
 /**
@@ -335,10 +335,7 @@ export function WelcomeScreen({ onStart }: WelcomeScreenProps) {
         The buttons are flags with no visible words (2026-09-29), so the section got a visible
         heading in the same shape as the two above it.
       */}
-      <section className="flex w-full max-w-content flex-col items-center gap-3">
-        <h2 className="text-sm text-fg-secondary">{copy.language.label}</h2>
-        <LanguageSelector locale={locale} onChange={setLocale} />
-      </section>
+      <LanguageSection locale={locale} onChange={setLocale} />
 
       {/* The app's actual front door now, so the one screen where a copyright line is most expected. */}
       <Footer />

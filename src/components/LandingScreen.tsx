@@ -70,7 +70,7 @@
 import { useRef, useState } from 'react';
 
 import { Footer } from './Footer';
-import { LanguageSelector } from './LanguageSelector';
+import { LanguageSection } from './LanguageSelector';
 import { OPTION_GROUP_CLASS_NAME, OptionCheckbox } from './OptionCheckbox';
 import { SuggestionButton } from './SuggestionButton';
 import { MAX_DECK_PLAYLISTS } from '../game/deck-merge';
@@ -1072,10 +1072,7 @@ export function LandingScreen({
         Back -- and the `pt-8` logo contract rules it out for the same 320px reason `WelcomeScreen`
         records. Disabled while loading, like every other control on this screen.
       */}
-      <section className="flex w-full max-w-content flex-col items-center gap-3">
-        <h2 className="text-sm text-fg-secondary">{copy.language.label}</h2>
-        <LanguageSelector locale={locale} onChange={setLocale} disabled={isLoading} />
-      </section>
+      <LanguageSection locale={locale} onChange={setLocale} disabled={isLoading} />
 
       {/* The app's front door, so the one screen where a copyright line is expected. */}
       <Footer />

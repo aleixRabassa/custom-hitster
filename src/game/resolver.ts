@@ -110,7 +110,7 @@
  * never a timer, for the same reason.
  */
 
-import type { Card, TrackRef, YearConfidence, YearStage } from '../../shared/types';
+import type { Card, YearConfidence, YearStage } from '../../shared/types';
 import type { YearLookupOutcome } from './year-client';
 
 /**
@@ -135,9 +135,12 @@ export type ResolvedYear =
 /**
  * The single network dependency: run one stage for one track, never throw. `year-client.ts`'s
  * `lookupYear` is the production implementation; the signal comes from `stop()`.
+ *
+ * Handed the whole `Card` (a `Card` is structurally a `TrackRef`), so a lookup can key on the
+ * track id: the game's lookup asks the preloaded years first (`withPreloadedYears`).
  */
 export type ResolverLookup = (
-  track: TrackRef,
+  track: Card,
   stage: YearStage,
   signal: AbortSignal,
 ) => Promise<YearLookupOutcome>;
@@ -752,7 +755,6 @@ export function createYearResolver(deck: readonly Card[], deps: ResolverDeps): Y
   /** One round trip. An injected lookup that rejects is treated as the network failure it is. */
   async function lookupOnce(card: Card, stage: YearStage): Promise<YearLookupOutcome> {
     try {
-      // A `Card` is structurally a valid `TrackRef` (shared/types.ts), so it goes straight in.
       return await deps.lookup(card, stage, controller.signal);
     } catch {
       return { ok: false, code: 'network' };
