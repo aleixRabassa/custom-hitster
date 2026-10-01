@@ -46,6 +46,7 @@ Environment variables are all consumed by `/api/year`. **Only `MUSICBRAINZ_USER_
 | `pnpm lint:fix`      | Same, applying autofixes.                                                                                                               |
 | `pnpm format`        | Prettier `--write` across the repo.                                                                                                     |
 | `pnpm format:check`  | Prettier in check mode; fails instead of rewriting.                                                                                     |
+| `pnpm preload-years` | Fills `src/game/preloaded-years.json` through the app's own resolver. **Only when the developer asks** (`decisions.md` § Decks).        |
 | `pnpm tsc:versions`  | Diagnostic. Prints both installed TypeScript versions (expect `6.0.3` then `7.0.2`).                                                    |
 
 `build` and `typecheck` are separate **on purpose**: `build` must not run `tsc -b`, because this repo cannot use TypeScript project references. See [`toolchain.md`](./toolchain.md) §2.

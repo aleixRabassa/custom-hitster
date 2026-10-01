@@ -57,6 +57,22 @@ const { toStringMock } = vi.hoisted(() => ({
 vi.mock('qrcode', () => ({ toString: toStringMock }));
 
 /**
+ * The preloaded years' table (`preloaded-years.ts`), replaced by one each test controls. The
+ * real table knows real Spotify tracks, and the fixture deck uses real track ids -- so with it
+ * every fixture card that happens to be in a suggested playlist would arrive with a year, and
+ * the tests below that drive the year lookups would be testing the table instead. Empty unless a
+ * test fills it; `applyPreloadedYears` stays the real one.
+ */
+const { preloadedTracks } = vi.hoisted(() => ({
+  preloadedTracks: {} as Record<string, unknown>,
+}));
+
+vi.mock('./game/preloaded-years', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./game/preloaded-years')>()),
+  loadPreloadedYears: () => Promise.resolve({ tracks: preloadedTracks }),
+}));
+
+/**
  * ===========================================================================
  *  INTEGRATION BUDGETS, NOT UNIT BUDGETS (2026-09-19).
  *
@@ -426,6 +442,7 @@ describe('App', () => {
   }, 60_000);
 
   beforeEach(() => {
+    for (const id of Object.keys(preloadedTracks)) delete preloadedTracks[id];
     toStringMock.mockReset();
     toStringMock.mockImplementation((text) => Promise.resolve(`<svg>QR(${text})</svg>`));
     // Generated codes are cached at module level (`src/game/qr-cache.ts`) so the deck's preload
@@ -2444,6 +2461,33 @@ describe('App', () => {
         expect(savedSession(storage).status).toBe('playing');
       });
       expect(savedSession(storage).deck.every((card) => card.year === undefined)).toBe(true);
+    });
+
+    it('should deal a card the preloaded table knows as final, with no lookup and no wait', async () => {
+      // No lookup ever answers, and the option is OFF, which holds an unknown start card in
+      // `preparing` for good. The table's answer is final, so the gate opens at once.
+      stubHangingYearApi();
+      preloadedTracks[pendingYearCard.id] = {
+        title: pendingYearCard.title,
+        artist: pendingYearCard.artist,
+        year: 2006,
+        confidence: 'high',
+        source: 'providers',
+      };
+      const storage = memoryStorage();
+      renderApp(playlistFetch(200, playlistResult({ cards: [{ ...pendingYearCard }] })), storage);
+
+      enterPicker();
+      startPlaylist();
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('hud')).not.toBeNull();
+      });
+      await waitFor(() => {
+        expect(savedSession(storage).status).toBe('playing');
+      });
+      expect(savedSession(storage).deck[0]).toMatchObject({ year: 2006, yearConfidence: 'high' });
+      expect(fetch).not.toHaveBeenCalled();
     });
 
     it('should drop unconfirmed cards when "Deal cards with an unconfirmed year" is unticked', async () => {

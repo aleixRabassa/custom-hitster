@@ -20,7 +20,8 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "preload-years": "tsx --env-file=.env.local scripts/preload-years.ts"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
@@ -52,6 +53,7 @@
     "jsdom": "^30.0.1",
     "prettier": "^3.9.6",
     "tailwindcss": "^4.3.3",
+    "tsx": "^4.21.0",
     "typescript": "6.0.3",
     "typescript-7": "npm:typescript@7.0.2",
     "typescript-eslint": "^8.66.0",

@@ -2360,3 +2360,22 @@ after three same-day iterations:
 - **Still open**: a null settled the same way drops while yearless cards are dropped — the remaining
   offline loss. iTunes over MusicBrainz `high` was proposed and NOT built (`UNCONFIRMED_TRUST` was
   measured against it: 6 known years worse, 2–3 better).
+
+## 2026-10-01 — Preloaded years for the suggested playlists: what the provider vote gets wrong
+
+Rule: AGENTS.md / decisions.md § Decks ("the suggested playlists' years are preloaded"). `pnpm preload-years`
+over the 13 suggested playlists (1,000 distinct tracks, ~55 min cold through the shared gates) kept **all 1,000**
+as final answers with nothing skipped: 805 `high`, 164 `low`, 31 `none`. A hand review then corrected **144**
+(`source: "manual"`), and the pattern is worth knowing before trusting the vote on similar decks:
+
+- **Soundtracks are the vote's blind spot, by construction.** It returns the recording's year, so a dub, a
+  re-recording, a cover orchestra or a compilation reissue gets the reissue's year: 43 of 47 Catalan openings
+  (SX3 compilations, 1992–2002) and 51 of 100 Disney songs (Spanish dub albums, 2002/2006/2010), plus 31 film
+  scores. 23 of the 31 nulls were soundtrack covers no provider knows. The developer's rule is the film's or
+  season's year, which no provider can answer.
+- **Elsewhere the vote is good**: 25 corrections across ~750 tracks, all verified on the web — remasters on a
+  later compilation (Lemon Tree 2009→1995, Zombie 1993→1994), single-before-album (Centuries 2015→2014), and
+  album-dated singles (Something Just Like This 2015→2017). The other 8 nulls all had a findable year.
+- **A fixture id is a real track id.** `noYearCard`'s id is "Smells Like Teen Spirit", which is in Rock Party, so
+  `App.test.tsx` mocks `loadPreloadedYears` to an empty table it controls; without that, seven tests broke.
+- **The JSON must be a dynamic import**: statically it took the entry chunk from 226 kB to 395 kB.

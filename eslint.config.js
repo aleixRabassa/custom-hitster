@@ -51,6 +51,14 @@ export default tseslint.config(
     },
   },
 
+  // --- Node: one-off maintenance scripts (`pnpm preload-years`) ---------------
+  {
+    files: ['scripts/**/*.ts'],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
+
   // --- Node: build-time config files ----------------------------------------
   {
     files: ['*.config.{ts,js}', 'eslint.config.js'],
