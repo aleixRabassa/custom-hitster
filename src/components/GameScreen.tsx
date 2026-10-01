@@ -86,6 +86,7 @@ import { CardControls } from './CardControls';
 import { CardStack } from './CardStack';
 import { DeckActionsDialog } from './DeckActionsDialog';
 import { ExitConfirmDialog } from './ExitConfirmDialog';
+import { FloatingNotice } from './FloatingNotice';
 import { Footer } from './Footer';
 import { Hud } from './Hud';
 import { useCopy } from '../hooks/useLocale';
@@ -461,23 +462,14 @@ export function GameScreen({
         central position, with the banner just above it and not affecting it"). It used to be the
         column's first row, so its appearing and leaving -- now on a 10 s timer as well as by hand --
         moved the HUD, the card and the controls by half its height, under a thumb that could be
-        mid-swipe. Anchored to the HUD's top edge (`bottom-full`), it grows UPWARD into the space
-        above, and this column lays out exactly as if there were no banner. The cost, stated: on a
-        phone short enough that the column already fills the screen, the banner can reach past the
-        top padding -- a row in docs/development.md §5. It is transient, so that was accepted.
+        mid-swipe. `FloatingNotice` anchors it to the HUD's top edge, so it grows UPWARD into the
+        space above, and this column lays out exactly as if there were no banner. The cost, stated:
+        on a phone short enough that the column already fills the screen, the banner can reach past
+        the top padding -- a row in docs/development.md §5. It is transient, so that was accepted.
       */}
-      <div className="relative flex w-full flex-col items-center">
-        {notice == null ? null : (
-          <div
-            data-testid="notice-slot"
-            className="absolute inset-x-0 bottom-full mb-3 flex justify-center"
-          >
-            {notice}
-          </div>
-        )}
-
+      <FloatingNotice notice={notice} gap="mb-3">
         <Hud cardsRemaining={cardsRemaining} playlistName={playlistName} />
-      </div>
+      </FloatingNotice>
 
       {/*
         ===========================================================================

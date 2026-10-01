@@ -31,6 +31,7 @@
  */
 
 import { useCopy } from '../hooks/useLocale';
+import { FloatingNotice } from './FloatingNotice';
 import { Footer } from './Footer';
 import { Spinner } from './Spinner';
 import type { ReactNode } from 'react';
@@ -59,21 +60,12 @@ export function PreparingScreen({ notice }: PreparingScreenProps) {
         OUT OF FLOW since 2026-10-01, as on the game screen and for the same reason (the developer's
         request: the content keeps one fixed position whether a notice is up or not). As the
         column's first row the banner pushed the spinner and both lines down by half its height,
-        and they jumped back up when it was closed or faded. Anchored to the status block's top edge
-        (`bottom-full`), it grows UPWARD and the column lays out exactly as if it were not there.
-        `GameScreen.tsx` records the cost on a short phone; here the content is three short lines,
-        so the space above is far larger.
+        and they jumped back up when it was closed or faded. `FloatingNotice` anchors it to the
+        status block's top edge, so it grows UPWARD and the column lays out exactly as if it were
+        not there. `GameScreen.tsx` records the cost on a short phone; here the content is three
+        short lines, so the space above is far larger.
       */}
-      <div className="relative flex w-full flex-col items-center">
-        {notice == null ? null : (
-          <div
-            data-testid="notice-slot"
-            className="absolute inset-x-0 bottom-full mb-4 flex justify-center"
-          >
-            {notice}
-          </div>
-        )}
-
+      <FloatingNotice notice={notice} gap="mb-4">
         {/*
           `role="status"` rather than `role="alert"`: this is a progress report, so it should be
           announced politely without interrupting whatever a screen reader is already saying.
@@ -102,7 +94,7 @@ export function PreparingScreen({ notice }: PreparingScreenProps) {
         */}
           <p className="max-w-narrow text-xs text-fg-muted">{copy.preparing.detail}</p>
         </div>
-      </div>
+      </FloatingNotice>
 
       {/*
         Rendered here as well as on the landing and end screens, even though this screen lives for

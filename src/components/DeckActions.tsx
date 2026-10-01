@@ -335,8 +335,11 @@ export function DeckActions({
    * cascading render, and the state was redundant anyway. "The player asked, and the deck is not
    * ready" is a fact about two values that are already here. The wait therefore ENDS BY ITSELF, on
    * the render where `pendingYearCount` reaches zero, with nothing to keep in step.
+   *
+   * It does not also read `isPrintViewOpen`: `hasAskedToPrint` is set only while opening the view
+   * and cleared only while closing it, so it already implies the view is open.
    */
-  const isWaitingForYears = isPrintViewOpen && hasAskedToPrint && !isDeckResolved;
+  const isWaitingForYears = hasAskedToPrint && !isDeckResolved;
 
   /**
    * The wait's Cancel button, so focus can follow the view.
