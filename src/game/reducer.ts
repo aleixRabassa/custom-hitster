@@ -30,8 +30,38 @@ export const initialGameState: GameState = {
   startIndex: 0,
   isFlipped: false,
   keepYearless: false,
+  skipUnconfirmed: false,
   yearLookupsUnavailable: false,
 };
+
+/** The two deal options that decide whether a FINAL answer removes its card. */
+interface DropRules {
+  keepYearless: boolean;
+  skipUnconfirmed: boolean;
+}
+
+/**
+ * Whether a card that already holds an answer is out of this session's deck -- the ONE rule
+ * `START`, `RESUME` and `YEAR_RESOLVED` all apply, so the three entry points cannot disagree.
+ *
+ * - A final `null` is dropped unless the session keeps yearless cards (reversal 2026-08-05).
+ * - A final year at `low` -- one no second provider confirmed -- is dropped when the session skips
+ *   unconfirmed years (2026-10-01).
+ *
+ * ONLY A FINAL ANSWER COUNTS, and the `yearProvisional` check is load-bearing: a provisional year is
+ * always `low`, and Restart re-deals `state.deck` through `START`, so a confidence-only test would
+ * make every card still awaiting `verify` vanish on a restart. A pending card (`year` undefined)
+ * has nothing to judge yet.
+ */
+function isDroppedAnswer(
+  card: Pick<Card, 'year' | 'yearConfidence' | 'yearProvisional'>,
+  rules: DropRules,
+): boolean {
+  if (card.yearProvisional === true || card.year === undefined) return false;
+  if (card.year === null) return !rules.keepYearless;
+
+  return rules.skipUnconfirmed && card.yearConfidence === 'low';
+}
 
 export function gameReducer(state: GameState, action: GameAction): GameState {
   switch (action.type) {
@@ -60,7 +90,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         per game and removes the question entirely.
       */
       const deck = shuffleDeck(
-        action.keepYearless ? action.cards : action.cards.filter((card) => card.year !== null),
+        action.cards.filter((card) => !isDroppedAnswer(card, action)),
         seed,
       );
 
@@ -78,6 +108,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           startIndex: 0,
           isFlipped: false,
           keepYearless: action.keepYearless,
+          skipUnconfirmed: action.skipUnconfirmed,
           yearLookupsUnavailable: false,
         };
       }
@@ -128,13 +159,17 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       //  the resolver sends that card straight to verification, and its final
       //  answer -- which may still drop it -- is what opens the gate.
       //
-      //  WITH `keepYearless`, NOTHING GATES AT ALL. The gate exists so the player
-      //  never lands on a card that is about to be dropped; a session that keeps
-      //  yearless cards drops nothing, so it starts at once and the year slot
-      //  shows its pending state like on any card the crawl has not reached.
+      //  WHEN THE SESSION CAN DROP NOTHING, NOTHING GATES AT ALL. The gate exists
+      //  so the player never lands on a card that is about to be dropped; a
+      //  session that keeps yearless cards AND keeps unconfirmed years drops
+      //  nothing, so it starts at once and the year slot shows its pending state
+      //  like on any card the crawl has not reached. `keepYearless` alone is not
+      //  enough since 2026-10-01: with `skipUnconfirmed`, the start card's
+      //  provisional year may still settle at `low` and take it away.
       // =======================================================================
+      const dropsNothing = action.keepYearless && !action.skipUnconfirmed;
       const status =
-        action.keepYearless || yearStateOf(deck[startIndex]) === 'final' ? 'playing' : 'preparing';
+        dropsNothing || yearStateOf(deck[startIndex]) === 'final' ? 'playing' : 'preparing';
 
       // A wholesale replacement, deliberately: starting a new SET OF PLAYLISTS mid-game must not
       // merge into the old deck, keep the old index, or leave a stale `yearLookupsUnavailable`
@@ -149,6 +184,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         startIndex,
         isFlipped: false,
         keepYearless: action.keepYearless,
+        skipUnconfirmed: action.skipUnconfirmed,
         yearLookupsUnavailable: false,
       };
     }
@@ -183,9 +219,12 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       //  without one there is nothing to play, and the QR working is not enough
       //  to make it a card.
       //
-      //  LOW CONFIDENCE IS UNAFFECTED. `low` still carries a real year and stays
-      //  in the deck, flagged unconfirmed on the revealed side. The test is
-      //  `year === null`, never the confidence.
+      //  LOW CONFIDENCE IS UNAFFECTED BY THIS RULE. `low` still carries a real
+      //  year and stays in the deck, flagged unconfirmed on the revealed side --
+      //  UNLESS the session skips unconfirmed years (`skipUnconfirmed`,
+      //  2026-10-01), a second, independent rule that removes a final `low` card
+      //  exactly as this one removes a final null: same index arithmetic, same
+      //  gate. Both live in `isDroppedAnswer`, which `START` and `RESUME` share.
       //
       //  Two consequences worth knowing before touching this branch:
       //
@@ -207,7 +246,10 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       //     hundred nulls, so a deployment with no `MUSICBRAINZ_USER_AGENT`
       //     yields a yearless deck rather than an empty one.
       // =======================================================================
-      const isDropped = action.year === null && !state.keepYearless;
+      const isDropped = isDroppedAnswer(
+        { year: action.year, yearConfidence: action.confidence },
+        state,
+      );
 
       // BY ID, never by index (decision 13). The resolver's priority jump makes its ordering
       // and the deck's ordering diverge routinely; an index write would corrupt the deck the
@@ -329,8 +371,9 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       //  `null` it LEAVES, and the gate has to keep waiting for whichever card
       //  takes its place, whose lookup has not happened yet.
       //
-      //  Only ever open while the option is OFF: a `keepYearless` session is
-      //  never `preparing`, because its `START` goes straight to `playing`.
+      //  Only ever open while the session can drop a card: one that keeps
+      //  yearless cards and keeps unconfirmed years is never `preparing`,
+      //  because its `START` goes straight to `playing`.
       //
       //  Written against the NEXT deck and the index AFTER the shrink for that
       //  reason. Reading `state.deck` would ask about a card that is no longer in
@@ -493,19 +536,25 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       */
       // `=== true` rather than a truthiness read: `loadSession()` already turns an absent field into
       // `false`, and this keeps a hand-built session that lacks it on the same side of the line.
-      const keepYearless = session.keepYearless === true;
-      const deck = keepYearless ? session.deck : session.deck.filter((card) => card.year !== null);
-      const yearlessBefore = (index: number): number =>
-        keepYearless ? 0 : session.deck.slice(0, index).filter((card) => card.year === null).length;
+      //
+      // `skipUnconfirmed` (2026-10-01) filters through the same rule: a save holds its final `low`
+      // cards only if it was written while they were kept, so this is normally a no-op for it too.
+      const rules: DropRules = {
+        keepYearless: session.keepYearless === true,
+        skipUnconfirmed: session.skipUnconfirmed === true,
+      };
+      const deck = session.deck.filter((card) => !isDroppedAnswer(card, rules));
+      const droppedBefore = (index: number): number =>
+        session.deck.slice(0, index).filter((card) => isDroppedAnswer(card, rules)).length;
       const currentIndex =
         deck.length === 0
           ? 0
           : Math.min(
-              Math.max(session.currentIndex - yearlessBefore(session.currentIndex), 0),
+              Math.max(session.currentIndex - droppedBefore(session.currentIndex), 0),
               deck.length - 1,
             );
       const startIndex = Math.min(
-        Math.max(session.startIndex - yearlessBefore(session.startIndex), 0),
+        Math.max(session.startIndex - droppedBefore(session.startIndex), 0),
         currentIndex,
       );
 
@@ -518,7 +567,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         currentIndex,
         startIndex,
         isFlipped: session.isFlipped,
-        keepYearless,
+        keepYearless: rules.keepYearless,
+        skipUnconfirmed: rules.skipUnconfirmed,
         // Re-derived by the next crawl rather than restored: it describes the server's
         // configuration, not the session (see `PersistedSession`).
         yearLookupsUnavailable: false,

@@ -78,6 +78,7 @@ function deal(deck: MergedDeck, options: { seed?: string; startCardId?: string }
     cards: deck.cards,
     playlists: deck.playlists,
     keepYearless: false,
+    skipUnconfirmed: false,
     ...options,
   });
 }
@@ -174,6 +175,7 @@ describe('a share link reproduces the sender deck', () => {
         cards: sender.deck,
         playlists: sender.playlists,
         keepYearless: sender.keepYearless,
+        skipUnconfirmed: sender.skipUnconfirmed,
       });
       expect(restarted.seed).not.toBe(sender.seed);
 

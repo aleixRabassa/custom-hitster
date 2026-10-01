@@ -66,7 +66,9 @@ export const SESSION_STORAGE_KEY = 'jitster:session:v1';
  * bump it either, for the same reason. Both are additive and both have an exact reading when
  * absent: a save without `keepYearless` was written before the option existed, when every session
  * dropped its yearless cards (`false`), and a card without `yearProvisional` was written before
- * the `resolve` stage existed, so its year is final.
+ * the `resolve` stage existed, so its year is final. `skipUnconfirmed` (2026-10-01) is the same
+ * case once more: absent, the save predates the option, when no session skipped an unconfirmed
+ * year (`false`).
  *
  * A save written on 2026-09-29 may also carry a `shuffleVersion` field, from the one day the
  * shuffle had two algorithms. It is IGNORED on read, never rejected: the save stores the dealt
@@ -120,6 +122,7 @@ export function toPersistedSession(state: GameState): PersistedSession | null {
     isFlipped: state.isFlipped,
     status: state.status,
     keepYearless: state.keepYearless,
+    skipUnconfirmed: state.skipUnconfirmed,
   };
 }
 
@@ -248,6 +251,11 @@ function validateSession(value: unknown): PersistedSession | null {
     version === SESSION_VERSION_LEGACY ? false : validateKeepYearless(record['keepYearless']);
   if (keepYearless === null) return null;
 
+  // The same rule for the 2026-10-01 option: absent (and always on a v1 payload) means `false`.
+  const skipUnconfirmed =
+    version === SESSION_VERSION_LEGACY ? false : validateOptionalFlag(record['skipUnconfirmed']);
+  if (skipUnconfirmed === null) return null;
+
   // Always reported as the CURRENT version, whichever version came in: a lifted v1 payload is a
   // valid v2 session, and the next `saveSession` writes it back as one.
   return {
@@ -260,6 +268,7 @@ function validateSession(value: unknown): PersistedSession | null {
     isFlipped,
     status,
     keepYearless,
+    skipUnconfirmed,
   };
 }
 
@@ -272,6 +281,15 @@ function validateSession(value: unknown): PersistedSession | null {
  * exactly the kind of guess that silently deletes a third of somebody's game.
  */
 function validateKeepYearless(value: unknown): boolean | null {
+  return validateOptionalFlag(value);
+}
+
+/**
+ * A deal option stored as an optional boolean: ABSENT MEANS `false`, a boolean is itself, and
+ * anything else rejects the save. `keepYearless` and `skipUnconfirmed` both read through it, so
+ * the two cannot drift on what a malformed value means.
+ */
+function validateOptionalFlag(value: unknown): boolean | null {
   if (value === undefined) return false;
 
   return typeof value === 'boolean' ? value : null;

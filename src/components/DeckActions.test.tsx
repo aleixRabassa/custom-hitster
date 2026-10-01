@@ -15,7 +15,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DeckActions } from './DeckActions';
 import { auditableText } from './__fixtures__/auditable-text';
-import { fixtureDeck, highConfidenceCard, noYearCard } from './__fixtures__/cards';
+import {
+  fixtureDeck,
+  highConfidenceCard,
+  lowConfidenceCard,
+  noYearCard,
+} from './__fixtures__/cards';
 import { COPY } from '../game/copy';
 import { CATALOGUES } from '../game/i18n';
 import { pdfFileName, sanitizeForPdf } from '../game/pdf-text';
@@ -733,6 +738,76 @@ describe('DeckActions', () => {
         [sanitizeForPdf(highConfidenceCard.title)],
         [sanitizeForPdf(highConfidenceCard.artist)],
       ]);
+    });
+  });
+
+  describe('leaving unconfirmed years blank', () => {
+    /**
+     * ===================================================================
+     *  THE DIALOG'S "LEAVE UNCONFIRMED YEARS BLANK" (2026-10-01).
+     *
+     *  Ticked, a card whose FINAL year is `low` -- unconfirmed -- is printed
+     *  with its title and artist and NO year, exactly as a kept yearless card
+     *  is, for the player to write in. A confirmed (`high`) year is printed
+     *  either way, and the box changes WHAT is drawn, never which cards are
+     *  printed: the count is the same file with or without it.
+     * ===================================================================
+     */
+    function drawnTexts(): (string | string[])[] {
+      return textMock.mock.calls.map((call) => call[0]);
+    }
+
+    function blankUnconfirmedBox(): HTMLInputElement {
+      return screen.getByRole('checkbox', {
+        name: COPY.deckActions.blankUnconfirmed,
+      }) as HTMLInputElement;
+    }
+
+    it('should render the option unticked, between Save and Print', () => {
+      renderActions();
+
+      const box = blankUnconfirmedBox();
+      expect(box.checked).toBe(false);
+      expect(box.className).toContain('focus-visible:focus-ring');
+      expect(box.closest('label')?.className).toContain('touch-target');
+      expect(box.hasAttribute('value')).toBe(false);
+
+      const save = screen.getByRole('button', { name: COPY.deckActions.save });
+      const print = screen.getByRole('button', { name: COPY.deckActions.print });
+      expect(save.compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(box.compareDocumentPosition(print) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it('should print an unconfirmed year by default', async () => {
+      renderActions({ deck: [lowConfidenceCard] });
+
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
+      await waitFor(() => {
+        expect(screen.queryByText(COPY.deckActions.exportDone)).not.toBeNull();
+      });
+
+      expect(drawnTexts()).toContain(String(lowConfidenceCard.year));
+    });
+
+    it('should leave only the unconfirmed year blank when ticked', async () => {
+      renderActions({ deck: [lowConfidenceCard, highConfidenceCard] });
+
+      fireEvent.click(blankUnconfirmedBox());
+      expect(blankUnconfirmedBox().checked).toBe(true);
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
+      await waitFor(() => {
+        expect(screen.queryByText(COPY.deckActions.exportDone)).not.toBeNull();
+      });
+
+      const texts = drawnTexts();
+      // Both cards printed -- the option is about what is DRAWN, not which cards.
+      expect(toDataURLMock).toHaveBeenCalledTimes(2);
+      expect(texts).toContainEqual([sanitizeForPdf(lowConfidenceCard.title)]);
+      expect(texts).toContainEqual([sanitizeForPdf(lowConfidenceCard.artist)]);
+      expect(texts).not.toContain(String(lowConfidenceCard.year));
+      // The confirmed year is still printed.
+      expect(texts).toContain(String(highConfidenceCard.year));
+      for (const text of texts.flat()) expect(text).not.toBe('null');
     });
   });
 

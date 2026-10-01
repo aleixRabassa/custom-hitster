@@ -104,10 +104,9 @@ describe.each(LOCALES)('the %s catalogue', (locale) => {
     expect(new Set([yearProvisional, yearUnconfirmed, yearPending]).size).toBe(3);
   });
 
-  it('should keep the keep-yearless label distinct from its hint', () => {
-    // The hint is tied to the checkbox with `aria-describedby`; reading the label twice would
-    // leave a screen-reader player without the reason to tick it.
-    expect(catalogue.copy.landing.keepYearless).not.toBe(catalogue.copy.landing.keepYearlessHint);
+  it('should keep the two deal options distinct', () => {
+    // Two checkboxes with one name are two boxes a screen-reader player cannot tell apart.
+    expect(catalogue.copy.landing.skipYearless).not.toBe(catalogue.copy.landing.skipUnconfirmed);
   });
 
   it('should give each of the five playlist rows a distinct label', () => {

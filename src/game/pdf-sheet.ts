@@ -68,6 +68,8 @@
  * so inverting or tinting it is how a printed deck fails at the one job the QR has.
  */
 
+import type { YearConfidence } from '../../shared/types';
+
 /**
  * Points to millimetres. The template is measured in points and this module speaks millimetres, so
  * the conversion is named once rather than written out at each of its uses.
@@ -439,4 +441,29 @@ export function selectPrintableCards<T extends PrintableCandidate>(
   });
 
   return { cards, excludedCount: deck.length - cards.length };
+}
+
+/** What the PDF dialog's "Leave unconfirmed years blank" asks for, passed down from its checkbox. */
+export interface PrintedYearOptions {
+  blankUnconfirmed: boolean;
+}
+
+/**
+ * The year to print on a card's back, or `null` to leave the year area BLANK (2026-10-01).
+ *
+ * A blank year was already a thing the sheet could print -- a kept yearless card, plan 4 -- and this
+ * is the one decision about WHEN: always for a `null`, and also for a year at `low` confidence when
+ * the player asked to leave unconfirmed years blank, so they can write the right one in by hand.
+ * `low` on a printable card is a FINAL unconfirmed year: `selectPrintableCards` has already left out
+ * every provisional one, which is also `low`. A pure function rather than a branch in `drawBack`,
+ * because the binding half is untestable offline and a wrong answer here is visible only on paper.
+ */
+export function printedYear(
+  card: { year?: number | null; yearConfidence?: YearConfidence },
+  options: PrintedYearOptions,
+): number | null {
+  if (typeof card.year !== 'number') return null;
+  if (options.blankUnconfirmed && card.yearConfidence === 'low') return null;
+
+  return card.year;
 }

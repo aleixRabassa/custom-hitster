@@ -58,6 +58,7 @@ function preparing(cards: Card[] = CARDS, seed = SEED, keepYearless = DROPS_YEAR
     playlists: [PLAYLIST],
     seed,
     keepYearless,
+    skipUnconfirmed: false,
   });
 }
 
@@ -101,6 +102,7 @@ function preparingFrom(startCardId: string, cards: Card[] = CARDS, seed = SEED):
     seed,
     startCardId,
     keepYearless: DROPS_YEARLESS,
+    skipUnconfirmed: false,
   });
 }
 
@@ -137,6 +139,7 @@ describe('gameReducer transitions', () => {
       cards: CARDS,
       playlists: [PLAYLIST],
       keepYearless: DROPS_YEARLESS,
+      skipUnconfirmed: false,
     });
 
     expect(state.seed).toMatch(/^[0-9a-f]{16}$/);
@@ -151,6 +154,7 @@ describe('gameReducer transitions', () => {
         cards: CARDS,
         playlists: [PLAYLIST],
         keepYearless: DROPS_YEARLESS,
+        skipUnconfirmed: false,
       }).seed;
 
     expect(deal()).not.toBe(deal());
@@ -178,6 +182,7 @@ describe('gameReducer transitions', () => {
       playlists: [PLAYLIST],
       seed: SEED,
       keepYearless: DROPS_YEARLESS,
+      skipUnconfirmed: false,
     });
 
     expect(state.deck).toEqual(shuffleDeck(CARDS, SEED));
@@ -218,6 +223,7 @@ describe('gameReducer transitions', () => {
       playlists: [{ id: 'other', name: 'Other', owner: 'Someone' }],
       seed: 'second',
       keepYearless: DROPS_YEARLESS,
+      skipUnconfirmed: false,
     });
 
     expect(second.status).toBe('preparing');
@@ -236,6 +242,7 @@ describe('gameReducer transitions', () => {
       playlists: [PLAYLIST, SECOND_PLAYLIST, THIRD_PLAYLIST],
       seed: SEED,
       keepYearless: DROPS_YEARLESS,
+      skipUnconfirmed: false,
     });
 
     expect(state.playlists).toEqual([PLAYLIST, SECOND_PLAYLIST, THIRD_PLAYLIST]);
@@ -250,6 +257,7 @@ describe('gameReducer transitions', () => {
       playlists: [PLAYLIST, SECOND_PLAYLIST, THIRD_PLAYLIST],
       seed: SEED,
       keepYearless: DROPS_YEARLESS,
+      skipUnconfirmed: false,
     });
 
     const second = gameReducer(first, {
@@ -258,6 +266,7 @@ describe('gameReducer transitions', () => {
       playlists: [SECOND_PLAYLIST],
       seed: 'second',
       keepYearless: DROPS_YEARLESS,
+      skipUnconfirmed: false,
     });
 
     expect(second.playlists).toEqual([SECOND_PLAYLIST]);
@@ -631,6 +640,7 @@ describe('gameReducer transitions', () => {
       isFlipped: true,
       status: 'playing',
       keepYearless: DROPS_YEARLESS,
+      skipUnconfirmed: false,
     };
 
     const state = gameReducer(initialGameState, { type: 'RESUME', session });
@@ -644,6 +654,7 @@ describe('gameReducer transitions', () => {
       startIndex: 1,
       isFlipped: true,
       keepYearless: DROPS_YEARLESS,
+      skipUnconfirmed: false,
       // Re-derived by the next crawl rather than restored: it describes the server's
       // configuration, not the session.
       yearLookupsUnavailable: false,
@@ -663,6 +674,7 @@ describe('gameReducer transitions', () => {
       isFlipped: false,
       status: 'playing',
       keepYearless: DROPS_YEARLESS,
+      skipUnconfirmed: false,
     };
 
     const state = gameReducer(initialGameState, { type: 'RESUME', session });
@@ -705,6 +717,7 @@ describe('gameReducer transitions', () => {
       isFlipped: false,
       status: 'playing',
       keepYearless: DROPS_YEARLESS,
+      skipUnconfirmed: false,
     };
 
     const state = gameReducer(initialGameState, { type: 'RESUME', session });
@@ -726,6 +739,7 @@ describe('gameReducer transitions', () => {
       isFlipped: false,
       status: 'playing',
       keepYearless: DROPS_YEARLESS,
+      skipUnconfirmed: false,
     };
 
     const state = gameReducer(initialGameState, { type: 'RESUME', session });
@@ -891,6 +905,7 @@ describe('gameReducer startIndex', () => {
       isFlipped: false,
       status: 'playing',
       keepYearless: DROPS_YEARLESS,
+      skipUnconfirmed: false,
     };
 
     const state = gameReducer(initialGameState, { type: 'RESUME', session });
@@ -913,6 +928,7 @@ describe('gameReducer startIndex', () => {
       isFlipped: false,
       status: 'playing',
       keepYearless: DROPS_YEARLESS,
+      skipUnconfirmed: false,
     };
 
     const state = gameReducer(initialGameState, { type: 'RESUME', session });
@@ -1630,6 +1646,7 @@ describe('gameReducer with keepYearless', () => {
       seed: SEED,
       startCardId: dealtIdAt(6),
       keepYearless: KEEPS_YEARLESS,
+      skipUnconfirmed: false,
     });
 
     expect(state.status).toBe('playing');
@@ -1763,6 +1780,7 @@ describe('gameReducer with keepYearless', () => {
       seed: SEED,
       startCardId: dealtIdAt(5),
       keepYearless: KEEPS_YEARLESS,
+      skipUnconfirmed: false,
     });
     state = gameReducer(state, {
       type: 'YEAR_RESOLVED',
@@ -1819,6 +1837,7 @@ describe('gameReducer with keepYearless', () => {
       cards: state.deck,
       playlists: state.playlists,
       keepYearless: state.keepYearless,
+      skipUnconfirmed: state.skipUnconfirmed,
     });
 
     expect(restarted.keepYearless).toBe(true);
@@ -1833,6 +1852,7 @@ describe('gameReducer with keepYearless', () => {
       cards: dropping.deck,
       playlists: dropping.playlists,
       keepYearless: dropping.keepYearless,
+      skipUnconfirmed: dropping.skipUnconfirmed,
     });
     expect(redealt.keepYearless).toBe(false);
   });
@@ -1856,6 +1876,7 @@ describe('gameReducer RESUME and keepYearless', () => {
       isFlipped: false,
       status: 'playing',
       keepYearless,
+      skipUnconfirmed: false,
     };
   }
 
@@ -1966,5 +1987,150 @@ describe('yearStateOf and the year selectors', () => {
 
     expect(resolvedCount(state)).toBe(2);
     expect(pendingYearCount(state)).toBe(CARDS.length - 2);
+  });
+});
+
+// ===========================================================================
+//  skipUnconfirmed (2026-10-01): the picker's "Skip cards with an unconfirmed
+//  year". A FINAL `low` year drops its card by the same rule as a final null;
+//  a PROVISIONAL year (always `low`) never does.
+// ===========================================================================
+
+describe('gameReducer with skipUnconfirmed', () => {
+  function deal(
+    cards: Card[],
+    options: { keepYearless?: boolean; skipUnconfirmed?: boolean } = {},
+  ): GameState {
+    return gameReducer(initialGameState, {
+      type: 'START',
+      cards,
+      playlists: [PLAYLIST],
+      seed: SEED,
+      keepYearless: options.keepYearless ?? DROPS_YEARLESS,
+      skipUnconfirmed: options.skipUnconfirmed ?? true,
+    });
+  }
+
+  it('should record skipUnconfirmed on START, and default it off', () => {
+    expect(deal(CARDS).skipUnconfirmed).toBe(true);
+    expect(deal(CARDS, { skipUnconfirmed: false }).skipUnconfirmed).toBe(false);
+    expect(initialGameState.skipUnconfirmed).toBe(false);
+  });
+
+  it('should drop a card whose final answer is low, moving the index like a null does', () => {
+    let state = deal(CARDS, { keepYearless: KEEPS_YEARLESS });
+    // Kept yearless + skipping unconfirmed can still drop, so this deal must NOT skip the gate...
+    expect(state.status).toBe('preparing');
+
+    // ...and a final `low` on the start card drops it, so the gate keeps waiting on the next one.
+    const first = firstCardId(state);
+    const second = idAt(state, 1);
+    state = gameReducer(state, {
+      type: 'YEAR_RESOLVED',
+      cardId: first,
+      year: 1980,
+      confidence: 'low',
+    });
+    expect(state.deck.some((c) => c.id === first)).toBe(false);
+    expect(state.deck).toHaveLength(CARDS.length - 1);
+    expect(state.status).toBe('preparing');
+    expect(currentCard(state)?.id).toBe(second);
+
+    // A `high` answer opens it.
+    state = gameReducer(state, {
+      type: 'YEAR_RESOLVED',
+      cardId: second,
+      year: 1981,
+      confidence: 'high',
+    });
+    expect(state.status).toBe('playing');
+
+    // A kept null stays: skipping unconfirmed years does not touch the yearless rule.
+    const third = idAt(state, 1);
+    state = gameReducer(state, {
+      type: 'YEAR_RESOLVED',
+      cardId: third,
+      year: null,
+      confidence: 'none',
+    });
+    expect(state.deck.find((c) => c.id === third)?.year).toBeNull();
+  });
+
+  it('should keep a final low card when skipUnconfirmed is off', () => {
+    let state = deal(CARDS, { skipUnconfirmed: false });
+    const first = firstCardId(state);
+    state = gameReducer(state, {
+      type: 'YEAR_RESOLVED',
+      cardId: first,
+      year: 1980,
+      confidence: 'low',
+    });
+
+    expect(state.deck.find((c) => c.id === first)?.yearConfidence).toBe('low');
+    expect(state.status).toBe('playing');
+  });
+
+  it('should never drop a provisional year, which is always low', () => {
+    let state = deal(CARDS);
+    const first = firstCardId(state);
+    state = gameReducer(state, provisional(first, 1980));
+
+    expect(state.deck.find((c) => c.id === first)?.yearProvisional).toBe(true);
+    expect(state.deck).toHaveLength(CARDS.length);
+    // Still gated: the provisional year may yet settle at `low`.
+    expect(state.status).toBe('preparing');
+  });
+
+  it('should filter final low cards on START but keep provisional ones (a Restart re-deal)', () => {
+    const cards = [
+      card('confirmed', { year: 1975, yearConfidence: 'high' }),
+      card('unconfirmed', { year: 1979, yearConfidence: 'low' }),
+      card('verifying', { year: 1983, yearConfidence: 'low', yearProvisional: true }),
+      card('pending'),
+    ];
+
+    const skipping = deal(cards);
+    expect(skipping.deck.map((c) => c.id).sort()).toEqual(['confirmed', 'pending', 'verifying']);
+
+    const keeping = deal(cards, { skipUnconfirmed: false });
+    expect(keeping.deck).toHaveLength(4);
+  });
+
+  it('should go straight to playing only when the session can drop nothing', () => {
+    expect(deal(CARDS, { keepYearless: true, skipUnconfirmed: false }).status).toBe('playing');
+    expect(deal(CARDS, { keepYearless: true, skipUnconfirmed: true }).status).toBe('preparing');
+    expect(deal(CARDS, { keepYearless: false, skipUnconfirmed: false }).status).toBe('preparing');
+  });
+
+  it('should filter final low cards on RESUME and move the index past them', () => {
+    const session: PersistedSession = {
+      version: 2,
+      playlists: [PLAYLIST],
+      seed: 'persisted-seed',
+      deck: [
+        card('a', { year: 1975, yearConfidence: 'high' }),
+        card('unconfirmed', { year: 1979, yearConfidence: 'low' }),
+        card('verifying', { year: 1983, yearConfidence: 'low', yearProvisional: true }),
+        card('here'),
+      ],
+      currentIndex: 3,
+      startIndex: 0,
+      isFlipped: false,
+      status: 'playing',
+      keepYearless: false,
+      skipUnconfirmed: true,
+    };
+
+    const state = gameReducer(initialGameState, { type: 'RESUME', session });
+    expect(state.skipUnconfirmed).toBe(true);
+    expect(state.deck.map((c) => c.id)).toEqual(['a', 'verifying', 'here']);
+    expect(currentCard(state)?.id).toBe('here');
+
+    const kept = gameReducer(initialGameState, {
+      type: 'RESUME',
+      session: { ...session, skipUnconfirmed: false },
+    });
+    expect(kept.deck).toHaveLength(4);
+    expect(currentCard(kept)?.id).toBe('here');
   });
 });

@@ -53,9 +53,9 @@ export const COPY_CA = {
     playlistLinkPlaceholder: COPY.landing.playlistLinkPlaceholder,
     removeRow: (position: number) => `Treu la playlist ${position}`,
     addRow: 'Afegeix una altra playlist',
-    // 2026-09-30 PROPOSALS, not yet read by a native speaker (docs/development.md §5).
-    keepYearless: 'Mantenir cartes sense any',
-    keepYearlessHint: 'Útil per imprimir la baralla sencera i escriure a mà els anys que faltin',
+    // 2026-10-01 PROPOSALS, not yet read by a native speaker (docs/development.md §5).
+    skipYearless: 'Salta les cartes sense any',
+    skipUnconfirmed: "Salta les cartes amb l'any sense confirmar",
     atMaxRows: (maxPlaylists: number) => `El màxim és de ${maxPlaylists} playlists per baralla.`,
     start: 'Comença',
     starting: 'Carregant…',
@@ -157,6 +157,8 @@ export const COPY_CA = {
     save: 'Desa aquesta playlist',
     saved: 'Desada a les teves playlists',
     print: 'Imprimeix les cartes en PDF',
+    // 2026-10-01 PROPOSAL, not yet read by a native speaker (docs/development.md §5).
+    blankUnconfirmed: 'Deixa en blanc els anys sense confirmar',
     printing: (completed: number, total: number) => `Generant el PDF… ${completed}/${total}`,
     sheetSummary: (sheets: number) =>
       `${sheets === 1 ? '1 full A4' : `${sheets} fulls A4`}, ${CARDS_PER_SHEET} cartes per full — imprimeix a doble cara`,

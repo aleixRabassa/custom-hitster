@@ -385,6 +385,23 @@ asks (see `AGENTS.md`, Conventions).
 | 7   | **Plan 4 step 10, option OFF**: everything behaves exactly as after plan 3 — the previous section's rows.                                                                                                                                                                                                                                                                                          | Pending |
 | 8   | **Plan 4 step 10, the memory**: the checkbox is remembered across reloads, and a share link opened in a fresh profile deals with the option **OFF** — the recipient's choice, never the sender's.                                                                                                                                                                                                  | Pending |
 
+### The two deal options and "Leave unconfirmed years blank" — built 2026-10-01, all of it Pending
+
+The picker's "Keep cards with no year found" became the inverted "Skip cards with no year found"
+(checked by default; its hint was removed), "Skip cards with an unconfirmed year" joined it, and the
+PDF dialog gained "Leave unconfirmed years blank". All three are jsdom- and node-tested; none of that
+paints a box. Rows 1 and 4 of the previous section are **superseded** by rows 1 and 4 here: the hint
+they measured is gone. **The store screenshots show the old checkbox and are stale** — regenerated
+only when the developer asks.
+
+| #   | Check                                                                                                                                                                                                                                         | Status  |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| 1   | **The restyled boxes at 320 px and on desktop**: the group reads as one box in the row inputs' shape, the painted tick is visible and centred when checked, hover and the focus ring show, and the two rows do not push Start below the fold. | Pending |
+| 2   | **"Skip cards with an unconfirmed year" in play**: with it ticked, an unconfirmed card never reaches the reveal as "Unconfirmed year" at the start, and **how often a card is dropped from under the player** once verify settles at `low`.   | Pending |
+| 3   | **A printed blank unconfirmed year**: with "Leave unconfirmed years blank" ticked, a `low` card prints title and artist and nothing in the year area, while a confirmed card keeps its year.                                                  | Pending |
+| 4   | **A native speaker's read** of `Salta les cartes sense any`, `Salta les cartes amb l'any sense confirmar`, `Deixa en blanc els anys sense confirmar` and `Dejar en blanco los años no confirmados`.                                           | Pending |
+| 5   | **A screen reader over the boxes**: each is announced by its caption and its checked state, with the native box hidden by `appearance-none`.                                                                                                  | Pending |
+
 ### Phase 7 look-and-access verification — nothing here is closed, and no local check can close it
 
 Phase 7's first half landed the `@theme` tokens, the fluid card, `prefers-reduced-motion`, focus

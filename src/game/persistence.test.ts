@@ -93,6 +93,7 @@ function session(): GameState {
     startIndex: 0,
     isFlipped: true,
     keepYearless: false,
+    skipUnconfirmed: false,
     yearLookupsUnavailable: false,
   };
 }
@@ -116,6 +117,7 @@ function validPayload(overrides: Partial<PersistedSession> = {}): PersistedSessi
     isFlipped: false,
     status: 'playing',
     keepYearless: false,
+    skipUnconfirmed: false,
     ...overrides,
   };
 }
@@ -146,6 +148,7 @@ describe('saveSession / loadSession', () => {
       isFlipped: state.isFlipped,
       status: state.status,
       keepYearless: state.keepYearless,
+      skipUnconfirmed: state.skipUnconfirmed,
     });
     // And it re-enters through `RESUME` cleanly -- the actual point of the format.
     //
@@ -517,6 +520,7 @@ describe('the start index', () => {
       seed: 'link-seed',
       startCardId: 'c',
       keepYearless: false,
+      skipUnconfirmed: false,
     });
     saveSession(state, storage);
 
@@ -620,6 +624,35 @@ describe('provisional years and keepYearless', () => {
     for (const keepYearless of ['true', 1, null, {}]) {
       const storage = memoryStorage();
       seed(storage, { ...validPayload(), keepYearless });
+
+      expect(loadSession(storage)).toBeNull();
+    }
+  });
+
+  it('should round-trip skipUnconfirmed, read it absent as false, and reject a non-boolean', () => {
+    for (const skipUnconfirmed of [true, false]) {
+      const storage = memoryStorage();
+      saveSession({ ...session(), skipUnconfirmed }, storage);
+
+      const raw = JSON.parse(storage.data.get(SESSION_STORAGE_KEY) ?? '{}') as Record<
+        string,
+        unknown
+      >;
+      expect(raw['skipUnconfirmed']).toBe(skipUnconfirmed);
+      expect(loadSession(storage)?.skipUnconfirmed).toBe(skipUnconfirmed);
+    }
+
+    // A save written before 2026-10-01 has no such field and skipped nothing.
+    const legacy = memoryStorage();
+    const payload: Record<string, unknown> = { ...validPayload() };
+    delete payload['skipUnconfirmed'];
+    seed(legacy, payload);
+    expect(loadSession(legacy)?.skipUnconfirmed).toBe(false);
+    expect(loadSession(legacy)?.version).toBe(SESSION_VERSION);
+
+    for (const skipUnconfirmed of ['true', 1, null, {}]) {
+      const storage = memoryStorage();
+      seed(storage, { ...validPayload(), skipUnconfirmed });
 
       expect(loadSession(storage)).toBeNull();
     }

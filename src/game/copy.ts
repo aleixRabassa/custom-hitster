@@ -173,9 +173,13 @@ export const COPY = {
     /** 1-based, because it names the box's position on screen. */
     removeRow: (position: number) => `Remove playlist ${position}`,
     addRow: 'Add another playlist',
-    /** The picker's checkbox (spike §12.8). The developer's own wording. */
-    keepYearless: 'Keep cards with no year found',
-    keepYearlessHint: 'Useful to print the whole deck and write missing years by hand',
+    /**
+     * The picker's two deal options (2026-10-01). Checked SKIPS: the first replaced "Keep cards with
+     * no year found" (spike §12.8) with its inverse, and the second drops a card whose final year no
+     * second provider confirmed. Worded from the developer's Spanish.
+     */
+    skipYearless: 'Skip cards with no year found',
+    skipUnconfirmed: 'Skip cards with an unconfirmed year',
     atMaxRows: (maxPlaylists: number) => `${maxPlaylists} playlists is the maximum for one deck.`,
     start: 'Start',
     starting: 'Loading…',
@@ -325,6 +329,11 @@ export const COPY = {
     save: 'Save this playlist',
     saved: 'Saved to your playlists',
     print: 'Print as PDF cards',
+    /**
+     * The PDF option (2026-10-01): an unconfirmed year is printed BLANK, to write in by hand. The
+     * developer's own wording.
+     */
+    blankUnconfirmed: 'Leave unconfirmed years blank',
     printing: (completed: number, total: number) => `Building PDF… ${completed}/${total}`,
     sheetSummary: (sheets: number) =>
       `${sheets === 1 ? '1 A4 sheet' : `${sheets} A4 sheets`}, ${CARDS_PER_SHEET} cards each — print double-sided`,

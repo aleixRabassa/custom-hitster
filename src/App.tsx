@@ -54,6 +54,7 @@ import type { MergedDeck } from './game/deck-merge';
 import type { StartFailureCode } from './game/messages';
 import type { PlaylistFetch } from './game/playlist-client';
 import type { StorageLike } from './game/persistence';
+import type { Prefs } from './game/prefs';
 
 /**
  * The game screen, and everything only it needs, in a separate chunk.
@@ -361,7 +362,9 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
   const [savedPlaylists, setSavedPlaylists] = useState(() => loadLibrary(libraryStorage));
 
   /**
-   * The picker's "Keep cards with no year found" (plan.year-fetch-rework-ui.md step 5).
+   * The picker's two deal options: "Skip cards with no year found" (plan.year-fetch-rework-ui.md
+   * step 5, where it read "Keep cards with no year found" -- stored as `keepYearless`, see below) and
+   * "Skip cards with an unconfirmed year" (2026-10-01).
    *
    * ===========================================================================
    *  THE PREFERENCE, NOT THE SESSION'S VALUE -- AND THE TWO ARE DIFFERENT THINGS.
@@ -372,9 +375,9 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
    *  remembered choice; the link format never carries the sender's, and
    *  `linkArrivalIntent` knows nothing about it.
    *
-   *  What a game in progress uses is `state.keepYearless`, recorded by `START`
-   *  and written into the save: Restart and "Play again" re-deal with THAT, a
-   *  resumed game keeps it, and `GameScreen` / `EndScreen` get it for the PDF.
+   *  What a game in progress uses is `state.keepYearless` and
+   *  `state.skipUnconfirmed`, recorded by `START` and written into the save:
+   *  Restart and "Play again" re-deal with THOSE, a resumed game keeps them, and `GameScreen` / `EndScreen` get it for the PDF.
    *  Handing this preference to any of those would let a checkbox touched since
    *  the deal change a game that is already being played.
    *
@@ -385,20 +388,44 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
    * ===========================================================================
    */
   const [prefsStorage] = useState<StorageLike>(() => storage ?? readLocalStorage());
-  const [keepYearless, setKeepYearless] = useState(() => loadPrefs(prefsStorage).keepYearless);
+  const [prefs, setPrefs] = useState<Prefs>(() => loadPrefs(prefsStorage));
+  const { keepYearless, skipUnconfirmed } = prefs;
 
-  const handleKeepYearlessChange = useCallback(
-    (next: boolean) => {
-      setKeepYearless(next);
+  /*
+    One handler for both deal options (2026-10-01), so a change to one always writes the other back
+    beside it: `savePrefs` rebuilds the WHOLE record, and saving a field from a stale copy of the
+    other would undo it.
+
+    THE "SKIP CARDS WITH NO YEAR FOUND" CHECKBOX IS `keepYearless` INVERTED, and this is the one
+    place that inverts it: `LandingScreen` takes `skipYearless` so its prop reads like its label,
+    while the model, the save and `prefs.ts` kept the old polarity so no stored value changed
+    meaning.
+  */
+  const handlePrefsChange = useCallback(
+    (change: Partial<Prefs>) => {
+      const next: Prefs = { ...prefs, ...change };
+      setPrefs(next);
       // `savePrefs` already swallows a throwing `setItem`; the guard here is for everything else a
       // write can do wrong, because a failure to REMEMBER must never cost the press itself.
       try {
-        savePrefs(prefsStorage, { keepYearless: next });
+        savePrefs(prefsStorage, next);
       } catch {
         // Applies for this page load, just not remembered.
       }
     },
-    [prefsStorage],
+    [prefs, prefsStorage],
+  );
+  const handleSkipYearlessChange = useCallback(
+    (skipYearless: boolean) => {
+      handlePrefsChange({ keepYearless: !skipYearless });
+    },
+    [handlePrefsChange],
+  );
+  const handleSkipUnconfirmedChange = useCallback(
+    (next: boolean) => {
+      handlePrefsChange({ skipUnconfirmed: next });
+    },
+    [handlePrefsChange],
   );
 
   /**
@@ -516,15 +543,16 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
     // re-run for the same merged deck a no-op, and the checkbox is disabled while a request is in
     // flight, so the value at the deal is the value at the press.
     if (link === null) {
-      start(deck.cards, deck.playlists, { keepYearless });
+      start(deck.cards, deck.playlists, { keepYearless, skipUnconfirmed });
     } else {
       start(deck.cards, deck.playlists, {
         seed: link.seed,
         ...(startCardId === null ? {} : { startCardId }),
         keepYearless,
+        skipUnconfirmed,
       });
     }
-  }, [requestState, start, keepYearless]);
+  }, [requestState, start, keepYearless, skipUnconfirmed]);
 
   /**
    * Submit the playlists the player asked for by hand.
@@ -653,9 +681,12 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
     // somebody touched the checkbox since. The provisional flags travel on the cards, so a card
     // still awaiting `verify` is verified after the restart rather than turning final.
     if (state.playlists.length > 0) {
-      start(state.deck, state.playlists, { keepYearless: state.keepYearless });
+      start(state.deck, state.playlists, {
+        keepYearless: state.keepYearless,
+        skipUnconfirmed: state.skipUnconfirmed,
+      });
     }
-  }, [start, state.deck, state.playlists, state.keepYearless]);
+  }, [start, state.deck, state.playlists, state.keepYearless, state.skipUnconfirmed]);
 
   const handleSavePlaylist = useCallback(() => {
     // Guarded rather than assumed: `state.playlists` is empty for the whole `idle` status, and the
@@ -739,10 +770,12 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
    *  one), `START` with nothing dealable, and `RESUME` of a pre-reversal save
    *  whose every card was yearless.
    *
-   *  IT CAN ONLY FIRE WHILE YEARLESS CARDS ARE DROPPED (plan.year-fetch-rework-
-   *  game.md). A session with `keepYearless` keeps a card whose final answer is
-   *  null, so its deck never shrinks and the only empty deck it can have is an
-   *  empty deal. The check stays as it is: it is exact in both modes.
+   *  IT CAN ONLY FIRE WHILE THE SESSION DROPS CARDS (plan.year-fetch-rework-
+   *  game.md): yearless ones, or since 2026-10-01 unconfirmed ones. A session
+   *  that keeps both never shrinks, so the only empty deck it can have is an
+   *  empty deal. The check stays as it is: it is exact in every mode. A deck
+   *  drained by `skipUnconfirmed` still reads `no-years-found`, which is close
+   *  enough -- no card had a year the session would play.
    * ===========================================================================
    */
   const deckCollapsed = state.status === 'ended' && state.deck.length === 0;
@@ -807,8 +840,10 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
       {...(startFailureCode ? { errorCode: startFailureCode } : {})}
       savedPlaylists={savedPlaylists}
       onRemoveSaved={handleRemoveSaved}
-      keepYearless={keepYearless}
-      onKeepYearlessChange={handleKeepYearlessChange}
+      skipYearless={!keepYearless}
+      onSkipYearlessChange={handleSkipYearlessChange}
+      skipUnconfirmed={skipUnconfirmed}
+      onSkipUnconfirmedChange={handleSkipUnconfirmedChange}
     />
   );
 

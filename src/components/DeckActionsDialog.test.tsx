@@ -107,6 +107,13 @@ describe('DeckActionsDialog', () => {
     fireEvent.keyDown(panel, { key: 'Tab' });
     expect(names()).toContain(COPY.deckActions.save);
 
+    // The print option (2026-10-01) is an `<input>`, so it is in the cycle -- `FOCUSABLE` names
+    // inputs for the copy fallback -- and is found by its name rather than by text content.
+    fireEvent.keyDown(panel, { key: 'Tab' });
+    expect(document.activeElement).toBe(
+      screen.getByRole('checkbox', { name: COPY.deckActions.blankUnconfirmed }),
+    );
+
     fireEvent.keyDown(panel, { key: 'Tab' });
     expect(names()).toContain(COPY.deckActions.print);
 
@@ -130,6 +137,11 @@ describe('DeckActionsDialog', () => {
     const panel = screen.getByRole('dialog');
     fireEvent.keyDown(panel, { key: 'Tab' });
 
+    // Past the disabled save, onto the print option and then Print itself.
+    expect(document.activeElement).toBe(
+      screen.getByRole('checkbox', { name: COPY.deckActions.blankUnconfirmed }),
+    );
+    fireEvent.keyDown(panel, { key: 'Tab' });
     expect(document.activeElement?.textContent).toBe(COPY.deckActions.print);
   });
 

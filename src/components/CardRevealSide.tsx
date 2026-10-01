@@ -61,7 +61,7 @@
  * only for a resumed save taken before that reversal.
  *
  * It is reachable in ordinary play again (plan.year-fetch-rework-game.md, spike §12.8): a session
- * dealt with `keepYearless` -- the picker's "Keep cards with no year found" -- keeps a card whose
+ * dealt with `keepYearless` -- the picker's "Skip cards with no year found" UNTICKED (it was "Keep cards with no year found" until 2026-10-01) -- keeps a card whose
  * FINAL answer is null, and this is the face it shows. With the option off the reducer still drops
  * those cards, and the branch still serves a pre-reversal save. Its markup is unchanged: it is the
  * display that is correct for a yearless card wherever one comes from, and it is asserted in this

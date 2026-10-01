@@ -38,8 +38,8 @@ import type { GameAction, GameState } from './types';
 import type { Card, PlaylistSummary } from '../../shared/types';
 
 /**
- * How a deal differs from a fresh one. `keepYearless` is the one REQUIRED field; with only that, the
- * deal is a fresh, randomly seeded one on card 1 -- the picker's case.
+ * How a deal differs from a fresh one. The two deal options are the REQUIRED fields; with only them,
+ * the deal is a fresh, randomly seeded one on card 1 -- the picker's case.
  *
  * A share link fills both optional fields: its `seed`, and -- for a link shared mid-game -- its
  * `card` param as `startCardId`. See `START` in `types.ts` for what each one does in the reducer.
@@ -48,12 +48,18 @@ export interface StartOptions {
   seed?: string;
   startCardId?: string;
   /**
-   * The picker's "Keep cards with no year found" (plan.year-fetch-rework-game.md), fixed for the
+   * Whether a final "no year" keeps its card -- the picker's "Skip cards with no year found",
+   * inverted (plan.year-fetch-rework-game.md; relabelled 2026-10-01), fixed for the
    * session -- see `GameState.keepYearless`. REQUIRED, like `START.keepYearless`, so no call site
    * can forget to decide it: the picker and the link deal pass the remembered preference, and
    * Restart passes the session's own `state.keepYearless`, never the picker's current value.
    */
   keepYearless: boolean;
+  /**
+   * The picker's "Skip cards with an unconfirmed year" (2026-10-01) -- see
+   * `GameState.skipUnconfirmed`. Required and sourced exactly like `keepYearless`.
+   */
+  skipUnconfirmed: boolean;
 }
 
 export interface UseGameSessionOptions {
@@ -96,7 +102,7 @@ export interface GameSession {
    * `deck-merge.ts`. The resolver takes the DECK rather than the playlist, so a five-playlist
    * crawl needs no new code here -- only more time (see `resolver.ts` for the per-lookup cost).
    *
-   * `options` carries only `keepYearless` for a fresh deal (a generated seed, card 1). A share link
+   * `options` carries only the two deal options for a fresh deal (a generated seed, card 1). A share link
    * passes its seed so the recipient gets the sender's order, and a mid-game link its card id so
    * they start on the sender's card -- see `StartOptions`.
    */
@@ -241,12 +247,13 @@ export function useGameSession(options: UseGameSessionOptions = {}): GameSession
       clearSession(storage);
 
       // Built without `undefined` properties: an absent field is what tells the reducer to use
-      // its default (a generated seed, card 1). `keepYearless` has no default to fall back on.
+      // its default (a generated seed, card 1). The deal options have no default to fall back on.
       const action: Extract<GameAction, { type: 'START' }> = {
         type: 'START',
         cards,
         playlists,
         keepYearless: options.keepYearless,
+        skipUnconfirmed: options.skipUnconfirmed,
       };
       if (options.seed !== undefined) action.seed = options.seed;
       if (options.startCardId !== undefined) action.startCardId = options.startCardId;

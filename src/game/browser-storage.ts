@@ -20,7 +20,7 @@
  *    to prevent a white page. Failing to clear a save is the better outcome.
  *  - `App` reads it on the FIRST render, three times over: `useGameSession`
  *    for the saved game, the saved-playlist library, and (in a lazy state
- *    initialiser) the "Keep cards with no year found" preference. A throw in
+ *    initialiser) the deal-option preferences. A throw in
  *    any of the three is a crash screen before the front door -- and a
  *    PERMANENT one, because the crash screen's Start over can clear nothing
  *    through a storage it cannot reach, so the reload crashes again. With all

@@ -70,6 +70,7 @@
 import { useRef, useState } from 'react';
 
 import { Footer } from './Footer';
+import { OPTION_GROUP_CLASS_NAME, OptionCheckbox } from './OptionCheckbox';
 import { SuggestionButton } from './SuggestionButton';
 import { MAX_DECK_PLAYLISTS } from '../game/deck-merge';
 import { playlistErrorMessage } from '../game/messages';
@@ -114,12 +115,6 @@ interface PlaylistRow {
 function rowErrorId(rowId: string): string {
   return `playlist-url-error-${rowId}`;
 }
-
-/**
- * The `id` of the keep-yearless checkbox's hint, which its input points `aria-describedby` at. A
- * constant: there is exactly one checkbox, and the picker is mounted at most once.
- */
-const KEEP_YEARLESS_HINT_ID = 'keep-yearless-hint';
 
 /** One suggested playlist: its Spotify id, its (untranslated) label and its blurb's copy key. */
 export interface SuggestedPlaylist {
@@ -243,15 +238,23 @@ export interface LandingScreenProps {
    */
   errorCode?: StartFailureCode;
   /**
-   * The "Keep cards with no year found" checkbox (spike §12.8), CONTROLLED.
+   * The "Skip cards with no year found" checkbox, CONTROLLED. It replaced "Keep cards with no year
+   * found" (spike §12.8) on 2026-10-01 and is that option INVERTED: checked means a final "no year"
+   * drops its card. Named for what the box SAYS; `App.tsx` maps it onto the stored `keepYearless`.
    *
    * A value and a change callback rather than a wider `onSubmit`, because the same value has to
    * reach a deal that never passes through this screen: a share link. `App.tsx` owns the state,
    * seeds it from `prefs.ts` and remembers every change, and hands it to every `start()`. REQUIRED,
    * like `onBack`, so no host can render a checkbox that silently does nothing.
    */
-  keepYearless: boolean;
-  onKeepYearlessChange: (keepYearless: boolean) => void;
+  skipYearless: boolean;
+  onSkipYearlessChange: (skipYearless: boolean) => void;
+  /**
+   * The "Skip cards with an unconfirmed year" checkbox (2026-10-01), CONTROLLED and owned exactly
+   * like the one above. Checked drops a card whose final year no second provider confirmed.
+   */
+  skipUnconfirmed: boolean;
+  onSkipUnconfirmedChange: (skipUnconfirmed: boolean) => void;
 }
 
 export function LandingScreen({
@@ -261,8 +264,10 @@ export function LandingScreen({
   errorCode,
   savedPlaylists = [],
   onRemoveSaved,
-  keepYearless,
-  onKeepYearlessChange,
+  skipYearless,
+  onSkipYearlessChange,
+  skipUnconfirmed,
+  onSkipUnconfirmedChange,
 }: LandingScreenProps) {
   const { copy, errorMessages } = useLocale();
   const [rows, setRows] = useState<PlaylistRow[]>(() => [{ id: 'row-1', value: '' }]);
@@ -817,48 +822,40 @@ export function LandingScreen({
 
           {/*
           ===============================================================================
-           "KEEP CARDS WITH NO YEAR FOUND" (2026-09-30, spike §12.8), BETWEEN THE ROWS AND
-           START, because it qualifies the press below it rather than any one row.
+           THE DEAL OPTIONS (2026-10-01), BETWEEN THE ROWS AND START, because they qualify
+           the press below them rather than any one row. Both SKIP when checked:
 
-           CONTROLLED: the value and its change callback are `App.tsx`'s, which remembers
-           the choice (`src/game/prefs.ts`) and hands it to every deal -- including a share
-           link's, which never renders this screen. See the prop's own comment.
+           - "Skip cards with no year found" -- the 2026-09-30 "Keep cards with no year
+             found" (spike §12.8), relabelled and INVERTED so the box does what it says.
+             Checked by default, because the default behaviour did not change: a final
+             "no year" still drops its card unless the player unticks it.
+           - "Skip cards with an unconfirmed year" -- new: a card whose final year no
+             second provider confirmed is dropped. Unchecked by default.
 
-           A NATIVE CHECKBOX INSIDE ITS `<label>`, so the caption is the accessible name
-           (WCAG 2.5.3, the same rule the row inputs above follow -- no `aria-label`) and a
-           press anywhere on the caption toggles it. `touch-target` sits on the LABEL,
-           which is the actual press area: on the input it would draw a 44px native box.
-           `focus-visible:focus-ring` sits on the input, which is what takes focus.
+           CONTROLLED: the values and their change callbacks are `App.tsx`'s, which
+           remembers them (`src/game/prefs.ts`) and hands them to every deal -- including a
+           share link's, which never renders this screen. See the props' own comments.
 
-           `text-sm` IS ON THE CAPTION `<span>` AND NOT ON THE `<label>` -- the preflight
-           trap recorded for this screen's inputs (2026-09-21): an `<input>` has
-           `font: inherit`, so a type scale on the wrapper would size the control too.
-
-           THE HINT IS OUTSIDE THE LABEL, on purpose: inside it, it would join the
-           accessible NAME. Outside, it is the DESCRIPTION, tied by `aria-describedby`,
-           and it reuses the cap hint's small-print pair above. Indented by the box's
-           width plus the gap (`size-5` + `gap-3` = `pl-8`) so it reads under the caption.
-
-           No `value` attribute: the leak audit reads `value`, and a checkbox needs none.
+           ONE BOX in the row inputs' own shape, the two options as rows inside it split by
+           a divider (`OptionCheckbox.tsx` has the control's rules). It keeps the column at
+           the single width the "+" comment above defends. The hint that used to sit under
+           the first option was removed at the developer's request, and with it the
+           `aria-describedby` that tied it to the box.
           ===============================================================================
         */}
-          <div className="flex flex-col gap-1">
-            <label className="touch-target flex items-center gap-3">
-              <input
-                type="checkbox"
-                checked={keepYearless}
-                onChange={(event) => {
-                  onKeepYearlessChange(event.target.checked);
-                }}
-                disabled={isLoading}
-                aria-describedby={KEEP_YEARLESS_HINT_ID}
-                className="size-5 shrink-0 accent-accent focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-(--opacity-disabled)"
-              />
-              <span className="text-sm text-fg-secondary">{copy.landing.keepYearless}</span>
-            </label>
-            <p id={KEEP_YEARLESS_HINT_ID} className="pl-8 text-xs text-fg-muted">
-              {copy.landing.keepYearlessHint}
-            </p>
+          <div className={OPTION_GROUP_CLASS_NAME}>
+            <OptionCheckbox
+              label={copy.landing.skipYearless}
+              checked={skipYearless}
+              disabled={isLoading}
+              onChange={onSkipYearlessChange}
+            />
+            <OptionCheckbox
+              label={copy.landing.skipUnconfirmed}
+              checked={skipUnconfirmed}
+              disabled={isLoading}
+              onChange={onSkipUnconfirmedChange}
+            />
           </div>
 
           <button

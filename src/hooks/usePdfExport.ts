@@ -41,6 +41,7 @@ import {
   MAX_TITLE_LINES,
   backLayout,
   planSheets,
+  printedYear,
   qrBox,
   selectPrintableCards,
   sheetCount,
@@ -49,7 +50,7 @@ import { pdfFileName, sanitizeForPdf } from '../game/pdf-text';
 import { loadQrcode } from '../game/qrcode-loader';
 import { useCopy } from './useLocale';
 import { spotifyTrackUrl } from '../../shared/spotify-url';
-import type { CardPlacement } from '../game/pdf-sheet';
+import type { CardPlacement, PrintedYearOptions } from '../game/pdf-sheet';
 import type { Card } from '../../shared/types';
 
 /**
@@ -76,8 +77,14 @@ export interface PdfExportState {
 
 export interface UsePdfExportResult {
   state: PdfExportState;
-  /** Generate and download. Safe to call again after it settles; a no-op while `working`. */
-  exportDeck: (deck: readonly Card[], playlistName: string) => void;
+  /**
+   * Generate and download. Safe to call again after it settles; a no-op while `working`.
+   *
+   * `options` is the dialog's "Leave unconfirmed years blank" (2026-10-01), per export rather than
+   * per hook: it is a choice about THIS file, read at the press, where `keepYearless` is the
+   * session's and fixed for the hook's life.
+   */
+  exportDeck: (deck: readonly Card[], playlistName: string, options: PrintedYearOptions) => void;
 }
 
 const IDLE: PdfExportState = { status: 'idle', completed: 0, total: 0, excludedCount: 0 };
@@ -95,7 +102,7 @@ const INK = { text: 20, muted: 110, rule: 170 } as const;
 const QR_PIXELS = 512;
 
 /**
- * @param keepYearless The SESSION's "Keep cards with no year found" (`GameState.keepYearless`),
+ * @param keepYearless The SESSION's `GameState.keepYearless` (the picker's "Skip cards with no year found", inverted),
  *   never the picker's current preference. It decides whether a final `year: null` card is printed
  *   -- with its year left blank, see `drawBack` -- or left out and counted. A provisional year is
  *   left out either way: `selectPrintableCards` owns that rule.
@@ -126,7 +133,7 @@ export function usePdfExport(keepYearless: boolean): UsePdfExportResult {
   }, []);
 
   const exportDeck = useCallback(
-    (deck: readonly Card[], playlistName: string) => {
+    (deck: readonly Card[], playlistName: string, options: PrintedYearOptions) => {
       const generation = ++generationRef.current;
       const publish = (next: PdfExportState) => {
         if (!isMountedRef.current || generationRef.current !== generation) return;
@@ -191,7 +198,7 @@ export function usePdfExport(keepYearless: boolean): UsePdfExportResult {
 
               if (page.side === 'front')
                 drawFront(doc, placement, codes[placement.cardIndex] ?? '');
-              else drawBack(doc, placement, cards[placement.cardIndex]);
+              else drawBack(doc, placement, cards[placement.cardIndex], options);
             }
           });
 
@@ -278,8 +285,17 @@ function drawFront(doc: Doc, placement: CardPlacement, dataUrl: string): void {
  * `backLayout()`'s unchanged, so a written-in year sits exactly where a printed one would. Guarding
  * the TEXT rather than returning early is the whole change, and `String(null)` is why the guard is
  * a type check: without it the card would print the word "null".
+ *
+ * Since 2026-10-01 an UNCONFIRMED year can be left blank the same way, when the player ticks "Leave
+ * unconfirmed years blank" in the dialog. Which year is printed is `printedYear()`'s decision in
+ * `pdf-sheet.ts`; this function only skips the `text` call when it says `null`.
  */
-function drawBack(doc: Doc, placement: CardPlacement, card: Card | undefined): void {
+function drawBack(
+  doc: Doc,
+  placement: CardPlacement,
+  card: Card | undefined,
+  options: PrintedYearOptions,
+): void {
   if (!card) return;
 
   const layout = backLayout(placement);
@@ -287,8 +303,9 @@ function drawBack(doc: Doc, placement: CardPlacement, card: Card | undefined): v
   doc.setTextColor(INK.text);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(layout.yearPointSize);
-  if (typeof card.year === 'number') {
-    doc.text(String(card.year), layout.centreXMm, layout.yearBaselineMm, { align: 'center' });
+  const year = printedYear(card, options);
+  if (year !== null) {
+    doc.text(String(year), layout.centreXMm, layout.yearBaselineMm, { align: 'center' });
   }
   doc.setFont('helvetica', 'normal');
 

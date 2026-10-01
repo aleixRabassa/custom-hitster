@@ -5721,3 +5721,30 @@ iTunes 429 are `busy`, retried with no cap. A provider shutting us out (an iTune
 body `code: 4`) is a `refused` SKIP, counted absent like `not-configured`. Before, a long Apple throttle of Vercel's IPs
 would have left every card provisional for ever, so the PDF never printed and, with the option OFF, a
 provisional start card held the loading screen.
+
+## 2026-10-01 — The picker's options both SKIP when ticked, the model kept `keepYearless`, and a provisional year must never count as "unconfirmed"
+
+At the developer's request "Keep cards with no year found" became "Skip cards with no year found"
+(checked = skip, its hint deleted), "Skip cards with an unconfirmed year" was added, and the PDF
+dialog gained "Leave unconfirmed years blank". Four conclusions worth not re-deriving:
+
+- **Only the UI inverted.** `keepYearless` is a stored field in the session save and in
+  `jitster:prefs:v1`; renaming it to `skipYearless` would have been a format change with no behaviour
+  in it. `App.tsx` passes `skipYearless={!keepYearless}`, so the default behaviour is unchanged and
+  the box reads CHECKED on a fresh profile — expected, not a regression.
+- **"Unconfirmed" = a FINAL year at `low`.** A provisional year is always `low` too, and Restart
+  re-deals `state.deck` through `START`, so a filter on confidence alone would delete every card still
+  awaiting `verify` on a restart. `isDroppedAnswer` in `reducer.ts` checks `yearProvisional` first and
+  is the one rule `START`, `YEAR_RESOLVED` and `RESUME` share; `reducer.test.ts` pins the restart case.
+- **`keepYearless` alone no longer skips the start gate.** With `skipUnconfirmed` the start card's
+  provisional year can still settle at `low` and leave, so the gate is skipped only when the session
+  drops nothing.
+- **`loadPrefs` had to become per-field.** It returned `DEFAULT_PREFS` for any record without a
+  boolean `keepYearless`; extending that rule to the new key would have reset every existing record
+  that lacked it. Each field now defaults on its own.
+
+The restyled checkbox (`OptionCheckbox.tsx`) is a native input with `appearance-none`; every new
+utility was confirmed present in the built CSS (`peer-checked:block`, `checked:bg-accent`,
+`group-hover:*`, `has-disabled:*`, `divide-border`). A browser screenshot was attempted under
+`pnpm dev` and the Chrome extension timed out, so nothing about its look has been seen yet
+(`docs/development.md` §5).

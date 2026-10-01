@@ -25,6 +25,7 @@ import {
   frontPlacement,
   planSheets,
   pointsToMm,
+  printedYear,
   qrBox,
   selectPrintableCards,
   sheetCount,
@@ -417,5 +418,30 @@ describe('pdf-sheet', () => {
 
     expect(selectPrintableCards(deck, { keepYearless: false }).cards).toHaveLength(0);
     expect(selectPrintableCards(deck, { keepYearless: true }).cards).toHaveLength(2);
+  });
+});
+
+describe('printedYear', () => {
+  const on = { blankUnconfirmed: true };
+  const off = { blankUnconfirmed: false };
+
+  it('should print a confirmed year either way', () => {
+    const card = { year: 1975, yearConfidence: 'high' } as const;
+
+    expect(printedYear(card, off)).toBe(1975);
+    expect(printedYear(card, on)).toBe(1975);
+  });
+
+  it('should leave an unconfirmed year blank only when asked to', () => {
+    const card = { year: 1979, yearConfidence: 'low' } as const;
+
+    expect(printedYear(card, off)).toBe(1979);
+    expect(printedYear(card, on)).toBeNull();
+  });
+
+  it('should leave a null year blank either way, and never print a missing one', () => {
+    expect(printedYear({ year: null, yearConfidence: 'none' }, off)).toBeNull();
+    expect(printedYear({ year: null, yearConfidence: 'none' }, on)).toBeNull();
+    expect(printedYear({}, off)).toBeNull();
   });
 });

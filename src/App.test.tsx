@@ -716,6 +716,7 @@ describe('App', () => {
         startIndex: 0,
         status: 'preparing',
         keepYearless: false,
+        skipUnconfirmed: false,
       } satisfies PersistedSession),
     );
     // A 500, so any playlist request a resume wrongly made would fail the test rather than pass it.
@@ -766,6 +767,7 @@ describe('App', () => {
         startIndex: 0,
         status: 'playing',
         keepYearless: false,
+        skipUnconfirmed: false,
       } satisfies PersistedSession),
     );
 
@@ -1094,6 +1096,7 @@ describe('App', () => {
       startIndex: 0,
       status: 'playing',
       keepYearless: false,
+      skipUnconfirmed: false,
     };
     storage.map.set(SESSION_STORAGE_KEY, JSON.stringify(session));
 
@@ -1130,6 +1133,7 @@ describe('App', () => {
         startIndex: 0,
         status: 'playing',
         keepYearless: false,
+        skipUnconfirmed: false,
       } satisfies PersistedSession),
     );
 
@@ -1187,6 +1191,7 @@ describe('App', () => {
         startIndex: 0,
         status: 'playing',
         keepYearless: false,
+        skipUnconfirmed: false,
       } satisfies PersistedSession),
     );
 
@@ -1353,6 +1358,7 @@ describe('App', () => {
           isFlipped: false,
           status: 'playing',
           keepYearless: false,
+          skipUnconfirmed: false,
           ...overrides,
         } satisfies PersistedSession),
       );
@@ -2092,6 +2098,7 @@ describe('App', () => {
           isFlipped: false,
           status: 'playing',
           keepYearless: false,
+          skipUnconfirmed: false,
         } satisfies PersistedSession),
       );
       const fetchImpl = bothLoad();
@@ -2139,6 +2146,7 @@ describe('App', () => {
           isFlipped: false,
           status: 'playing',
           keepYearless: false,
+          skipUnconfirmed: false,
         } satisfies PersistedSession),
       );
       const fetchImpl = bothLoad();
@@ -2234,7 +2242,7 @@ describe('App', () => {
     });
   });
 
-  describe('the keep-yearless option', () => {
+  describe('the deal options', () => {
     /**
      * `?playlist=…&seed=…`, as in the share-link block above. Redeclared rather than hoisted, so
      * this block reads on its own.
@@ -2242,9 +2250,19 @@ describe('App', () => {
     const LINK_SEED = 'a1b2c3d4e5f60718';
     const LINK_SEARCH = `?playlist=${PLAYLIST.id}&seed=${LINK_SEED}`;
 
-    /** The picker's checkbox, by its visible caption. */
-    function keepYearlessBox(): HTMLInputElement {
-      return screen.getByRole('checkbox', { name: COPY.landing.keepYearless }) as HTMLInputElement;
+    /**
+     * The picker's "Skip cards with no year found", by its visible caption. CHECKED BY DEFAULT since
+     * 2026-10-01 -- it is `keepYearless` inverted -- so one click is what keeps yearless cards.
+     */
+    function skipYearlessBox(): HTMLInputElement {
+      return screen.getByRole('checkbox', { name: COPY.landing.skipYearless }) as HTMLInputElement;
+    }
+
+    /** The picker's "Skip cards with an unconfirmed year", unchecked by default. */
+    function skipUnconfirmedBox(): HTMLInputElement {
+      return screen.getByRole('checkbox', {
+        name: COPY.landing.skipUnconfirmed,
+      }) as HTMLInputElement;
     }
 
     function savedSession(storage: ReturnType<typeof memoryStorage>): PersistedSession {
@@ -2255,7 +2273,7 @@ describe('App', () => {
       return JSON.parse(storage.map.get(PREFS_STORAGE_KEY) ?? 'null');
     }
 
-    it('should deal with keepYearless from the checkbox', async () => {
+    it('should deal with keepYearless when "Skip cards with no year found" is unticked', async () => {
       // Every lookup finds nothing. With the option OFF that is the collapse to the picker's
       // `no-years-found` warning (asserted above); ON, every card stays and the game plays on.
       stubDroppingYearApi();
@@ -2263,7 +2281,7 @@ describe('App', () => {
       renderApp(playlistFetch(200, playlistResult()), storage);
 
       enterPicker();
-      fireEvent.click(keepYearlessBox());
+      fireEvent.click(skipYearlessBox());
       startPlaylist();
 
       await waitFor(() => {
@@ -2287,26 +2305,35 @@ describe('App', () => {
 
       renderApp(fetchImpl, storage);
       enterPicker();
-      expect(keepYearlessBox().checked).toBe(false);
+      // The default behaviour is unchanged -- yearless cards are dropped -- so the box reads checked.
+      expect(skipYearlessBox().checked).toBe(true);
+      expect(skipUnconfirmedBox().checked).toBe(false);
 
-      fireEvent.click(keepYearlessBox());
-      expect(keepYearlessBox().checked).toBe(true);
-      expect(storedPrefs(storage)).toEqual({ keepYearless: true });
+      fireEvent.click(skipYearlessBox());
+      expect(skipYearlessBox().checked).toBe(false);
+      expect(storedPrefs(storage)).toEqual({ keepYearless: true, skipUnconfirmed: false });
+
+      // The second box writes its own field and keeps the first one's.
+      fireEvent.click(skipUnconfirmedBox());
+      expect(storedPrefs(storage)).toEqual({ keepYearless: true, skipUnconfirmed: true });
 
       // A reload: a fresh mount over the same storage shows the remembered value on its first
       // render of the picker.
       cleanup();
       renderApp(fetchImpl, storage);
       enterPicker();
-      expect(keepYearlessBox().checked).toBe(true);
+      expect(skipYearlessBox().checked).toBe(false);
+      expect(skipUnconfirmedBox().checked).toBe(true);
 
-      // And turning it off is remembered too.
-      fireEvent.click(keepYearlessBox());
-      expect(storedPrefs(storage)).toEqual({ keepYearless: false });
+      // And turning them back is remembered too.
+      fireEvent.click(skipYearlessBox());
+      fireEvent.click(skipUnconfirmedBox());
+      expect(storedPrefs(storage)).toEqual({ keepYearless: false, skipUnconfirmed: false });
       cleanup();
       renderApp(fetchImpl, storage);
       enterPicker();
-      expect(keepYearlessBox().checked).toBe(false);
+      expect(skipYearlessBox().checked).toBe(true);
+      expect(skipUnconfirmedBox().checked).toBe(false);
     });
 
     it("should deal a share link with the recipient's remembered choice", async () => {
@@ -2369,6 +2396,7 @@ describe('App', () => {
           startIndex: 0,
           status: 'playing',
           keepYearless: true,
+          skipUnconfirmed: false,
         } satisfies PersistedSession),
       );
 
@@ -2401,7 +2429,7 @@ describe('App', () => {
       renderApp(playlistFetch(200, playlistResult()), storage);
 
       enterPicker();
-      fireEvent.click(keepYearlessBox());
+      fireEvent.click(skipYearlessBox());
       startPlaylist();
 
       await waitFor(() => {
@@ -2413,6 +2441,78 @@ describe('App', () => {
         expect(savedSession(storage).status).toBe('playing');
       });
       expect(savedSession(storage).deck.every((card) => card.year === undefined)).toBe(true);
+    });
+
+    it('should drop unconfirmed cards when "Skip cards with an unconfirmed year" is ticked', async () => {
+      // Every lookup settles FINAL at `low` -- a year no second provider confirmed. Unticked, that
+      // is an ordinary playable deck; ticked, every card leaves and the deck collapses to the
+      // picker's warning, exactly as a deck of final nulls does with the other option.
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(() =>
+          Promise.resolve({
+            ok: true,
+            status: 200,
+            headers: { get: () => null },
+            json: () =>
+              Promise.resolve({
+                year: 1975,
+                confidence: 'low',
+                source: 'release-group',
+                cached: true,
+                cleanedTitle: 'x',
+                stripped: { remaster: false, live: false, feature: false, version: false },
+                final: true,
+              }),
+          }),
+        ),
+      );
+      const storage = memoryStorage();
+      renderApp(playlistFetch(200, playlistResult()), storage);
+
+      enterPicker();
+      fireEvent.click(skipUnconfirmedBox());
+      startPlaylist();
+
+      expect(await screen.findByText(PLAYLIST_ERROR_MESSAGES['no-years-found'])).not.toBeNull();
+      expect(storedPrefs(storage)).toEqual({ keepYearless: false, skipUnconfirmed: true });
+    });
+
+    it('should play unconfirmed cards with "Skip cards with an unconfirmed year" unticked', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(() =>
+          Promise.resolve({
+            ok: true,
+            status: 200,
+            headers: { get: () => null },
+            json: () =>
+              Promise.resolve({
+                year: 1975,
+                confidence: 'low',
+                source: 'release-group',
+                cached: true,
+                cleanedTitle: 'x',
+                stripped: { remaster: false, live: false, feature: false, version: false },
+                final: true,
+              }),
+          }),
+        ),
+      );
+      const storage = memoryStorage();
+      renderApp(playlistFetch(200, playlistResult()), storage);
+
+      enterPicker();
+      startPlaylist();
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('hud')).not.toBeNull();
+      });
+      await waitFor(() => {
+        expect(savedSession(storage).deck.every((card) => card.year === 1975)).toBe(true);
+      });
+      expect(savedSession(storage).skipUnconfirmed).toBe(false);
+      expect(savedSession(storage).deck).toHaveLength(distinctCardCount(UNRESOLVED_DECK));
     });
 
     it('should show a provisional year and change it on a revealed card when the final answer differs', async () => {
@@ -2462,7 +2562,7 @@ describe('App', () => {
 
       renderApp(playlistFetch(200, playlistResult()));
       enterPicker();
-      fireEvent.click(keepYearlessBox());
+      fireEvent.click(skipYearlessBox());
       startPlaylist();
 
       await waitFor(() => {

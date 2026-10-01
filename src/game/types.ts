@@ -19,7 +19,8 @@ import type { Card, PlaylistSummary, YearConfidence } from '../../shared/types';
  *                card's answer is not FINAL yet -- a provisional `resolve` year does not open
  *                it (plan.year-fetch-rework-game.md). Card 1, except for a deal from a shared
  *                mid-game link, which starts on the sender's card (2026-09-29). Never entered
- *                when the session keeps yearless cards (`keepYearless`): nothing waits then.
+ *                when the session can drop nothing -- it keeps yearless cards (`keepYearless`)
+ *                and keeps unconfirmed ones (`skipUnconfirmed` false): nothing waits then.
  *                **The only status Phase 6 may render a loading screen for** -- a wait here is
  *                one lookup (1.3-3.6 s cold), never the whole deck (minutes; see `resolver.ts`
  *                for the measurements).
@@ -110,13 +111,29 @@ export interface GameState {
   /** Whether the current card is showing its revealed side. Reset by `NEXT`. */
   isFlipped: boolean;
   /**
-   * The picker's "Keep cards with no year found" (plan.year-fetch-rework-game.md, spike
+   * The picker's "Keep cards with no year found" -- "Skip cards with no year found" UNTICKED since
+   * 2026-10-01, see below -- (plan.year-fetch-rework-game.md, spike
    * §12.8), fixed for the whole session at `START`. When true, a final null KEEPS the card
    * with `year: null` and nothing gates on a year, so the game starts at once; when false,
    * a final null drops the card and the start card's answer must be FINAL before play.
    * Restart re-deals with this value, never the picker's current preference.
+   *
+   * THE PICKER SHOWS THE INVERSE since 2026-10-01: its checkbox reads "Skip cards with no year
+   * found", checked exactly when this is FALSE. Only the binding in `App.tsx` inverts; the model,
+   * the save and `prefs.ts` keep this polarity, so no stored value changed meaning.
    */
   keepYearless: boolean;
+  /**
+   * The picker's "Skip cards with an unconfirmed year" (2026-10-01), fixed for the session at
+   * `START` exactly like `keepYearless`. When true, a card whose FINAL answer is a year at `low`
+   * confidence -- a year no second provider confirmed, which the reveal labels "Unconfirmed year"
+   * -- is REMOVED from the deck, by the same rule and at the same three entry points as a final
+   * null; and the start card's answer must be final before play, since a provisional year may
+   * still settle at `low`. A PROVISIONAL year is never dropped by it: it is always `low` and its
+   * confidence is not final until the card is. Independent of `keepYearless` -- a final null is
+   * not "unconfirmed", it has no year to confirm.
+   */
+  skipUnconfirmed: boolean;
   /**
    * Set when year lookups cannot work at all for this deployment (`not-configured`, i.e. no
    * `MUSICBRAINZ_USER_AGENT` on the server). A hard stop, not a retry signal: the deck stays
@@ -154,6 +171,8 @@ export type GameAction =
       startCardId?: string;
       /** See `GameState.keepYearless`. Required, so no call site can forget to decide it. */
       keepYearless: boolean;
+      /** See `GameState.skipUnconfirmed`. Required, for the same reason. */
+      skipUnconfirmed: boolean;
     }
   /**
    * One completed lookup -- final or provisional, see `YearResolvedAction`. Matched onto the deck BY CARD ID, never by index (decision 13):
@@ -222,4 +241,6 @@ export interface PersistedSession {
   status: GameStatus;
   /** See `GameState.keepYearless`. Optional in storage (absent = false), required here. */
   keepYearless: boolean;
+  /** See `GameState.skipUnconfirmed`. Optional in storage (absent = false), required here. */
+  skipUnconfirmed: boolean;
 }

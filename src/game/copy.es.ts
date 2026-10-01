@@ -46,9 +46,9 @@ export const COPY_ES = {
     playlistLinkPlaceholder: COPY.landing.playlistLinkPlaceholder,
     removeRow: (position: number) => `Quitar playlist ${position}`,
     addRow: 'Añadir otra playlist',
-    // 2026-09-30 PROPOSALS, not yet read by a native speaker (docs/development.md §5).
-    keepYearless: 'Mantener cartas sin año',
-    keepYearlessHint: 'Útil para imprimir la baraja entera y escribir a mano los años que falten',
+    // The developer's own wording (2026-10-01).
+    skipYearless: 'Saltar cartas sin año',
+    skipUnconfirmed: 'Saltar cartas con año no confirmado',
     atMaxRows: (maxPlaylists: number) => `El máximo son ${maxPlaylists} playlists por mazo.`,
     start: 'Empezar',
     starting: 'Cargando…',
@@ -150,6 +150,8 @@ export const COPY_ES = {
     save: 'Guardar esta playlist',
     saved: 'Guardada en tus playlists',
     print: 'Imprimir como cartas en PDF',
+    // 2026-10-01 PROPOSAL, not yet read by a native speaker (docs/development.md §5).
+    blankUnconfirmed: 'Dejar en blanco los años no confirmados',
     printing: (completed: number, total: number) => `Creando PDF… ${completed}/${total}`,
     sheetSummary: (sheets: number) =>
       `${sheets === 1 ? '1 hoja A4' : `${sheets} hojas A4`}, ${CARDS_PER_SHEET} cartas por hoja — imprime a doble cara`,

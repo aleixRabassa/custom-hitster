@@ -31,14 +31,17 @@ function renderLanding(props: Partial<Parameters<typeof LandingScreen>[0]> = {})
   const onSubmit = props.onSubmit ?? vi.fn();
   const onBack = props.onBack ?? vi.fn();
   const onRemoveSaved = props.onRemoveSaved ?? vi.fn();
-  const onKeepYearlessChange = props.onKeepYearlessChange ?? vi.fn();
+  const onSkipYearlessChange = props.onSkipYearlessChange ?? vi.fn();
+  const onSkipUnconfirmedChange = props.onSkipUnconfirmedChange ?? vi.fn();
   const rendered = render(
     <LandingScreen
       onSubmit={onSubmit}
       onBack={onBack}
       isLoading={props.isLoading ?? false}
-      keepYearless={props.keepYearless ?? false}
-      onKeepYearlessChange={onKeepYearlessChange}
+      skipYearless={props.skipYearless ?? true}
+      onSkipYearlessChange={onSkipYearlessChange}
+      skipUnconfirmed={props.skipUnconfirmed ?? false}
+      onSkipUnconfirmedChange={onSkipUnconfirmedChange}
       {...(props.errorCode ? { errorCode: props.errorCode } : {})}
       // Defaults to empty, which is the first-time visitor's screen and the one every assertion
       // written before the library existed was written against.
@@ -47,7 +50,14 @@ function renderLanding(props: Partial<Parameters<typeof LandingScreen>[0]> = {})
     />,
   );
 
-  return { ...rendered, onSubmit, onBack, onRemoveSaved, onKeepYearlessChange };
+  return {
+    ...rendered,
+    onSubmit,
+    onBack,
+    onRemoveSaved,
+    onSkipYearlessChange,
+    onSkipUnconfirmedChange,
+  };
 }
 
 /**
@@ -473,106 +483,127 @@ describe('LandingScreen', () => {
     });
   });
 
-  describe('the keep-yearless checkbox', () => {
-    /** The checkbox, by its VISIBLE caption -- which is what fails if an `aria-label` ever returns. */
-    function keepYearlessBox(): HTMLInputElement {
-      return screen.getByRole('checkbox', { name: COPY.landing.keepYearless }) as HTMLInputElement;
+  describe('the deal options', () => {
+    /** The boxes, by their VISIBLE captions -- which is what fails if an `aria-label` ever returns. */
+    function skipYearlessBox(): HTMLInputElement {
+      return screen.getByRole('checkbox', { name: COPY.landing.skipYearless }) as HTMLInputElement;
+    }
+    function skipUnconfirmedBox(): HTMLInputElement {
+      return screen.getByRole('checkbox', {
+        name: COPY.landing.skipUnconfirmed,
+      }) as HTMLInputElement;
     }
 
-    it('should render the checkbox with COPY.landing.keepYearless and the hint', () => {
+    it('should render both checkboxes, named by their captions alone', () => {
       renderLanding();
 
-      const box = keepYearlessBox();
-      expect(box.type).toBe('checkbox');
-      // The hint is the DESCRIPTION, not part of the name: tied by `aria-describedby` to an element
-      // holding exactly the hint, and outside the `<label>` so it does not join the name.
-      const hintId = box.getAttribute('aria-describedby');
-      expect(hintId).not.toBeNull();
-      const hint = document.getElementById(hintId ?? '');
-      expect(hint?.textContent).toBe(COPY.landing.keepYearlessHint);
-      expect(box.closest('label')?.contains(hint ?? null)).toBe(false);
-      expect(box.closest('label')?.textContent).toBe(COPY.landing.keepYearless);
+      for (const [box, caption] of [
+        [skipYearlessBox(), COPY.landing.skipYearless],
+        [skipUnconfirmedBox(), COPY.landing.skipUnconfirmed],
+      ] as const) {
+        expect(box.type).toBe('checkbox');
+        expect(box.closest('label')?.textContent).toBe(caption);
+        // The hint is gone (2026-10-01), and with it the description.
+        expect(box.hasAttribute('aria-describedby')).toBe(false);
+        // The leak audit reads `value`; a checkbox needs none.
+        expect(box.hasAttribute('value')).toBe(false);
+      }
     });
 
-    it('should sit between the playlist rows and Start', () => {
+    it('should sit between the playlist rows and Start, in that order', () => {
       renderLanding();
 
-      const box = keepYearlessBox();
       const start = screen.getByRole('button', { name: COPY.landing.start });
       const add = screen.getByRole('button', { name: COPY.landing.addRow });
 
       // `compareDocumentPosition`: FOLLOWING means the argument comes after the node.
-      expect(add.compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-      expect(box.compareDocumentPosition(start) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(
+        add.compareDocumentPosition(skipYearlessBox()) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(
+        skipYearlessBox().compareDocumentPosition(skipUnconfirmedBox()) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(
+        skipUnconfirmedBox().compareDocumentPosition(start) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
     });
 
-    it('should call onKeepYearlessChange when toggled', () => {
-      const { onKeepYearlessChange, onSubmit } = renderLanding();
+    it('should report each box on its own callback, never as a press of Start', () => {
+      const { onSkipYearlessChange, onSkipUnconfirmedChange, onSubmit } = renderLanding({
+        skipYearless: true,
+        skipUnconfirmed: false,
+      });
 
-      fireEvent.click(keepYearlessBox());
-      expect(onKeepYearlessChange).toHaveBeenCalledExactlyOnceWith(true);
-      // Toggling is not a press of Start.
+      fireEvent.click(skipYearlessBox());
+      expect(onSkipYearlessChange).toHaveBeenCalledExactlyOnceWith(false);
+      expect(onSkipUnconfirmedChange).not.toHaveBeenCalled();
+
+      fireEvent.click(skipUnconfirmedBox());
+      expect(onSkipUnconfirmedChange).toHaveBeenCalledExactlyOnceWith(true);
+      expect(onSkipYearlessChange).toHaveBeenCalledOnce();
+
       expect(onSubmit).not.toHaveBeenCalled();
     });
 
-    it('should report false when a checked box is toggled off', () => {
-      const { onKeepYearlessChange } = renderLanding({ keepYearless: true });
-
-      fireEvent.click(keepYearlessBox());
-      expect(onKeepYearlessChange).toHaveBeenCalledExactlyOnceWith(false);
-    });
-
-    it('should reflect the keepYearless prop', () => {
+    it('should reflect the props', () => {
+      const props = { onSubmit: vi.fn(), onBack: vi.fn(), isLoading: false };
       const { rerender } = render(
         <LandingScreen
-          onSubmit={vi.fn()}
-          onBack={vi.fn()}
-          isLoading={false}
-          keepYearless={false}
-          onKeepYearlessChange={vi.fn()}
+          {...props}
+          skipYearless={false}
+          onSkipYearlessChange={vi.fn()}
+          skipUnconfirmed
+          onSkipUnconfirmedChange={vi.fn()}
         />,
       );
-      expect(keepYearlessBox().checked).toBe(false);
+      expect(skipYearlessBox().checked).toBe(false);
+      expect(skipUnconfirmedBox().checked).toBe(true);
 
       rerender(
         <LandingScreen
-          onSubmit={vi.fn()}
-          onBack={vi.fn()}
-          isLoading={false}
-          keepYearless
-          onKeepYearlessChange={vi.fn()}
+          {...props}
+          skipYearless
+          onSkipYearlessChange={vi.fn()}
+          skipUnconfirmed={false}
+          onSkipUnconfirmedChange={vi.fn()}
         />,
       );
-      expect(keepYearlessBox().checked).toBe(true);
+      expect(skipYearlessBox().checked).toBe(true);
+      expect(skipUnconfirmedBox().checked).toBe(false);
     });
 
-    it('should disable the checkbox while loading', () => {
+    it('should disable both while loading', () => {
       renderLanding({ isLoading: true });
 
-      expect(keepYearlessBox().disabled).toBe(true);
+      expect(skipYearlessBox().disabled).toBe(true);
+      expect(skipUnconfirmedBox().disabled).toBe(true);
     });
 
     it('should carry focus-visible:focus-ring and touch-target', () => {
       // The ring on the INPUT, which is what takes focus; the 44px minimum on the LABEL, which is
-      // the press area -- on the input it would draw a 44px native box.
+      // the press area -- on the input it would grow the painted box.
       renderLanding();
 
-      const box = keepYearlessBox();
-      expect(box.className).toContain('focus-visible:focus-ring');
-      // The box's colour is the accent TOKEN (`--color-accent`), the app's first `accent-*` utility:
-      // a misspelt token would emit no rule at all, so the class is pinned here as the canary.
-      expect(box.className).toContain('accent-accent');
-      expect(box.closest('label')?.className).toContain('touch-target');
-      // The preflight trap: the type scale is on the caption, never on the label, because an
-      // `<input>` inherits its font from the wrapper.
-      expect(box.closest('label')?.className).not.toContain('text-sm');
-      expect(screen.getByText(COPY.landing.keepYearless).className).toContain('text-sm');
+      for (const box of [skipYearlessBox(), skipUnconfirmedBox()]) {
+        expect(box.className).toContain('focus-visible:focus-ring');
+        // The painted box: the native one is replaced, and its checked fill is the accent TOKEN. A
+        // misspelt token would emit no rule at all, so the classes are pinned here as the canary.
+        expect(box.className).toContain('appearance-none');
+        expect(box.className).toContain('checked:bg-accent');
+        expect(box.closest('label')?.className).toContain('touch-target');
+        // The preflight trap: the type scale is on the caption, never on the label, because an
+        // `<input>` inherits its font from the wrapper.
+        expect(box.closest('label')?.className).not.toContain('text-sm');
+      }
+      expect(screen.getByText(COPY.landing.skipYearless).className).toContain('text-sm');
+      expect(screen.getByText(COPY.landing.skipUnconfirmed).className).toContain('text-sm');
     });
 
     it('should keep pt-8 and gap-8', () => {
       // The equal-height contract with the welcome screen and the column's one standard margin,
-      // re-read with the checkbox on screen: it is IN the form, so neither number had to move.
-      const { container } = renderLanding({ keepYearless: true });
+      // re-read with the options on screen: they are IN the form, so neither number had to move.
+      const { container } = renderLanding({ skipUnconfirmed: true });
 
       const main = container.querySelector('main');
       expect(main?.className).toContain('pt-8');
@@ -841,9 +872,9 @@ describe('LandingScreen', () => {
     pressAdd();
 
     const interactive = [...container.querySelectorAll('button, input')];
-    // Back (2026-09-18), two inputs, two removes, the "+", the keep-yearless checkbox
-    // (2026-09-30), Start, and one button per suggestion.
-    expect(interactive).toHaveLength(1 + 2 + 2 + 1 + 1 + 1 + SUGGESTED_PLAYLISTS.length);
+    // Back (2026-09-18), two inputs, two removes, the "+", the two deal options (2026-10-01),
+    // Start, and one button per suggestion.
+    expect(interactive).toHaveLength(1 + 2 + 2 + 1 + 2 + 1 + SUGGESTED_PLAYLISTS.length);
 
     for (const element of interactive) {
       expect(element.className).toContain('focus-visible:focus-ring');
@@ -885,11 +916,11 @@ describe('LandingScreen', () => {
       .replace(COPYRIGHT_NOTICE, '')
       .replace(COPY.footer.authorUrl, '');
 
-    // The keep-yearless checkbox's caption and hint (2026-09-30) are READ by this audit, asserted
-    // first so the proxy below cannot pass them by omission -- the 2026-09-19 `download` lesson.
-    // Neither is subtracted: neither carries anything year-shaped, and that is the point.
-    expect(text).toContain(COPY.landing.keepYearless);
-    expect(text).toContain(COPY.landing.keepYearlessHint);
+    // The two deal options' captions (2026-10-01) are READ by this audit, asserted first so the
+    // proxy below cannot pass them by omission -- the 2026-09-19 `download` lesson. Neither is
+    // subtracted: neither carries anything year-shaped, and that is the point.
+    expect(text).toContain(COPY.landing.skipYearless);
+    expect(text).toContain(COPY.landing.skipUnconfirmed);
 
     for (const card of fixtureDeck) {
       expect(text).not.toContain(card.title);
@@ -1153,10 +1184,10 @@ describe('LandingScreen', () => {
       const { container } = renderLanding({ savedPlaylists: SAVED });
 
       const interactive = [...container.querySelectorAll('button, input')];
-      // Back (2026-09-18), one row's input, the "+", the keep-yearless checkbox (2026-09-30), Start,
+      // Back (2026-09-18), one row's input, the "+", the two deal options (2026-10-01), Start,
       // two buttons per saved row, and one per suggestion.
       expect(interactive).toHaveLength(
-        1 + 1 + 1 + 1 + 1 + SAVED.length * 2 + SUGGESTED_PLAYLISTS.length,
+        1 + 1 + 1 + 2 + 1 + SAVED.length * 2 + SUGGESTED_PLAYLISTS.length,
       );
 
       for (const element of interactive) {
@@ -1444,8 +1475,10 @@ describe('LandingScreen in another language', () => {
           onSubmit={vi.fn()}
           onBack={vi.fn()}
           isLoading={false}
-          keepYearless={false}
-          onKeepYearlessChange={vi.fn()}
+          skipYearless
+          onSkipYearlessChange={vi.fn()}
+          skipUnconfirmed={false}
+          onSkipUnconfirmedChange={vi.fn()}
           {...(props.errorCode ? { errorCode: props.errorCode } : {})}
           savedPlaylists={props.savedPlaylists ?? []}
           onRemoveSaved={vi.fn()}

@@ -62,6 +62,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 
+import { OPTION_GROUP_CLASS_NAME, OptionCheckbox } from './OptionCheckbox';
 import { Spinner } from './Spinner';
 import { useCopy } from '../hooks/useLocale';
 import { buildDeckLink } from '../game/deck-link';
@@ -251,6 +252,15 @@ export function DeckActions({
   const isDeckResolved = pendingYearCount === 0;
 
   /**
+   * "Leave unconfirmed years blank" (2026-10-01): print a card whose final year no second provider
+   * confirmed with its year area EMPTY, for the player to write in by hand -- the same blank a kept
+   * yearless card already prints with. Local state, default OFF, and NOT remembered: it is a choice
+   * about the next file, not about the game, so it resets with the panel. The wait view replaces the
+   * box, so the wait's auto-export and "Print so far" use the value set BEFORE Print was pressed.
+   */
+  const [blankUnconfirmed, setBlankUnconfirmed] = useState(false);
+
+  /**
    * Whether the player has ASKED to print. Not whether they are waiting -- see below.
    *
    * A boolean rather than a fourth `PdfExportStatus`, deliberately: `usePdfExport` describes work
@@ -342,7 +352,7 @@ export function DeckActions({
       return;
     }
 
-    exportDeck(deck, playlistName);
+    exportDeck(deck, playlistName, { blankUnconfirmed });
   };
 
   /**
@@ -378,8 +388,8 @@ export function DeckActions({
     if (!hasAskedToPrint || pendingYearCount > 0 || hasAutoExportedRef.current) return;
 
     hasAutoExportedRef.current = true;
-    exportDeck(deck, playlistName);
-  }, [hasAskedToPrint, pendingYearCount, exportDeck, deck, playlistName]);
+    exportDeck(deck, playlistName, { blankUnconfirmed });
+  }, [hasAskedToPrint, pendingYearCount, exportDeck, deck, playlistName, blankUnconfirmed]);
 
   /**
    * The wait, shaped like the screen that dealt the deck.
@@ -445,7 +455,7 @@ export function DeckActions({
           <button
             type="button"
             onClick={() => {
-              exportDeck(deck, playlistName);
+              exportDeck(deck, playlistName, { blankUnconfirmed });
             }}
             // Disabled only while working: `exportDeck` bumps its own generation counter, so a
             // second press would abandon the document the first one is half-way through.
@@ -516,6 +526,20 @@ export function DeckActions({
       >
         {isPlaylistSaved ? copy.deckActions.saved : copy.deckActions.save}
       </button>
+
+      {/*
+        The print option sits directly above the press it qualifies, in the same box and control the
+        picker's deal options use (`OptionCheckbox.tsx`). Disabled while an export is working, so the
+        file being built cannot disagree with the box.
+      */}
+      <div className={OPTION_GROUP_CLASS_NAME}>
+        <OptionCheckbox
+          label={copy.deckActions.blankUnconfirmed}
+          checked={blankUnconfirmed}
+          disabled={pdf.status === 'working'}
+          onChange={setBlankUnconfirmed}
+        />
+      </div>
 
       <button
         type="button"
