@@ -1165,8 +1165,11 @@ suppressed**: desktop and mobile-Chrome back now open the confirmation too, and 
 no user-agent sniff. Full reasoning in [`docs/architecture.md`](./architecture.md) §3; **every
 device check is still outstanding** and cannot be run in Chrome.
 
-**THE STORE SHELL IS A FOURTH TOP-LEVEL TREE, AND AS OF 2026-09-19 THE TREE IS NOT THERE YET — grepping
-for `android/` and finding nothing is the CORRECT reading of this repo, not a stale doc.**
+**THE STORE SHELL IS A FOURTH TOP-LEVEL TREE.** _Updated 2026-10-01: `bubblewrap init` created
+`android/` on 2026-09-20, and **only `android/twa-manifest.json` is tracked** — the generated Gradle
+project, `manifest-checksum.txt`, `assetlinks.json`, the keystore and the build artefacts are each
+named in `.gitignore`. The rest of this paragraph is the 2026-09-19 state, kept as history: on that
+day the tree did not exist, and grepping for it and finding nothing was the correct reading._
 [`docs/plans/plan.google-play-shell.md`](./plans/plan.google-play-shell.md) packages the deployed
 PWA as a Trusted Web Activity, and its steps 1–5 landed on 2026-09-19 while steps 6–18 did not.
 **It is FROZEN as of 2026-09-19, along with the back-button plan, and
@@ -1188,9 +1191,9 @@ stay tracked** — it is what makes a release reproducible, and it is the second
 id. **The rest of the generated project need not be tracked** — answered 2026-09-19 by reading the
 installed CLI: `bubblewrap update` DELETES `settings.gradle`, `build.gradle`, `gradlew`, `gradle/` and
 `app/` outright and rebuilds them from the config plus re-fetched icons, so committing them would only
-commit output. Their ignore entries land at step 6, when the files first exist; today `.gitignore`
-names `android/build/`, `android/app/build/` and `android/.gradle/` **one at a time and never widens to
-`android/`** — the widening is the edit that silently untracks the config. **The trap that follows
+commit output. Their ignore entries landed on 2026-09-20, when the files first existed; `.gitignore`
+names each regenerated path (`android/app/`, `android/gradle/`, `android/gradlew`, …) **one at a time
+and never widens to `android/`** — the widening is the edit that silently untracks the config. **The trap that follows
 from the same reading:** `app/build.gradle` is regenerated too, so step 8's `targetSdkVersion` bump
 must be expressed in `twa-manifest.json` — hand-edit it and the next `update` discards it, and the
 symptom is a Play upload rejected months later. See `docs/agent_findings.md` (2026-09-19).

@@ -478,13 +478,16 @@ src/App.tsx             THE container. The only caller of useGameSession(). Swit
 src/components/
   WelcomeScreen.tsx     The front door (2026-09-18): tagline, three steps, one big button
                         into the picker, and the printable year-cards PDF. Count-free
-  LandingScreen.tsx     URL input, inline validation, the suggested playlists, and
+  LandingScreen.tsx     1..5 playlist rows (a "+" until MAX_DECK_PLAYLISTS, a ✕ per row,
+                        per-row errors), the suggested playlists, and
                         "Your playlists" — the saved library, above the suggestions.
                         A Back button (2026-09-18) top-left returns to WelcomeScreen
                         through the container's flag; a <button>, not an anchor
   PreparingScreen.tsx   The card-1 gate. COUNT-ONLY
   Hud.tsx               Cards remaining + playlist name. Counts only, no Exit
-  NoticeBanner.tsx      truncated / skippedCount / yearLookupsUnavailable. Fades out 10
+  NoticeBanner.tsx      Six notices: truncated / skippedCount / failed playlists /
+                        combined deck / yearLookupsUnavailable / start card missing
+                        (the multi-playlist pair since 2026-08-07). Fades out 10
                         visible seconds after the deal (2026-10-01); the clock is App's
                         (useTimedDismiss), since the banner is remounted on the
                         preparing-to-game hand-off. On the game screen it floats above
@@ -663,9 +666,9 @@ Three features that add to the app without changing how a game is played, and al
 
 ---
 
-### The combined deck — 1..5 playlists (multi-playlist, core half built 2026-08-07)
+### The combined deck — 1..5 playlists (multi-playlist, both plans built 2026-08-07)
 
-A deck is dealt from **up to five playlists**, merged in the browser. `plan.multi-playlist-core.md` built everything below React; `plan.multi-playlist-ui.md` builds the landing rows, the fan-out hook and the container wiring on top of it.
+A deck is dealt from **up to five playlists**, merged in the browser. `plan.multi-playlist-core.md` built everything below React; `plan.multi-playlist-ui.md` built the landing rows, the fan-out hook (`usePlaylist.request(urls)`, one `AbortController` over every row's request) and the container wiring on top of it. A suggestion or a saved deck pressed with nothing selected still submits at once and **replaces** the typed rows with exactly what it deals.
 
 ```
   five raw URLs, in row order
@@ -699,7 +702,7 @@ A deck is dealt from **up to five playlists**, merged in the browser. `plan.mult
 
 **A playlist that fails is dropped with a count; only a total failure blocks Start.** Same non-blocking-notice pattern as `truncated` and `skippedCount` — one dead editorial playlist must not cost a five-playlist deck. A total failure reports the **first** row's code, which is the only reason the merge insists on row order: the landing screen has one error slot, and it should describe the first thing that went wrong. **No new `StartFailureCode`** — a partial failure is a notice, and a total failure is already exactly one of the codes `fetchPlaylist` returns, so `messages.ts`'s exhaustive `Record` is untouched by the whole feature.
 
-**One `deckLabel()` names the deck everywhere**: the first playlist's name, then `"<first> +N more"`. The HUD, the end screen, the PDF filename and the library row all read it, so they cannot disagree. It is playlist-level data only — the same class of string the suggestion buttons already render. Through `pdfFileName` it slugs cleanly: `jitster-rock-classics-2-more.pdf`.
+**One `deckLabel()` names the deck everywhere**: the first playlist's name, then `"<first> +N playlists"` (`"+N more"` until 2026-09-29). The HUD, the end screen, the PDF filename and the library row all read it, so they cannot disagree. It is playlist-level data only — the same class of string the suggestion buttons already render. Through `pdfFileName` it slugs cleanly: `jitster-rock-classics-2-playlists.pdf`.
 
 **The share link's `playlist` param is a comma list, and a single id parses identically** — so every link already shared keeps working with no back-compat branch. A comma is a legal query-value character, so nothing is escaped. Repeated `playlist` params are also accepted via `getAll`, one line of tolerance for a link a chat client reshaped; the builder only ever emits the comma form, so the round trip stays exact. Every element goes through `shared/spotify-url.ts`, so an album link **in any position** rejects the whole link rather than quietly dealing a smaller deck. **Over five distinct ids is a rejection, not a truncation** (`null`, i.e. the plain landing screen with no error): truncating would deal a deck the link did not describe, with a seed that makes it look deliberate. The dedupe runs **before** the cap check, so a link repeating one id is not punished for it.
 

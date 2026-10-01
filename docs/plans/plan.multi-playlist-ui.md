@@ -229,7 +229,7 @@ buttons already fill.
         `deck-merge` module), the number of `/api/playlist` requests a five-row submit makes under React
         19 StrictMode, and the card count a real five-playlist deck merges to after the dedupe.
 
-    **Measured 2026-08-07** (these still owe an `agent_findings.md` entry — see Documentation Updates):
+    **Measured 2026-08-07** (recorded in `agent_findings.md`, 2026-08-07, on 2026-10-01):
 
     - **Bundle, initial path: +3.10 kB raw / +0.77 kB gzip** on `index-*.js` (210.00 → 213.10 kB;
       65.94 → 66.71 kB gzip), plus **+0.16 kB raw / +0.04 kB gzip** of CSS. That is the whole
@@ -330,24 +330,24 @@ buttons already fill.
 
 ## Documentation Updates
 
-- [ ] `docs/architecture.md` §3 — the landing screen's row model, the parallel fan-out and its single
+- [x] `docs/architecture.md` §3 — the landing screen's row model, the parallel fan-out and its single
       `AbortController`, and the notice list going from three notices to five.
-- [ ] `docs/development.md` §5 — a new **"Multi-playlist"** table in the same shape as the Phase 8 one,
+- [x] `docs/development.md` §5 — a new **"Multi-playlist"** table in the same shape as the Phase 8 one,
       every row Pending, with at least: five real playlists dealt on a deployment; one private playlist
       among five (the notice, not a block); a five-playlist share link pasted into a clean profile; a
       saved multi-deck surviving a reload and playing; a multi-playlist PDF's filename and header; the
       rows and the "+" on a 360 px screen; and the keyboard path through five rows, the add and the
       removes. jsdom computes no layout and has no accessibility tree, so the last two cannot be closed
       locally by anything.
-- [ ] `docs/development.md` §8 — add what this feature cannot verify locally: the real wall clock of a
+- [x] `docs/development.md` §8 — add what this feature cannot verify locally: the real wall clock of a
       ~500-card year crawl, and whether five parallel `/api/playlist` requests are ever rate-limited or
       queued in a real browser.
-- [ ] `docs/agent_findings.md` — a dated (2026-08-07) entry with the three measurements from step 7 and
-      anything that surprised the implementer.
-- [ ] `AGENTS.md` — extend plan 1's bullet with the UI half: the row cap, the two new notices, that the
+- [x] `docs/agent_findings.md` — a dated (2026-08-07) entry with the three measurements from step 7 and
+      anything that surprised the implementer. _Done 2026-10-01, together with the five items around it._
+- [x] `AGENTS.md` — extend plan 1's bullet with the UI half: the row cap, the two new notices, that the
       HUD/end screen/PDF all read one `deckLabel()`, and that a suggestion or saved deck still submits
       instantly and therefore replaces typed rows.
-- [ ] `docs/plans/plan.md` §5 — tick the multi-playlist item once both plans are done, in the same voice
+- [x] `docs/plans/plan.md` §5 — tick the multi-playlist item once both plans are done, in the same voice
       as the existing Phase 8 entries, and name what is left as manual.
 
 ---

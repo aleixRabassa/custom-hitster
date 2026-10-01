@@ -636,7 +636,11 @@ what makes the game's payoff audible at all.
 
 ### Post-Phase-8
 
-- [ ] **Multi-playlist — a deck from up to 5 playlists.** Two plans:
+- [x] **Multi-playlist — a deck from up to 5 playlists.** Code complete (2026-08-07); what is left is
+      manual — the seven Pending rows of [`../development.md`](../development.md) §5 "Multi-playlist"
+      (five real playlists on a deployment, a private one among five, a share link in a clean
+      profile, a saved deck across a reload, the PDF filename, 360px, the keyboard path) and §8's
+      ~500-card crawl wall clock. Two plans:
       [`plan.multi-playlist-core.md`](./plan.multi-playlist-core.md) (the merge module, the widened
       `GameState`, both v2 storage formats, the multi-id link — **built 2026-08-07**) and
       [`plan.multi-playlist-ui.md`](./plan.multi-playlist-ui.md) (the landing rows, the fan-out hook,
