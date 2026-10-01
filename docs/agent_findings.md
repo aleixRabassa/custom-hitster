@@ -2379,3 +2379,19 @@ as final answers with nothing skipped: 805 `high`, 164 `low`, 31 `none`. A hand 
 - **A fixture id is a real track id.** `noYearCard`'s id is "Smells Like Teen Spirit", which is in Rock Party, so
   `App.test.tsx` mocks `loadPreloadedYears` to an empty table it controls; without that, seven tests broke.
 - **The JSON must be a dynamic import**: statically it took the entry chunk from 226 kB to 395 kB.
+
+## 2026-10-01 — `VITE_PRELOADED_YEARS=off`: a build-time switch for load tests
+
+Rule: AGENTS.md / decisions.md § Decks. `usePlaylist` passes `import.meta.env.VITE_PRELOADED_YEARS` to
+`loadPreloadedYears(flag)`, which returns the empty table (no chunk fetch) when the flag is exactly `off`; anything
+else leaves it on.
+
+- **It is build time.** Vite inlines `import.meta.env.VITE_*`, so on Vercel the variable must be set for the
+  environment _before_ the deploy that should honour it; changing it in the dashboard does nothing until a
+  redeploy. An open tab keeps the old bundle until its service worker updates.
+- **The env read cannot live in `preloaded-years.ts`**: `scripts/preload-years.ts` imports its types, so the
+  module is in `tsconfig.api.json`'s program (it includes `scripts/`), which has no `vite/client` types —
+  `import.meta.env` there is `TS2339` in `pnpm typecheck:api` only. The hook reads it; the module takes the flag.
+- **The load still meets the server caches**: tracks already resolved come back from `mbyear:` / `yearprov:` in
+  Redis, so disabling the preload stresses the endpoint and Redis, not necessarily MusicBrainz, Deezer or iTunes.
+- `src/vite-env.d.ts` is new and types the variable; `VITE_PRELOADED_YEARS` is the only `VITE_` variable.

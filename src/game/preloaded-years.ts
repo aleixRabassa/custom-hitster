@@ -80,6 +80,21 @@ export interface PreloadedYearsTable {
 
 const EMPTY_TABLE: PreloadedYearsTable = { tracks: {} };
 
+/** The one value of `VITE_PRELOADED_YEARS` that turns the table off. */
+export const PRELOADED_YEARS_OFF = 'off';
+
+/**
+ * Whether a deal reads the table, from the raw `VITE_PRELOADED_YEARS` (2026-10-01).
+ *
+ * A LOAD-TEST SWITCH, not a feature: with the table off, every card of a suggested playlist is
+ * asked of `/api/year` again, which is the traffic a load test wants to see. ONLY THE EXACT
+ * LITERAL `off` disables it; unset, empty, `false` or a typo all leave it on, because a mistyped
+ * value in the Vercel dashboard must never silently turn the preload off for every player.
+ */
+export function isPreloadEnabled(flag: string | undefined): boolean {
+  return flag !== PRELOADED_YEARS_OFF;
+}
+
 let tablePromise: Promise<PreloadedYearsTable> | undefined;
 
 /**
@@ -92,8 +107,17 @@ let tablePromise: Promise<PreloadedYearsTable> | undefined;
  * installed, a deploy that removed it) is an EMPTY table, which is exactly the behaviour before
  * the file existed -- the crawl asks for every card. Not cached on failure, so the next deal tries
  * again.
+ *
+ * `flag` is the raw `VITE_PRELOADED_YEARS`; at `off` this is the empty table at once and the chunk
+ * is never fetched (`isPreloadEnabled`). The caller reads `import.meta.env`, not this module:
+ * `scripts/preload-years.ts` imports its types, which puts it in `tsconfig.api.json`'s program,
+ * and that program has no Vite types. Vite inlines the variable at BUILD time, so flipping it on
+ * Vercel takes a redeploy, and a tab still on the old build keeps the old behaviour until its
+ * service worker updates.
  */
-export function loadPreloadedYears(): Promise<PreloadedYearsTable> {
+export function loadPreloadedYears(flag: string | undefined): Promise<PreloadedYearsTable> {
+  if (!isPreloadEnabled(flag)) return Promise.resolve(EMPTY_TABLE);
+
   tablePromise ??= import('./preloaded-years.json').then(
     (module) => ({ tracks: module.default.tracks }),
     () => {

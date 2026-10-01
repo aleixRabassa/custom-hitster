@@ -621,6 +621,17 @@ MusicBrainz budget for minutes and can overwrite years they reviewed. The chart 
 España, PEGAO, RapCaviar) churn weekly, so their part of the file ages fastest; that costs only requests, never a
 wrong year. `preloaded-years.test.ts` fails when the file's playlists stop matching `SUGGESTED_PLAYLISTS`.
 
+**`VITE_PRELOADED_YEARS=off` turns the table off, for load tests in production (2026-10-01).** With the preload on,
+a suggested deck sends `/api/year` almost nothing, so the developer asked for a switch to put that traffic back.
+`loadPreloadedYears` resolves to the empty table without fetching the chunk — exactly the behaviour before the
+file existed — and `usePlaylist` is untouched. **Only the exact literal `off` disables it** (`isPreloadEnabled`):
+unset, empty, `false` or a typo leave it on, because a mistyped value in the Vercel dashboard must never silently
+cost every player the preload. It is a `VITE_` variable, so Vite **inlines it at build time**: flipping it is a
+redeploy, not a runtime toggle, and a tab already open keeps its old build until the service worker updates (it
+waits, it never skips waiting). A runtime switch (a URL parameter or a server-side flag) was not built. The server
+caches (`mbyear:`, `yearprov:`) still answer tracks already resolved, so with the table off the load lands on the
+year endpoint and Redis, and on the providers only for tracks the caches do not hold.
+
 ## Deck actions and the PDF export
 
 **THE DECK'S PRINTED CARD IS 48.9722 mm IN A 4 × 4 GRID AS OF 2026-09-21, AND THAT REVERSES THE

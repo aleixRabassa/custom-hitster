@@ -8,7 +8,12 @@
 import { describe, expect, it } from 'vitest';
 
 import PRELOADED_YEARS from './preloaded-years.json';
-import { applyPreloadedYears, loadPreloadedYears } from './preloaded-years';
+import {
+  PRELOADED_YEARS_OFF,
+  applyPreloadedYears,
+  isPreloadEnabled,
+  loadPreloadedYears,
+} from './preloaded-years';
 import { gameReducer, initialGameState } from './reducer';
 import { SUGGESTED_PLAYLISTS } from '../components/LandingScreen';
 import type { Card } from '../../shared/types';
@@ -98,12 +103,29 @@ describe('applyPreloadedYears', () => {
   });
 });
 
+describe('isPreloadEnabled', () => {
+  it('should be off only for the exact literal "off"', () => {
+    expect(isPreloadEnabled(PRELOADED_YEARS_OFF)).toBe(false);
+  });
+
+  it.each([undefined, '', 'on', 'true', 'false', '0', 'OFF', ' off', 'of'])(
+    'should stay on for %j, so a mistyped value never disables it',
+    (flag) => {
+      expect(isPreloadEnabled(flag)).toBe(true);
+    },
+  );
+});
+
 describe('loadPreloadedYears', () => {
   it('should resolve to the bundled tracks, and to the same promise on a second call', async () => {
-    const first = loadPreloadedYears();
+    const first = loadPreloadedYears(undefined);
 
-    expect(loadPreloadedYears()).toBe(first);
+    expect(loadPreloadedYears(undefined)).toBe(first);
     expect((await first).tracks).toEqual(PRELOADED_YEARS.tracks);
+  });
+
+  it('should resolve to an empty table when the flag is off', async () => {
+    expect((await loadPreloadedYears(PRELOADED_YEARS_OFF)).tracks).toEqual({});
   });
 });
 

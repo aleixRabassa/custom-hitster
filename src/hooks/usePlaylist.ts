@@ -148,8 +148,9 @@ export function usePlaylist(options: UsePlaylistOptions = {}): UsePlaylistResult
       // an `ok: false` outcome, which is exactly what the merge wants.
       //
       // The preloaded years' chunk loads alongside them, so it costs no wall clock on a deal
-      // (`preloaded-years.ts`). It never rejects: a failed load is an empty table.
-      const tableLoad = loadPreloadedYears();
+      // (`preloaded-years.ts`). It never rejects: a failed load is an empty table, and so is
+      // `VITE_PRELOADED_YEARS=off`, the load-test switch.
+      const tableLoad = loadPreloadedYears(import.meta.env.VITE_PRELOADED_YEARS);
       const outcomes = await Promise.all(
         urls.map((url) => fetchPlaylist(url, { fetchImpl, signal: controller.signal })),
       );
