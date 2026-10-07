@@ -100,7 +100,7 @@ Measured 2026-08-05: a real `spotify.link` chain is a **single 307** straight to
 ```
 
 - `cards[].artist` is the artist string **verbatim**, never split — the separators Spotify joins with also occur inside real artist names ("Earth, Wind & Fire"). See `shared/artists.ts`.
-- `cards[].previewUrl` is **omitted** when Spotify supplies no preview (~0.5% of tracks). Phase 4 disables Play/Pause and Restart for such a card; the QR still works.
+- `cards[].previewUrl` is **omitted** when Spotify supplies no preview (~0.5% of tracks). The game disables Play/Pause for such a card; the QR still works.
 - `cards[].isPlayable: false` tracks are **kept** in the deck. The QR code always works, so an unplayable track is still a playable card.
 - `cards[].year` / `yearConfidence` are **never set here** — the embed payload has no release date at track level. `/api/year` fills them.
 - `truncated: true` means the deck **may** be incomplete (exactly `MAX_EMBED_TRACKS` came back). It cannot mean more than "may": there is no pagination signal to check against. Phase 6 renders a non-blocking warning.
@@ -173,7 +173,7 @@ Resolves ONE track's original release year, with a cache in front. The client se
 
 | Field          | Notes                                                                                                                                                                                                                    |
 | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `year`         | The original release year, or `null` when nothing could be resolved. Phase 6 lets the player fill a null in by hand.                                                                                                     |
+| `year`         | The original release year, or `null` when nothing could be resolved. The game drops such a card, or keeps it as "Year unknown" when the session keeps yearless cards.                                                    |
 | `confidence`   | The weakest of two axes: the rung (① `official-release` → `high`, ② and ③ → `low`) and the artist match (exact → `high`, loosened → `low`). So `low` means "worth checking" and `high` requires both. `none` is no year. |
 | `source`       | `release-group` for rungs ① and ②, `recording` for rung ③. **Omitted** when `year` is null.                                                                                                                              |
 | `reason`       | `no-candidates` (the query matched nothing) or `no-dated-candidates` (matches existed, none dated). **Omitted** when a year was resolved. The two point at different fixes.                                              |
@@ -320,6 +320,7 @@ api/
   year.ts                       GET /api/year     — year resolution
   _lib/                         NOT routed — server-only helpers
     spotify-embed.ts              the embed adapter (all scraping lives here)
+    short-link.ts                 spotify.link redirect resolver: manual hops, exact host allow-list
     musicbrainz.ts                the MusicBrainz adapter (all HTTP + response shape)
     resolve-year.ts               cache -> gate -> strict -> relaxed, orchestrated
     musicbrainz-provider.ts       resolveYear() wrapped whole as one ProviderLookup

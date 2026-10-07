@@ -217,8 +217,6 @@ cache, per-instance gate, sequential crawl at 1.1 s.
   `DEFAULT_MAX_WAIT_MS`, so it gets the permit. 429 back-pressure is multi-user only — hence unit-tested.
 - One genuine `502 upstream-unavailable` (`Sunflower - Spider-Man: Into the Spider-Verse`) was retried
   to `2018/low`.
-- With `MUSICBRAINZ_USER_AGENT` deleted the deck still started and spent **exactly one** lookup before
-  halting the crawl.
 
 ## 2026-08-05 — Two Vitest 4 gotchas that cost a whole 150 s harness run
 
@@ -231,8 +229,8 @@ cache, per-instance gate, sequential crawl at 1.1 s.
 ## 2026-08-05 — The remix fallback: a third resolution tier, measured at 3 of 5 recovered
 
 `stripRemixSuffix()` (`shared/year.ts`) drops a trailing remix segment (`- Remix`, `(Bad Bunny Remix)`,
-`- Bootleg`, `- VIP Mix`, `- Remix Version`). `resolveYear()` uses it **only when strict and relaxed
-both returned `year: null`**, then re-queries with the base title. It is not part of
+`- Bootleg`, `- VIP Mix`, `- Remix Version`). `resolveYear()` uses it **only when the title as given
+returned `year: null`**, then re-queries with the base title. It is not part of
 `cleanTrackTitle()` because a remix is often a separately credited recording MusicBrainz knows under
 its full title. Pinned by tests:
 
@@ -352,10 +350,11 @@ with a native activation meaning (Space, Enter) double-fires against whatever is
 
 ## 2026-08-05 — Absolutely positioned siblings paint over an in-flow sibling (card stack)
 
-Positioned elements (`position: absolute`, `z-index: auto`) paint in a later layer than in-flow
-content regardless of DOM order, so the stack's backs covered the in-flow card. Fix: `isolate` on the
-container plus `-z-10` on the back(s); without `isolate` the negative z-index escapes and the back
-vanishes behind the screen background. Still how `CardStack.tsx` is layered.
+Positioned elements (`position: absolute`, `z-index: auto`) paint in a later layer than an in-flow
+sibling that is not itself a stacking context, so the stack's backs covered the in-flow card. Fix:
+`isolate` on the container plus `-z-10` on the back(s); without `isolate` the negative z-index escapes
+and the back vanishes behind the screen background. Still how `CardStack.tsx` is layered. (An in-flow
+sibling that IS a stacking context paints in the same step, by tree order — see 2026-09-21.)
 
 ## 2026-08-05 — A button inside a tappable card flips it: the pointer twin of the Space-on-a-button bug
 
@@ -466,15 +465,12 @@ reproduced all 16 of Phase 7's ratios to the digit first.
 | `--color-fg-muted` (placeholder)       | `--color-surface`              | 5.54     | pass                                   |
 | `--color-fg` at `--opacity-disabled`   | `--color-surface`              | 6.54     | pass                                   |
 | `--color-fg` at `--opacity-disabled`   | `--color-surface-raised`       | 5.94     | pass                                   |
-| _1.4.3 — the HIDDEN card face_         |                                |          |                                        |
-| `--color-fg` ("Scan to play…")         | `--color-surface`              | 16.42    | pass                                   |
 | _1.4.3 — the REVEAL card face_         |                                |          |                                        |
 | **`--color-fg-year` (the year, 60px)** | `--color-surface-raised`       | 11.30    | pass — **new**, needs 3:1 (large)      |
 | `--color-fg` (title, 20px semibold)    | `--color-surface-raised`       | 13.86    | pass                                   |
 | `--color-fg-secondary` (artist, 16px)  | `--color-surface-raised`       | 5.83     | pass                                   |
 | `--color-fg-heading` ("Year unknown")  | `--color-surface-raised`       | 10.20    | pass                                   |
 | `--color-warning` ("Unconfirmed year") | `--color-surface-raised`       | 10.45    | pass                                   |
-| `--color-fg-decorative` (`····`)       | `--color-surface-raised`       | 1.94     | **exempt** — `aria-hidden` decoration  |
 | _1.4.3 — filled controls_              |                                |          |                                        |
 | `--color-on-accent`                    | `--color-accent`               | 5.40     | pass                                   |
 | `--color-on-accent`                    | `--color-accent-hover`         | 8.03     | pass                                   |
@@ -498,19 +494,15 @@ reproduced all 16 of Phase 7's ratios to the digit first.
 | `--color-ring-from` (green)            | `--color-surface-raised`       | 11.30    | pass                                   |
 | `--color-ring-via` (cyan)              | `--color-surface-raised`       | 9.99     | pass                                   |
 | `--color-ring-to` (magenta)            | `--color-surface-raised`       | 4.13     | pass — the worst of the three stops    |
-| `--color-ring-dim` (the backs)         | `--color-page`                 | 4.23     | pass — was **1.31**, see below         |
 
-Since this table, "Scan to play" moved off the hidden face to below the card in `text-fg-muted` on
-the page (the 6.12 row); the accent-as-text pair is in the 2026-08-12 entry (5.13:1).
+"Scan to play" is rendered below the card in `text-fg-muted` on the page (the 6.12 row); the
+accent-as-text pair is in the 2026-08-12 entry (5.13:1).
 
 - **Focus ring on danger, 2.65:1, is exempt, and the obvious fix is wrong.** `focus-ring` is a 2px
   outline at `outline-offset: 2px`, so it is painted in the gap outside the button, over the dialog's
   `--color-surface` (16.42:1); the danger fill is never adjacent. The ring is one colour app-wide, and
   no colour clears 3:1 on both a near-black page and a light red fill. Same reasoning covers the
   3.36:1 accent row. Found only because every pair was recomputed, not just the changed ones.
-- **`--color-fg-decorative` 1.94:1** stays exempt: the `····` pending glyph only, `aria-hidden`.
-- **The backs' border was 1.31:1** (`border-border`, nearly invisible, covered by neither 1.4.3 nor
-  1.4.11); `--color-ring-dim` puts it at 4.23:1.
 - **Why three values are what they are:** `--color-fg-muted: oklch(65% 0 none)` must clear 4.5:1 on
   page, card face and control surface; Tailwind's neutral scale jumps 55.6% → 70.8%, and the minimum
   passing lightness is **60% on `neutral-900`, 64.5% on `neutral-800`**. `--color-on-accent:
@@ -624,12 +616,12 @@ a call on a mock or ref (the audio presses).
 A card whose lookup finds no year is removed from the deck (now optional: `keepYearless`, AGENTS.md §
 Deal options). What it took:
 
-1. **The card-1 gate is a property of the deck** — `deck[0]?.year !== undefined` on the NEXT deck —
-   not "the resolved card was `deck[0]`", or a drop opens the gate onto an unresolved card.
-2. ~~Transient failures settling at `null` drop cards~~ — superseded by the year-fetch rework: a
-   transient failure is never a final "no year" (AGENTS.md § Year resolution). Still true:
-   `not-configured` dispatches `YEAR_LOOKUPS_UNAVAILABLE`, so a deploy without
-   `MUSICBRAINZ_USER_AGENT` yields a yearless deck, not an empty one.
+1. **The gate is decided on the NEXT deck** (today `yearStateOf(deck[currentIndex]) === 'final'`
+   after the drop), never as "the resolved card was the start card", or a drop opens the gate onto
+   an unresolved card.
+2. `not-configured` dispatches `YEAR_LOOKUPS_UNAVAILABLE`, so the deck plays yearless rather than
+   empty. Since the provider vote the staged path returns it only when **every** provider is
+   unconfigured; a missing `MUSICBRAINZ_USER_AGENT` alone is skipped with a warning.
 3. **Removal is an index problem.** Drops behind the player move `currentIndex` back; a dropped
    CURRENT card keeps the index but **must reset `isFlipped`** (else the next card mounts revealed — a
    leak); a dropped current card with nothing after it ends the session.
@@ -777,9 +769,8 @@ Signature, seen 2026-08-05 and twice on 2026-08-06:
 | Bad run (2026-08-05) | 19 of 32 ran | (not recorded)       | **13** |                  — |             — |
 
 **Zero tests fail** (the files never ran) and **`environment` time collapses** (~28× lower): a per-file
-jsdom initialisation failure, always ~15 of the 17 jsdom files. Refuted triggers: CPU load (six
-concurrent builds alongside a test run) and a cold transform cache. Only lead: both occurrences ran
-`pnpm test` chained with `pnpm build` in one shell invocation. **Re-run before investigating, and read
+jsdom initialisation failure, always ~15 of the 17 jsdom files — the forks pool's "Timeout waiting
+for worker to respond" under machine load (2026-09-30). **Re-run before investigating, and read
 the file and test counts — a green exit code alone does not prove the jsdom half ran.** Later flake
 shapes: the `beforeAll` entry below, 2026-08-06 "third flake shape", 2026-09-19 and 2026-09-29
 (`App.test.tsx`).
@@ -813,7 +804,7 @@ rendering` asserts the deal and bounds fetches at two. Rule: AGENTS.md § Decks.
 
 TypeScript's excess-property check does not fire for a spread or a variable, so `savePlaylist(storage,
 { ...somethingLarger })` type-checked and wrote every extra field to `localStorage`, read on a
-pre-start screen. Caught by `should store nothing beyond id, name and timestamp`. **Validating only on
+pre-start screen. Caught by `should not write any field beyond ids, name and savedAt`. **Validating only on
 read is not enough when the store is the leak surface** — rebuild field by field on write too. Rule:
 AGENTS.md § Decks.
 
@@ -869,8 +860,7 @@ Gotcha found writing the test: `useCardAudio.test.ts` had no `afterEach(cleanup)
 test's `<audio>` and its listener were still mounted. **A missing `cleanup()` is invisible until a
 test observes something global** (a document-level listener).
 
-Still owed: devtools DOM search on an unflipped card, printed-QR scan, lock-screen re-check, all of
-iOS.
+Still owed: devtools DOM search on an unflipped card, printed-QR scan, all of iOS.
 
 ## 2026-08-06 — `public/logo.png` and `public/logo.webp` were DIFFERENT ARTWORK
 
@@ -878,27 +868,14 @@ Commit `5e178f6` (2026-08-06) deleted `public/logo.png` (1,262,175 bytes, 1254×
 `667b974`, 2026-08-03) and added `public/logo.webp` (20,610 bytes, 240×240). Different marks: the PNG
 was a rounded **card stack** (equaliser bars, "PLAYLIST / HITSTER", "TU PLAYLIST, TU JUEGO", a vinyl);
 the WebP a **circular** neon "HITSTER" wordmark. Phase 7's "replaced a 1.26 MB PNG costing 6.2 s of
-LCP" note was true about bytes and silent about artwork. The developer chose the card-stack source for
-everything. (The whole identity was regenerated again from a new master on 2026-08-12 — see that
-entry; the master lives in `visual-assets/logo-master/`.)
+LCP" note was true about bytes and silent about artwork. (The whole identity was regenerated from a
+new master on 2026-08-12 — see that entry; the master lives in `visual-assets/logo-master/`.)
 
-Byte sizes as generated that day:
-
-| File                       |              Size | Note                                                      |
-| -------------------------- | ----------------: | --------------------------------------------------------- |
-| `logo.webp`                |            10,376 | Smaller than the 20,610 it replaced; on the critical path |
-| `pwa-192x192.png`          |            26,361 |                                                           |
-| `apple-touch-icon.png`     |            23,526 | 180×180. iOS ignores manifest icons and uses only this    |
-| `pwa-512x512.png`          |           131,461 |                                                           |
-| `pwa-maskable-512x512.png` |           103,328 |                                                           |
-|                            | **284,676 added** | None fetched before first paint                           |
-
-PNGs palette-quantised to 256 colours (≈ halves them; the 512 was 227,819 truecolour), no visible
-banding. **Never restore a large icon to the favicon slot.** Maskable sized by measurement: artwork's
-max content radius is 95.1% of half-width, so drawing it at **84%** of the canvas puts content at
-204.9px vs the 204.8px safe radius of the 80% circle. A renamed full-bleed 512, or one entry with
-`purpose: 'any maskable'`, validates cleanly and gets cropped on round launchers — `manifest.test.ts`
-asserts against it.
+PNGs palette-quantised to 256 colours (≈ halves them), no visible banding. `apple-touch-icon.png`
+(180×180) is the only icon iOS uses; it ignores manifest icons. **Never restore a large icon to the
+favicon slot.** The maskable icon is sized by measurement (per artwork — 2026-08-12). A renamed
+full-bleed 512, or one entry with `purpose: 'any maskable'`, validates cleanly and gets cropped on
+round launchers — `manifest.test.ts` asserts against it.
 
 ## 2026-08-06 — The two peeking backs never rendered (historical; cited by `CardStack.tsx`)
 
@@ -962,8 +939,7 @@ takes `card-ring` plus `card-ring-quiet`.
   modules per file, and a warm cache makes placeholder assertions fail as if the component were too
   eager.
 
-(Since then the card's QR became an SVG, so the "extra `toDataURL()` per advance" cost no longer
-applies.) Rules: AGENTS.md § The card. Geometry unverifiable in jsdom (development.md §5).
+Rules: AGENTS.md § The card. Geometry unverifiable in jsdom (development.md §5).
 
 ## 2026-08-06 — The deck actions moved to the game screen; plan 2's decision 7 half reversed
 
@@ -1013,12 +989,12 @@ cards count as pending): AGENTS.md / decisions.md § Deck actions and the PDF ex
    arrays rendered by the landing screen. Tested for no mutation.
 4. **A field-by-field rebuild is only as strong as its weakest field; a container field needs
    rebuilding element by element** — `ids` is filtered to non-empty strings on write.
-5. `pdfFileName` collapses `[^a-z0-9]+` → `-`, so a `+` never reaches a filesystem. (The
-   `format:check` CRLF note from this entry is superseded by 2026-09-19.)
+5. `pdfFileName` collapses `[^a-z0-9]+` → `-`, so a `+` never reaches a filesystem.
 
 ## 2026-08-07 — Multi-playlist plan 2: three measurements (bundle, request count, deck size)
 
-Step 7 of [`plan.multi-playlist-ui.md`](./plans/plan.multi-playlist-ui.md), measured on the build day:
+Step 7 of `plan.multi-playlist-ui.md` (deleted 2026-10-07; in git history), measured on the build
+day:
 
 - **Bundle, initial path: +3.10 kB raw / +0.77 kB gzip** on `index-*.js` (210.00 → 213.10 kB;
   65.94 → 66.71 kB gzip), plus **+0.16 kB raw / +0.04 kB gzip** of CSS — both plans together against
@@ -1176,9 +1152,8 @@ Since changed: cache is now `v6`, and the "no second provider" call was reversed
 
 1. **The caption was the QR's ceiling.** Moving "Scan to play" below the card left padding as the only
    limit (`r × 240 + 48 ≤ 240` → 0.8); chose **3/4** (288px ceiling / 180px floor) because
-   `overflow-hidden` crops an over-large code. `QR_BITMAP_SIZE` 224 → 288 (encoding below display size
-   blurs module edges). It also removed the sentence being in the DOM twice per card (the back mounts
-   `CardHiddenSide` too).
+   `overflow-hidden` crops an over-large code. It also removed the sentence being in the DOM twice
+   per card (the back mounts `CardHiddenSide` too).
 2. **A copyright footer is a year-shaped number on a pre-reveal surface.** Leak proxies
    (`not.toMatch(/\b(19|20)\d{2}\b/)`) failed on "Copyright © 2026-present"; the fix is
    `.replace(COPYRIGHT_NOTICE, '')` by exact string, **never loosening the regex**.
@@ -1569,8 +1544,9 @@ returned, for the placeholder `sha256_cert_fingerprints: []`:
 ```
 
 An empty list is **malformed content**, not "reachable but delegating to nobody" — there is no
-in-between state. Caveats: the checker caches for **~600 s** (wait that long after a redeploy before
-concluding anything), and the trailing-dot host in `debugString` is normal DNS-root form.
+in-between state. Caveats: the checker caches this malformed answer for **~600 s** (a valid statement
+for 3600 s — 2026-09-21; wait that long after a redeploy before concluding anything), and the
+trailing-dot host in `debugString` is normal DNS-root form.
 
 ## 2026-09-19 — The first suggested playlist is really called "Hitser"
 
@@ -1676,15 +1652,15 @@ app and the app did not exist yet, and `support.google.com/...answer/11926878` a
 - **Vercel's edge served the OLD statement on the bare URL for ~41 min** (`X-Vercel-Cache: HIT`,
   `Age: 2454`, 223 bytes) while `?cb=<epoch>` got the new one (`MISS`, 336 bytes). The verifier asks
   for the bare URL: **fetch both ways** when checking a redeploy.
-- **Google's checker caches a VALID statement for 3600 s** (`maxAge: 3599.998301537s`); the 600 s
-  measured 2026-09-19 belonged to the `ERROR_CODE_MALFORMED_CONTENT` answer for an empty list.
+- **Google's checker caches a VALID statement for 3600 s** (`maxAge: 3599.998301537s`), against
+  ~600 s for the `ERROR_CODE_MALFORMED_CONTENT` answer to an empty list (2026-09-19).
 - **A clean reinstall of the same APK** after the deploy launched with no address bar (build, key and
   package id held constant — only the statement changed). Chrome caches TWA verification **per
   install**: a relaunch is not a test. This says nothing about the Play-signed build, which presents a
   different certificate; §5 TWA rows 1 and 6 are half passed until step 12.
 - **The fingerprint-count test is deliberately unwritten**: asserting one would go red on step 11's
-  correct change. Write it when Play's key lands, asserting two (`src/pwa/assetlinks.test.ts` checks
-  only non-empty today).
+  correct change. Write it when Play's key lands, asserting two (`src/pwa/assetlinks.test.ts` asserts
+  no count today).
 
 ## 2026-09-21 — Step 7's device pass on the sideloaded build
 
@@ -1850,10 +1826,9 @@ peek's `z-10`), beside `BEHIND_INCOMING_Z_INDEX = -1`; `Card.test.tsx` asserts s
 AGENTS.md § Gestures and deck animation.
 
 **General lesson:** `perspective`, `opacity < 1`, `filter`, `will-change` and `transform` all create
-stacking contexts, and any of them on the in-flow sibling cancels "positioned paints on top". This
-**corrects the 2026-08-05 entry's** "regardless of DOM order" rule: an absolute first child versus an
-in-flow `perspective` second child, no z-index — the in-flow card wins. That entry's `isolate` +
-`-z-10` fix still stands.
+stacking contexts, and any of them on the in-flow sibling cancels "positioned paints on top": an
+absolute first child versus an in-flow `perspective` second child, no z-index — the in-flow card
+wins. The 2026-08-05 `isolate` + `-z-10` layering still stands.
 
 ## 2026-09-22 — The two swipe animations were matched on DURATION, which is why they did not match
 
@@ -1922,15 +1897,14 @@ Playwright against the deployed app, plus Canva.
 Final layout after three same-day moves: `visual-assets/listing.md`, `tester-notes.md`,
 `screenshots.mjs`, `assets/{graphics,play-phone,social}` (tracked) and
 `assets/play-tablet-chromebook/` (git-ignored, regenerated by the script); the logo master is
-**`visual-assets/logo-master/logo.png`, tracked**. Older entries' `docs/store/` and `docs/assets/`
-paths mean these.
+**`visual-assets/logo-master/logo.png`, tracked**.
 
 ## 2026-09-24 — "Hitser" fixed in the HUD through `playlist-display-name.ts`
 
 The first suggestion's real Spotify title is **"Hitser"**, and the HUD showed it via `deckLabel()`.
 `src/game/playlist-display-name.ts` maps that id → "Jitster official", read by `deckLabel()` (HUD,
 end-screen count, PDF filename, library saves), `EndScreen`'s multi-playlist list and `loadLibrary`
-(rebuilds the name from `ids[0]` plus "+N more"). **Applied on read, never on write**, which heals old
+(rebuilds the base name from `ids[0]`'s override). **Applied on read, never on write**, which heals old
 saves without a migration. Only labels for the APP belong in the map — overriding the other suggestions
 would make the HUD disagree with what the QR opens. The guard in `LandingScreen.test.tsx` is
 `/hitst?er/i`. **Not fixable here:** Spotify still shows "Hitser" after a scan; renaming the playlist
@@ -1981,9 +1955,6 @@ Rule: AGENTS.md / decisions.md § Copy and languages.
 - **On Windows, Lighthouse 13.5.0 exits non-zero after EVERY run** (`EPERM … rmSync …
 lighthouse.<n>` from chrome-launcher's temp cleanup) after the report is written. Judge a run by its
   report file, not the exit code.
-- **`.claude/skills/unlighthouse/SKILL.md` was copied from another project** (its routes and base URL
-  are `calculadorapatrimonio.vercel.app`'s). The procedure applies; the targets do not. Routes used
-  here: `/`, a share link (`/?playlist=…&seed=…`), `/privacy.html`.
 - **The share route can be audited locally only with `/api` proxied** (`vite preview` has no
   functions): a small Node server serving `dist/` with the SPA fallback and forwarding `/api/*` to
   production. Its numbers compare only with each other.
@@ -2137,8 +2108,7 @@ For [`docs/spikes/spike.ai-year-fetch.md`](./spikes/spike.ai-year-fetch.md). Not
 
 ## 2026-09-30 — MusicBrainz fixes built: the cleaner's lazy head and the live acceptance diff
 
-From [`plan.year-fetch-rework-mb-fixes.md`](./plans/plan.year-fetch-rework-mb-fixes.md) (commit
-`4197322`). The `tokenised` rung this plan also built was removed on 2026-10-01 (see below).
+From `plan.year-fetch-rework-mb-fixes.md` (deleted 2026-10-07; in git history) (commit `4197322`). The `tokenised` rung this plan also built was removed on 2026-10-01 (see below).
 
 - **The lazy head was the bug**: `X (REMIX) (feat. Y)` matched as ONE segment that no family
   recognised. The head is now greedy, so the LAST segment is examined first; the old lazy pattern
@@ -2305,10 +2275,9 @@ Found by `docs/reviews/review.year-fetch-rework.md` (B1). Rule: AGENTS.md § the
   with no `durationMs` sends no request and is never written; `busy` (our gate, Deezer `code: 700`, a
   Deezer/iTunes 429) is retried with no cap, `refused` (iTunes 403, Deezer `code: 4`) is a skip. Before
   that, a long Apple throttle would have left every card provisional forever.
-- **Correction to the 2026-09-28 entry**: a throwing `localStorage` getter in `App.tsx` was not
-  survivable — it crashed on every reload, and Start over could not clear storage it could not reach.
-  Every first-render read now goes through `src/game/browser-storage.ts`, and `App.test.tsx` renders
-  the app with a throwing getter.
+- **A throwing `localStorage` getter read directly in `App.tsx` crashed every reload**, and Start
+  over could not clear storage it could not reach. Every first-render read now goes through
+  `src/game/browser-storage.ts`, and `App.test.tsx` renders the app with a throwing getter.
 - The resolver header's "one client never holds two MusicBrainz lookups" was corrected, not enforced:
   `verify` re-running a cold `resolve` frontier is by design.
 
@@ -2366,7 +2335,7 @@ after three same-day iterations:
 Rule: AGENTS.md / decisions.md § Decks ("the suggested playlists' years are preloaded"). `pnpm preload-years`
 over the 13 suggested playlists (1,000 distinct tracks, ~55 min cold through the shared gates) kept **all 1,000**
 as final answers with nothing skipped: 805 `high`, 164 `low`, 31 `none`. A hand review then corrected **144**
-(`source: "manual"`), and the pattern is worth knowing before trusting the vote on similar decks:
+(each now marked by a `note`, see 2026-10-01 "Every preloaded year is confirmed"), and the pattern is worth knowing before trusting the vote on similar decks:
 
 - **Soundtracks are the vote's blind spot, by construction.** It returns the recording's year, so a dub, a
   re-recording, a cover orchestra or a compilation reissue gets the reissue's year: 43 of 47 Catalan openings
@@ -2400,8 +2369,8 @@ else leaves it on.
 
 Found in a review of the preload commits. `scripts/preload-years.ts`'s `readFile()` caught every error and returned
 an empty file, and `main()` writes the file right after the playlist loop — so one stray comma from a hand edit,
-followed by a run with explicit playlist ids, overwrote `src/game/preloaded-years.json` and lost every `manual`
-entry (the invariant "never overwrites a `manual` entry"). It now falls back to an empty file only on `ENOENT` and
+followed by a run with explicit playlist ids, overwrote `src/game/preloaded-years.json` and lost every hand
+correction (the invariant "never overwrites an entry with a `note`"). It now falls back to an empty file only on `ENOENT` and
 rethrows anything else, a parse error included.
 
 ## 2026-10-01 — The preloaded years are asked before every year request, not only on a fetched deck
@@ -2418,7 +2387,7 @@ deal whose chunk failed) or a provisional one still went to `/api/year`.
 - **The table goes in as a promise**, not loaded by the wrapper: a module-internal `loadPreloadedYears` call
   would bypass `App.test.tsx`'s mock of the module and hit the real 1000-track JSON in tests.
 - **What it does not change**: a card already final is never looked up, so a save's final answer is kept even
-  where the table (a `manual` correction) disagrees; a `low` entry still settles `low`, i.e. "unconfirmed".
+  where the table (a hand correction) disagrees.
 - `App.test.tsx`'s "share link with the recipient's remembered choice" read the save once right after the HUD
   appeared and failed once in a full run — the same effect-after-render race its sibling already waits out. It
   now waits too.
@@ -2432,11 +2401,10 @@ counts as confirmed: the entry shape is now `{ title, artist, year: number | nul
 - **97 entries that were `low`** (final provider answers, unconfirmed) now read `high`: their reveal no longer
   shows "Unconfirmed year", and `skipUnconfirmed` ("Deal cards with an unconfirmed year" unticked) never drops a
   preloaded year. A preloaded `null` (allowed, none today) is still dropped unless the session keeps yearless cards.
-  This supersedes the previous entry's "a `low` entry still settles `low`".
 - `pnpm preload-years` still keeps a final `low` answer from the vote; it is written without a confidence and read
   as `high`.
-- **Gotcha: the manual marker moved from `source: "manual"` to the presence of a `note`.** An entry added or
-  corrected by hand WITHOUT a `note` looks like a provider entry, and the next `--refresh` overwrites it. Every
+- **Gotcha: the manual marker is the presence of a `note`** (there is no `source` field any more). An entry
+  added or corrected by hand WITHOUT a `note` looks like a provider entry, and the next `--refresh` overwrites it. Every
   hand correction needs a `note` (and its `providerYear`).
 
 ## 2026-10-01 — The preloaded-years chunk is waited for at most 2 s, by the deal and by the crawl

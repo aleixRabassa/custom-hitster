@@ -364,22 +364,22 @@ update`, so a hand edit is silently discarded and the symptom is a Play upload r
 
 - [ ] **Step 9 `[Console]` — Create the Play Console app.** Absorbs plan 1 step 10, second half;
       waits on step 1's identity verification. Name "Playlist Jitster", default language English,
-      Games category with a music/trivia subcategory, **PAID at €1.00 one-time** (changed 2026-09-21,
-      decision 16), not primarily child-directed.
+      Games category with a music/trivia subcategory, **FREE** (decision 17, 2026-10-07, reversing
+      decision 16's €1.00), not primarily child-directed.
       **UNBLOCKED 2026-09-21** — identity verification and every profile check completed, one day
       inside the wait started 2026-09-20. Values are `visual-assets/listing.md` §5; three notes on which
-      of them are hard to undo. **Free is the one that does not go back, which is why Paid is the safe
-      answer to give here**: Google allows paid → free and refuses free → paid outright — an app once
-      offered free can only be charged for as a NEW app with a NEW package name, which would discard
-      `aleixrabassa.playlistjitster`. Answering Paid keeps both options; answering Free would close one
-      permanently. **The package id is NOT typed here** — the Console binds it from the first uploaded
+      of them are hard to undo. **Free does not go back**: Google refuses free → paid outright — an app
+      once offered free can only be charged for as a NEW app with a NEW package name. Decision 17
+      accepts that: a paid version, if one ever ships, is a new app, and `aleixrabassa.playlistjitster`
+      stays free. **The package id is NOT typed here** — the Console binds it from the first uploaded
       bundle at step 10, which is where the permanence rule in `AGENTS.md` actually bites; there is no
       field to get wrong at creation. And **"App or game" answers Game**, which is what makes the Games
       category reachable at all. Category, subcategory, name and default language are all editable
-      afterwards. **The price itself is NOT set here**: it needs a payments profile first (new step
-      9a), and App pricing is a separate page.
+      afterwards. A free app needs no payments profile (step 9a).
 
-- [ ] **Step 9a `[Console]` — Set up the payments profile. START IT BEFORE STEP 9, NOT AFTER.** New
+- [x] **Step 9a `[Console]` — Set up the payments profile.** _→ **Not needed since 2026-10-07
+      (decision 17): the app is free.** Kept as the procedure for a future paid app, which would be a
+      new app with its own package name._ New
       2026-09-21, created by decision 16 and by nothing in the original plan — which assumed a free app
       and therefore never needed a merchant account. Google's own order is "set up a payments profile →
       review the price ranges → enter a price", and a payments profile carries bank details, tax
@@ -408,9 +408,9 @@ fingerprint generateAssetLinks`, so `twa-manifest.json` is the record of which f
   - [ ] `[agent]` Copy the generated statement into `public/.well-known/assetlinks.json` — never
         hand-edit two files — then write the two tests deferred from plan 1 step 4 (Unit Tests, batch
         B), run the four checks, commit, push. _→ **Copy and deploy done 2026-09-21 for the one
-        fingerprint.** The two tests are deliberately NOT written yet and the reason changed: a count
-        test asserting two is red today, and one asserting one goes red at the correct step-11 change.
-        Write them when Play's fingerprint lands. Reasoning in `assetlinks.test.ts`'s header._
+        fingerprint.** The package-id cross-pin and the fingerprint-format test were written
+        2026-09-23 (batch B below); only the count-of-two assertion is still owed — write it when
+        Play's fingerprint lands. Reasoning in `assetlinks.test.ts`'s header._
   - [ ] `[agent]` After the deploy, wait out the checker's cache — **3600 seconds, not the 600 this
         plan was written with** (measured 2026-09-21: the `maxAge` on a VALID statement is
         `3599.998s`, where the `ERROR_CODE_MALFORMED_CONTENT` response measured on 2026-09-19 carried
@@ -626,7 +626,8 @@ are steps 7, 12, 15 and 17 — a device and a Console.
 | 13  | Deploys happen by pushing to `main`; the Vercel CLI is not installed and this plan does not install it.               | `docs/development.md` §7 records that pushes deploy; the 2026-09-19 measurements were made against a push-triggered deploy. Installing the CLI is a machine-setup change outside a release plan.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | 14  | Row 7 (predictive back) must pass on a physical Android 13+ device before the closed-testing AAB is final.            | It is the one row whose remedy lives in `android/`, and an emulator's verdict on a system gesture animation is not evidence about a phone.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | 15  | Deciding plan 2's two back-gesture questions is in scope at step 12; building either is not.                          | They were parked "until step 5 says how the gesture feels" and had no owner. A decision after the seven rows costs nothing; an implementation is a second `pushState` and a plan of its own.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| 16  | The app is **PAID, €1.00, one-time**, reversing this plan's "free" throughout.                                        | Developer's choice on 2026-09-21. The order is the safe one: Google allows paid → free and refuses free → paid except as a new app with a new package name, so answering Paid keeps both doors open while Free would shut one on `aleixrabassa.playlistjitster`. Costs: a payments profile becomes a prerequisite (step 9a), and the twelve testers need a route that does not charge them (Open Questions). **Raised once and reaffirmed**: the same game is free and public at the pinned origin, which a paid listing's reviewers will compare, and a paid thin wrapper of a free site sits closer to Play's minimum-functionality scrutiny than a free one. Recorded, not re-argued. |
+| 16  | ~~The app is **PAID, €1.00, one-time**, reversing this plan's "free" throughout.~~ Superseded by 17.                  | Developer's choice on 2026-09-21. The order is the safe one: Google allows paid → free and refuses free → paid except as a new app with a new package name, so answering Paid keeps both doors open while Free would shut one on `aleixrabassa.playlistjitster`. Costs: a payments profile becomes a prerequisite (step 9a), and the twelve testers need a route that does not charge them (Open Questions). **Raised once and reaffirmed**: the same game is free and public at the pinned origin, which a paid listing's reviewers will compare, and a paid thin wrapper of a free site sits closer to Play's minimum-functionality scrutiny than a free one. Recorded, not re-argued. |
+| 17  | The app is **FREE** on Play, reversing 16. A paid version, if ever, ships as a NEW app.                               | Developer's choice on 2026-10-07. Google refuses free → paid, so `aleixrabassa.playlistjitster` stays free for good and a paid version needs a new package name, a new listing and its own testers. It also settles the licence question: Deezer and iTunes may not be used in a paid app (`AGENTS.md`), and this app is not one. Step 9a (payments profile) is no longer needed.                                                                                                                                                                                                                                                                                                        |
 
 ---
 
@@ -665,7 +666,8 @@ are steps 7, 12, 15 and 17 — a device and a Console.
       developer as their own account**, so "official" holds and decision 5 shipped unchanged. The
       owner is in `entity.subtitle`, not in `authors` (which is `null` at playlist level, as it always
       has been) — worth knowing for the next time something needs a playlist's owner.
-- [ ] **How do the twelve testers get the app without paying €1?** _→ **Partly answered
+- [x] **How do the twelve testers get the app without paying €1?** _→ **Moot since 2026-10-07
+      (decision 17): the app is free**, so testers install it at no cost._ _→ **Partly answered
       2026-09-23, and the answer is worse than this question assumed.** Google's own help page
       (`answer/9845334`): internal testers "can install your internal test version for free", but
       "testers must purchase paid apps when participating in open or closed tests" — and the closed

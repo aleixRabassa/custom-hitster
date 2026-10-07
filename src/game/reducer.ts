@@ -239,16 +239,17 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       //     working, not a bug -- but it is why the HUD's "cards left" now falls
       //     as well as rising.
       //  2. `null` DOES NOT ALWAYS MEAN "NO PROVIDER HAS A YEAR". The resolver
-      //     also settles at `null` on a 400, on transient failures that survive
-      //     its deferred pass, and on a card whose `verify` retries ran out with
-      //     nothing found -- and `YEAR_RESOLVED` carries no reason. So
+      //     also settles at `null` on a 400, and on a card whose `verify` retries
+      //     ran out with nothing found -- an exhausted resolve hands its card to
+      //     verify, so that is the one way a transient failure reaches `null` --
+      //     and `YEAR_RESOLVED` carries no reason. So
       //     a network blip drops cards. That is the honest trade: an unplayable
       //     card is unplayable whatever the cause, and the alternative -- a
       //     `reason` on the action so the reducer could keep "failed" cards --
       //     would put a yearless card back on the table, which is the thing this
       //     decision removes. The one blanket failure is already exempt:
       //     `not-configured` dispatches `YEAR_LOOKUPS_UNAVAILABLE` instead of a
-      //     hundred nulls, so a deployment with no `MUSICBRAINZ_USER_AGENT`
+      //     hundred nulls, so a deployment with no year provider configured
       //     yields a yearless deck rather than an empty one. A YEAR settled the
       //     same way is different since 2026-10-01: when no verify call ever came
       //     back with a year it arrives `unverified`, and `isDroppedAnswer` keeps
@@ -426,7 +427,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case 'YEAR_LOOKUPS_UNAVAILABLE': {
       if (state.status !== 'preparing' && state.status !== 'playing') return state;
 
-      // Transition out of `preparing` ANYWAY. A deployment with no `MUSICBRAINZ_USER_AGENT`
+      // Transition out of `preparing` ANYWAY. A deployment with no year provider configured
       // fails identically for every card, so waiting for card 1 would wait forever: the deck
       // is still playable, just yearless (Phase 6 words the notice).
       const status = state.status === 'preparing' ? 'playing' : state.status;

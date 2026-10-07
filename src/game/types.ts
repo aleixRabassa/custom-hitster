@@ -1,5 +1,5 @@
 /**
- * The vocabulary of the client-side game layer (plan.phase-3.md).
+ * The vocabulary of the client-side game layer (plan.phase-3.md, deleted; in git history).
  *
  * DELIBERATELY NOT IN `shared/types.ts`. Everything here is browser-only: no function
  * under `api/` needs to know which card is current or how the deck was shuffled.
@@ -137,7 +137,7 @@ export interface GameState {
   skipUnconfirmed: boolean;
   /**
    * Set when year lookups cannot work at all for this deployment (`not-configured`, i.e. no
-   * `MUSICBRAINZ_USER_AGENT` on the server). A hard stop, not a retry signal: the deck stays
+   * year provider configured on the server). A hard stop, not a retry signal: the deck stays
    * playable and yearless rather than hanging in `preparing` forever.
    */
   yearLookupsUnavailable: boolean;

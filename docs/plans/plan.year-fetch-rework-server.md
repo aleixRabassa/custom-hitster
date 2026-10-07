@@ -1,5 +1,5 @@
 <!-- Plans for year-fetch-rework (in order):
-  1. plan.year-fetch-rework-mb-fixes.md  — licence-clean MusicBrainz fixes: the cleaner bug, new cleaner families, no silent degradation, the tokenised rescue rung
+  1. plan.year-fetch-rework-mb-fixes.md (deleted; in git history) — licence-clean MusicBrainz fixes: the cleaner bug, new cleaner families, no silent degradation, the tokenised rescue rung
   2. plan.year-fetch-rework-server.md    — the provider vote in shared/, the Deezer/iTunes adapters, per-provider gates and cache, /api/year stages  ← this file
   3. plan.year-fetch-rework-game.md      — the game layer: provisional years, keepYearless, the two-lane resolver, persistence, the PDF gate
   4. plan.year-fetch-rework-ui.md        — the reveal's year slot, the picker checkbox and its remembered preference, copy in three languages, the blank PDF year
@@ -10,7 +10,7 @@
 > **Source:** [`docs/spikes/spike.year-fetch-rework.md`](../spikes/spike.year-fetch-rework.md) §4.1, §11, §12, §13.9–13.12
 > **Date:** 2026-09-30
 > **Author:** aleix.rabassa
-> **Depends on:** [plan.year-fetch-rework-mb-fixes.md](plan.year-fetch-rework-mb-fixes.md), **softly**. That plan owns the year-cache `v5` bump, and this plan must not bump the MusicBrainz key again.
+> **Depends on:** `plan.year-fetch-rework-mb-fixes.md` (deleted 2026-10-07; in git history), **softly**. That plan owns the year-cache `v5` bump, and this plan must not bump the MusicBrainz key again.
 
 ---
 
@@ -254,6 +254,10 @@ MusicBrainz included. The endpoint fails loudly only when **all** providers fail
     - the storefront is a named constant, not an environment variable;
     - a 403 or 429 maps to busy.
   - [x] Each adapter's permits go through its own gate (step 8).
+
+  > **Amended 2026-10-01:** an iTunes 403 and Deezer's code 4 are now a `refused` skip, not busy;
+  > see the note under step 11.
+
 - [x] **Step 7: the MusicBrainz provider, `api/_lib/musicbrainz-provider.ts`.**
   - [x] Wrap `resolveYear` **whole**, passing the raw title, because it cleans the title itself and
         owns cache-before-gate and the `mbyear:` entry.

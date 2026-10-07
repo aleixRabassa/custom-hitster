@@ -132,7 +132,7 @@ export type SuggestionIntent = 'toggle' | 'start';
  *  immediately, exactly as it did before this feature existed -- including
  *  replacing whatever was typed. That is the one-click demo path and the entire
  *  reason the suggestions are on the screen (decision 5 of
- *  `plan.multi-playlist-ui.md`), and making every press require a second press
+ *  `plan.multi-playlist-ui.md`, deleted; in git history), and making every press require a second press
  *  on Start would spend it.
  *
  *  So the three ways to say "select instead" are all EXPLICIT:

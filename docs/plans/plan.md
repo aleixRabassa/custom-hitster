@@ -39,7 +39,7 @@ Left-to-right/top-to-bottom: desktop landing page (URL input + suggested playlis
 - Hidden side must not leak title, artist, or year — that is the whole game.
 - Tap = flip. Swipe = next card.
 - Deck ends naturally (no cards left) or manually (Exit button on the card, which ends the session and redirects to the landing page).
-- **Start waits on exactly one year — card 1's. Never on the whole deck.** At MusicBrainz's 1 req/s a 100-track playlist is ~100 s (~200 s at the two-requests-per-track figure of [plan.phase-2-year.md](./plan.phase-2-year.md) decision 19); resolving up front would mean minutes of loading screen before the first card. Cards 2..n resolve in the background while the player is looking at card 1. See §3.
+- **Start waits on exactly one year — card 1's. Never on the whole deck.** At MusicBrainz's 1 req/s a 100-track playlist is ~100 s (~200 s at the two-requests-per-track figure of `plan.phase-2-year.md` decision 19, deleted 2026-10-07 and in git history); resolving up front would mean minutes of loading screen before the first card. Cards 2..n resolve in the background while the player is looking at card 1. See §3.
 
 ---
 
@@ -142,6 +142,8 @@ Browser (SPA)                          Serverless (Vercel Functions)
 
 ## 5. Step Plan
 
+> Built phase plans were deleted on 2026-10-07 to save reading time; they are in git history (`git log --diff-filter=D -- docs/plans/`).
+
 ### Phase 0 — Spikes (decision gate; do this before writing app code)
 
 - [x] Spike: fetch `open.spotify.com/embed/playlist/{id}` server-side; extract the track list JSON. Record **max tracks returned** and available fields.
@@ -181,17 +183,17 @@ Browser (SPA)                          Serverless (Vercel Functions)
 - [x] **Vercel project linked; confirm a hello-world function deploys** — linked and deployed manually by the developer (decision 4 of the phase plan), reported successful 2026-08-03. This closes the one part of Phase 1 that could not be verified locally: the deploy exercises the root `tsconfig.json` against `api/`, which is the payoff for keeping it a real config rather than a solution file (decision 14).
 - [x] Vitest wired up with one trivial passing test
 
-> Detail, decisions, and execution notes: [plan.phase-1.md](./plan.phase-1.md).
+> Detail, decisions, and execution notes: `plan.phase-1.md`.
 
 ### Phase 2 — Data Layer
 
 - [x] `parsePlaylistUrl()` — handle `open.spotify.com/playlist/{id}`, `?si=` params, `spotify:playlist:` URIs, bare IDs (+ tests) — also locale-prefixed paths (`/intl-es/`), which turned out to be a real form Spotify serves
-- [x] `/api/playlist` — fetch, extract, normalize to `Card[]`; typed errors (**`not-found-or-private`** / `unsupported-entity` / `invalid-url` / `upstream-unavailable` / `unexpected-payload`). Note the deviation from the wording here: `private` and `not-found` collapse into one code because Spotify gives no signal that separates them — see [plan.phase-2-playlist.md](./plan.phase-2-playlist.md) decision 8
+- [x] `/api/playlist` — fetch, extract, normalize to `Card[]`; typed errors (**`not-found-or-private`** / `unsupported-entity` / `invalid-url` / `upstream-unavailable` / `unexpected-payload`). Note the deviation from the wording here: `private` and `not-found` collapse into one code because Spotify gives no signal that separates them — see `plan.phase-2-playlist.md` decision 8
 - [x] `/api/year` — MusicBrainz lookup, ~~batch endpoint~~ **one track per request** (client sequences them; decided 2026-08-03), with the 1 req/s budget enforced by a shared out-of-process gate rather than an in-process queue. Built as **two** MusicBrainz requests per lookup, not one: a recording search plus one batched release-group call for the album's `first-release-date`, which is where the accuracy comes from (2026-08-04)
 - [x] Cache layer behind an interface (KV in prod, in-memory locally) — `YearCache` in `api/_lib/cache.ts`. The same Upstash variables also back the rate-limit gate, so a deployment has both or neither
 - [x] Year-resolution logic + tests (fuzzy title match, feat./remaster/live stripping, pick earliest, **tiered fallback: strict pass → relaxed pass marked low-confidence → no year for manual entry**. ~~fall back to Spotify year~~ — the embed carries no year, see §2). Measured **14 of 14** known-tricky tracks exact against the ~6% naive baseline, live-verified 2026-08-04
 
-> Detail, decisions, and execution notes, split in two: [plan.phase-2-playlist.md](./plan.phase-2-playlist.md) (checkboxes 1–2) and [plan.phase-2-year.md](./plan.phase-2-year.md) (checkboxes 3–5).
+> Detail, decisions, and execution notes, split in two: `plan.phase-2-playlist.md` (checkboxes 1–2) and `plan.phase-2-year.md` (checkboxes 3–5).
 >
 > **Phase 2 is complete (2026-08-04).** Three findings from execution that Phase 3 has to design against, all in [`agent_findings.md`](../agent_findings.md):
 >
@@ -211,13 +213,13 @@ Browser (SPA)                          Serverless (Vercel Functions)
   - [x] `START` dispatches as soon as card 1 has a year; the loop keeps running across the whole session
   - [x] A test that asserts the game is playable while cards 2..n are still `undefined` — this is the invariant that regresses silently, because a deck of cached years resolves fast enough to hide a blocking implementation in local testing
 
-> Detail, decisions, and execution notes: [plan.phase-3.md](./plan.phase-3.md).
+> Detail, decisions, and execution notes: `plan.phase-3.md`.
 >
 > **Phase 3 is complete (code in `43e59cc`, 2026-08-04; measured against a real playlist 2026-08-05).** Verified numbers, all in [`agent_findings.md`](../agent_findings.md) (2026-08-05): a 42-card cold deck crawls in **153.0 s** (~3.64 s/card), the **card-1 gate cleared in 6.06 s** with 1 of 42 resolved, a rapid advance to index 41 resolved **that** card in 5.67 s instead of ~145 s, a warm re-crawl cost **0 lookups**, and the client saw **0** 429s because a sequential loop paced at 1.1 s never contends with itself. A third of an ordinary deck (15 of 42) settled at `confidence: 'none'` and every one stayed playable.
 >
 > Two deviations worth carrying forward: a 500 is mapped to `not-configured` only from the response **body** (`api/year.ts` also returns 500 for its catch-all, and the two want opposite handling), and `YEAR_RESOLVED` updates **every** card sharing an id, because a playlist may legitimately hold the same track twice.
 >
-> **Real-deployment verification of progressive loading moved to [plan.phase-4-6-screens.md](./plan.phase-4-6-screens.md)** — it needs a UI to exercise, and that plan is what produces one.
+> **Real-deployment verification of progressive loading moved to `plan.phase-4-6-screens.md`** — it needs a UI to exercise, and that plan is what produces one.
 
 ### Phase 4 — Card UI
 
@@ -227,9 +229,9 @@ Browser (SPA)                          Serverless (Vercel Functions)
 - [x] In-app audio wired to the Phase 0 winner; if unavailable for a track, disable Play/Pause and Restart but keep the QR and Exit fully functional — `src/hooks/useCardAudio.ts`, one session-scoped `<audio>` element whose `src` swaps per card
 - [x] **Playback runs to its natural end — no auto-stop timer and no auto-advance** (decided 2026-08-04). It stops only when the player pauses, exits, or moves to the next card. Note the ceiling this runs into: `previewUrl` is a **30-second** MP3, so "the full song" is 30 seconds, not the whole track — there is no way to play more, since the app has no Spotify playback session (see §2). The QR is what gets the player to the full track.
 - [x] Pause/stop audio on ~~flip/~~next/restart, and stop it on Exit — never let a track bleed into the next card or double up on itself. One element makes this structural rather than a rule to enforce
-  - **REVERSED IN PART, 2026-08-06 (developer decision, [plan.phase-8-features.md](./plan.phase-8-features.md) step 1): audio no longer stops on the FLIP.** The preview survives the reveal and stops only when the card changes or the player confirms Exit. The flip rule was this phase's own reasoning — "once the answer is on screen the preview has no job left" — and playing the game disagreed with it: **hearing the song while reading the year is the point of the reveal.** Its second justification, a lingering preview bleeding into the next card, was **already covered by the card-change rule**, which keys on card id and is also what makes a swipe stop the audio. So `GameScreen`'s stop-on-flip effect was **deleted and nothing replaced it**; `CardControls` lives outside the card, so Play/Pause stays reachable while the reveal is showing and a player who wants silence has a button. `GameScreen.test.tsx`'s "should stop audio when the card is flipped" is now `should **not** stop audio when the card is flipped` — the assertion that catches a re-add.
+  - **REVERSED IN PART, 2026-08-06 (developer decision, `plan.phase-8-features.md` step 1): audio no longer stops on the FLIP.** The preview survives the reveal and stops only when the card changes or the player confirms Exit. The flip rule was this phase's own reasoning — "once the answer is on screen the preview has no job left" — and playing the game disagreed with it: **hearing the song while reading the year is the point of the reveal.** Its second justification, a lingering preview bleeding into the next card, was **already covered by the card-change rule**, which keys on card id and is also what makes a swipe stop the audio. So `GameScreen`'s stop-on-flip effect was **deleted and nothing replaced it**; `CardControls` lives outside the card, so Play/Pause stays reachable while the reveal is showing and a player who wants silence has a button. `GameScreen.test.tsx`'s "should stop audio when the card is flipped" is now `should **not** stop audio when the card is flipped` — the assertion that catches a re-add.
 
-> Detail, decisions, and execution notes: [plan.phase-4-6-card-ui.md](./plan.phase-4-6-card-ui.md).
+> Detail, decisions, and execution notes: `plan.phase-4-6-card-ui.md`.
 >
 > **Phase 4 is complete (2026-08-05), except for manual verification on real hardware.** It also added the repo's DOM test environment — jsdom plus Testing Library, opted into **per test file** with a `@vitest-environment jsdom` docblock so the default stays `node`. The suite went from 233 tests to 278.
 >
@@ -245,7 +247,7 @@ Browser (SPA)                          Serverless (Vercel Functions)
 - [x] Keyboard controls (Space = flip, → = next) for laptop/tablet play
 - [ ] ~~Verified on real iOS Safari + Android Chrome (touch is where this breaks)~~ — **waived 2026-08-05, deliberately not performed.** Left unticked because it was not done, not because it is still queued
 
-> **Phase 5 built, with one deliberate gap.** Detail and execution notes in [plan.phase-4-6-gestures.md](./plan.phase-4-6-gestures.md).
+> **Phase 5 built, with one deliberate gap.** Detail and execution notes in `plan.phase-4-6-gestures.md`.
 >
 > **The swipe itself is verified by neither tests nor a device.** jsdom cannot exercise a drag — Motion's drag handling reads element geometry jsdom does not compute, so a simulated pointer sequence asserts that the test double works rather than that the gesture does. The response was to push every decision a drag makes into pure functions in `src/game/gestures.ts`, which the node environment covers exhaustively on both sides of every boundary (15 tests), and to keep jsdom for the keyboard path and stack composition (11 + 6). What no local check reaches is whether the numbers feel right under a thumb — and the real-device pass that would have answered that was waived. This is recorded as a known limitation in [`../development.md`](../development.md) §8 rather than treated as pending work.
 >
@@ -271,7 +273,7 @@ Browser (SPA)                          Serverless (Vercel Functions)
 
 - [x] **Non-blocking notices from `/api/playlist`**, both shown only when they apply and neither ever blocking Start:
   - the `truncated` warning ("this playlist may have more tracks than shown — only the first 100 could be loaded"), per the Phase 0 track-source decision
-  - a `skippedCount` note ("n tracks could not be read and were left out") — **decided 2026-08-04: yes, this surfaces.** Normally `0`, so nothing renders in the common case. A deck missing one malformed track is still playable, so this is a note, not an error. Rationale in [plan.phase-2-playlist.md](./plan.phase-2-playlist.md) Open Questions
+  - a `skippedCount` note ("n tracks could not be read and were left out") — **decided 2026-08-04: yes, this surfaces.** Normally `0`, so nothing renders in the common case. A deck missing one malformed track is still playable, so this is a note, not an error. Rationale in `plan.phase-2-playlist.md` Open Questions
   - a third notice was added in build: **`yearLookupsUnavailable`**, the one derived from game state
     rather than from the fetch. A deployment with no `MUSICBRAINZ_USER_AGENT` will never resolve a
     year for any card, and the deck is still playable, so it is a notice rather than an error
@@ -307,7 +309,7 @@ nothing dispatches `YEAR_RESOLVED`, and **the loading screen stayed up forever**
 this phase, because nothing could deal a pre-resolved deck.
 
 **Still owed:** the real-deployment verification of progressive loading (step 15 of
-[plan.phase-4-6-screens.md](./plan.phase-4-6-screens.md), carried over from Phase 3), including the
+`plan.phase-4-6-screens.md`, carried over from Phase 3), including the
 50-track cold-deck wall clock and the StrictMode request count. See [development.md](../development.md) §5.
 
 ### Phase 7 — Polish (complete)
@@ -319,8 +321,8 @@ this phase, because nothing could deal a pre-resolved deck.
 - [x] README: setup, env vars, deploy, known limitations
 
 **The middle two boxes are the first half, shipped 2026-08-05** —
-[plan.phase-7-look.md](./plan.phase-7-look.md). The other three are the second half, shipped
-2026-08-06 — [plan.phase-7-robustness.md](./plan.phase-7-robustness.md). **"Added by" has moved to
+`plan.phase-7-look.md`. The other three are the second half, shipped
+2026-08-06 — `plan.phase-7-robustness.md`. **"Added by" has moved to
 Phase 8**, where its bullet now carries the re-spike that unblocked the decision (below).
 
 **The app now has a design surface.** `src/index.css` grew from 24 lines to one `@theme static` block
@@ -384,7 +386,7 @@ of a fixed 288px card. The card is now fluid, so at its floor the same 96px is 5
 retuned: all five gesture thresholds are documented guesses that have never met a thumb, and a second
 guess is not an improvement on the first. The arithmetic is recorded in `src/game/gestures.ts`.
 
-**The second half shipped 2026-08-06** — [plan.phase-7-robustness.md](./plan.phase-7-robustness.md).
+**The second half shipped 2026-08-06** — `plan.phase-7-robustness.md`.
 Failure states, the bundle, the audit and the documentation. 497 tests across 36 files, up from 474
 across 34.
 
@@ -473,10 +475,10 @@ verification — which this plan **added** the game-screen Lighthouse audit to r
 ### Phase 8 — Nice-to-haves (code complete; every remaining item is manual verification)
 
 **All six items are resolved, across three plans, all on 2026-08-06.** Two shipped as features
-([`plan.phase-8-features.md`](./plan.phase-8-features.md): the share link, the saved-playlist library,
+(`plan.phase-8-features.md`: the share link, the saved-playlist library,
 the PDF export, plus the audio-across-the-flip reversal), two more as the look and the shell
-([`plan.phase-8-look-and-shell.md`](./plan.phase-8-look-and-shell.md): the neon ring and the PWA), one
-was resolved **won't-build** with no code ([`plan.phase-8-added-by.md`](./plan.phase-8-added-by.md)),
+(`plan.phase-8-look-and-shell.md`: the neon ring and the PWA), one
+was resolved **won't-build** with no code (`plan.phase-8-added-by.md`),
 and one — prerendering — was **retired by a favicon fix** rather than built. Nothing in the phase is
 still waiting on a decision.
 
@@ -499,7 +501,7 @@ what makes the game's payoff audible at all.
       deferred a third time.** Show who added that track to the playlist, alongside
       title/artist/year, once the card is flipped. **Moved here from Phase 7 on 2026-08-06, after
       the re-spike that phase owed**, then resolved the same day by
-      [`plan.phase-8-added-by.md`](./plan.phase-8-added-by.md) — a plan that writes no code, which is
+      `plan.phase-8-added-by.md` — a plan that writes no code, which is
       its result rather than its limitation. The checkbox is ticked for the **decision**; no feature
       was built and none should be. It was blocked on data availability rather than on UI, and here
       is the current evidence:
@@ -532,14 +534,14 @@ what makes the game's payoff audible at all.
     it would surface in the normaliser, in the persisted session's validator and in the year cache's
     key space for nothing. `shared/types.ts` is untouched, and so is every other file under `src/`,
     `api/` and `shared/`.
-  - Two questions were left genuinely open rather than answered by this resolution, both in
-    `plan.phase-8-added-by.md` §Open Questions: whether a **user-owned-playlists product** (PKCE,
+  - Two questions were left genuinely open rather than answered by this resolution (both were in
+    `plan.phase-8-added-by.md`): whether a **user-owned-playlists product** (PKCE,
     "make your own deck from your own playlist") is ever wanted, which is §2's decision to re-take;
     and whether any **non-Spotify attribution source** exists — not obviously, since nothing in
     MusicBrainz knows who added a track to somebody's playlist, and no third source has been looked
     for.
 - [x] **Card visual design (take cues from the reference repo's neon-ring aesthetic)** — built
-      2026-08-06, [`plan.phase-8-look-and-shell.md`](./plan.phase-8-look-and-shell.md) steps 1–8. The
+      2026-08-06, `plan.phase-8-look-and-shell.md` steps 1–8. The
       reference turned out to be **in the repo already**: `docs/plans/custom-jitster-mockup.png`, a
       green → cyan → magenta gradient ring with a soft bloom on near-black faces. **Phase 7's bet paid
       off** — the redesign cost ten tokens, two `@utility` composites and **four class-string edits
@@ -572,7 +574,7 @@ what makes the game's payoff audible at all.
     height, because centre-origin `scale()` cancels the 10px offset. **Not fixed** (a deck-feel
     decision); recorded in [`../development.md`](../development.md) §8 and the findings.
 - [x] **Shareable deck URL** (playlist id + shuffle seed) — built 2026-08-06,
-      [`plan.phase-8-features.md`](./plan.phase-8-features.md) steps 6–11. `?playlist=&seed=`, read
+      `plan.phase-8-features.md` steps 6–11. `?playlist=&seed=`, read
       once in a lazy initialiser, submitted through the same `request` the landing form uses, and the
       seed handed to `start`'s third argument — so **the reducer is untouched**, exactly as
       `GameState.seed`'s own comment predicted. **The heading above is wrong in one word and it
@@ -641,9 +643,9 @@ what makes the game's payoff audible at all.
       (five real playlists on a deployment, a private one among five, a share link in a clean
       profile, a saved deck across a reload, the PDF filename, 360px, the keyboard path) and §8's
       ~500-card crawl wall clock. Two plans:
-      [`plan.multi-playlist-core.md`](./plan.multi-playlist-core.md) (the merge module, the widened
+      `plan.multi-playlist-core.md` (the merge module, the widened
       `GameState`, both v2 storage formats, the multi-id link — **built 2026-08-07**) and
-      [`plan.multi-playlist-ui.md`](./plan.multi-playlist-ui.md) (the landing rows, the fan-out hook,
+      `plan.multi-playlist-ui.md` (the landing rows, the fan-out hook,
       the container wiring and the labels — **built 2026-08-07** too; this entry said "not built" until
       2026-09-19, long after AGENTS.md had corrected the same claim). The landing screen is a list of
       1..5 rows and `usePlaylist.request(urls)` fans out under one `AbortController`.
@@ -664,16 +666,16 @@ what makes the game's payoff audible at all.
       trademark relabel through the Bubblewrap shell to a staged production rollout, and the two
       below are **frozen** — they keep their reasoning and their dated history, and their unfinished
       boxes tick only when the matching step in plan 3 does. Point `/plan-exec` at plan 3 and nothing
-      else. **Its steps 2, 3 and 8 are done (2026-09-19)**: the deployed asset-links and privacy
-      fetches are recorded, the first suggested playlist is relabelled `'Jitster official'` (gate M1),
-      and `visual-assets/tester-notes.md` exists. Everything left needs a phone or the Play Console. The
+      else. **Its steps 1–8 are done (2026-09-19 to 2026-09-21)**: among them the relabel to
+      `'Jitster official'` (gate M1), the generated `android/` shell and its signing key, the first
+      build and install, and `visual-assets/tester-notes.md`. Everything left needs the Play Console. The
       order the first two were written in is not the order they were built in:
       [`plan.google-play-shell.md`](./plan.google-play-shell.md) (Bubblewrap shell in a new `android/`
       tree, `public/.well-known/assetlinks.json` with BOTH certificate fingerprints, `public/privacy.html`,
       four manifest fields, the listing under `visual-assets/`, and the store's closed-testing gate of
       twelve testers for fourteen days — **steps 1-5 built 2026-09-19**: the origin, the four manifest
-      fields, the privacy page, the placeholder asset-links file and the toolchain. Step 6 onward needs a
-      device and a Play Console account, and `android/` does not exist yet) and
+      fields, the privacy page, the placeholder asset-links file and the toolchain. Its later steps are
+      owned by plan 3, and `android/` exists since 2026-09-20) and
       [`plan.google-play-back-button.md`](./plan.google-play-back-button.md) (Android's back gesture
       becomes an exit REQUEST through `ExitConfirmDialog`, via one pushed history entry while
       `GameScreen` is mounted — **code built 2026-08-12**, seven device rows still Pending because only
@@ -692,7 +694,7 @@ what makes the game's payoff audible at all.
 
 ## 6. Open Questions
 
-- [ ] Card art direction — reuse the reference repo's neon-ring look, or something new?
+- [x] Card art direction — reuse the reference repo's neon-ring look, or something new? — **Resolved in Phase 8: the neon ring, built.**
 - [x] Is a manual "paste track links" fallback wanted in v1 if the embed scrape proves unreliable? — **Resolved in Phase 0 (§5): no, deferred past v1.** A 100-tracks-exactly warning banner substitutes for it; see the track-source-mechanism decision.
 - [x] Should year review be mandatory before Start, or skippable with a "years may be off" warning? —
       **Resolved 2026-08-04: neither. There is no pre-Start year review at all.** The person pasting the
@@ -755,7 +757,7 @@ what makes the game's payoff audible at all.
 - [ ] **Two tabs share the `localStorage` keys and the last write wins**, silently clobbering the other
       tab. Accepted for v1 — Phase 3's call, re-confirmed in Phase 6, and **now covering two keys
       rather than one**: Phase 8 added `hitster:library:v1` beside `hitster:session:v1`
-      (2026-08-06, `plan.phase-8-features.md` step 15). The library inherits the hazard rather than
+      (2026-08-06, `plan.phase-8-features.md` step 15, deleted; in git history). The library inherits the hazard rather than
       adding a new one, and inherits it cheaply — an entry is an id, a name and a timestamp, so a
       clobber costs a row somebody re-saves, where the session key's costs a game. A single
       `storage`-event guard would fix both and remains the fix if it ever bites; neither Phase 8 plan

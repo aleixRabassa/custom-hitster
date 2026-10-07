@@ -1,5 +1,5 @@
 <!-- Plans for year-fetch-rework (in order):
-  1. plan.year-fetch-rework-mb-fixes.md  — licence-clean MusicBrainz fixes: the cleaner bug, new cleaner families, no silent degradation, the tokenised rescue rung
+  1. plan.year-fetch-rework-mb-fixes.md (deleted; in git history) — licence-clean MusicBrainz fixes: the cleaner bug, new cleaner families, no silent degradation, the tokenised rescue rung
   2. plan.year-fetch-rework-server.md    — the provider vote in shared/, the Deezer/iTunes adapters, per-provider gates and cache, /api/year stages
   3. plan.year-fetch-rework-game.md      — the game layer: provisional years, keepYearless, the two-lane resolver, persistence, the PDF gate  ← this file
   4. plan.year-fetch-rework-ui.md        — the reveal's year slot, the picker checkbox and its remembered preference, copy in three languages, the blank PDF year
@@ -202,6 +202,10 @@ wires the control.
     - A provisional card becomes final with its provisional year and `low`, keeping the best single
       answer, as the spike's §10.3 rule says.
     - A card with nothing becomes final null.
+    - _Later, 2026-10-01: a card whose verify retries ran out without any verify answering with a
+      year settles `yearUnverified` ("Year could not be checked") instead, and is never dropped as
+      unconfirmed; `yearVerifyAnswered` is saved so a reload keeps the difference (AGENTS.md, "the
+      resolver")._
 
     The resolve lane's deferred pass settles null exactly as today.
 

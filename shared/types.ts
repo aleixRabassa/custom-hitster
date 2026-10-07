@@ -29,7 +29,7 @@ export type YearConfidence = 'high' | 'low' | 'none';
  * The minimal input a year lookup needs.
  *
  * Kept as its own type rather than folded into `Card` so that `/api/year`
- * (plan.phase-2-year.md) depends on a small stable shape instead of the whole card.
+ * (plan.phase-2-year.md, deleted; in git history) depends on a small stable shape instead of the whole card.
  * A `Card` is structurally a valid `TrackRef`, so callers can pass one directly.
  *
  * `artist` is the RAW joined artist string exactly as Spotify supplied it -- see
@@ -48,7 +48,7 @@ export interface TrackRef {
  * TWO THINGS THIS TYPE DELIBERATELY DOES NOT DO:
  *
  * 1. `year` and `yearConfidence` are declared here but NEVER set by
- *    plan.phase-2-playlist.md -- the Spotify embed endpoint carries no release date
+ *    plan.phase-2-playlist.md (deleted; in git history) -- the Spotify embed endpoint carries no release date
  *    at track level (Phase 0), so a year can only come from MusicBrainz. The fields
  *    exist now so Phase 3 and Phase 4 have a stable shape to build against.
  *
@@ -80,7 +80,7 @@ export interface Card {
    */
   isPlayable: boolean;
   /**
-   * Original release year, filled in by plan.phase-2-year.md. Three states, and the
+   * Original release year, filled in by plan.phase-2-year.md (deleted; in git history). Three states, and the
    * difference between the last two matters to Phase 3's progressive loading:
    * `undefined` = not looked up yet, `null` = a FINAL "no year" (every provider was asked),
    * a number = resolved (check `yearConfidence` before trusting it, and `yearProvisional`
@@ -199,7 +199,7 @@ export interface PlaylistErrorResult {
 // ===========================================================================
 //  YEAR RESOLUTION
 //
-//  The vocabulary of plan.phase-2-year.md. The logic that produces these values
+//  The vocabulary of plan.phase-2-year.md (deleted; in git history). The logic that produces these values
 //  is in `shared/year.ts` (pure) and `api/_lib/musicbrainz.ts` (all the I/O).
 // ===========================================================================
 
@@ -337,7 +337,7 @@ export interface CleanedTitle {
  * One (recording x release) pair, flattened and normalized away from MusicBrainz's JSON.
  *
  * The scorer in `shared/year.ts` sees ONLY this shape, never a raw response. That is what
- * makes every accuracy claim in plan.phase-2-year.md a unit test over fixtures instead of
+ * makes every accuracy claim in plan.phase-2-year.md (deleted; in git history) a unit test over fixtures instead of
  * a live, rate-limited, non-deterministic network call (decision 16) -- and it confines a
  * MusicBrainz shape change to `api/_lib/musicbrainz.ts`.
  *

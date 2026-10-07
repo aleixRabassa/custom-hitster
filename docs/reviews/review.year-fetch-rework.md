@@ -1,7 +1,7 @@
 # Review: year-fetch-rework
 
 **Plan:** four parts, built in order —
-[mb-fixes](../plans/plan.year-fetch-rework-mb-fixes.md) ·
+`mb-fixes` (deleted 2026-10-07; in git history) ·
 [server](../plans/plan.year-fetch-rework-server.md) ·
 [game](../plans/plan.year-fetch-rework-game.md) ·
 [ui](../plans/plan.year-fetch-rework-ui.md)
@@ -122,9 +122,9 @@ already listed in `AGENTS.md`.
 ## Out-of-Scope Changes
 
 None detected. The `--fix` changes to plan 2 step 10 (W2/W4) and plan 3 step 4 (S1) were made on
-the developer's rulings during this review. The docs record each reversal; the plan files have not
-been annotated yet (task-review adds no steps or checkboxes to a plan, but a dated note is the
-developer's call).
+the developer's rulings during this review. The docs record each reversal, and each plan carries a
+dated "Later, 2026-10-01" note under the step it changes (task-review adds no steps or checkboxes
+to a plan; the notes were the developer's call).
 
 ## Verdict
 

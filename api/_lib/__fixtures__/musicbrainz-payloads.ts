@@ -441,7 +441,7 @@ export const joinPhraseSearch = {
 
 /**
  * A track MusicBrainz ALONE cannot place, pinned as a miss. Captured live for
- * docs/plans/plan.year-fetch-rework-mb-fixes.md step 7, when the adapter still had a fourth,
+ * plan.year-fetch-rework-mb-fixes.md (deleted; in git history) step 7, when the adapter still had a fourth,
  * `tokenised` rung (every title word quoted and ANDed) that found it; that rung was removed on
  * 2026-10-01, and this capture now pins what the three phrase queries do without it.
  *

@@ -1,5 +1,5 @@
 <!-- Plans for year-fetch-rework (in order):
-  1. plan.year-fetch-rework-mb-fixes.md  — licence-clean MusicBrainz fixes: the cleaner bug, new cleaner families, no silent degradation, the tokenised rescue rung
+  1. plan.year-fetch-rework-mb-fixes.md (deleted; in git history) — licence-clean MusicBrainz fixes: the cleaner bug, new cleaner families, no silent degradation, the tokenised rescue rung
   2. plan.year-fetch-rework-server.md    — the provider vote in shared/, the Deezer/iTunes adapters, per-provider gates and cache, /api/year stages
   3. plan.year-fetch-rework-game.md      — the game layer: provisional years, keepYearless, the two-lane resolver, persistence, the PDF gate
   4. plan.year-fetch-rework-ui.md        — the reveal's year slot, the picker checkbox and its remembered preference, copy in three languages, the blank PDF year  ← this file
@@ -175,6 +175,13 @@ The alternatives were rejected for these reasons:
   - [ ] The checkbox is remembered across reloads, and a share link opened in a fresh profile deals
         with the option OFF.
 
+  > **Later, 2026-10-01: the picker's option changed after this plan was built.** The one "Keep cards
+  > with no year found" checkbox became two — "Deal cards with no year found" (`keepYearless`, unticked
+  > by default) and "Deal cards with an unconfirmed year" (`!skipUnconfirmed`, ticked by default) —
+  > and the hint under it was removed. Read "Option ON" in the checks above as the first box ticked
+  > with the second at its default: the loading screen is skipped only when `keepYearless &&
+!skipUnconfirmed`. The steps above stay as written, as the record of what was built.
+
 ---
 
 ## Unit Tests
@@ -279,6 +286,8 @@ The alternatives were rejected for these reasons:
 - [ ] Do the Spanish and Catalan strings read naturally? Ask a native speaker.
 - [ ] Does the checkbox plus its hint push Start below the fold on a 320 px phone? It is a manual row.
       If it does, dropping the hint is the first lever.
+      _2026-10-01: the hint has since been removed, and the checkbox is now two options; the 320 px
+      fit is still a manual row._
 
 ---
 

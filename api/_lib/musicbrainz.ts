@@ -376,7 +376,7 @@ function buildAttempts(input: YearLookupInput): { kind: MusicBrainzAttempt; quer
  *  `upstream-unavailable` as transient: `resolve-year.ts` caches nothing,
  *  `/api/year` answers 502, and the client retries later. The request already
  *  spent IS discarded -- that is the price, and it buys never caching a
- *  degraded year. See docs/plans/plan.year-fetch-rework-mb-fixes.md step 5.
+ *  degraded year. From plan.year-fetch-rework-mb-fixes.md step 5 (deleted; in git history).
  * ===========================================================================
  */
 async function attachReleaseGroupDates(

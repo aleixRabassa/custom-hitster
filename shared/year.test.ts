@@ -365,7 +365,7 @@ describe('cleanTrackTitle, the 2026-09-30 families', () => {
 
   it('should set the expected strip flag for each new family', () => {
     // Every new family maps to an EXISTING `TitleStripFlags` member, so the type did not
-    // change (plan.year-fetch-rework-mb-fixes.md decision 8).
+    // change (plan.year-fetch-rework-mb-fixes.md decision 8; deleted, in git history).
     for (const [raw, family] of [
       ['Song - Sped Up', 'version'],
       ['Song - Slowed + Reverb', 'version'],

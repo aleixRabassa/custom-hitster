@@ -41,8 +41,9 @@ one below is a comment or an identifier, never a rendered string.
 ### The audit's one hit — RESOLVED 2026-09-19 by relabelling
 
 `SUGGESTED_PLAYLISTS[0]` in `src/components/LandingScreen.tsx` read
-`{ id: '34cIJlWIX9TEoA8bpI2UBu', label: 'Hitster', blurb: 'Mixed hits' }`, and it is now
-`{ id: '34cIJlWIX9TEoA8bpI2UBu', label: 'Jitster official', blurb: 'Mixed hits' }`. **The id did not
+`{ id: '34cIJlWIX9TEoA8bpI2UBu', label: 'Hitster', blurb: 'Mixed hits' }`. It now reads its label
+from `PLAYLIST_NAME_OVERRIDES[JITSTER_OFFICIAL_PLAYLIST_ID]` ("Jitster official", in
+`src/game/playlist-display-name.ts`) and its blurb from the copy key `mixedHits`. **The id did not
 change** — the same playlist, a different label.
 
 **The relabel reaches the game screen too as of 2026-09-24.** It was found that day that the dealt
@@ -81,21 +82,17 @@ Consequences, now that it is decided:
   it silently. The relabel itself is invisible to the rest of the suite by design: eleven existing
   sites read `SUGGESTED_PLAYLISTS[0]!.label` symbolically and no test holds the literal.
 
-### Two more places the word appears, neither of them listing copy
+### Where else the word appears, none of it listing copy
 
 - **`README.md` links to the board game by name** ("a playable digital [Hitster](…) deck"). Its second
   use — printed cards "sized to match shop-bought Hitster cards" — went with the 2026-09-21 card
   geometry, which dropped the 65 mm size. The remaining link is fine for a repository — it
   is describing what the project is modelled on, to developers — and it is **not** fine in anything
   pasted into the Console. Do not copy a sentence from the README into the listing.
-- **`public/privacy.html` names the two storage keys**, so the word appears on the page the
-  listing's privacy-policy URL points at. It is a technical identifier in a policy document, not
-  marketing copy, and renaming the keys would discard saved games. Left as is, recorded here so it
-  is a decision rather than an oversight.
-- **`public/robots.txt`'s first line is a comment beginning "Custom Hitster is a single public
-  page…"** — served at `<origin>/robots.txt`, so publicly fetchable, though it is a developer
-  comment in a crawler directive rather than anything a player or a reviewer is shown. Noted for
-  completeness; not listing copy, and not changed here.
+- **`public/privacy.html` no longer carries the word**: it names the storage keys, which are
+  `jitster:*` since the 2026-09-30 rename (no migration, at the developer's request).
+- **`public/robots.txt`'s first line** began "Custom Hitster is…" until 2026-09-19, when
+  `plan.play-store-todo.md` step 3 reworded it to "Playlist Jitster".
 
 ### The name itself — RESOLVED 2026-09-23
 
@@ -133,7 +130,7 @@ read next to twenty others.
 
 ## 3. Full description — 4000 character limit
 
-**2194 characters** of the 4000 allowed (recounted 2026-09-21, after the 49 mm / 16-per-sheet edit).
+**2212 characters** of the 4000 allowed (recounted 2026-10-07, after the several-databases edit).
 
 ```text
 Playlist Jitster turns any public Spotify playlist into a music timeline card game.
@@ -146,7 +143,7 @@ HOW A ROUND GOES
 3. Guess the year, then flip the card to check.
 
 THE YEAR IS THE POINT, SO IT IS LOOKED UP PROPERLY
-Spotify reports the date of the album edition you happen to be listening to, which turns a 2011 remaster into a 2011 song. Playlist Jitster asks MusicBrainz for the original release year instead, and marks a year it is unsure about rather than pretending. A song it cannot place at all is left out of the deck.
+Spotify reports the date of the album edition you happen to be listening to, which turns a 2011 remaster into a 2011 song. Playlist Jitster checks the original release year against several music databases instead, and marks a year it is unsure about rather than pretending. A song it cannot place at all is left out of the deck.
 
 PLAY ON PAPER TOO
 • A printable PDF of year cards, 1970 to 2033, ready before you have chosen a playlist. Print them, cut them out, and lay the timeline along the table.
@@ -221,7 +218,7 @@ background), and the capture's square corners showing just inside the rounded fr
       `pwa-maskable-512x512.png` — that one is a separate file whose artwork is drawn at **72% of
       the canvas** with the rest as background, so a launcher can crop it to any shape; as a store
       icon it would read as a small mark floating in a large field.
-- [ ] **Open the 512 and look at it.** It DOES carry a wordmark. `plan.google-play-shell.md` as
+- [x] **Open the 512 and look at it.** It DOES carry a wordmark. `plan.google-play-shell.md` as
       written on 2026-08-11 claimed the icons carried none; its 2026-09-19 review note already
       records the correction, and this file repeats it because the listing is where the icon
       actually gets uploaded. The icons read "PLAYLIST HITSTER" until the 2026-08-12 artwork
@@ -258,7 +255,7 @@ Things to know before reusing any of them:
   skips edition-suffixed titles and "Unconfirmed" years, so a screenshot never advertises a
   low-confidence answer.
 - **The social pieces say "Now on Google Play"** — true only from the production rollout (plan 3 step
-  17). Do not post them before. None of the graphics says "free": the app is paid (§5).
+  17). Do not post them before. None of the graphics mentions a price.
 - **No graphic contains the word the trademark rule forbids** — every text string was written by hand
   and the AI-generated layouts were checked for baked-in text. Two generated backgrounds DID carry
   faint baked copies of their own headlines, which is why the feature graphic sits on a solid
@@ -275,27 +272,17 @@ From `plan.google-play-shell.md` steps 10 and 14.
 | App name           | Playlist Jitster                                                  |
 | Default language   | English (`manifest.lang` is `en`, `dir` is `ltr`)                 |
 | Category           | Games, with a music/trivia subcategory                            |
-| Price              | **Paid — €1.00, one-time** (changed 2026-09-21; see below)        |
+| Price              | **Free** (2026-10-07; see below)                                  |
 | Ads                | None                                                              |
 | Target audience    | Not primarily child-directed, to stay outside the Families policy |
 | Privacy policy URL | `https://playlistjitster.vercel.app/privacy.html`                 |
 
-**The app is PAID as of 2026-09-21, and the ORDER of that decision is the part that matters.** Google
-allows paid → free and **refuses free → paid**: an app that has ever been offered free can only be
-charged for by creating a new app **with a new package name**, which would throw away
-`aleixrabassa.playlistjitster` and every permanent identity built on it. So choosing paid now is the
-reversible direction and choosing free would have been the one-way door. Read from
-`support.google.com/googleplay/android-developer/answer/6334373`, 2026-09-21.
-
-Three things that follow, none of them about the number. **A payments profile is a PREREQUISITE** —
-Google's own steps are "set up a payments profile, review the price ranges, then enter a price" — and
-it is a merchant account with bank and tax details and its own verification cycle, so it is a calendar
-wait of the same kind as identity verification and wants starting immediately. **The €1.00 must be
-checked against Play's price-range list for EUR** rather than assumed; the minimum was not sourced here
-and is deliberately not guessed. And **what €1.00 nets is not €1.00**: Play's service fee applies, and
-whether Google is the merchant of record for Spanish VAT — which decides whether the €1 is
-VAT-inclusive — was **not verified** and should be read off the payments profile rather than from this
-file.
+**The app is FREE as of 2026-10-07** (plan 3 decision 17; it was paid, €1.00, from 2026-09-21).
+Google allows paid → free and **refuses free → paid**: an app that has ever been offered free can only
+be charged for by creating a new app **with a new package name**. So `aleixrabassa.playlistjitster`
+stays free for good, and a paid version, if one ever ships, is a separate app with its own listing.
+Read from `support.google.com/googleplay/android-developer/answer/6334373`, 2026-09-21. A free app
+needs no payments profile.
 
 The privacy policy URL is `<origin>/privacy.html`, and the origin is the one pinned by step 1:
 `https://playlistjitster.vercel.app`. The file is `public/privacy.html`, static, reaching the
@@ -311,8 +298,8 @@ and the form must account for:
 - the **track title, artist and duration** leaving the device, sent to the year function;
 - the **Upstash cache**, which is server-side storage of those strings with a TTL — server-side
   storage is the part that is easy to answer "no" to by accident;
-- **Spotify receiving the player's IP address**, because preview audio and the embed are fetched by
-  the browser directly rather than proxied;
+- **Spotify receiving the player's IP address** for the preview audio only, and only once Play is
+  pressed — the browser fetches it directly; the embed is fetched by this app's server;
 - MusicBrainz being contacted **server-side**, so it does not see the player at all.
 
 **Fill the form from `public/privacy.html`, which is the enumeration** — it was written from the

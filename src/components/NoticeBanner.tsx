@@ -69,8 +69,8 @@ export interface NoticeBannerProps {
   loadedPlaylistCount?: number;
   /**
    * From `state.yearLookupsUnavailable`. The one notice derived from GAME state rather than from
-   * the fetch: it means the server has no `MUSICBRAINZ_USER_AGENT`, so no card will ever get a
-   * year. The deck is still playable -- the QR always works.
+   * the fetch: it means the server has no year provider configured (`not-configured`), so no card
+   * will ever get a year. The deck is still playable -- the QR always works.
    */
   yearLookupsUnavailable: boolean;
   /**

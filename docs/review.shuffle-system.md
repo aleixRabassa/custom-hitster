@@ -88,7 +88,7 @@ approximation of the χ² statistic; |z| < 2 is consistent with uniform.
   store the full 64-bit seed string — but the comment should say 2³².
 - **Big playlists dominate small ones, by design.** Each playlist's share of the deck is its share of the
   deduped union: a 5-track playlist beside two 100-track ones has roughly a 1-in-10 chance of placing _any_ card
-  in the first 10. `docs/plans/plan.multi-playlist-core.md:368-369` puts weighting explicitly out of scope; not
+  in the first 10. `plan.multi-playlist-core.md` (deleted; in git history) put weighting explicitly out of scope; not
   recommended without a product decision.
 
 ---

@@ -4,7 +4,7 @@ Turn any public Spotify playlist link into a playable digital [Hitster](https://
 
 Built with **Vite 8 + React 19 + TypeScript + Tailwind CSS v4**, with a thin **Vercel Functions** backend that exists only to do what a browser can't: reach a CORS-blocked endpoint, set a custom `User-Agent`, and hold a cache shared across users.
 
-> **Status: playable end to end. Phases 0–8 code complete** — 844 tests across 51 files. Paste a link or pick one of the suggested playlists, and you get a shuffled deck you can flip, swipe, scan and play audio from, with a HUD, an exit confirmation and an end screen. The deck resumes across a reload. Phase 8 added **a shareable deck link, a saved-playlist library, a printable PDF export, the neon-ring card design and an installable offline shell** (all 2026-08-06). On 2026-09-18 a **welcome screen** went in front of the playlist picker (with a downloadable PDF of printable year cards, 1970–2033), and a **left swipe now steps back** a card while a right swipe advances. What remains is **manual verification** — a printer, a phone, a deployment and a screen reader — scoped in [`docs/development.md`](./docs/development.md) §5. See [`docs/plans/plan.md`](./docs/plans/plan.md).
+> **Status: playable end to end. Phases 0–8 code complete.** Paste a link or pick one of the suggested playlists, and you get a shuffled deck you can flip, swipe, scan and play audio from, with a HUD, an exit confirmation and an end screen. The deck resumes across a reload. Phase 8 added **a shareable deck link, a saved-playlist library, a printable PDF export, the neon-ring card design and an installable offline shell** (all 2026-08-06). On 2026-09-18 a **welcome screen** went in front of the playlist picker (with a downloadable PDF of printable year cards, 1970–2033), and a **left swipe now steps back** a card while a right swipe advances. What remains is **manual verification** — a printer, a phone, a deployment and a screen reader — scoped in [`docs/development.md`](./docs/development.md) §5. See [`docs/plans/plan.md`](./docs/plans/plan.md).
 >
 > **You must run it under `vercel dev`, not `pnpm dev`** — see [Quickstart](#quickstart). Under `pnpm dev` the app loads but Start always fails, and it fails in a way that looks like an app bug.
 
@@ -111,9 +111,9 @@ the listing.
 
 The release process — toolchain, build, upload and staged rollout — lives in
 [`docs/development.md`](./docs/development.md) §9, "The Android release (Google Play)"; the manual checks
-the shell introduces are in that file's §5, under "The Trusted Web Activity shell". The plan behind it,
-including every step still outstanding, is
-[`docs/plans/plan.google-play-shell.md`](./docs/plans/plan.google-play-shell.md), and the store
+the shell introduces are in that file's §5, under "The Trusted Web Activity shell". Every step still
+outstanding is in [`docs/plans/plan.play-store-todo.md`](./docs/plans/plan.play-store-todo.md), the
+only executable Google Play plan, and the store
 listing copy is kept under [`visual-assets/`](./visual-assets/) rather than only in the Play Console.
 
 **The install line lands here when the listing does**, together with the store link.
@@ -122,13 +122,13 @@ listing copy is kept under [`visual-assets/`](./visual-assets/) rather than only
 
 ## Environment variables
 
-Full reference, including exactly how the app behaves when each is missing, in [`docs/api.md`](./docs/api.md) §"Environment variables".
+Full reference, including exactly how the app behaves when each is missing, in [`docs/api.md`](./docs/api.md) §4, "Configuration reference".
 
-| Variable                   | Needed             | Notes                                                                                                                                                                                                                                               |
-| -------------------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `MUSICBRAINZ_USER_AGENT`   | Local + production | **You write it**, format `AppName/Version ( contact )`. MusicBrainz blocks anonymous traffic, so without it every `/api/year` call returns `500 not-configured` and no card ever gets a year. The app stays playable and raises a notice saying so. |
-| `UPSTASH_REDIS_REST_URL`   | Production only    | The shared year cache. Provision Upstash Redis through the Vercel Marketplace and both variables are injected.                                                                                                                                      |
-| `UPSTASH_REDIS_REST_TOKEN` | Production only    | Same place, shown alongside the URL.                                                                                                                                                                                                                |
+| Variable                   | Needed             | Notes                                                                                                                                                                                                                                                                                               |
+| -------------------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MUSICBRAINZ_USER_AGENT`   | Local + production | **You write it**, format `AppName/Version ( contact )`. MusicBrainz blocks anonymous traffic, so without it the year lookup skips MusicBrainz with a warning and answers from Deezer and iTunes alone; only the legacy stage-less `/api/year` path returns `500 not-configured`. Set it everywhere. |
+| `UPSTASH_REDIS_REST_URL`   | Production only    | The shared year cache. Provision Upstash Redis through the Vercel Marketplace and both variables are injected.                                                                                                                                                                                      |
+| `UPSTASH_REDIS_REST_TOKEN` | Production only    | Same place, shown alongside the URL.                                                                                                                                                                                                                                                                |
 
 The two Upstash variables are **a pair a deployment either has both of or neither**. With neither, the cache degrades to an in-memory one per function instance — which is a real degradation rather than a no-op: the cache is what makes a repeated playlist instant, and the 1 req/s MusicBrainz gate is backed by the same store, so without them the gate paces nothing across instances. A half-configured deployment (URL only) is logged as a warning, because it is almost certainly a mistake.
 
@@ -161,7 +161,7 @@ Deploy details, including what the preview-deployment verification still owes, i
 Summarised; the full list with measurements is [`docs/development.md`](./docs/development.md) §8. A README that omits these oversells the app.
 
 - **Playlists are capped at 100 tracks, and the app cannot tell when it happened.** The embed payload carries no pagination signal at all — no total, no offset, no `hasMore` — so exactly 100 tracks is indistinguishable from a playlist that genuinely holds 100. A non-blocking notice appears at exactly 100.
-- **Release years are sometimes wrong.** MusicBrainz has no canonical "original studio recording" per song. The strict pass placed 14 of 14 known-tricky tracks exactly, but that is a curated set; a track it cannot place falls through to a relaxed pass that is measurably off by a year or so, and those are marked unconfirmed on the card. A card whose lookup finds nothing at all is removed from the deck, so a real playlist deals roughly a third fewer cards than it has tracks.
+- **Release years are sometimes wrong.** No provider has a canonical "original studio recording" per song. Years come from a vote between MusicBrainz, Deezer and iTunes; a year no second source confirms is marked unconfirmed on the card. A card whose lookup finds nothing at all is removed from the deck unless **Deal cards with no year found** is ticked, so a real playlist can deal fewer cards than it has tracks.
 - **The first play of a cold playlist is slow, and the 1 req/s MusicBrainz budget is global.** Two paced requests per track means a cold 100-track playlist takes several minutes. The cache means only genuinely new songs pay it, but two people resolving cold playlists at once each get half the throughput.
 - **In-app audio covers ~99.5% of tracks**, measured across 398/400. Without a preview URL the audio controls are disabled; the QR code always renders, so the card still works.
 - **The embed endpoint is unofficial** and may change or break without notice. Reading it is outside Spotify's Developer Terms — an accepted risk for a personal project. All scraping is confined to one adapter module, and the QR renders regardless, so the deck degrades rather than dies.

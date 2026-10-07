@@ -864,8 +864,8 @@ probe of a whole suggested deck against the table.**
   before Gemini's, and its retirement is "not sooner than **October 15, 2026**", two weeks after
   this pass.
 - **The first whole-deck probe against the table (§14.10):** `gemini-3.8-flash` gave the
-  developer's year on **94 of 100** Disney cards, where the vote gave it on 49. Haiku's run is
-  pending: the key is not in `.env.local` yet.
+  developer's year on **94 of 100** Disney cards, where the vote gave it on 49. Haiku never ran
+  (§14.14), and it was dropped (§14.15).
 - **Then four decks against the providers, with the film rule (§14.12), and six levers on card 1's
   time (§14.13).** On soundtrack decks the LLM gives the developer's year far more often than the
   vote: 35 against 4, 80 against 49, 87 against 63. On ordinary songs it does worse: 91 against 98.
@@ -1384,14 +1384,14 @@ the same deck.** That is 64% fewer output tokens, for the same 87 of 99.
 the code and against §14.12's numbers. Two are clear wins, one is the change that matters most, and
 one is rejected by measurement.
 
-| #   | Lever                                   | Measured effect on card 1                                   | Recommendation                                                          |
-| --- | --------------------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------- |
-| 1   | The start card in its own request       | **0.1–0.4 s** on healthy legs                               | **Rejected** by measurement; revisit only if Haiku's first line is slow |
-| 2   | The lowest reasoning each model allows  | Nothing left to remove: zero thinking already billed        | **Keep the minimum**: Haiku with no `thinking`, Gemini `low`/`minimal`  |
-| 3   | A compact line                          | **−0.47 s** (1.50 → 1.03 s), and the deck **22.4 → 8.25 s** | **Build**, with a work flag: `{"k","y","f"}`                            |
-| 4   | Fire the request earlier                | A few hundred ms at most, and it loses the play order       | **Fire at `START`, in play order**, not earlier                         |
-| 5   | A shared server cache of LLM answers    | 0 ms for a track already asked; nothing for a new one       | **Build**: keyed by artist and title, versioned by model and prompt     |
-| 6   | Let the LLM's year open the card-1 gate | The only lever that moves card 1 at all                     | **Build, through the vote**: the LLM's film year is final               |
+| #   | Lever                                   | Measured effect on card 1                                   | Recommendation                                                                     |
+| --- | --------------------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| 1   | The start card in its own request       | **0.1–0.4 s** on healthy legs                               | **Rejected** by measurement; revisit only if the pass-1 model's first line is slow |
+| 2   | The lowest reasoning each model allows  | Nothing left to remove: zero thinking already billed        | **Keep the minimum**: Haiku with no `thinking`, Gemini `low`/`minimal`             |
+| 3   | A compact line                          | **−0.47 s** (1.50 → 1.03 s), and the deck **22.4 → 8.25 s** | **Build**, with a work flag: `{"k","y","f"}`                                       |
+| 4   | Fire the request earlier                | A few hundred ms at most, and it loses the play order       | **Fire at `START`, in play order**, not earlier                                    |
+| 5   | A shared server cache of LLM answers    | 0 ms for a track already asked; nothing for a new one       | **Build**: keyed by artist and title, versioned by model and prompt                |
+| 6   | Let the LLM's year open the card-1 gate | The only lever that moves card 1 at all                     | **Build, through the vote**: the LLM's film year is final                          |
 
 #### Lever 1 — The start card in its own request
 
@@ -1409,8 +1409,8 @@ one is rejected by measurement.
   And the start card must be left out of the deck's body, because the cache cannot dedupe two
   requests that are in flight together.
 - **It gains nothing by itself**, because card 1 waits for a final year (lever 6).
-- **Recommendation: do not build it.** Revisit it only if Haiku's first line, when measured, is much
-  slower on a 100-track request than on a one-track one.
+- **Recommendation: do not build it.** Revisit it only if the pass-1 model's first line, on the paid
+  tier, is much slower on a 100-track request than on a one-track one.
 
 #### Lever 2 — The lowest reasoning each model allows
 

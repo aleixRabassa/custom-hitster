@@ -2,11 +2,11 @@
 
 Playlist Jitster is a **client-heavy single-page app with a thin serverless backend**. The game itself — shuffle, flip, swipe, audio, progress — runs entirely in the browser. The backend exists only to do the three things a browser cannot: reach a CORS-blocked endpoint, set a custom `User-Agent`, and hold a cache shared across all users.
 
-> **Implementation status: Phases 1–7 complete and Phase 8 code complete — the app is playable end to end, has a design surface, and fails legibly.** All three functions (`/api/hello`, `/api/playlist`, `/api/year`), the year cache, the client-side game layer (`src/game/`), the card UI, the gestures, and the game flow screens (landing, preparing, HUD, notices, end screen) plus the real `src/App.tsx` container all exist today. So does the **token layer** — `@theme` tokens, fluid card geometry, `prefers-reduced-motion`, focus states and the ARIA/contrast fixes ([`plans/plan.phase-7-look.md`](./plans/plan.phase-7-look.md)) — and the **failure surface**: the `offline` and `empty-playlist` codes, the collapsed-deck redirect, the error boundary, and the two chunk splits ([`plans/plan.phase-7-robustness.md`](./plans/plan.phase-7-robustness.md)). **Phase 8 is code complete** — its three plans are resolved, and what it owes is manual verification ([`development.md`](./development.md) §5) — and the four year-fetch-rework plans (the MusicBrainz fixes, the three-provider vote, the provisional year and `keepYearless`, and their UI) all landed on 2026-09-30. Sections below are marked **[built]** or **[planned]** throughout; planned shapes come from [`plans/plan.md`](./plans/plan.md) §3 and are recorded here because they determine where new code belongs, not because they exist.
+> **Implementation status: Phases 1–7 complete and Phase 8 code complete — the app is playable end to end, has a design surface, and fails legibly.** All three functions (`/api/hello`, `/api/playlist`, `/api/year`), the year cache, the client-side game layer (`src/game/`), the card UI, the gestures, and the game flow screens (landing, preparing, HUD, notices, end screen) plus the real `src/App.tsx` container all exist today. So does the **token layer** — `@theme` tokens, fluid card geometry, `prefers-reduced-motion`, focus states and the ARIA/contrast fixes (`plan.phase-7-look.md`, deleted 2026-10-07; in git history) — and the **failure surface**: the `offline` and `empty-playlist` codes, the collapsed-deck redirect, the error boundary, and the two chunk splits (`plan.phase-7-robustness.md`, deleted 2026-10-07; in git history). **Phase 8 is code complete** — its three plans are resolved, and what it owes is manual verification ([`development.md`](./development.md) §5) — and the four year-fetch-rework plans (the MusicBrainz fixes, the three-provider vote, the provisional year and `keepYearless`, and their UI) all landed on 2026-09-30. Sections below are marked **[built]** or **[planned]** throughout; planned shapes come from [`plans/plan.md`](./plans/plan.md) §3 and are recorded here because they determine where new code belongs, not because they exist.
 >
-> **One thing is owed rather than planned:** progressive loading has never been verified against a real deployment (step 15 of [`plans/plan.phase-4-6-screens.md`](./plans/plan.phase-4-6-screens.md)). See [`development.md`](./development.md) §8.
+> **One thing is owed rather than planned:** progressive loading has never been verified against a real deployment (step 15 of `plan.phase-4-6-screens.md`, deleted 2026-10-07; in git history). See [`development.md`](./development.md) §8.
 >
-> **One caveat carried forward from Phase 5, and Phase 7 sharpened it:** the gesture thresholds have never been verified on a real touch device — and now that the card is fluid, `SWIPE_COMMIT_DISTANCE_PX` is a third of its width at the ceiling and over half at the floor. See [§3 The gestures](#the-gestures-srcgamegesturests--srchooksusecardgesturests--built) and `docs/development.md` §8 Known limitations.
+> **One caveat carried forward from Phase 5:** the gesture thresholds have been verified on one Android device (2026-08-06) and on no iPhone. See [§3 The gestures](#the-gestures-srcgamegesturests--srchooksusecardgesturests--built) and `docs/development.md` §8 Known limitations.
 >
 > **One caveat new in Phase 7:** none of the reduced-motion, responsive or screen-reader behaviour can be verified by any test in this repo — jsdom evaluates no media queries and has no `window.matchMedia` at all. What is automated is both ends of each contract; the middle is a manual pass. See §3 The token layer and `docs/development.md` §5.
 
@@ -85,13 +85,13 @@ Browser                                  Vercel Function
 ┌────────────────────┐                   ┌──────────────────────────────┐
 │ src/main.tsx       │                   │ api/hello.ts                 │
 │   └─ src/App.tsx   │   GET /api/hello  │   imports MAX_EMBED_TRACKS    │
-│      (placeholder) │ ─────────────────▶│   from ../shared/constants.js │
+│      (container)   │ ─────────────────▶│   from ../shared/constants.js │
 │                    │ ◀─────────────────│   returns {ok, message,       │
 └────────────────────┘   JSON            │            maxEmbedTracks}    │
                                          └──────────────────────────────┘
 ```
 
-Playlist ingestion, as built. No caller exists yet — Phase 6 wires the landing page to it:
+Playlist ingestion, as built. Its caller is `src/game/playlist-client.ts`, behind the picker:
 
 ```
                        GET /api/playlist?url=<any accepted form>
@@ -177,7 +177,7 @@ Three orderings in that diagram are load-bearing and easy to "tidy" into bugs. *
 
 A fourth thing is load-bearing and is a 2026-08-11 reversal: **rung ① accepts `Single` and `EP`, not just `Album`.** A release group's `first-release-date` is the date of the record, so an Album-only rung reports the year a song was _included on an album_ rather than the year it came out — Creep 1993 instead of 1992, Mr. Brightside 2004 instead of 2003, and nothing at all for a song like "Hey Jude" that was never on a studio album. Widening is safe in one direction only, and that is why it is safe at all: the rung takes the **earliest** surviving date, so admitting more release groups can only move the answer earlier. A reissue single cannot beat the album it postdates, which is why Billie Jean is still 1982 despite its January 1983 single. The same change added rung ②, because before it the ladder went straight from "official original release" to **no filter at all** — that is what made `low` answers unreliable, since a live take or a bootleg dated the card whenever rung ① missed. Full measurement in [`agent_findings.md`](./agent_findings.md) (2026-08-11).
 
-Three more changes landed on 2026-09-30, from [`plans/plan.year-fetch-rework-mb-fixes.md`](./plans/plan.year-fetch-rework-mb-fixes.md) (spike §8: P1, P2, P6 and the `tokenised` rescue rung). They also moved the cache key to `v5`. On 2026-10-01 the query ladder was reordered and the `tokenised` rung removed, which moved the key to `v6`.
+Three more changes landed on 2026-09-30, from `plan.year-fetch-rework-mb-fixes.md` (deleted 2026-10-07, in git history; spike §8: P1, P2, P6 and the `tokenised` rescue rung). They also moved the cache key to `v5`. On 2026-10-01 the query ladder was reordered and the `tokenised` rung removed, which moved the key to `v6`.
 
 - **The cleaner reads the LAST trailing segment first and works inward.** `TRAILING_SEGMENT_PATTERN` used to have a lazy head, so a title with two bracketed tails was read as one segment it could not classify: `X (REMIX) (feat. Y)` became `REMIX) (feat. Y` and was left unchanged. The same shape made `stripRemixSuffix("A - B - Remix")` return `A`. Now the head is greedy and no segment may contain a bracket. **The cleaner never strips less than before, and that holds by construction.** When a pass finds nothing it can strip, it retries with the old lazy pattern, kept as `LEGACY_TRAILING_SEGMENT_PATTERN`. Two shapes need that retry: `Song - Live at Wembley - 1986`, where the last segment is unrecognised, and nested brackets such as `(From "Movie (Part 2)")`. The whole old algorithm also runs as a floor, and the shorter answer wins. `stripRemixSuffix` uses the new pattern with **no** fallback, because there the lazy read was the bug. The same change added new families: `Sped Up`/`Slowed`, `prod.`, hinted `from …` tails, Spanish `con` and Catalan `amb` featuring tails, the soundtrack tails and the Spanish and Catalan edition words. Each one maps to an existing `TitleStripFlags` member. The remix fallback also runs `cleanTrackTitle()` again on the title it strips, so a `(feat. …)` that sat to the left of `- Remix` is removed too.
 - **The query ladder is three rungs, and the primary-artist guess comes second (2026-10-01).** The rungs of `buildAttempts()`, in order:
@@ -185,7 +185,7 @@ Three more changes landed on 2026-09-30, from [`plans/plan.year-fetch-rework-mb-
   2. `artist-guess`: the quoted title and the primary-artist guess, with no bound, only when the guess differs from the full string;
   3. `unbounded`: the quoted title and the full artist, with no bound.
 
-  A rung runs only when the one before it returned no recordings, so a card that the first rung finds still costs exactly two requests, and a single-artist card asks rungs 1 and 3 only. The remix fallback walks the same ladder. **The order is measured, and swapping rungs 2 and 3 back is the edit to refuse.** Until 2026-10-01 the full-artist unbounded query came second and the guess third, which was Phase 2's order ([`plans/plan.phase-2-year.md`](./plans/plan.phase-2-year.md) decision 15). In the spike baseline the guess found a year for 68% of the cards that reached it (108 of 159), and the unbounded full string for 5% (11 of 235), because Spotify's `", "` join rarely matches MusicBrainz's joinphrase. Over 782 live cards the reorder cut MusicBrainz requests by 15.7% (2.735 → 2.306 per card). MusicBrainz's own answer was unchanged on 774, lost on 3 and moved on 5. The 3 lost are years Deezer already has, so no shown year changed under the vote. Four of the 5 moved to the right year, where the unbounded query had matched only one to three stray recordings credited with the comma list, mostly remixes (Get Lucky 2021 → 2013, twice; Up Where We Belong 1997 → 1982; You're The One That I Want 2021 → 1978). The fifth, Somebody That I Used To Know, is wrong both ways, because the exact artist matcher rejects "Gotye feat. Kimbra" for "Gotye, Kimbra", a separate defect that is still open. **The cost of the order is known.** The guess is lossy for an artist whose own name holds a comma ("Earth" for "Earth, Wind & Fire"), and it is now asked before the full name has been asked without a bound. A probe of 13 such artists with no duration found one wrong year: "Teach Your Children" (Crosby, Stills, Nash & Young) reads 1969 instead of 1970, through a Crosby, Stills & Nash recording that the exact matcher admits. Earth, Wind & Fire itself resolves correctly in both orders, and a non-empty guess pool that scores no year, the steal Phase 2 feared, happened 0 times in 782. A duration-bounded guess was also measured and rejected: 6 lost, 9 moved, and one real steal, The Imperial March. **The `tokenised` rung is gone.** Built on 2026-09-30 as a fourth rung, an AND of the quoted title words, it answered 5 of 782 cards, all five also answered by Deezer, and rescued 0 inside the remix fallback. Its `low` cap in `resolve-year.ts` went with it. The cache key went to `v6`, because the reorder changes answers already cached. See [`agent_findings.md`](./agent_findings.md) (2026-10-01).
+  A rung runs only when the one before it returned no recordings, so a card that the first rung finds still costs exactly two requests, and a single-artist card asks rungs 1 and 3 only. The remix fallback walks the same ladder. **The order is measured, and swapping rungs 2 and 3 back is the edit to refuse.** Until 2026-10-01 the full-artist unbounded query came second and the guess third, which was Phase 2's order (`plan.phase-2-year.md` decision 15, deleted 2026-10-07; in git history). In the spike baseline the guess found a year for 68% of the cards that reached it (108 of 159), and the unbounded full string for 5% (11 of 235), because Spotify's `", "` join rarely matches MusicBrainz's joinphrase. Over 782 live cards the reorder cut MusicBrainz requests by 15.7% (2.735 → 2.306 per card). MusicBrainz's own answer was unchanged on 774, lost on 3 and moved on 5. The 3 lost are years Deezer already has, so no shown year changed under the vote. Four of the 5 moved to the right year, where the unbounded query had matched only one to three stray recordings credited with the comma list, mostly remixes (Get Lucky 2021 → 2013, twice; Up Where We Belong 1997 → 1982; You're The One That I Want 2021 → 1978). The fifth, Somebody That I Used To Know, is wrong both ways, because the exact artist matcher rejects "Gotye feat. Kimbra" for "Gotye, Kimbra", a separate defect that is still open. **The cost of the order is known.** The guess is lossy for an artist whose own name holds a comma ("Earth" for "Earth, Wind & Fire"), and it is now asked before the full name has been asked without a bound. A probe of 13 such artists with no duration found one wrong year: "Teach Your Children" (Crosby, Stills, Nash & Young) reads 1969 instead of 1970, through a Crosby, Stills & Nash recording that the exact matcher admits. Earth, Wind & Fire itself resolves correctly in both orders, and a non-empty guess pool that scores no year, the steal Phase 2 feared, happened 0 times in 782. A duration-bounded guess was also measured and rejected: 6 lost, 9 moved, and one real steal, The Imperial March. **The `tokenised` rung is gone.** Built on 2026-09-30 as a fourth rung, an AND of the quoted title words, it answered 5 of 782 cards, all five also answered by Deezer, and rescued 0 inside the remix fallback. Its `low` cap in `resolve-year.ts` went with it. The cache key went to `v6`, because the reorder changes answers already cached. See [`agent_findings.md`](./agent_findings.md) (2026-10-01).
 
 - **A failed release-group request is a transient error, not a degraded answer (P6).** Until 2026-09-30, a busy gate or a failed request 2 handed the candidates back without their release-group dates. Rung ① then found nothing to date, and the ladder fell through to a `low` year drawn from inlined reissue dates. That answer was cached for seven days as if it were the track's real one. Both branches now fail the lookup. The code is `upstream-unavailable`, or `unexpected-payload` for a 200 that was not JSON. `resolve-year.ts` caches neither, `/api/year` answers 502, and the client retries later. **A busy gate before request 2 is deliberately NOT `rate-limited`.** The client treats a 429 as free, and request 1 has already been spent, so a free retry would spend it again, in a loop. A counted transient failure is bounded by the client's retry budget. **Since 2026-10-01 the rule covers every permit after the lookup's first request**, not only request 2. Query rungs 2–3 run only after rung 1 was spent and came back empty, so a busy gate there used to return `rate-limited`, and the client restarted the lookup from query 1 and spent those empty queries again. Now only query 1 keeps the gate's default 1.5 s wait and the free 429, because nothing has been spent yet. Every later permit of the lookup (rungs 2–3, the release-group request and the remix fallback's first query) waits up to ~3.5 s (`SPENT_LOOKUP_MAX_WAIT_MS`). The gate spaces MusicBrainz requests 1.1 s apart, so that tolerates about three other lookups queued ahead. If the gate still refuses, the lookup returns `upstream-unavailable`, never `rate-limited`. This is a named exception to `rate-limit.ts`'s rule that a function should not wait long for a permit, because a restart spends more gate time than the wait costs. The price is idle function time, only on a cold card whose first query missed, and only under contention. How often that happens is unmeasured. The gain is the same answer an uncontended lookup gets, without the restart loop. The remix fallback learns that the lookup is already spent through `fetchYearCandidates`' `requestsAlreadySpent: true` option, which is why even its first query takes the longer wait. One gap remains: the remix fallback still swallows its own failures, so a release-group failure inside it, or a gate still busy after the longer wait, caches the primary pass's one-day null.
 
@@ -290,9 +290,12 @@ src/game/
                       I/O — no fetch, no window, no storage. The fan-out itself is
                       usePlaylist's; this only decides what the results mean together
   ── year-fetch rework (2026-09-30) ───────────────────────────────────────────
-  prefs.ts            The viewer's remembered preferences (jitster:prefs:v1) — today only
-                      keepYearless. locale.ts's pattern: injected StorageLike, validated
+  prefs.ts            The viewer's remembered preferences (jitster:prefs:v1) — keepYearless
+                      and skipUnconfirmed. locale.ts's pattern: injected StorageLike, validated
                       on read, rebuilt field by field on write
+  preloaded-years.ts  Memoised dynamic import of preloaded-years.json, capped by a timer:
+                      the suggested playlists' years by track id, asked BEFORE /api/year
+  playlist-display-name.ts  Display labels read over saved names ("Jitster official")
 ```
 
 Three properties of that split are load-bearing:
@@ -305,7 +308,7 @@ Three properties of that split are load-bearing:
 
 **Phase 8's four new modules are here rather than in a component or a hook for one reason each, and the reason is always "what could not otherwise be tested".** `deck-link.ts` takes a query STRING instead of reading `location`, so its rejection cases are node tests rather than jsdom ones. `playlist-library.ts` takes an injected `StorageLike`, exactly as `persistence.ts` does, so a corrupt-payload test is a three-line stub. `pdf-sheet.ts` holds every millimetre as arithmetic over numbers because **getting the duplex mirror wrong pairs every card with the wrong answer and is discoverable only by printing and cutting** — the same decision/binding split as `gestures.ts` and `resolver.ts`, applied a third time. `pdf-text.ts` is string rules, and string rules in a hook are string rules nothing covers. The binding halves are `App.tsx` (the link), `EndScreen.tsx` (the two buttons) and `src/hooks/usePdfExport.ts` (the imports, the QR loop, the download).
 
-**The card-1 gate is an invariant of the app, not an implementation detail.** `START` waits for **one** card's answer to be _final_ — the current card's, where a final `null` counts and a provisional year does not (`yearStateOf(card) === 'final'`) — and never for the deck. With `keepYearless` ON nothing gates at all and `START` goes straight to `playing` (see "Provisional years, the two lanes and `keepYearless`" below). Cards 2..n filling in during play is normal, not a loading state. This is the single most likely thing to be "simplified" into a wait-for-everything by someone who only ever tested a playlist whose years were all cached, because a warm deck resolves fast enough to hide the difference. Measured on a real 42-card cold deck (2026-08-05, on the MusicBrainz-only path): the gate cleared in **6.06 s**, the full crawl took **153.0 s**. Those two numbers are the whole argument; their three-provider equivalents are unmeasured.
+**The card-1 gate is an invariant of the app, not an implementation detail.** `START` waits for **one** card's answer to be _final_ — the current card's, where a final `null` counts and a provisional year does not (`yearStateOf(card) === 'final'`) — and never for the deck. When the session can drop nothing (`keepYearless && !skipUnconfirmed`) nothing gates at all and `START` goes straight to `playing` (see "Provisional years, the two lanes and `keepYearless`" below). Cards 2..n filling in during play is normal, not a loading state. This is the single most likely thing to be "simplified" into a wait-for-everything by someone who only ever tested a playlist whose years were all cached, because a warm deck resolves fast enough to hide the difference. Measured on a real 42-card cold deck (2026-08-05, on the MusicBrainz-only path): the gate cleared in **6.06 s**, the full crawl took **153.0 s**. Those two numbers are the whole argument; their three-provider equivalents are unmeasured.
 
 ### Provisional years, the two lanes and `keepYearless` (`src/game/`) — built 2026-09-30
 
@@ -343,7 +346,7 @@ The two pick orders, each re-evaluated before **every** request:
 
 | Where                | Option OFF (the default)                                                                            | Option ON                                                                                                      |
 | -------------------- | --------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `START`              | Filters `year: null` cards; waits in `preparing` until the start card's answer is **final**         | Deals every card and goes straight to `playing` — nothing waits for a year                                     |
+| `START`              | Filters `year: null` cards; waits in `preparing` until the start card's answer is **final**         | Deals every card; goes straight to `playing` unless `skipUnconfirmed` is also on                               |
 | `YEAR_RESOLVED`      | A final null **drops** the card and moves the indices, exactly as since 2026-08-05                  | A final null is recorded as `year: null`, `confidence: 'none'`; the card stays and no index moves              |
 | `RESUME`             | Filters nulls and moves `currentIndex` / `startIndex` by the yearless cards before them             | Resumes the deck exactly as saved, nulls included                                                              |
 | Restart / Play again | Re-deals `state.deck` with the **session's** `state.keepYearless`, never the picker's current value | Same — a deck that kept its yearless cards must not start dropping them because the checkbox was touched since |
@@ -368,8 +371,8 @@ src/components/
                         the keying; calls useCardGestures
   Card.tsx              The 3D flip shell, and the draggable element. Owns no state;
                         both faces live here. NOTHING INTERACTIVE may go inside it
-  CardHiddenSide.tsx    The QR code and one line of generic text. Leaks nothing
-  CardControls.tsx      [Exit] [Play/Pause] [Restart], BESIDE the card — see below
+  CardHiddenSide.tsx    The QR code and nothing else. Leaks nothing
+  CardControls.tsx      [Exit] [Play/Pause] [Keep this deck], BESIDE the card — see below
   CardRevealSide.tsx    Title, artist, and the five-state year slot (see "The reveal's
                         year slot" below)
   QrCode.tsx            Wraps `qrcode`; async generation with a stale-result guard
@@ -380,11 +383,11 @@ src/hooks/
   useCardGestures.ts    Binds gestures.ts's decisions to Motion's drag callbacks
 ```
 
-**The four controls are outside the card, and that placement is a bug fix rather than a layout preference.** They were on the hidden face through Phase 4. Phase 5 then made the card tap-to-flip with `gestureProps.onPointerUp` bound to the card's **outer** element — and a pointer-up on a button inside the card bubbles into that handler, where `isTap()` sees exactly what a genuine tap looks like: a few pixels of movement over a couple of hundred milliseconds with no drag recognised. So **pressing Play both started the audio and revealed the answer.** This is the pointer twin of the Space-on-a-focused-button double-action Phase 5 already guarded against for the keyboard, and it was missed because the two halves shipped in different phases: the buttons were harmless until the card became tappable.
+**The controls are outside the card, and that placement is a bug fix rather than a layout preference.** They were on the hidden face through Phase 4. Phase 5 then made the card tap-to-flip with `gestureProps.onPointerUp` bound to the card's **outer** element — and a pointer-up on a button inside the card bubbles into that handler, where `isTap()` sees exactly what a genuine tap looks like: a few pixels of movement over a couple of hundred milliseconds with no drag recognised. So **pressing Play both started the audio and revealed the answer.** This is the pointer twin of the Space-on-a-focused-button double-action Phase 5 already guarded against for the keyboard, and it was missed because the two halves shipped in different phases: the buttons were harmless until the card became tappable.
 
-It could have been patched with a `closest('button')` check inside the gesture hook. Moving the controls out is the structural fix instead: **there is no interactive element inside the draggable surface at all**, so the class of bug is gone rather than guarded. `CardHiddenSide.test.tsx` and `CardStack.test.tsx` both assert that nothing clickable is in there. The card's face is now the QR code and one line of generic text, which is also the honest shape — the QR is the only part of a hidden card a player is meant to touch, and they touch it with a phone camera.
+It could have been patched with a `closest('button')` check inside the gesture hook. Moving the controls out is the structural fix instead: **there is no interactive element inside the draggable surface at all**, so the class of bug is gone rather than guarded. `CardHiddenSide.test.tsx` and `CardStack.test.tsx` both assert that nothing clickable is in there. The card's face is now the QR code alone, which is also the honest shape — the QR is the only part of a hidden card a player is meant to touch, and they touch it with a phone camera.
 
-**The deck actions are reachable mid-game, and the modal is what makes that safe** (reversal of half of plan 2's decision 7, 2026-08-06). The share link, the save and the PDF export used to be on the end screen and **nowhere else** — and the only way to reach the end screen is to **end the game**, which clears the saved session and cannot be undone. So copying a link cost the player their deck. `CardControls` now has a fourth button that opens `DeckActionsDialog`, which mounts the same `DeckActions` the end screen renders.
+**The deck actions are reachable mid-game, and the modal is what makes that safe** (reversal of half of plan 2's decision 7, 2026-08-06). The share link, the save and the PDF export used to be on the end screen and **nowhere else** — and the only way to reach the end screen is to **end the game**, which clears the saved session and cannot be undone. So copying a link cost the player their deck. `CardControls` has a button that opens `DeckActionsDialog`, which mounts the same `DeckActions` the end screen renders.
 
 Decision 7's two objections are answered rather than dropped. **The spoiler objection** is answered by `DeckActions` itself: it takes the deck (the PDF needs it) and renders only counts — `completed/total`, an excluded **count**, a sheet count — with no title, artist or year in text or in an attribute, asserted against the whole fixture deck in three files. **The swipe objection** is answered by where it mounts: the dialog's backdrop covers the card, and `GameScreen`'s guard 4 suspends its window key handler while it is open, so a → cannot deal a card behind it. Guard 4 is now an **OR over two flags**, and a third dialog must be added to it. Nothing interactive was added inside `Card`, so the Phase 5 tap-is-a-flip class of bug stays structurally impossible.
 
@@ -453,7 +456,7 @@ Four things about this are load-bearing:
 
 - **A tap and a drag begin with the identical pointer event, and both misreadings are destructive.** A tap misread as a swipe skips a card — or, since 2026-09-18, steps back onto one; a left swipe can undo the skip, but not the guess in progress, because a step back resets the flip and the audio. A swipe misread as a tap reveals the answer the player was mid-guess on. This is why `isTap` requires four independent signals to agree, and why the tap radius and the commit distance are asserted not to overlap.
 - **The drag transform and the flip transform are on different elements, and must stay that way.** Both are CSS transforms on the same box if they share an element: Motion writes `translateX` from the drag while Tailwind's `rotate-y-180` writes its own, and the last writer wins. Drag on the outer element, rotation on the inner face wrapper.
-- **The back is ONE card, the next one, and it renders its HIDDEN face and nothing else — reversed 2026-08-06.** It used to be two empty divs, centre-scaled to 96% / 92% and offset 10px, and that produced "two cards, one inside the other" the moment a drag uncovered them: a centre-origin `scale()` insets every edge, so what showed was two concentric rectangles smaller than the card. It is now `absolute inset-0` with **no transform** — covered pixel for pixel at rest, and revealed complete, with its QR already generated, the instant the top card moves. **The leak rule is unchanged and still asserted:** the back mounts `CardHiddenSide`, `CardStack` does not import `CardRevealSide`, and no title, artist or year reaches the document a card early in text or in any attribute. The track **id** does, because the QR encodes it — accepted deliberately: 22 opaque characters, on a face that is a mystery by construction, for the card the player is in the act of dealing themselves. The cost is one extra `toDataURL()` per advance, which is the feature. `CardStack.test.tsx` still asserts against the "just reuse `Card` for the back" refactor, because `Card` mounts a reveal face.
+- **The back is ONE card, the next one, and it renders its HIDDEN face and nothing else — reversed 2026-08-06.** It used to be two empty divs, centre-scaled to 96% / 92% and offset 10px, and that produced "two cards, one inside the other" the moment a drag uncovered them: a centre-origin `scale()` insets every edge, so what showed was two concentric rectangles smaller than the card. It is now `absolute inset-0` with **no transform** — covered pixel for pixel at rest, and revealed complete, with its QR already generated, the instant the top card moves. **The leak rule is unchanged and still asserted:** the back mounts `CardHiddenSide`, `CardStack` does not import `CardRevealSide`, and no title, artist or year reaches the document a card early in text or in any attribute. The track **id** does, because the QR encodes it — accepted deliberately: 22 opaque characters, on a face that is a mystery by construction, for the card the player is in the act of dealing themselves. The cost is one extra QR generation (`toString({ type: 'svg' })`) per advance, which is the feature. `CardStack.test.tsx` still asserts against the "just reuse `Card` for the back" refactor, because `Card` mounts a reveal face.
 - **A generated QR outlives the element that generated it (`src/game/qr-cache.ts`).** Without it the preload buys nothing: the back is a plain div in `CardStack` and the front card is a `Card` inside `AnimatePresence`, so an advance unmounts the element holding the code and mounts a new one. The cache is read **during render** rather than in an effect, because `useEffect` runs after paint and would still show one frame of the placeholder. Test consequence: every DOM test file that renders a card calls `clearQrCache()` in `beforeEach` — Vitest isolates modules per file, not per test.
 - **`AnimatePresence` keys are card id _plus_ deck index.** A playlist may legitimately hold the same track twice — Phase 3's reducer handles duplicate ids explicitly for that reason — so two adjacent cards can share an id, and a bare-id key makes React reuse one element for both.
 
@@ -465,7 +468,7 @@ Four things about this are load-bearing:
 
 **Keyboard controls are a window-level handler in `GameScreen`, not a handler on a focused card.** The card is not a control and nobody's hands are on it; a focus-dependent handler would be dead most of the time, and "the keyboard works only after you click the card first" is indistinguishable from broken. The cost is that the handler sees keystrokes meant for other things, hence four guards — auto-repeat, text-entry focus, `isPlayable`, and **Space while focus is on a button**, which would otherwise make one press both activate Play/Pause and flip the card.
 
-**The gesture thresholds have never met a thumb.** Real-device verification on iOS Safari and Android Chrome was scoped for Phase 5 and then **deliberately not performed** (decided 2026-08-05). The constants in `gestures.ts` are documented starting guesses, and they are the first thing to look at if touch input misbehaves in the field. See `docs/development.md` §8 Known limitations.
+**The gesture thresholds have met one thumb.** One Android pass (2026-08-06) found them acceptable with no retune; iOS Safari is still unchecked. The constants in `gestures.ts` are documented starting guesses, and they are the first thing to look at if touch input misbehaves in the field. See `docs/development.md` §8 Known limitations.
 
 ### The game flow screens (`src/App.tsx` + the screens) — built
 
@@ -555,7 +558,7 @@ Browser (SPA)                          Serverless (Vercel Functions)
 2. **`User-Agent`** — MusicBrainz requires a descriptive one and browsers cannot set that header. It also rate-limits to 1 req/s.
 3. **Shared cache** — a year cache across all users makes repeat playlists instant.
 
-**Why progressive loading is structural, not polish:** a lookup is a `resolve` call (Deezer and MusicBrainz in parallel, MusicBrainz behind the 1 req/s gate every user shares) and, for every card `resolve` does not confirm, a second `verify` call (iTunes, behind a 3 s gate). On the MusicBrainz-only path a cold 100-track playlist took **~3-5 minutes** — measured 1.3-3.6 s per track on 2026-08-04, against a warm cache 0 ms — and the three-provider wall clock, second round trip included, is unmeasured ([`development.md`](./development.md) §5). Years resolve in the background, the game starts as soon as the **start card**'s answer is final (at once with `keepYearless` ON), and it only blocks if the player outruns the resolver. Two invariants fall out of that, both easy to violate without any test failing: **shuffle runs before resolution** (so the resolver walks the deck in play order and the start card is genuinely the card the player sees first), and the resolver is **two sequential lanes, one request in flight per stage, not a fan-out** — a `Promise.all` over 100 cards turns the shared gates into ~99 429s. See [`plans/plan.md`](./plans/plan.md) §1 and §3.
+**Why progressive loading is structural, not polish:** a lookup is a `resolve` call (Deezer and MusicBrainz in parallel, MusicBrainz behind the 1 req/s gate every user shares) and, for every card `resolve` does not confirm, a second `verify` call (iTunes, behind a 3 s gate). On the MusicBrainz-only path a cold 100-track playlist took **~3-5 minutes** — measured 1.3-3.6 s per track on 2026-08-04, against a warm cache 0 ms — and the three-provider wall clock, second round trip included, is unmeasured ([`development.md`](./development.md) §5). Years resolve in the background, the game starts as soon as the **start card**'s answer is final (at once when nothing can be dropped), and it only blocks if the player outruns the resolver. Two invariants fall out of that, both easy to violate without any test failing: **shuffle runs before resolution** (so the resolver walks the deck in play order and the start card is genuinely the card the player sees first), and the resolver is **two sequential lanes, one request in flight per stage, not a fan-out** — a `Promise.all` over 100 cards turns the shared gates into ~99 429s. See [`plans/plan.md`](./plans/plan.md) §1 and §3.
 
 ---
 
@@ -577,7 +580,7 @@ The developer asked for "an explanatory, visual landing page with a big Start bu
 
 ### Languages (`src/game/locale.ts`, `src/game/i18n.ts`, `src/hooks/useLocale.ts`) — built 2026-09-28
 
-English, Spanish and Catalan, chosen by the player with a selector on the welcome screen or, failing that, detected from `navigator.languages`. No i18n library: `COPY` was already one typed object with every varying sentence as a function, so each language is another object of the same shape, and a key-string API (`t('hud.cardsLeft')`) would have given up the typing that makes a missing translation a compile error.
+English, Spanish and Catalan, chosen by the player with a selector on the welcome screen and the picker or, failing that, detected from `navigator.languages`. No i18n library: `COPY` was already one typed object with every varying sentence as a function, so each language is another object of the same shape, and a key-string API (`t('hud.cardsLeft')`) would have given up the typing that makes a missing translation a compile error.
 
 - **Catalogues.** `copy.ts` (`COPY`, English, plus `type Copy`), `copy.es.ts`, `copy.ca.ts`, and the error maps `messages.ts` / `messages.es.ts` / `messages.ca.ts`. `i18n.ts` joins them as `CATALOGUES: Record<Locale, { copy, errorMessages }>`. Plurals are hand-written per language — all three distinguish only 1 from the rest, so `Intl.PluralRules` would buy nothing. Catalan's `end.cardsPlayed` elides `de` → `d'` before a vowel-initial playlist name, the one piece of logic in any catalogue.
 - **Choosing.** `locale.ts` is pure: a stored choice (`jitster:locale:v1`, validated on read) beats the browser list, matched on the primary subtag (`es-AR` → `es`), falling back to English. `LocaleProvider` computes it in `useState`'s lazy initializer, so the first paint is already in the right language, and mirrors it to `document.documentElement.lang`.
@@ -585,7 +588,7 @@ English, Spanish and Catalan, chosen by the player with a selector on the welcom
 - **Mounting.** `main.tsx`: `StrictMode > LocaleProvider > ErrorBoundary > MotionConfig > App`. Outside the boundary so the crash screen is translated, which is also why the provider guards the `localStorage` getter itself.
 - **What does not change with the language.** The app name, the copyright line, the `jitster-` file names and the year-cards PDF; the manifest's `lang` (one per manifest, so it names the default) and `index.html`'s bytes; the playlist LABELS in `SUGGESTED_PLAYLISTS`, which render Spotify's own titles — only their blurbs are copy (`COPY.landing.suggestionBlurbs`, keyed by name).
 - **The saved library stores the language-free part.** `SavedPlaylist.name` is the base name; the "+N more" is composed at render. Entries saved before this carry an English suffix and are stripped on read against a frozen literal — with one known false positive, a playlist genuinely named "Foo +2 more" leading a three-playlist deck.
-- **Where the selector is.** The welcome screen's last in-flow section, never a top corner (see `WelcomeScreen.tsx`): the logo leaves ~40px beside it at 320px, and moving the logo breaks the equal-height contract with the picker. It costs ~5.4 kB gzip in total JS, landing in the shared `gestures` chunk.
+- **Where the selector is.** The last in-flow section of the welcome screen and (since 2026-10-01) of the picker, where it is disabled while loading; never a top corner (see `WelcomeScreen.tsx`): the logo leaves ~40px beside it at 320px, and moving the logo breaks the equal-height contract with the picker. It costs ~5.4 kB gzip in total JS, landing in the shared `gestures` chunk.
 
 ---
 
@@ -620,7 +623,7 @@ Two consequences worth stating plainly. **This is not TWA-only**: the browser's 
 
 Three features that add to the app without changing how a game is played, and all three were **caller changes** when built: the reducer, `GameState` and the persistence format were untouched. The share link stopped being one on 2026-09-29 — the start card went into `START`, `GameState` and the save (see below).
 
-> **Superseded in part by "The combined deck" below (2026-08-07).** Multi-playlist widened the link's `playlist` param to a comma list, a library entry to `ids[]`, and `start`'s second argument to an array; both payloads went to **v2** while keeping their `v1` keys. Everything else in this section — the lazy read, the saved-session precedence, the untouched address bar, the print palette, the duplex mirror — is unchanged.
+> **Superseded in part by "The combined deck" below (2026-08-07).** Multi-playlist widened the link's `playlist` param to a comma list, a library entry to `ids[]`, and `start`'s second argument to an array; both payloads went to **v2** while keeping their `v1` keys. Everything else in this section — the lazy read, the untouched address bar, the print palette, the duplex mirror — is unchanged; the saved-session precedence was replaced by `linkArrivalIntent` on 2026-09-29 (below).
 
 ```
                     ?playlist=<id>[,<id>…]&seed=<16 hex>
@@ -628,7 +631,7 @@ Three features that add to the app without changing how a game is played, and al
                                 ▼
   ┌───────────────────────────────────────────────────────────────┐
   │ App.tsx                                                        │
-  │  · a saved session OUTRANKS a link → resume, ignore params     │
+  │  · linkArrivalIntent: deal/resume/ask (ReplaceSessionPrompt)   │
   │  · otherwise: request(…) — the SAME fetch path the landing     │
   │    form uses                                                   │
   │  · the seed rides in a REF into start(cards, playlists, seed)  │
@@ -662,13 +665,13 @@ Three features that add to the app without changing how a game is played, and al
 
 **Only cards with a resolved year are exported, and the count of the rest is reported — never a list.** The end screen is one press from re-dealing the same deck, so naming an excluded title would spoil the rematch. In practice the only exclusion is a card the resolver has not reached yet.
 
-**A standard PDF font is WinAnsi-encoded, so titles are sanitised rather than a font embedded.** Measured before deciding: WinAnsi already covers every Spanish, Portuguese, French, German and Italian glyph, and four of the nine suggested playlists are Spanish or Latin — so the transformation is a no-op on the decks this app is built for. The gap is Cyrillic, Greek, CJK and a few Latin extras, and embedding a Latin-Extended font would cost 200–400 kB in the export chunk to fix Polish and Turkish while still failing on the rest. A Cyrillic or CJK title prints as `?` placeholders; **the year and the QR are unaffected**, so the card still plays and still scans. Listed in [`development.md`](./development.md) §8.
+**A standard PDF font is WinAnsi-encoded, so titles are sanitised rather than a font embedded.** Measured before deciding: WinAnsi already covers every Spanish, Portuguese, French, German and Italian glyph, and about half of the thirteen suggested playlists are Spanish, Catalan or Latin — so the transformation is a no-op on the decks this app is built for. The gap is Cyrillic, Greek, CJK and a few Latin extras, and embedding a Latin-Extended font would cost 200–400 kB in the export chunk to fix Polish and Turkish while still failing on the rest. A Cyrillic or CJK title prints as `?` placeholders; **the year and the QR are unaffected**, so the card still plays and still scans. Listed in [`development.md`](./development.md) §8.
 
 ---
 
 ### The combined deck — 1..5 playlists (multi-playlist, both plans built 2026-08-07)
 
-A deck is dealt from **up to five playlists**, merged in the browser. `plan.multi-playlist-core.md` built everything below React; `plan.multi-playlist-ui.md` built the landing rows, the fan-out hook (`usePlaylist.request(urls)`, one `AbortController` over every row's request) and the container wiring on top of it. A suggestion or a saved deck pressed with nothing selected still submits at once and **replaces** the typed rows with exactly what it deals.
+A deck is dealt from **up to five playlists**, merged in the browser. `plan.multi-playlist-core.md` (deleted; in git history) built everything below React; `plan.multi-playlist-ui.md` (deleted; in git history) built the landing rows, the fan-out hook (`usePlaylist.request(urls)`, one `AbortController` over every row's request) and the container wiring on top of it. A suggestion or a saved deck pressed with nothing selected still submits at once and **replaces** the typed rows with exactly what it deals.
 
 ```
   five raw URLs, in row order
@@ -751,9 +754,10 @@ Two consequences worth knowing before editing any of it. The row's ✕ now rende
 ```
 src/main.tsx
   <StrictMode>
-    <ErrorBoundary>            ← OUTSIDE <App />, and that position is the point
-      <MotionConfig>
-        <App />
+    <LocaleProvider>           ← outside the boundary, so the crash screen is translated
+      <ErrorBoundary>          ← OUTSIDE <App />, and that position is the point
+        <MotionConfig>
+          <App />
 ```
 
 **`ErrorBoundary` wraps `<App />` from `main.tsx`, never from inside it.** A boundary catches only what is **below** it, so one rendered inside `App` would be unmounted by the very exception it exists to catch — a throw in `App`'s own render passes straight through a boundary that same render produced. Out here its render depends on nothing the game touches, so there is nothing left in it to break. It sits outside `MotionConfig` too, so a crash in Motion's own tree is caught.
@@ -833,8 +837,8 @@ Five things about it are load-bearing:
   `fg*`, `accent*`, `on-accent`, `warning*`, `danger*`, `focus-ring`. Phase 8 changes hues without
   renaming anything. `fg-` rather than `text-` for the foreground family only because
   `--color-text-muted` would yield the utility `text-text-muted`.
-- **`focus-ring`, `touch-target`, `card-ring` and `card-ring-dim` are `@utility` composites, not
-  repeated utilities.** Thirteen interactive elements need an outline and a 44px minimum; declaring
+- **`focus-ring`, `touch-target`, `card-ring` and `card-ring-quiet` are `@utility` composites, not
+  repeated utilities.** Every interactive element needs an outline and a 44px minimum; declaring
   them once means one place to change and one class name for a test to assert. Written as `@utility`
   rather than a plain class so Tailwind's variants still compose — components write
   `focus-visible:focus-ring`. The two ring utilities are Phase 8's and have a subsection of their own
@@ -929,7 +933,7 @@ flip for free, and reproducing that with `{isFlipped ? null : …}` would remove
 `justify-center` column — so the card itself would jump on every flip. The flip is a toggle, so the
 sentence stays true.
 
-#### The footer is on all five screens, and the one omission is the decision
+#### The footer is on every screen but one, and the one omission is the decision
 
 `src/components/Footer.tsx` renders the copyright line on the **welcome (since 2026-09-18), landing,
 preparing, game and end** screens. There is no shell to hang it on: every screen is its own `min-h-dvh` centred column, so a
@@ -983,7 +987,7 @@ made it worth writing down.** It is `font-bold text-accent focus-visible:focus-r
 with `rel="noreferrer noopener"`, pointing at `COPY.footer.authorUrl` — the URL lives in `copy.ts`
 beside the words for the same reason they do, and deliberately **outside `notice`**, because that
 string is what the three leak proxies subtract and an `href` is not text a player reads. Three things
-follow. The `focus-ring` is not decoration: the link is now in the tab order of **all five screens**,
+follow. The `focus-ring` is not decoration: the link is now in the tab order of **every screen except the crash screen**,
 including mid-game, and the repo's rule is that everything focusable carries one. Both dialogs trap
 Tab, so it stays unreachable behind a backdrop — that is what makes the footer-before-dialogs DOM
 order above still sufficient. And `font-bold` is doing accessibility work as well as what was asked
@@ -1087,10 +1091,10 @@ The card's visual design, drawn from `docs/plans/custom-jitster-mockup.png`: a g
 gradient border with a soft outer bloom, on the near-black faces. Ten tokens and two `@utility`
 composites in `src/index.css`, applied as class names.
 
-| Utility         | Where                                    | What it is                                                       |
-| --------------- | ---------------------------------------- | ---------------------------------------------------------------- |
-| `card-ring`     | Both faces in `Card.tsx`                 | Masked gradient `::before` + a `box-shadow` bloom on the element |
-| `card-ring-dim` | The two peeking backs in `CardStack.tsx` | A flat `--color-ring-dim` border. No pseudo-element, no glow     |
+| Utility           | Where                           | What it is                                                       |
+| ----------------- | ------------------------------- | ---------------------------------------------------------------- |
+| `card-ring`       | Both faces in `Card.tsx`        | Masked gradient `::before` + a `box-shadow` bloom on the element |
+| `card-ring-quiet` | The one back in `CardStack.tsx` | `card-ring` with its bloom suppressed through a custom property  |
 
 **No new component, and that was the decision rather than the lazy option.** A `NeonRing`/`CardFrame`
 component buys expressive range this design does not need and costs three things: a component plus its
@@ -1119,7 +1123,7 @@ Four things about it are load-bearing:
 - **The ring is on the FACES, not on the card's outer element.** The outer element is the perspective
   container and does not rotate, so a ring there would sit still while the card turned inside it.
 - **It adds no layout.** `--ring-width` is a border inside a `border-box` element and the bloom is a
-  `box-shadow`, so the card's measured box is 288 × 448 exactly as before — the redesign is a paint
+  `box-shadow`, so the card's measured box is unchanged by the ring — the redesign is a paint
   change, not a layout one.
 
 **Contrast was recomputed for every pair in the app, not only the changed ones, and the table in
@@ -1129,10 +1133,9 @@ postdates Phase 7's audit and is exempt because `outline-offset: 2px` puts the w
 panel surface behind the button. It also improved one nobody had asked about: the stack's backs were
 `border-border` at **1.31:1**, and `--color-ring-dim` is 4.23:1.
 
-**One caveat is recorded rather than fixed:** the two peeking backs turn out not to render at all at
-the card's full height — `scale()` is centre-origin and cancels the 10px offset — so `card-ring-dim` is
-currently inert on a desktop-sized card. Pre-existing from Phase 5, measured, and written up in
-[`agent_findings.md`](./agent_findings.md); the geometry is a deck-feel decision, not a mechanical fix.
+The two peeking backs this ring was first applied to did not render at full height; they were
+replaced on 2026-08-06 by one back at `inset-0`, and `card-ring-dim` by `card-ring-quiet`. Written
+up in [`agent_findings.md`](./agent_findings.md).
 
 ### The installable shell (Phase 8) — built
 
@@ -1150,7 +1153,7 @@ public/logo.webp           384. The favicon AND the landing screen's <h1>, at 19
 public/favicon.ico         16/32/48, 7 kB. For crawlers that ask for /favicon.ico
                            (Vercel's dashboard); no <link> names it, not precached
 visual-assets/logo-master/logo.png       The 1254 master every one of the above derives
-                           from. In docs/ because public/ ships and precaches
+                           from. In visual-assets/ because public/ ships and precaches
 ```
 
 **The manifest is a module, not a literal in the plugin call**, for the same reason as every other
@@ -1226,7 +1229,7 @@ icon to the favicon slot.**
 `/sw.js`, `/manifest.webmanifest`, `/registerSW.js` and the icons all serve as files. That was checked
 against the actual pattern rather than assumed.
 
-### The Android store shell (Google Play TWA) — repo side built 2026-09-19, shell not generated
+### The Android store shell (Google Play TWA) — repo side built 2026-09-19, shell generated 2026-09-20
 
 **The store build is the deployed site, not a copy of it.** A Trusted Web Activity is an Android
 activity that renders one origin full-screen with no browser chrome — it ships no HTML, no
@@ -1237,16 +1240,16 @@ them. Everything below exists to make that binding verifiable. None of it change
 and a store release that starts editing `src/`, `api/` or `shared/` has gone wrong by definition.
 
 ```
-public/.well-known/assetlinks.json  The Digital Asset Links statement. Its fingerprint
-                                    list is EMPTY today, on purpose
+public/.well-known/assetlinks.json  The Digital Asset Links statement. Holds the upload
+                                    key's fingerprint; Play's joins it at plan 3's step 11
 public/privacy.html                 Self-contained static page, mandatory for the listing.
                                     Outside the src/game/copy.ts rule, as index.html is
 src/pwa/assetlinks.test.ts          A `node` test over the statement's shape, the privacy
                                     page's existence, and vercel.json's rewrite pattern
 src/pwa/manifest.ts                 `id`, `lang`, `dir` and `categories` added for the
                                     packager; `orientation` still absent, now pinned
-android/                            NOT PRESENT. The generated Gradle project and its
-                                    twa-manifest.json land here at the plan's step 6
+android/                            Bubblewrap output, git-ignored except
+                                    twa-manifest.json, the only tracked file
 ```
 
 **Digital Asset Links makes the origin a second consumer of the production alias.** The origin is
@@ -1305,15 +1308,11 @@ store asks for. **PWABuilder was rejected for a different reason**: its packagin
 version control, so `android/twa-manifest.json` could not be the committed record of what a release
 was built from.
 
-**What is built and what is not, as of 2026-09-19.** Built: the four manifest fields, the privacy
-page, the placeholder asset-links file, their tests, and the toolchain — Bubblewrap **1.25.0**, JDK
-**17.0.10** (installed but _not_ on the `PATH`; Bubblewrap keeps its location in
-`~/.bubblewrap/config.json`) and Android build-tools **36.1.0**. Not built: **`android/` does not
-exist**, no shell has been generated, no keystore exists, nothing has been installed on a device,
-and there is no Play Console app. So every sentence above about verification, the URL bar and the
-store describes a plan rather than a measurement —
-[`plans/plan.google-play-shell.md`](./plans/plan.google-play-shell.md) holds the steps, and the
-device checks are rows in [`development.md`](./development.md) §5.
+**What is built.** The four manifest fields, the privacy page, the asset-links file (upload key
+only), their tests, the toolchain (versions in [`development.md`](./development.md) §9), and since 2026-09-20 the generated shell (`android/`, only
+`twa-manifest.json` tracked). Release status lives in
+[`plans/plan.play-store-todo.md`](./plans/plan.play-store-todo.md) and nowhere else; the device
+checks are rows in [`development.md`](./development.md) §5.
 
 **The TWA shares `localStorage` with Chrome** — same profile, same origin, so the two storage keys
 are one store seen from two launchers; written up as a documented property in
@@ -1404,7 +1403,7 @@ An SPA needs a catch-all rewrite so unmatched paths return `index.html` and clie
 
 ## 7. Planned components
 
-Everything below is **not built**, except where a row says otherwise. The authoritative source for what belongs in which phase is [`plans/plan.md`](./plans/plan.md) §5 — **do not build ahead of the current phase.**
+Everything below is **not built**, except where a row says otherwise. The authoritative source for what belongs in which phase is [`plans/plan.md`](./plans/plan.md) §5.
 
 | Phase | Adds                                                                                                                                                                                                                                                                                                           |
 | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1413,10 +1412,10 @@ Everything below is **not built**, except where a row says otherwise. The author
 | 4     | ~~Card component with CSS 3D flip, QR rendering, `previewUrl` + `<audio>` playback~~ **[built] — phase complete** (see §3), plus the jsdom + Testing Library test environment                                                                                                                                  |
 | 5     | ~~Swipe-to-next, tap-to-flip, stacked-deck visuals, keyboard controls~~ **[built] — phase complete** (see §3), with real-device touch verification deliberately not performed                                                                                                                                  |
 | 6     | ~~Landing page, suggested playlists, loading state, HUD, end screen, notices, the real `App.tsx` container~~ **[built] — phase complete** (see §3). The reveal-side unconfirmed-year marking shipped early, in Phase 4's year slot. Only the real-deployment verification of progressive loading is still owed |
-| 7     | Visual design, `@theme` design tokens, error/offline states, responsive, a11y, Lighthouse                                                                                                                                                                                                                      |
-| 8     | Out of v1: shareable deck URL, PWA, PDF export, difficulty filters, multiplayer scoring                                                                                                                                                                                                                        |
+| 7     | ~~Visual design, `@theme` design tokens, error/offline states, responsive, a11y, Lighthouse~~ **[built]** (see §3); its manual passes are owed                                                                                                                                                                 |
+| 8     | ~~Shareable deck URL, PWA, PDF export~~ **[built]** (see §3). Difficulty filters and multiplayer scoring: not built                                                                                                                                                                                            |
 
-**Every installed dependency now has an importer.** Phase 1 deliberately installed `motion` and `qrcode` with none, so one coherent dependency tree could be locked up front. `qrcode` acquired its importer in Phase 4 — `src/components/QrCode.tsx`, which imports it **by name** (`import { toDataURL }`), because `@types/qrcode` declares named exports only and this repo runs `verbatimModuleSyntax` without `esModuleInterop`. `motion` acquired its first two in Phase 5: `Card.tsx` (`motion`) and `CardStack.tsx` (`AnimatePresence`), both from the `motion/react` subpath.
+**Every runtime dependency has an importer** (`@testing-library/user-event` is a devDependency with none yet; see toolchain.md §5). Phase 1 deliberately installed `motion` and `qrcode` with none, so one coherent dependency tree could be locked up front. `qrcode` is imported only through `src/game/qrcode-loader.ts`'s memoized dynamic `import()`, by name, because `@types/qrcode` declares named exports only and this repo runs `verbatimModuleSyntax` without `esModuleInterop`. `motion` acquired its first two in Phase 5: `Card.tsx` (`motion`) and `CardStack.tsx` (`AnimatePresence`), both from the `motion/react` subpath.
 
 One trap in `motion@12`, found the hard way: **`PanInfo` — the type of the `info` argument Motion hands `onDragEnd` — is not importable.** `motion` re-exports `framer-motion`, which does _not_ re-export `PanInfo`; it lives in `motion-dom`, a **transitive** dependency absent from `package.json`, which pnpm's strict linking is right to make awkward to reach. `useCardGestures.ts` therefore declares `DragEndInfo` and `GesturePointer` locally as structural **supertypes** of what Motion passes (strictly fewer required fields), which parameter contravariance makes soundly assignable — verified by the compiler at the `Card` call site. Side benefit: the hook's signature carries no Motion types at all. Do not "fix" this by adding `motion-dom` to `package.json`.
 

@@ -25,16 +25,6 @@ kind.
 2. Follow the link on that page to Google Play.
 3. Install **Playlist Jitster** as you would any other app.
 
-> **Note for whoever sends the invitations — not for testers, and to be replaced before this file is
-> shared.** The app became **paid (€1.00)** on 2026-09-21, and step 3 above is written as if it were
-> free. Testers must not be asked to pay to test — and on the CLOSED track they would be: Google's
-> help says closed and open testers "must purchase paid apps" (only internal testers install free),
-> and license testing covers in-app purchases, not the app's price. **The candidate is a promo code
-> per tester** (Monetize → Promo codes, up to 500 a quarter); whether one redeems before a production
-> release is NOT verified. Once it is, rewrite step 3 as "redeem the code you were sent in the Play
-> Store (profile picture → Payments & subscriptions → Redeem gift code; check the wording on a real phone), then install", send each tester their code,
-> and delete this note. If codes do not work, say plainly that the €1 is reimbursed.
-
 If Play says the app is not available, give it a few hours: a new test build takes a while to reach
 every account, and there is nothing to fix at your end.
 
@@ -48,13 +38,14 @@ release back by days — Google counts continuous days with testers enrolled, no
 
 ## Things that are expected — please do not report these
 
-**The welcome screen appears every single time you open the app.** Not just the first time. The app
+**The welcome screen appears every time you open the app with no game in progress.** Not just the
+first time. (With a game in progress, the app opens straight into that game.) The app
 deliberately does not remember that you have seen it; there is one big button to get past it. If you
 find this annoying, say so — that is useful feedback, and different from a bug report.
 
 **A game you played in your phone's browser shows up in the app, and the other way round.** If you
 have ever opened the game at `playlistjitster.vercel.app` in Chrome on the same phone, the installed
-app will offer to continue that game, and any playlists you saved there will be in the app's list.
+app will open straight into that game, and any playlists you saved there will be in the app's list.
 This is on purpose: the app and the browser share one save. So "it remembered a game I never played
 in it" is the app working correctly.
 
@@ -87,9 +78,9 @@ back should bring up a "leave this game?" question, not close the app. Outside a
 welcome screen, the playlist picker, or the end screen), back closing the app is correct.
 
 **Music still playing after you lock the phone.** The sound should stop when the screen goes off.
-When you unlock, it stays stopped on purpose — pressing Play should then continue from where it
-stopped rather than starting the song again. Silence after unlocking is correct; a song that
-restarts from the beginning is not.
+When you unlock, it stays stopped on purpose. Pressing Play then starts the preview again from the
+beginning, which is known and expected — only music that keeps playing while the phone is locked is
+worth reporting.
 
 **A download that does not arrive.** There are two: a "printable year cards" link on the welcome
 screen, and a "Print as PDF cards" button during a game. Both should put a PDF in your Downloads.
@@ -97,7 +88,8 @@ A file that silently never appears is a real bug and it is easy to miss — plea
 rather than assuming it worked.
 
 **Tapping a shared game link opens the browser instead of the app.** If someone sends you a link to
-a deck and you tap it, the installed app should open and deal that deck straight away.
+a deck and you tap it, the installed app should open and deal that deck — or, if you already have a
+game in progress, ask you first whether to replace it.
 
 **Anything that looks wrong on your screen size** — text cut off, a card that does not fit, buttons
 you cannot reach, a QR code that will not scan.

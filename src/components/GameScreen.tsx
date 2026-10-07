@@ -38,7 +38,7 @@
  *  reveal is on screen and a player who does want silence has a button for it.
  *
  *  Reversal of a completed phase, so it is written down in `plan.md` §5,
- *  `AGENTS.md`'s dated-decisions block and `docs/agent_findings.md` as well as
+ *  `docs/decisions.md` and `docs/agent_findings.md` as well as
  *  here, and `GameScreen.test.tsx` asserts the NON-stop.
  * ===========================================================================
  *

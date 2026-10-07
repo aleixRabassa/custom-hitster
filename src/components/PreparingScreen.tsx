@@ -24,8 +24,8 @@
  * exactly that and no more, because a loading screen that implies a longer wait than it has is how
  * a player closes the tab.
  *
- * It also must NOT assume it will only ever leave on a resolved year. A deployment with no
- * `MUSICBRAINZ_USER_AGENT` dispatches `YEAR_LOOKUPS_UNAVAILABLE`, and the reducer moves to
+ * It also must NOT assume it will only ever leave on a resolved year. A deployment with no year
+ * provider configured dispatches `YEAR_LOOKUPS_UNAVAILABLE`, and the reducer moves to
  * `playing` anyway with `yearLookupsUnavailable` set -- so this screen can be replaced by the game
  * having resolved nothing at all. Nothing here may block on `resolvedCount > 0`.
  */

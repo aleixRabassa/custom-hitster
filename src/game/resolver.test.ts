@@ -6,7 +6,7 @@ import type { YearLookupOutcome } from './year-client';
 import type { Card, YearLookupResult, YearStage } from '../../shared/types';
 
 /**
- * The resolver's tests are the bulk of plan.phase-3.md's test surface, because the resolver is
+ * The resolver's tests are the bulk of Phase 3's test surface (plan.phase-3.md, deleted; in git history), because the resolver is
  * where the phase's non-obvious guarantees live: one request in flight per stage, a 429 that is
  * back-pressure rather than failure, a priority jump that does not restart the crawl, and a
  * teardown that lets nothing land in a dead reducer. Since 2026-09-30 it also owns the two-stage

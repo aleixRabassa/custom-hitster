@@ -4,7 +4,7 @@
  * Title cleaning, cache-key normalization, and candidate scoring live here; every HTTP
  * concern lives in `api/_lib/musicbrainz.ts`. That split is the whole reason the accuracy
  * claims below are unit tests over fixtures instead of live, rate-limited, non-deterministic
- * network calls (plan.phase-2-year.md decision 16).
+ * network calls (plan.phase-2-year.md decision 16; deleted, in git history).
  *
  * Lives in `shared/` -- so no DOM and no Node APIs -- because Phase 6's review screen shows
  * the cleaned title that was actually queried, and must derive it the same way the server did.
@@ -143,7 +143,7 @@ const FAMILY_PATTERNS: { family: StripFamily; pattern: RegExp }[] = [
   },
   { family: 'version', pattern: /^from\s+["“'].+$/ },
 
-  // ---- Added 2026-09-30 (plan.year-fetch-rework-mb-fixes.md step 3) ----------------
+  // ---- Added 2026-09-30 (plan.year-fetch-rework-mb-fixes.md step 3; deleted, in git history) ----
   // Every entry below maps to an EXISTING flag, so `TitleStripFlags` did not change. The
   // plan files the Spanish/Catalan edition words and the long remaster tail under `version`
   // too, even where `live` or `remaster` would read more naturally; the flags are
@@ -443,7 +443,7 @@ export function stripRemixSuffix(title: string): string | undefined {
  * ORIGINAL title before the remix rewrite is attempted. Bumped anyway, because a version that
  * is only bumped when someone judges it necessary is a version nobody can trust.
  *
- * **v5 (2026-09-30):** plan.year-fetch-rework-mb-fixes.md. Four changes, each of which would
+ * **v5 (2026-09-30):** plan.year-fetch-rework-mb-fixes.md (deleted; in git history). Four changes, each of which would
  * wash out on its own within 7 days: the lazy-head fix in `TRAILING_SEGMENT_PATTERN` and the
  * new cleaner families change the CLEANED title, and so the cache key, for the titles they
  * touch; the adapter's tokenised rescue rung turns cached `none` entries into years; and a

@@ -181,7 +181,7 @@
    *
    *  Drawn from `docs/plans/custom-jitster-mockup.png`: a green -> cyan ->
    *  magenta gradient border on a near-black card, with a soft bloom outside it.
-   *  Consumed ONLY by the `card-ring` and `card-ring-dim` utilities at the bottom
+   *  Consumed ONLY by the `card-ring` and `card-ring-quiet` utilities at the bottom
    *  of this file -- which is exactly why the block this sits in has to stay
    *  `@theme static`. A bare `@theme` tree-shakes any token no GENERATED utility
    *  references, and Tailwind does not count an `@utility` body as a use, so

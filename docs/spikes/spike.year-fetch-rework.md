@@ -227,7 +227,7 @@ applies, for the same reason: errors in a store are reissues, and reissues are l
 lower bounds, and most of the "misses" in the iTunes row are MusicBrainz's errors.
 
 **Deezer is a catalogue of editions**: its `release_date` is the album it is sold on, so for old
-catalogue it reports the remaster. This is exactly the objection `plan.year-accuracy.md` recorded
+catalogue it reports the remaster. This is exactly the objection `plan.year-accuracy.md` (deleted; in git history) recorded
 ("the same disease as Spotify"), and it is real, but only for old catalogue. **iTunes is
 surprisingly strong on old catalogue.**
 
@@ -430,7 +430,7 @@ of the 2026-08-05 "dropping yearless cards has a long tail" finding. Each of the
 ## 8. Proposals, in the order they could land
 
 **Status (2026-09-30): P1, P2, P6 and the `tokenised` rung are built**, in
-[`plan.year-fetch-rework-mb-fixes.md`](../plans/plan.year-fetch-rework-mb-fixes.md). The `tokenised`
+`plan.year-fetch-rework-mb-fixes.md` (deleted 2026-10-07; in git history). The `tokenised`
 rung landed as the last attempt of the adapter's query ladder, not in a stage B, and its hits are
 capped at `low`. That plan also took the cache to `v5`. The `isrc:` rung of P4, and P3 and P5, are
 not built. The measurements in this spike are unchanged. **The `tokenised` rung was built on
@@ -457,7 +457,8 @@ Where things land follows the house rule:
   both before and after the change, the same false-comfort shape as 2026-08-11.
 
 `plan.year-accuracy.md`'s "deliberately not done — a second provider" is superseded by this
-measurement. That file was left unchanged, because it records what was decided at the time.
+measurement. That file was left unchanged, because it records what was decided at the time; it was
+deleted on 2026-10-07 and is in git history.
 
 ## 9. Reproducing this
 
@@ -852,8 +853,8 @@ order and membership. The Discogs harness (`dg-lib.ts`, `dg-run.ts`), the latenc
 ## 12. Fourth pass: the provider order, as decided and partly built (2026-09-30)
 
 **Status: implementation STARTED and PAUSED at the developer's request; the partial work was lost and the whole design was BUILT on 2026-09-30 from `docs/plans/plan.year-fetch-rework-*.md`.** The design below is
-settled; its last open questions (§12.5) were answered the same day. The server-side pieces listed in §12.7 are
-written but **not wired, not tested and not type-checked**; nothing on the client has been touched.
+settled; its last open questions (§12.5) were answered the same day. The server-side pieces §12.7 lists were
+lost before they were wired (§13.8); §13.12 then replaced §12.2's order, and the plans rebuilt everything.
 
 ### 12.1 The developer's decisions, in intent
 
@@ -1077,6 +1078,12 @@ The card's year slot, on the **revealed side only**, has four states:
 
 ### 12.6 The rest of the design, as it will be built
 
+> **Note (2026-10-07): superseded where the build differs.** Read AGENTS.md ("the provider vote",
+> "deal options") for the current rules. As built: the caches are `yearprov:<provider>:v1:` and
+> `mbyear:` at `v6`; there is no Discogs adapter, gate or key (§13.12); a busy `resolve` that already
+> has an answer is a 200 carrying `retryAfterMs`; and the card-1 gate is skipped only when
+> `keepYearless && !skipUnconfirmed`.
+
 **Server.**
 
 - `/api/year` gains `stage=resolve|verify`.
@@ -1144,6 +1151,11 @@ The card's year slot, on the **revealed side only**, has four states:
 | Tests, the four checks, AGENTS.md, `.env.example`  | **Not started.**                                                                                                                                                                         |
 
 ### 12.8 The "Keep cards with no year found" option (decided 2026-09-30)
+
+> **Note (2026-10-07): the build differs; AGENTS.md "Deal options" is current.** The option ships as
+> "Deal cards with no year found" (`keepYearless`), beside "Deal cards with an unconfirmed year"
+> (`!skipUnconfirmed`). The card-1 gate is skipped only when both allow it, and the PDF has its own
+> "Leave unconfirmed years blank".
 
 **The developer's decision.** The playlist picker gets a checkbox, **"Keep cards with no year
 found"**. It exists for a player who wants to **print the whole deck**, including the cards no
@@ -1626,5 +1638,5 @@ This supersedes §12.2's four-step table and its `unconfirmedTrust` order. The p
 2026-09-30 to match are
 [`plan.year-fetch-rework-server.md`](../plans/plan.year-fetch-rework-server.md) (Discogs removed, the
 trust tiers, the two-voter rule, the new replay targets) and
-[`plan.year-fetch-rework-mb-fixes.md`](../plans/plan.year-fetch-rework-mb-fixes.md) (the soundtrack
+`plan.year-fetch-rework-mb-fixes.md` (deleted 2026-10-07, in git history; the soundtrack
 title tails of §13.6 added to P2, now that the recording's own title must find it).
