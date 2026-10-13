@@ -100,7 +100,7 @@ export const COPY_ES = {
   },
 
   card: {
-    yearPending: 'Aún buscando el año…',
+    yearPending: 'Buscando el año…',
     yearUnknown: 'Año desconocido',
     yearUnknownDetail: 'Compruébalo por tu cuenta',
     yearUnconfirmed: 'Año sin confirmar',
@@ -115,7 +115,7 @@ export const COPY_ES = {
 
   notice: {
     truncated: (maxTracks: number) =>
-      `Puede que una playlist tenga más canciones de las que se muestran — solo se han podido cargar las primeras ${maxTracks}.`,
+      `Solo se han cargado las primeras ${maxTracks} de cada playlist.`,
     skippedTracks: (count: number) =>
       count === 1
         ? 'No se ha podido leer 1 canción y se ha dejado fuera.'
@@ -125,11 +125,11 @@ export const COPY_ES = {
         ? 'No se ha podido cargar 1 playlist y se ha dejado fuera.'
         : `No se han podido cargar ${count} playlists y se han dejado fuera.`,
     combinedDeck: (deckSize: number, playlistCount: number) =>
-      `${deckSize === 1 ? '1 carta' : `${deckSize} cartas`} de ${playlistCount === 1 ? '1 playlist' : `${playlistCount} playlists`}, ${deckSize === 1 ? 'barajada' : 'barajadas'} en un solo mazo.`,
+      `${deckSize === 1 ? '1 carta' : `${deckSize} cartas`} de ${playlistCount === 1 ? '1 playlist' : `${playlistCount} playlists`}, en un mazo.`,
     yearsUnavailable:
-      'Los años no están disponibles en este despliegue, así que las cartas no mostrarán ninguno. El mazo se puede jugar igualmente — escanea una carta para escuchar la canción.',
+      'Los años no están disponibles, así que las cartas no mostrarán ninguno. El mazo se puede jugar igualmente.',
     startCardMissing:
-      'La carta desde la que se compartió este enlace ya no está en la playlist, así que el mazo empieza desde el principio.',
+      'La carta desde la que se compartió este enlace ya no está en la playlist, así que el mazo empieza desde la siguiente.',
     dismiss: 'Cerrar aviso',
   },
 
@@ -145,9 +145,7 @@ export const COPY_ES = {
 
   deckActions: {
     copyLink: 'Copiar enlace para compartir',
-    /** "Same playlist, same shuffle" -- never "the same deck". See the English comment. */
-    shareCaption: (playlistCount: number, fromCurrentCard: boolean) =>
-      `Comparte la partida. ${playlistCount === 1 ? 'Misma playlist' : 'Mismas playlists'}, misma mezcla${fromCurrentCard ? ', desde la carta en la que estás' : ''}`,
+    shareCaption: 'Comparte la partida en el estado actual exacto',
     save: 'Guardar esta playlist',
     saved: 'Guardada en tus playlists',
     print: 'Imprimir como cartas en PDF',
@@ -164,10 +162,10 @@ export const COPY_ES = {
     waitingDetail: (pendingCount: number) =>
       `${pendingCount === 1 ? '1 carta sigue' : `${pendingCount} cartas siguen`} buscando su año.`,
     printPartial: 'Imprimir lo que hay',
+    confirmPrint: 'Imprimir',
     cancel: 'Cancelar',
-    exportDone: 'PDF descargado',
     exportDonePartial: (excludedCount: number) =>
-      `PDF descargado — ${excludedCount === 1 ? '1 carta excluida' : `${excludedCount} cartas excluidas`}, aún sin año`,
+      `${excludedCount === 1 ? '1 carta excluida' : `${excludedCount} cartas excluidas`}, aún sin año`,
     exportEmpty: 'Ninguna carta tiene año todavía, así que no hay nada que imprimir',
     exportFailed: 'No se ha podido crear el PDF',
     linkCopied: 'Enlace copiado',

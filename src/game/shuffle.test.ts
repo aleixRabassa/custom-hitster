@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { generateSeed, hashSeed, shuffleDeck } from './shuffle';
+import { generateSeed, hashSeed, shuffleDeck, startIndexFor } from './shuffle';
 
 const DECK = Array.from({ length: 52 }, (_, i) => `card-${i}`);
 
@@ -241,5 +241,33 @@ describe('generateSeed', () => {
     expect(first).toMatch(/^[0-9a-f]{16}$/);
     expect(second).toMatch(/^[0-9a-f]{16}$/);
     expect(first).not.toBe(second);
+  });
+});
+
+describe('startIndexFor', () => {
+  it('should return the index of a card that is in the deck', () => {
+    const deck = shuffleDeck(CARDS, 'seed');
+
+    expect(startIndexFor(deck, deck[7]!.id, 'seed')).toBe(7);
+  });
+
+  it('should return the card the seed places right after a missing one', () => {
+    const deck = shuffleDeck(CARDS, 'seed');
+    const missing = deck[5]!;
+    // The same order with one card gone, as a deck is after the playlist changed.
+    const without = shuffleDeck(
+      deck.filter((card) => card.id !== missing.id),
+      'seed',
+    );
+
+    expect(startIndexFor(without, missing.id, 'seed')).toBe(5);
+  });
+
+  it('should return 0 when the missing card would have been the last one', () => {
+    const deck = shuffleDeck(CARDS, 'seed');
+    const last = deck[deck.length - 1]!;
+    const without = deck.slice(0, -1);
+
+    expect(startIndexFor(without, last.id, 'seed')).toBe(0);
   });
 });

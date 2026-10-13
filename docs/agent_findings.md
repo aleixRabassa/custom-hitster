@@ -2420,3 +2420,5 @@ visit with no service worker, a bad connection), and two places awaited it with 
   the card-1 gate on "preparing". It now races the table against one deadline per wrapped lookup, started by its
   first call: at most 2 s once (the lanes are serial, so a per-lookup cap would cost 2 s per card), and a table
   that lands later wins every lookup after it.
+
+- **2026-10-13: the print view is two-step.** Step 1 (summary or wait, plus a press that only opens step 2) and step 2 (the blank-years option and `COPY.deckActions.confirmPrint`, the one press that exports). The wait's auto-export now also requires `isConfirmingPrint`, so nothing is written before step 2 is open. Consequences: a full export shows no message (`exportDone` deleted), `exportDonePartial` lost its "PDF downloaded" prefix, and `shareCaption` is a plain string ("exact current state"), no longer a function of playlist count and card.

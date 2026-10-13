@@ -117,6 +117,32 @@ export function shuffleDeck<T extends { id: string }>(items: readonly T[], seed:
 }
 
 /**
+ * Where a shared link starts in an already-shuffled `deck`, given the id of the card it named.
+ *
+ * The card is in the deck: its index. It is not (the playlist changed, or it was dropped as
+ * yearless): the first card the seed places AFTER it, which is the same comparison `shuffleDeck`
+ * sorts on, so the missing card's key is computed from its id alone. Past the end of the deck, 0.
+ *
+ * Pure and additive: `shuffleDeck`'s output is untouched.
+ */
+export function startIndexFor(
+  deck: readonly { readonly id: string }[],
+  cardId: string,
+  seed: string,
+): number {
+  const found = deck.findIndex((card) => card.id === cardId);
+  if (found !== -1) return found;
+
+  const missingKey = hashSeed(`${seed}:${cardId}`);
+  const next = deck.findIndex((card) => {
+    const key = hashSeed(`${seed}:${card.id}`);
+    return key > missingKey || (key === missingKey && card.id > cardId);
+  });
+
+  return next === -1 ? 0 : next;
+}
+
+/**
  * How many random bytes a generated seed carries. 8 bytes -> 16 hex chars.
  *
  * Each card's key hashes the WHOLE seed string, so the number of distinct deals is bounded by the

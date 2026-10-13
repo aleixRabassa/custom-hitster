@@ -95,7 +95,7 @@ describe('EndScreen', () => {
     expect(params.get('seed')).toBe(SEED);
     expect(params.has('v')).toBe(false);
     // And the caption says the same: no "starting from the card you are on".
-    expect(document.body.textContent ?? '').toContain(COPY.deckActions.shareCaption(1, false));
+    expect(document.body.textContent ?? '').toContain(COPY.deckActions.shareCaption);
   });
 
   it('should host the footer: positioned, with the bottom band reserved', () => {

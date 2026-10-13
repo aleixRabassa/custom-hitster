@@ -21,6 +21,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { buildDeckLink, parseDeckLink, type DeckLink } from './deck-link';
+import { startIndexFor } from './shuffle';
 import { mergePlaylists, type MergedDeck } from './deck-merge';
 import type { PlaylistOutcome } from './playlist-client';
 import { currentCard, gameReducer, initialGameState } from './reducer';
@@ -288,8 +289,9 @@ describe('a mid-game link carries the position', () => {
     expect(idsRestrictedTo(recipient.deck, sender.deck)).toEqual(idsOf(sender.deck));
   });
 
-  it('should start the recipient on card 1 when their deck does not hold the card', () => {
-    // The playlist lost that track since it was shared: the order survives, the position cannot.
+  it('should start the recipient on the next card in the seed order when their deck does not hold the card', () => {
+    // The playlist lost that track since it was shared: the order survives, so the recipient starts on
+    // the card the seed places after it, not on card 1.
     const sender = deal(fetchDeck(tracks('a', 30), tracks('b', 20)), { seed: SEED });
     // A card from the FIRST playlist and not card 1, so removing it below is observable.
     const current = sender.deck.find((card, index) => index > 0 && card.id.startsWith('a'))!;
@@ -298,6 +300,7 @@ describe('a mid-game link carries the position', () => {
     const without = tracks('a', 30).filter((card) => card.id !== current.id);
     const recipient = dealFromLink(fetchDeck(without, tracks('b', 20)), link);
 
-    expect(recipient.currentIndex).toBe(0);
+    expect(recipient.currentIndex).toBe(startIndexFor(recipient.deck, current.id, SEED));
+    expect(recipient.currentIndex).not.toBe(0);
   });
 });

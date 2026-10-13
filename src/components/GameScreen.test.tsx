@@ -562,7 +562,7 @@ describe('GameScreen', () => {
     const params = new URL(field.value).searchParams;
     expect(params.get('card')).toBe(highConfidenceCard.id);
     expect(params.has('v')).toBe(false);
-    expect(document.body.textContent ?? '').toContain(COPY.deckActions.shareCaption(1, true));
+    expect(document.body.textContent ?? '').toContain(COPY.deckActions.shareCaption);
 
     expect(field.value).not.toContain(highConfidenceCard.title);
     expect(field.value).not.toContain(highConfidenceCard.artist);
@@ -613,11 +613,13 @@ describe('GameScreen', () => {
     render(renderScreen({ skipUnconfirmed: true }));
     fireEvent.click(screen.getByRole('button', { name: COPY.controls.keepDeck }));
     fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
     expect(blankBox()).toBeNull();
 
     cleanup();
     render(renderScreen({ skipUnconfirmed: false }));
     fireEvent.click(screen.getByRole('button', { name: COPY.controls.keepDeck }));
+    fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
     fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
     expect(blankBox()).not.toBeNull();
   });

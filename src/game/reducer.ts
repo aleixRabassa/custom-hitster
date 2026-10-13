@@ -16,7 +16,7 @@
  *      Returning the identical reference is what keeps that free of re-renders.
  */
 
-import { generateSeed, shuffleDeck } from './shuffle';
+import { generateSeed, shuffleDeck, startIndexFor } from './shuffle';
 import type { GameAction, GameState, YearResolvedAction } from './types';
 import type { Card } from '../../shared/types';
 
@@ -125,17 +125,13 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         recipient's has not.
 
         An id that is not in this deck (the playlist changed since it was shared, or that card was
-        already known yearless and filtered above) falls back to card 1 rather than failing the
-        deal: the order is still the sender's, only the position is lost. `startIndex` starts equal
-        to `currentIndex`, and only `PREVIOUS` lowers it.
+        already known yearless and filtered above) starts at the NEXT card in the seed's order
+        (`startIndexFor`), not at card 1 -- the sender's order is the same, and the card they were
+        on is gone, so the next one is the nearest honest place. `startIndex` starts equal to
+        `currentIndex`, and only `PREVIOUS` lowers it.
       */
       const startIndex =
-        action.startCardId === undefined
-          ? 0
-          : Math.max(
-              0,
-              deck.findIndex((card) => card.id === action.startCardId),
-            );
+        action.startCardId === undefined ? 0 : startIndexFor(deck, action.startCardId, seed);
 
       // =======================================================================
       //  THE GATE IS SKIPPED WHEN THE START CARD'S ANSWER IS ALREADY FINAL --

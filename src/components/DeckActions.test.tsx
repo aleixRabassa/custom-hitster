@@ -24,7 +24,6 @@ import {
 import { COPY } from '../game/copy';
 import { CATALOGUES } from '../game/i18n';
 import { pdfFileName, sanitizeForPdf } from '../game/pdf-text';
-import { LOCALES } from '../game/locale';
 import { LocaleContext } from '../hooks/useLocale';
 import { sheetsForDeck } from '../hooks/usePdfExport';
 import type { DeckActionsProps, DeckActionsView } from './DeckActions';
@@ -123,12 +122,22 @@ function renderActions(overrides: Partial<DeckActionsProps> = {}) {
 }
 
 /**
- * Print a resolved deck: the actions view's Print OPENS the print view (2026-10-01), and the print
- * view's own Print -- the same label -- is the press that exports.
+ * Print a resolved deck: the actions view's Print OPENS the print view, the view's Print (the same
+ * label) moves to the confirmation step, and the confirm press is the one that exports (2026-10-13).
  */
-function printDeck(label: string = COPY.deckActions.print): void {
+function printDeck(
+  label: string = COPY.deckActions.print,
+  confirmLabel: string = COPY.deckActions.confirmPrint,
+): void {
   fireEvent.click(screen.getByRole('button', { name: label }));
   fireEvent.click(screen.getByRole('button', { name: label }));
+  fireEvent.click(screen.getByRole('button', { name: confirmLabel }));
+}
+
+/** From inside the print view: the step-1 press (`label`), then the confirm press. */
+function confirmPrintFrom(label: string): void {
+  fireEvent.click(screen.getByRole('button', { name: label }));
+  fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.confirmPrint }));
 }
 
 /**
@@ -291,14 +300,6 @@ describe('DeckActions', () => {
       });
     });
 
-    it('should say playlists rather than playlist for a combined deck', () => {
-      // The caption is the sentence that has to be read and believed, so it agrees with the deck it
-      // describes. "Same playlist" over a three-playlist deck reads as a link to one of them.
-      renderActions({ playlistIds: [PLAYLIST_ID, SECOND_PLAYLIST_ID] });
-
-      expect(document.body.textContent ?? '').toContain(COPY.deckActions.shareCaption(2, false));
-    });
-
     it('should carry the current card mid-game and no card without one', () => {
       // D3: a mid-game link starts the recipient on the sender's card. The end screen passes no
       // card, because after the last card a position would drop the recipient on the final card.
@@ -324,25 +325,14 @@ describe('DeckActions', () => {
       expect(linkParams(writeText.mock.calls[0]?.[0]).get('card')).toBeNull();
     });
 
-    it('should say when the link starts from the current card, and only then', () => {
-      // The caption is the sentence that has to be believed, so it agrees with what the link does.
+    it('should claim the exact current state, with or without a current card', () => {
+      // The caption is the sentence that has to be believed, and it is one string for both hosts.
       renderActions({ currentCardId: CURRENT_CARD_ID });
-      expect(document.body.textContent ?? '').toContain(COPY.deckActions.shareCaption(1, true));
+      expect(document.body.textContent ?? '').toContain(COPY.deckActions.shareCaption);
 
       cleanup();
       renderActions();
-      expect(document.body.textContent ?? '').toContain(COPY.deckActions.shareCaption(1, false));
-    });
-
-    it('should word the two captions differently in every language', () => {
-      // `satisfies Copy` cannot catch a translation that ignores the second parameter -- a
-      // one-parameter function is assignable to a two-parameter type -- so this does, per catalogue.
-      for (const locale of LOCALES) {
-        const { shareCaption } = CATALOGUES[locale].copy.deckActions;
-        expect(shareCaption(1, true)).not.toBe(shareCaption(1, false));
-        expect(shareCaption(2, true)).not.toBe(shareCaption(2, false));
-        expect(shareCaption(1, false)).not.toBe(shareCaption(2, false));
-      }
+      expect(document.body.textContent ?? '').toContain(COPY.deckActions.shareCaption);
     });
 
     it('should build the share link from the current seed', () => {
@@ -460,11 +450,13 @@ describe('DeckActions', () => {
         </LocaleContext.Provider>,
       );
 
-      printDeck(copy.deckActions.print);
+      printDeck(copy.deckActions.print, copy.deckActions.confirmPrint);
 
       await waitFor(() => {
-        expect(screen.queryByText(copy.deckActions.exportDone)).not.toBeNull();
+        expect(saveMock).toHaveBeenCalledTimes(1);
       });
+      // A full export says nothing: no region is announcing the download.
+      expect(screen.queryByRole('status')).toBeNull();
       expect(saveMock).toHaveBeenCalledWith(pdfFileName('Rock Classics', copy.pdf));
     });
 
@@ -493,11 +485,11 @@ describe('DeckActions', () => {
       /*
         Nothing was loaded and nothing was downloaded -- the check happens before the import. Read
         off the button's LABEL rather than by searching for the progress wording: the label is
-        `COPY.deckActions.print` while idle and `printing(done, total)` while working, so a button
+        `COPY.deckActions.confirmPrint` while idle and `printing(done, total)` while working, so a button
         still wearing the idle name is exactly the claim "no export started", with no sentence
         pinned anywhere.
       */
-      expect(screen.queryByRole('button', { name: COPY.deckActions.print })).not.toBeNull();
+      expect(screen.queryByRole('button', { name: COPY.deckActions.confirmPrint })).not.toBeNull();
     });
 
     it('should wait for the outstanding years instead of exporting a short deck', () => {
@@ -524,9 +516,9 @@ describe('DeckActions', () => {
       expect(screen.queryByText(COPY.deckActions.exportEmpty)).toBeNull();
     });
 
-    it('should export by itself once the last year lands', () => {
-      // The wait ENDS on its own. A player who has to press Print a second time after watching a
-      // spinner has been made to do the app's bookkeeping.
+    it('should export by itself once the last year lands, but only after the confirm step', () => {
+      // The wait ENDS on its own -- but nothing is written to a file before the player has moved to
+      // the confirmation step (2026-10-13).
       const { rerender, props } = renderActions({ pendingYearCount: 2 });
 
       fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
@@ -537,21 +529,24 @@ describe('DeckActions', () => {
       expect(screen.queryByText(COPY.deckActions.waitingHeading)).not.toBeNull();
       expect(screen.queryByText(COPY.deckActions.waitingDetail(1))).not.toBeNull();
 
-      // The last one lands: the wait is over, the export has started, and the print view now
-      // offers the full Print in place of "Print so far".
+      // The last one lands from step 1: the wait is over and NOTHING has started. The view offers
+      // the full Print, still step 1.
       rerender(<DeckActions {...props} pendingYearCount={0} />);
       expect(screen.queryByText(COPY.deckActions.waitingHeading)).toBeNull();
-      /*
-        Either label is correct here -- the panel is back and the auto-export may already have
-        started -- so the name is matched with a predicate over the two strings the button can
-        carry rather than with a regex over a phrase. `printing`'s counts are known: the default
-        deck is the six resolved fixture cards.
-      */
+      expect(screen.queryByRole('button', { name: COPY.deckActions.printing(0, 6) })).toBeNull();
+      expect(screen.queryByRole('button', { name: COPY.deckActions.print })).not.toBeNull();
+      expect(saveMock).not.toHaveBeenCalled();
+
+      // The same wait, confirmed (step 2) before the last year lands: now it exports by itself.
+      cleanup();
+      const second = renderActions({ pendingYearCount: 2 });
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.printPartial }));
+      expect(screen.queryByRole('button', { name: COPY.deckActions.printing(0, 6) })).toBeNull();
+      second.rerender(<DeckActions {...second.props} pendingYearCount={0} />);
+      // `printing`'s counts are known: the default deck is the six resolved fixture cards.
       expect(
-        screen.queryByRole('button', {
-          name: (name: string) =>
-            name === COPY.deckActions.print || name === COPY.deckActions.printing(0, 6),
-        }),
+        screen.queryByRole('button', { name: COPY.deckActions.printing(0, 6) }),
       ).not.toBeNull();
     });
 
@@ -719,7 +714,7 @@ describe('DeckActions', () => {
 
       printDeck();
       await waitFor(() => {
-        expect(screen.queryByText(COPY.deckActions.exportDone)).not.toBeNull();
+        expect(saveMock).toHaveBeenCalledTimes(1);
       });
 
       // `splitTextToSize` returns lines, so the title and the artist arrive as one-line arrays.
@@ -742,7 +737,7 @@ describe('DeckActions', () => {
 
       printDeck();
       await waitFor(() => {
-        expect(screen.queryByText(COPY.deckActions.exportDone)).not.toBeNull();
+        expect(saveMock).toHaveBeenCalledTimes(1);
       });
 
       expect(drawnTexts()).toEqual([
@@ -775,14 +770,18 @@ describe('DeckActions', () => {
       }) as HTMLInputElement;
     }
 
-    it('should render the option only in the print view, unticked, above its Print', () => {
-      // 2026-10-01, the developer's request: the option sits in the print view, beside the press it
-      // qualifies, and no longer among the three actions.
+    it('should render the option only in the confirmation step, unticked, above its Print', () => {
+      // 2026-10-13: the option sits in step 2 of the print view, above the press that exports.
       renderActions();
       expect(
         screen.queryByRole('checkbox', { name: COPY.deckActions.blankUnconfirmed }),
       ).toBeNull();
 
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
+      // Step 1 has no option; the confirmation step holds it.
+      expect(
+        screen.queryByRole('checkbox', { name: COPY.deckActions.blankUnconfirmed }),
+      ).toBeNull();
       fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
 
       const box = blankUnconfirmedBox();
@@ -791,7 +790,7 @@ describe('DeckActions', () => {
       expect(box.closest('label')?.className).toContain('touch-target');
       expect(box.hasAttribute('value')).toBe(false);
 
-      const print = screen.getByRole('button', { name: COPY.deckActions.print });
+      const print = screen.getByRole('button', { name: COPY.deckActions.confirmPrint });
       expect(box.compareDocumentPosition(print) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 
@@ -802,17 +801,18 @@ describe('DeckActions', () => {
       const { rerender, props } = renderActions({ skipUnconfirmed: true, pendingYearCount: 2 });
 
       fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
+      expect(screen.queryByRole('button', { name: COPY.deckActions.printPartial })).not.toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.printPartial }));
       expect(
         screen.queryByRole('checkbox', { name: COPY.deckActions.blankUnconfirmed }),
       ).toBeNull();
-      expect(screen.queryByRole('button', { name: COPY.deckActions.printPartial })).not.toBeNull();
 
       rerender(<DeckActions {...props} pendingYearCount={0} />);
       expect(
         screen.queryByRole('checkbox', { name: COPY.deckActions.blankUnconfirmed }),
       ).toBeNull();
       await waitFor(() => {
-        expect(screen.queryByText(COPY.deckActions.exportDone)).not.toBeNull();
+        expect(saveMock).toHaveBeenCalledTimes(1);
       });
     });
 
@@ -823,24 +823,29 @@ describe('DeckActions', () => {
       renderActions({ skipUnconfirmed: true, deck: [unchecked, highConfidenceCard] });
 
       fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
-      fireEvent.click(blankUnconfirmedBox());
       fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
+      fireEvent.click(blankUnconfirmedBox());
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.confirmPrint }));
       await waitFor(() => {
-        expect(screen.queryByText(COPY.deckActions.exportDone)).not.toBeNull();
+        expect(saveMock).toHaveBeenCalledTimes(1);
       });
 
       expect(drawnTexts()).not.toContain(String(unchecked.year));
       expect(drawnTexts()).toContain(String(highConfidenceCard.year));
     });
 
-    it('should sit beside "Print so far" while years are pending', () => {
+    it('should sit above the confirm press, in the step after "Print so far"', () => {
       renderActions({ pendingYearCount: 2 });
 
       fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
-
-      const partial = screen.getByRole('button', { name: COPY.deckActions.printPartial });
       expect(
-        blankUnconfirmedBox().compareDocumentPosition(partial) & Node.DOCUMENT_POSITION_FOLLOWING,
+        screen.queryByRole('checkbox', { name: COPY.deckActions.blankUnconfirmed }),
+      ).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.printPartial }));
+
+      const confirm = screen.getByRole('button', { name: COPY.deckActions.confirmPrint });
+      expect(
+        blankUnconfirmedBox().compareDocumentPosition(confirm) & Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
     });
 
@@ -849,7 +854,7 @@ describe('DeckActions', () => {
 
       printDeck();
       await waitFor(() => {
-        expect(screen.queryByText(COPY.deckActions.exportDone)).not.toBeNull();
+        expect(saveMock).toHaveBeenCalledTimes(1);
       });
 
       expect(drawnTexts()).toContain(String(lowConfidenceCard.year));
@@ -859,11 +864,12 @@ describe('DeckActions', () => {
       renderActions({ deck: [lowConfidenceCard, highConfidenceCard] });
 
       fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
       fireEvent.click(blankUnconfirmedBox());
       expect(blankUnconfirmedBox().checked).toBe(true);
-      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.confirmPrint }));
       await waitFor(() => {
-        expect(screen.queryByText(COPY.deckActions.exportDone)).not.toBeNull();
+        expect(saveMock).toHaveBeenCalledTimes(1);
       });
 
       const texts = drawnTexts();
@@ -887,6 +893,10 @@ describe('DeckActions', () => {
       fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
 
       expect(saveMock).not.toHaveBeenCalled();
+      expect(
+        screen.queryByRole('checkbox', { name: COPY.deckActions.blankUnconfirmed }),
+      ).toBeNull();
+      expect(screen.queryByRole('button', { name: COPY.deckActions.confirmPrint })).toBeNull();
       expect(screen.queryByRole('button', { name: COPY.deckActions.copyLink })).toBeNull();
       expect(screen.queryByRole('button', { name: COPY.deckActions.cancel })).not.toBeNull();
       expect(screen.queryByText(COPY.deckActions.waitingHeading)).toBeNull();
@@ -913,6 +923,10 @@ describe('DeckActions', () => {
       fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
       expect(document.activeElement?.textContent).toBe(COPY.deckActions.cancel);
 
+      // And again on the step change, which unmounts the press that was focused.
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
+      expect(document.activeElement?.textContent).toBe(COPY.deckActions.cancel);
+
       fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.cancel }));
       expect(document.activeElement).toBe(
         screen.getByRole('button', { name: COPY.deckActions.print }),
@@ -924,8 +938,10 @@ describe('DeckActions', () => {
       renderActions();
 
       fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
       fireEvent.click(screen.getByRole('checkbox', { name: COPY.deckActions.blankUnconfirmed }));
       fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.cancel }));
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
       fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
 
       expect(
@@ -975,7 +991,11 @@ describe('DeckActions', () => {
       // of the latter are dropped by `selectPrintableCards`, and the count is the honest part.
       startWait();
 
+      // Step 1 only moves on: nothing is working yet.
       fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.printPartial }));
+      expect(screen.queryByRole('button', { name: COPY.deckActions.printing(0, 6) })).toBeNull();
+      expect(saveMock).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.confirmPrint }));
 
       // Synchronous, because `usePdfExport` publishes `working` before it awaits either import.
       expect(
@@ -998,13 +1018,13 @@ describe('DeckActions', () => {
       // asked for.
       const { rerender, props } = startWait();
 
-      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.printPartial }));
+      confirmPrintFrom(COPY.deckActions.printPartial);
       await waitFor(() => {
         expect(screen.queryByText(COPY.deckActions.exportDonePartial(2))).not.toBeNull();
       });
 
       expect(screen.queryByText(COPY.deckActions.waitingHeading)).not.toBeNull();
-      expect(screen.queryByRole('button', { name: COPY.deckActions.printPartial })).not.toBeNull();
+      expect(screen.queryByRole('button', { name: COPY.deckActions.confirmPrint })).not.toBeNull();
 
       // The crawl finishes: the wait ends on its own and the auto-export takes over, exactly as it
       // does for a player who never pressed this.
@@ -1020,7 +1040,7 @@ describe('DeckActions', () => {
       // The common case on card 1, and it is not a failure: the whole deck is still in flight.
       startWait({ deck: fixtureDeck.filter((card) => typeof card.year !== 'number') });
 
-      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.printPartial }));
+      confirmPrintFrom(COPY.deckActions.printPartial);
 
       expect(screen.getByText(COPY.deckActions.exportEmpty)).not.toBeNull();
       // Still waiting -- a refusal is not an exit either.
@@ -1034,7 +1054,7 @@ describe('DeckActions', () => {
       // covers the DONE message as much as the pending one.
       const { container } = startWait();
 
-      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.printPartial }));
+      confirmPrintFrom(COPY.deckActions.printPartial);
       await waitFor(() => {
         expect(screen.queryByText(COPY.deckActions.exportDonePartial(2))).not.toBeNull();
       });

@@ -250,7 +250,7 @@ export const COPY = {
   },
 
   card: {
-    yearPending: 'Still looking up the year…',
+    yearPending: 'Looking up the year…',
     yearUnknown: 'Year unknown',
     yearUnknownDetail: 'Check this one yourself',
     yearUnconfirmed: 'Unconfirmed year',
@@ -274,8 +274,7 @@ export const COPY = {
   },
 
   notice: {
-    truncated: (maxTracks: number) =>
-      `A playlist may have more tracks than shown — only the first ${maxTracks} of it could be loaded.`,
+    truncated: (maxTracks: number) => `Only the first ${maxTracks} of each playlist were loaded.`,
     skippedTracks: (count: number) =>
       count === 1
         ? '1 track could not be read and was left out.'
@@ -285,15 +284,16 @@ export const COPY = {
         ? '1 playlist could not be loaded and was left out.'
         : `${count} playlists could not be loaded and were left out.`,
     combinedDeck: (deckSize: number, playlistCount: number) =>
-      `${deckSize} cards from ${playlistCount} playlists, shuffled into one deck.`,
+      `${deckSize} cards from ${playlistCount} playlists, one deck.`,
     yearsUnavailable:
-      'Years are unavailable on this deployment, so cards will not show one. The deck is still playable — scan a card to hear the song.',
+      'Years are unavailable, so cards will not show one. The deck is still playable.',
     /**
      * A mid-game share link named a card this deck no longer holds -- the playlist changed, or the
-     * card was dropped as yearless -- so the recipient starts at the top instead (2026-09-29).
+     * card was dropped as yearless -- so the recipient starts at the next card in the seed's order
+     * instead (2026-09-29; "next" since 2026-10-13).
      */
     startCardMissing:
-      'The card this link was shared from is no longer in the playlist, so the deck starts from the top.',
+      'The card this link was shared from is no longer in the playlist, so the deck starts from the next one.',
     dismiss: 'Dismiss notice',
   },
 
@@ -311,31 +311,12 @@ export const COPY = {
   deckActions: {
     copyLink: 'Copy share link',
     /**
-     * ===========================================================================
-     *  IT PROMISES "SAME PLAYLIST, SAME SHUFFLE" AND MUST NEVER PROMISE THE SAME
-     *  DECK.
-     *
-     *  Yearless cards are dropped at play time and editorial playlists refresh
-     *  their tracks, so the seeded shuffle is exact while its INPUT is not. A link
-     *  that claimed "the same deck" would be wrong in a way the player only finds
-     *  out about by comparing two games.
-     *
-     *  Pluralised on the id count rather than left as "playlist(s)": this is the
-     *  sentence that has to be read and believed, and a slash in it reads as
-     *  boilerplate.
-     *
-     *  TWO VARIANTS SINCE 2026-09-29 (review of the shuffle system, D3). A link
-     *  copied MID-GAME carries the current card, so the recipient starts on it;
-     *  an end-screen link does not, because after the last card a position would
-     *  drop the recipient on the final card. Until later that day both also said
-     *  what can still differ ("if a playlist has changed since, some tracks may
-     *  differ"); the developer cut that tail as noise. The promise above is what
-     *  keeps it honest without it: "same shuffle" is exact, and nothing here
-     *  claims the card set is.
-     * ===========================================================================
+     * Claims the EXACT CURRENT STATE since 2026-10-13 (it used to promise "same playlist, same
+     * shuffle" and carry two variants): the link carries the shuffle and the card the player is on.
+     * Yearless cards are still dropped at play time and editorial playlists still refresh, so it
+     * must never say "the same deck".
      */
-    shareCaption: (playlistCount: number, fromCurrentCard: boolean) =>
-      `Share the game. ${playlistCount === 1 ? 'Same playlist' : 'Same playlists'}, same shuffle${fromCurrentCard ? ', starting from the card you are on' : ''}`,
+    shareCaption: 'Share the game in its exact current state',
     save: 'Save this playlist',
     saved: 'Saved to your playlists',
     print: 'Print as PDF cards',
@@ -358,11 +339,12 @@ export const COPY = {
     waitingDetail: (pendingCount: number) =>
       `${pendingCount === 1 ? '1 card is' : `${pendingCount} cards are`} still looking up a year.`,
     printPartial: 'Print so far',
+    /** Step 2 of the print view: the press that writes the file. */
+    confirmPrint: 'Print',
     cancel: 'Cancel',
-    exportDone: 'PDF downloaded',
     /** The whole of the disclosure for a partial export -- do not weaken it. */
     exportDonePartial: (excludedCount: number) =>
-      `PDF downloaded — ${excludedCount} ${excludedCount === 1 ? 'card' : 'cards'} left out, no year yet`,
+      `${excludedCount} ${excludedCount === 1 ? 'card' : 'cards'} left out, no year yet`,
     exportEmpty: 'No card has a year yet, so there is nothing to print',
     exportFailed: 'Could not build the PDF',
     linkCopied: 'Link copied',

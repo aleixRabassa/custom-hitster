@@ -575,8 +575,8 @@ deals a different order**. So: **a `v` param is IGNORED, never rejected** (links
 save carrying a `shuffleVersion` field still loads, and **the output is pinned as literals in `shuffle.test.ts`** —
 it is a stored format, a failing pin is fixed by reverting, and a future algorithm change has no lever left: it must
 bring a version back, or accept the same re-deal knowingly. **A mid-game link
-carries `&card=<trackId>`** and the recipient starts ON that card (`START.startCardId`; card 1 plus the
-`startCardMissing` notice when the card is gone); the end screen's link does not, because its position is the
+carries `&card=<trackId>`** and the recipient starts ON that card (`START.startCardId`; when the card is gone, the
+next one in the seed's order via `startIndexFor` in `shuffle.ts`, with the `startCardMissing` notice, since 2026-10-13 — it was card 1 before); the end screen's link does not, because its position is the
 last card. So the card-1 gate is now "the CURRENT card's answer is **final**" (and only with "Shuffle in cards with no
 year found" OFF or "Shuffle in cards with doubtful year" unticked — nothing gates only when both allow every card, see the options' block), the resolver crawls from the start card and
 wraps, and `GameState.startIndex` (the lowest index this player has been on; saved, absent = 0) is what the end
@@ -705,11 +705,16 @@ the next file, not about the game, so it resets when the panel closes — passed
 including the wait's auto-export and "Print so far". **It lives in the PRINT VIEW, and Print now
 ALWAYS opens that view** (the developer's choice, later on 2026-10-01): the option was asked to sit
 beside "Print so far", but the wait is reached only while years are pending, so on a resolved deck it
-would have been unreachable. So `DeckActions`' Print opens "Print this deck" (`COPY.deckActions.printTitle`)
-— the sheet count (resolved) or the wait (pending), the option, one press that exports (Print, or
-"Print so far" while waiting) and Cancel — and a resolved deck now costs one more press than before.
-The pending case behaves as it did: opening the view is the press that starts the wait, and the wait
-still exports by itself when the last year lands, then turns into the resolved view in place.
+would have been unreachable. So `DeckActions`' Print opens "Print this deck" (`COPY.deckActions.printTitle`).
+**Since 2026-10-13 the view has two steps** (`isConfirmingPrint`, reset on open and on Cancel). Step 1:
+the sheet count (resolved) or the wait (pending), a press (Print, or "Print so far" while waiting) that
+only opens step 2, and Cancel. Step 2: the same text, **the option**, the one press that exports
+(`COPY.deckActions.confirmPrint`) and Cancel. The option sits in step 2, directly above the press it
+qualifies, not beside the first press. The pending case behaves as it did: opening the view is the press
+that starts the wait, and the wait still exports by itself when the last year lands, then turns into the
+resolved view in place — **but only once step 2 is open**, so nothing is written to a file before the
+player has moved past step 1. A full export reports nothing (`exportDone` was deleted); only a partial
+one speaks, in `exportDonePartial`.
 **The title changes for that view only**: the dialog stays "Keep this deck" over the three actions. The
 view is `DeckActions`' state and the heading is the host's element, so the host passes
 `renderHeading(view)` and `DeckActions` renders it first, in a fragment — the dialog's `<h2>` (still the
@@ -766,7 +771,7 @@ dialog's "Leave unconfirmed years blank" (`printedYear` in `pdf-sheet.ts`; see t
 
 **The wait offers "Print so far", and it does not contradict the gate — it is the gate's informed
 version** (2026-08-07). What the gate refuses is a deck that is **quietly** short; a player who
-presses this is told the count that was left out, in "PDF downloaded — N cards left out, no year yet"
+presses this is told the count that was left out, in "N cards left out, no year yet"
 (since 2026-09-30 that N also counts cards whose year is shown but still provisional).
 **That line is now the whole of the disclosure** — an explanatory caption above the buttons was
 written and then cut as noise, so do not weaken the message. Three things to know. It does **not touch
@@ -789,7 +794,7 @@ FOUND" (UNCHECKED BY DEFAULT) AND "SHUFFLE IN CARDS WITH DOUBTFUL YEAR" (CHECKED
 moved twice that day, at the developer's request: in the morning the pair read "Skip cards with no year
 found" / "Skip cards with an unconfirmed year" and skipped when ticked; by the afternoon they read
 "Deal …" (Spanish "Repartir cartas sin año" / "Repartir cartas con año no confirmado") and deal when
-ticked. On 2026-10-13, again at the developer's request, the wording became "Shuffle in …" (Spanish "Baraja las cartas sin año encontrado" / "Baraja las cartas con año dudoso" and Catalan "Barreja les cartes sense any trobat" / "Barreja les cartes amb any dubtós", all the developer's own), with the polarity and the model unchanged. The first is the 2026-09-30 **"Keep cards with no year found"**
+ticked. On 2026-10-13, again at the developer's request, the wording became "Shuffle in …" (Spanish "Baraja las cartas sin año encontrado" / "Baraja las cartas con año dudoso" and Catalan "Baralla les cartes sense any trobat" / "Baralla les cartes amb any dubtós", all the developer's own), with the polarity and the model unchanged. The first is the 2026-09-30 **"Keep cards with no year found"**
 ([`plan.year-fetch-rework-ui.md`](./plans/plan.year-fetch-rework-ui.md), spike §12.8) under a new
 label and its original polarity; its hint ("useful to print the whole deck…") was deleted with
 `COPY.landing.keepYearlessHint` and the `aria-describedby`. **The model never inverted**:

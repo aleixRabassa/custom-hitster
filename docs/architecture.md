@@ -421,7 +421,7 @@ Three corollaries, all of them things a leak audit that greps only for visible t
 
 | State       | Card                    | What the slot shows                                                                                               |
 | ----------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| pending     | `year` undefined        | The spinner in its fixed-size box, over "Still looking up the year…". The answer **will** come                    |
+| pending     | `year` undefined        | The spinner in its fixed-size box, over "Looking up the year…". The answer **will** come                    |
 | provisional | `yearProvisional: true` | The year, exactly as a final one, over **"Confirming year"** (`COPY.card.yearProvisional`) in `text-fg-secondary` |
 | final, high | a number, `high`        | The year, plain, over an **empty** reserved notice line                                                           |
 | final, low  | a number, `low`         | The year over the amber "Unconfirmed year" marker (`text-warning`)                                                |

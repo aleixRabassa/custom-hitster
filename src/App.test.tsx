@@ -46,6 +46,7 @@ import { AUTO_DISMISS_AFTER_MS, NOTICE_FADE_MS } from './hooks/useTimedDismiss';
 import { SESSION_STORAGE_KEY, SESSION_VERSION } from './game/persistence';
 import { LIBRARY_STORAGE_KEY, LIBRARY_VERSION } from './game/playlist-library';
 import { PREFS_STORAGE_KEY } from './game/prefs';
+import { startIndexFor } from './game/shuffle';
 import type { PlaylistFetch } from './game/playlist-client';
 import type { StorageLike } from './game/persistence';
 import type { PersistedSession } from './game/types';
@@ -1560,7 +1561,7 @@ describe('App', () => {
       expect(saved.startIndex).toBe(saved.currentIndex);
     });
 
-    it('should start from the top and say so when the shared card has left the playlist', async () => {
+    it('should start from the next card and say so when the shared card has left the playlist', async () => {
       stubYearApi();
       const storage = memoryStorage();
       const fetchImpl = playlistFetch(200, playlistResult());
@@ -1576,7 +1577,10 @@ describe('App', () => {
       await waitFor(() => {
         expect(screen.queryByTestId('hud')).not.toBeNull();
       });
-      expect(savedSession(storage).currentIndex).toBe(0);
+      const saved = savedSession(storage);
+      expect(saved.currentIndex).toBe(
+        startIndexFor(saved.deck, 'zzzzzzzzzzzzzzzzzzzzzz', saved.seed),
+      );
       expect(screen.getByTestId('notice-banner').textContent).toContain(
         COPY.notice.startCardMissing,
       );

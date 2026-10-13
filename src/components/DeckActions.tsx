@@ -243,6 +243,9 @@ function ExportMessage({ state }: { state: PdfExportState }) {
   // `idle` and `working` say nothing: the button label is already carrying the progress, and an
   // empty region is what keeps this from announcing before it has news.
   if (state.status === 'idle' || state.status === 'working') return null;
+  // A full export says nothing: the file landing is the news. Only a partial one has something to
+  // disclose.
+  if (state.status === 'done' && state.excludedCount === 0) return null;
 
   return (
     <p
@@ -250,9 +253,7 @@ function ExportMessage({ state }: { state: PdfExportState }) {
       className={`text-center text-xs ${state.status === 'done' ? 'text-fg-secondary' : 'text-warning'}`}
     >
       {state.status === 'done'
-        ? state.excludedCount === 0
-          ? copy.deckActions.exportDone
-          : copy.deckActions.exportDonePartial(state.excludedCount)
+        ? copy.deckActions.exportDonePartial(state.excludedCount)
         : state.status === 'nothing-to-print'
           ? copy.deckActions.exportEmpty
           : copy.deckActions.exportFailed}
@@ -291,8 +292,9 @@ export function DeckActions({
    * "Leave unconfirmed years blank" (2026-10-01): print a card whose final year no second provider
    * confirmed with its year area EMPTY, for the player to write in by hand -- the same blank a kept
    * yearless card already prints with. Local state, default OFF, and NOT remembered: it is a choice
-   * about the next file, not about the game, so it resets with the panel. It lives in the PRINT
-   * VIEW, beside the presses it qualifies; the wait's auto-export reads it at the moment it fires.
+   * about the next file, not about the game, so it resets with the panel. It lives in the print
+   * view's CONFIRMATION step, directly above the press that exports; the wait's auto-export reads
+   * it at the moment it fires, and fires only after that confirm press.
    */
   const [blankUnconfirmed, setBlankUnconfirmed] = useState(false);
 
@@ -303,15 +305,18 @@ export function DeckActions({
    *  PRINT ALWAYS OPENS A VIEW NOW -- EVEN ON A RESOLVED DECK, WHERE IT USED TO
    *  EXPORT AT ONCE.
    *
-   *  The blank-years option was asked to sit beside "Print so far", i.e. in the
-   *  wait. But the wait is reached only while years are pending, so on a deck
-   *  that was already resolved the option would have been unreachable. The
-   *  developer chose the extra press over that: Print opens "Print this deck",
-   *  which holds the option and the sheet count (resolved) or the wait and
-   *  "Print so far" (pending), plus the one press that exports, and Cancel.
+   *  The blank-years option cannot live in the wait alone: the wait is reached
+   *  only while years are pending, so on a resolved deck it would be unreachable.
+   *  Print therefore opens "Print this deck" in TWO steps (2026-10-13). Step 1:
+   *  the sheet count (resolved) or the wait (pending), a press that only moves
+   *  to step 2, and Cancel. Step 2: the same text, the option, the one press that
+   *  exports ("Print"), and Cancel. Nothing is written to a file before it.
    * ===========================================================================
    */
   const [isPrintViewOpen, setIsPrintViewOpen] = useState(false);
+
+  /** Step 2 of the print view: the option and the press that exports. Reset on open and close. */
+  const [isConfirmingPrint, setIsConfirmingPrint] = useState(false);
 
   /**
    * Whether the player has ASKED to print. Not whether they are waiting -- see below.
@@ -367,6 +372,7 @@ export function DeckActions({
   const wasPrintViewOpenRef = useRef(false);
   useEffect(() => {
     if (isPrintViewOpen) {
+      // Also on the step change: the press that moved to step 2 has just been unmounted.
       cancelRef.current?.focus();
     } else if (wasPrintViewOpenRef.current) {
       const print = printButtonRef.current;
@@ -374,7 +380,7 @@ export function DeckActions({
       else copyButtonRef.current?.focus();
     }
     wasPrintViewOpenRef.current = isPrintViewOpen;
-  }, [isPrintViewOpen]);
+  }, [isPrintViewOpen, isConfirmingPrint]);
 
   const [copyState, setCopyState] = useState<CopyState>('idle');
   /**
@@ -427,6 +433,7 @@ export function DeckActions({
    */
   const handleOpenPrintView = () => {
     setIsPrintViewOpen(true);
+    setIsConfirmingPrint(false);
     if (!isDeckResolved) {
       hasAutoExportedRef.current = false;
       setHasAskedToPrint(true);
@@ -436,10 +443,11 @@ export function DeckActions({
   /** Cancel: back to the three actions, and the wait (if any) ends with the view. */
   const handleClosePrintView = () => {
     setIsPrintViewOpen(false);
+    setIsConfirmingPrint(false);
     setHasAskedToPrint(false);
   };
 
-  /** The print view's own press: the whole deck when resolved, "Print so far" while waiting. */
+  /** Step 2's confirm press: the only manual press that writes a file. */
   const handleExport = () => {
     exportDeck(deck, playlistName, { blankUnconfirmed });
   };
@@ -463,7 +471,8 @@ export function DeckActions({
    *  so this effect re-runs perhaps a hundred times during a crawl. Every one of
    *  those runs returns at the first line, because `hasAskedToPrint` is false
    *  unless the player pressed Print and `pendingYearCount` is above zero until
-   *  the crawl ends. The ref then closes the remaining case: `hasAskedToPrint`
+   *  the crawl ends. It also needs `isConfirmingPrint`: a wait the player has not
+   *  confirmed never writes a file. The ref then closes the remaining case: `hasAskedToPrint`
    *  STAYS true after the handoff (nothing clears it), so without the ref a
    *  later re-render with a fresh `deck` identity would export a second time.
    *  `exportDeck`'s own generation counter is a third line of defence rather
@@ -474,11 +483,25 @@ export function DeckActions({
    * ===========================================================================
    */
   useEffect(() => {
-    if (!hasAskedToPrint || pendingYearCount > 0 || hasAutoExportedRef.current) return;
+    if (
+      !hasAskedToPrint ||
+      !isConfirmingPrint ||
+      pendingYearCount > 0 ||
+      hasAutoExportedRef.current
+    )
+      return;
 
     hasAutoExportedRef.current = true;
     exportDeck(deck, playlistName, { blankUnconfirmed });
-  }, [hasAskedToPrint, pendingYearCount, exportDeck, deck, playlistName, blankUnconfirmed]);
+  }, [
+    hasAskedToPrint,
+    isConfirmingPrint,
+    pendingYearCount,
+    exportDeck,
+    deck,
+    playlistName,
+    blankUnconfirmed,
+  ]);
 
   /**
    * The print view (2026-10-01): "Print this deck", opened by the Print press.
@@ -488,9 +511,10 @@ export function DeckActions({
    * end screen has no other way out -- the game screen's dialog has its own Close, but this
    * component cannot assume one exists.
    *
-   * Two states, one view. RESOLVED: the sheet count, the option, and Print. PENDING: the wait,
-   * shaped like the screen that dealt the deck, the option, and "Print so far" -- and when the last
-   * year lands the wait exports by itself and the view turns into the resolved one in place.
+   * Two states, two steps. RESOLVED: the sheet count and Print. PENDING: the wait, shaped like the
+   * screen that dealt the deck, and "Print so far". Either press only opens step 2, which adds the
+   * option and the confirm press -- and when the last year lands on a confirmed wait it exports by
+   * itself and the view turns into the resolved one in place.
    *
    * The wait is a COUNT, never a list. The cards still looking up a year are the ones whose answer
    * the player has not seen, so naming one here would spoil the card they are looking at.
@@ -543,7 +567,7 @@ export function DeckActions({
           )}
 
           {/*
-            The print option, directly above the press it qualifies, in the same box and control
+            STEP 2 ONLY. The print option, directly above the press it qualifies, in the same box and control
             the picker's deal options use (`OptionCheckbox.tsx`). Disabled while an export is
             working, so the file being built cannot disagree with the box.
 
@@ -551,7 +575,7 @@ export function DeckActions({
             `skipUnconfirmed`): no card left in the deck has a `low` year. `blankUnconfirmed` then
             stays at its default `false`, since nothing can tick it.
           */}
-          {!offersBlankUnconfirmed ? null : (
+          {!isConfirmingPrint || !offersBlankUnconfirmed ? null : (
             <div className={OPTION_GROUP_CLASS_NAME}>
               <OptionCheckbox
                 label={copy.deckActions.blankUnconfirmed}
@@ -577,27 +601,41 @@ export function DeckActions({
                "N cards left out, no year yet" line below -- the label says what
                the button prints, so a caption repeating it was cut as noise.
 
-               It does not touch `hasAskedToPrint`, so the wait survives the
-               press and the full deck still exports itself when the last year
-               lands. Two files, both asked for.
+               In step 1 this press only opens step 2; the file is written by
+               the confirm press. It does not touch `hasAskedToPrint`, so the
+               wait survives and the full deck still exports itself when the last
+               year lands on a confirmed wait. Two files, both asked for.
               ===================================================================
             */}
-            <button
-              type="button"
-              onClick={handleExport}
-              // Disabled only while working: `exportDeck` bumps its own generation counter, so a
-              // second press would abandon the document the first one is half-way through. A
-              // finished or failed export is repeatable -- the commonest reason to press it twice
-              // is a printer that ate the first one.
-              disabled={pdf.status === 'working'}
-              className={BUTTON_CLASSES}
-            >
-              {pdf.status === 'working'
-                ? copy.deckActions.printing(pdf.completed, pdf.total)
-                : isDeckResolved
-                  ? copy.deckActions.print
-                  : copy.deckActions.printPartial}
-            </button>
+            {isConfirmingPrint ? (
+              <button
+                type="button"
+                onClick={handleExport}
+                // Disabled only while working: `exportDeck` bumps its own generation counter, so a
+                // second press would abandon the document the first one is half-way through. A
+                // finished or failed export is repeatable -- the commonest reason to press it twice
+                // is a printer that ate the first one.
+                disabled={pdf.status === 'working'}
+                className={BUTTON_CLASSES}
+              >
+                {pdf.status === 'working'
+                  ? copy.deckActions.printing(pdf.completed, pdf.total)
+                  : copy.deckActions.confirmPrint}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setIsConfirmingPrint(true)}
+                disabled={pdf.status === 'working'}
+                className={BUTTON_CLASSES}
+              >
+                {pdf.status === 'working'
+                  ? copy.deckActions.printing(pdf.completed, pdf.total)
+                  : isDeckResolved
+                    ? copy.deckActions.print
+                    : copy.deckActions.printPartial}
+              </button>
+            )}
 
             {/*
               Takes focus when the view opens -- see `cancelRef`. The button that was focused
@@ -635,18 +673,10 @@ export function DeckActions({
         </button>
 
         {/*
-        Deliberately careful wording. The seeded shuffle is exact; the track list it shuffles is
-        not, because yearless cards are dropped at play time, editorial playlists refresh, and a
-        playlist that has gone private since is dropped with a notice. See the header block --
-        promising "the same deck" here is the one thing this copy must not do.
-
-        Pluralised on the id count rather than left as "playlist(s)": the caption is the sentence
-        that has to be read and believed, and a slash in it reads as boilerplate. And it says
-        whether the link starts on the current card, because only a mid-game link does.
+        The caption claims the exact current state: the link carries the shuffle and the card the
+        player is on. See the header block and copy.ts for what the link does not promise.
       */}
-        <p className="text-center text-xs text-fg-muted">
-          {copy.deckActions.shareCaption(playlistIds.length, currentCardId !== undefined)}
-        </p>
+        <p className="text-center text-xs text-fg-muted">{copy.deckActions.shareCaption}</p>
 
         <button
           type="button"

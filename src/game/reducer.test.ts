@@ -11,7 +11,7 @@ import {
   resolvedCount,
   yearStateOf,
 } from './reducer';
-import { shuffleDeck } from './shuffle';
+import { shuffleDeck, startIndexFor } from './shuffle';
 import type { GameState, PersistedSession } from './types';
 import type { Card, PlaylistSummary } from '../../shared/types';
 
@@ -202,13 +202,13 @@ describe('gameReducer transitions', () => {
     expect(state.deck).toEqual(preparing().deck);
   });
 
-  it('should start on card 1 when the startCardId is not in the deck', () => {
+  it('should start on the next card in the seed order when the startCardId is not in the deck', () => {
     // The playlist changed since it was shared, or that card was already known yearless. The order is
-    // still the sender's; only the position is lost, so the deal goes ahead from the top.
+    // still the sender's, so the deal starts on the card the seed places after the missing one.
     const state = preparingFrom('not-in-this-deck');
 
-    expect(state.currentIndex).toBe(0);
-    expect(state.startIndex).toBe(0);
+    expect(state.currentIndex).toBe(startIndexFor(state.deck, 'not-in-this-deck', SEED));
+    expect(state.startIndex).toBe(state.currentIndex);
     expect(state.status).toBe('preparing');
   });
 

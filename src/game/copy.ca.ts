@@ -54,8 +54,8 @@ export const COPY_CA = {
     removeRow: (position: number) => `Treu la playlist ${position}`,
     addRow: 'Afegeix una altra playlist',
     // The developer's own wording (2026-10-13).
-    dealYearless: 'Barreja les cartes sense any trobat',
-    dealUnconfirmed: 'Barreja les cartes amb any dubtós',
+    dealYearless: 'Baralla les cartes sense any trobat',
+    dealUnconfirmed: 'Baralla les cartes amb any dubtós',
     atMaxRows: (maxPlaylists: number) => `El màxim és de ${maxPlaylists} playlists per baralla.`,
     start: 'Comença',
     starting: 'Carregant…',
@@ -107,7 +107,7 @@ export const COPY_CA = {
   },
 
   card: {
-    yearPending: "Encara s'està buscant l'any…",
+    yearPending: "Buscant l'any…",
     yearUnknown: 'Any desconegut',
     yearUnknownDetail: 'Comprova-ho pel teu compte',
     yearUnconfirmed: 'Any sense confirmar',
@@ -123,7 +123,7 @@ export const COPY_CA = {
 
   notice: {
     truncated: (maxTracks: number) =>
-      `Pot ser que una playlist tingui més cançons de les que es mostren — només se n'han pogut carregar les primeres ${maxTracks}.`,
+      `Només s'han carregat les primeres ${maxTracks} de cada playlist.`,
     skippedTracks: (count: number) =>
       count === 1
         ? "No s'ha pogut llegir 1 cançó i s'ha deixat fora."
@@ -133,11 +133,11 @@ export const COPY_CA = {
         ? "No s'ha pogut carregar 1 playlist i s'ha deixat fora."
         : `No s'han pogut carregar ${count} playlists i s'han deixat fora.`,
     combinedDeck: (deckSize: number, playlistCount: number) =>
-      `${deckSize === 1 ? '1 carta' : `${deckSize} cartes`} de ${playlistCount} playlists, barrejades en una sola baralla.`,
+      `${deckSize === 1 ? '1 carta' : `${deckSize} cartes`} de ${playlistCount} playlists, en una baralla.`,
     yearsUnavailable:
-      'Els anys no estan disponibles en aquest desplegament, així que les cartes no en mostraran cap. La baralla es pot jugar igualment — escaneja una carta per escoltar la cançó.',
+      'Els anys no estan disponibles, així que les cartes no en mostraran cap. La baralla es pot jugar igualment.',
     startCardMissing:
-      'La carta des de la qual es va compartir aquest enllaç ja no és a la playlist, així que la baralla comença des del principi.',
+      'La carta des de la qual es va compartir aquest enllaç ja no és a la playlist, així que la baralla comença des de la següent.',
     dismiss: "Tanca l'avís",
   },
 
@@ -153,9 +153,7 @@ export const COPY_CA = {
 
   deckActions: {
     copyLink: "Copia l'enllaç per compartir",
-    /** Same playlist(s), same shuffle -- never "the same deck". See the English original. */
-    shareCaption: (playlistCount: number, fromCurrentCard: boolean) =>
-      `Comparteix la partida. ${playlistCount === 1 ? 'La mateixa playlist' : 'Les mateixes playlists'}, la mateixa barreja${fromCurrentCard ? ', des de la carta on ets' : ''}`,
+    shareCaption: 'Comparteix la partida en el estat actual exacte',
     save: 'Desa aquesta playlist',
     saved: 'Desada a les teves playlists',
     print: 'Imprimeix les cartes en PDF',
@@ -176,10 +174,10 @@ export const COPY_CA = {
         ? "1 carta encara està buscant l'any."
         : `${pendingCount} cartes encara estan buscant l'any.`,
     printPartial: 'Imprimeix el que hi ha',
+    confirmPrint: 'Imprimeix',
     cancel: 'Cancel·la',
-    exportDone: 'PDF descarregat',
     exportDonePartial: (excludedCount: number) =>
-      `PDF descarregat — ${excludedCount === 1 ? "1 carta s'ha quedat fora" : `${excludedCount} cartes s'han quedat fora`}, encara sense any`,
+      `${excludedCount === 1 ? "1 carta s'ha quedat fora" : `${excludedCount} cartes s'han quedat fora`}, encara sense any`,
     exportEmpty: 'Cap carta té any encara, així que no hi ha res per imprimir',
     exportFailed: "No s'ha pogut generar el PDF",
     linkCopied: 'Enllaç copiat',
