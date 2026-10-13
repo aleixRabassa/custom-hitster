@@ -2424,3 +2424,16 @@ visit with no service worker, a bad connection), and two places awaited it with 
 - **2026-10-13: the print view is two-step.** Step 1 (summary or wait, plus a press that only opens step 2) and step 2 (the blank-years option and `COPY.deckActions.confirmPrint`, the one press that exports). The wait's auto-export now also requires `isConfirmingPrint`, so nothing is written before step 2 is open. Consequences: a full export shows no message (`exportDone` deleted), `exportDonePartial` lost its "PDF downloaded" prefix, and `shareCaption` is a plain string ("current state"), no longer a function of playlist count and card.
 
 - **2026-10-13 (later): a resolved deck has no step 1 in the print view.** Supersedes the step-1-on-a-resolved-deck part of the two-step entry above (the rest of it stands). Print on a resolved deck opens straight on the confirmation (sheet count, "Leave unconfirmed years blank" when offered, Print, Cancel), because the step-1 "Print as PDF cards" press was redundant. Step 1 exists only while years are pending (the wait, "Print so far", Cancel). The confirmation is derived in `DeckActions.tsx`: `isConfirmStep = isConfirmingPrint || isDeckResolved`. **Gotcha: the auto-export effect must keep reading the stored `isConfirmingPrint`, never `isConfirmStep`** — otherwise a wait that resolves while the player never pressed "Print so far" would switch to the confirmation and download a file unasked. Also removed: the `printWaitsForYears` sentence ("N cards are still looking up a year — printing waits for them all") under the Print button; the panel now shows the sheet count only when the deck is resolved, and nothing while pending.
+
+## 2026-10-13 — Play Console's "native code, no debug symbols" warning on version code 4 has nothing to act on
+
+Rule: AGENTS.md § Google Play. On the upload of version code 4, Play Console warned "Este App Bundle contiene código
+nativo, pero no has subido símbolos de depuración".
+
+- **The local bundle has no native code.** `android/app-release-bundle.aab` (built 2026-10-13 21:50, versionCode 4)
+  has no `lib/` entry and no `.so` in its 464 entries. `android/app/build.gradle` has no `ndk {}`, `ndkVersion` or
+  `debugSymbolLevel`, and its only dependency is `androidbrowserhelper` 2.6.2.
+- **There is nothing to upload**: `ndk { debugSymbolLevel 'FULL' }` produces symbols only from `.so` files, and this
+  bundle has none. It is a warning, not an error, and does not block the release.
+- If it comes back, check the uploaded bundle in Play Console (App bundle explorer, "Native platforms") before
+  touching `app/build.gradle`. `bubblewrap update` regenerates that file, so a hand edit there would be lost anyway.
