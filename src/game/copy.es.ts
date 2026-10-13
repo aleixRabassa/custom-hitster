@@ -156,8 +156,6 @@ export const COPY_ES = {
     printing: (completed: number, total: number) => `Creando PDF… ${completed}/${total}`,
     sheetSummary: (sheets: number) =>
       `${sheets === 1 ? '1 hoja A4' : `${sheets} hojas A4`}, ${CARDS_PER_SHEET} cartas por hoja — imprime a doble cara`,
-    printWaitsForYears: (pendingCount: number) =>
-      `${pendingCount === 1 ? '1 carta sigue' : `${pendingCount} cartas siguen`} buscando su año — la impresión espera a que estén todas`,
     waitingHeading: 'Esperando los últimos años…',
     waitingDetail: (pendingCount: number) =>
       `${pendingCount === 1 ? '1 carta sigue' : `${pendingCount} cartas siguen`} buscando su año.`,

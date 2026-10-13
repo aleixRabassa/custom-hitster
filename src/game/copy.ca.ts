@@ -164,10 +164,6 @@ export const COPY_CA = {
     printing: (completed: number, total: number) => `Generant el PDF… ${completed}/${total}`,
     sheetSummary: (sheets: number) =>
       `${sheets === 1 ? '1 full A4' : `${sheets} fulls A4`}, ${CARDS_PER_SHEET} cartes per full — imprimeix a doble cara`,
-    printWaitsForYears: (pendingCount: number) =>
-      pendingCount === 1
-        ? "1 carta encara està buscant l'any — la impressió espera que acabi"
-        : `${pendingCount} cartes encara estan buscant l'any — la impressió espera que acabin totes`,
     waitingHeading: 'Esperant els últims anys…',
     waitingDetail: (pendingCount: number) =>
       pendingCount === 1

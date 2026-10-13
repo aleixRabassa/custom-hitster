@@ -333,8 +333,6 @@ export const COPY = {
     printing: (completed: number, total: number) => `Building PDF… ${completed}/${total}`,
     sheetSummary: (sheets: number) =>
       `${sheets === 1 ? '1 A4 sheet' : `${sheets} A4 sheets`}, ${CARDS_PER_SHEET} cards each — print double-sided`,
-    printWaitsForYears: (pendingCount: number) =>
-      `${pendingCount === 1 ? '1 card is' : `${pendingCount} cards are`} still looking up a year — printing waits for them all`,
     waitingHeading: 'Waiting for the last years…',
     waitingDetail: (pendingCount: number) =>
       `${pendingCount === 1 ? '1 card is' : `${pendingCount} cards are`} still looking up a year.`,

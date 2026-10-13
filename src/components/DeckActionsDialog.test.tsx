@@ -160,9 +160,8 @@ describe('DeckActionsDialog', () => {
     const panel = screen.getByRole('dialog');
 
     fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
-    // The option is in the confirmation step (2026-10-13), one press further in.
-    fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
-    // Each step put focus on Cancel; Shift+Tab walks back through Print to the option.
+    // A resolved deck opens on the confirmation step (2026-10-13), which holds the option.
+    // Opening put focus on Cancel; Shift+Tab walks back through Print to the option.
     expect(document.activeElement?.textContent).toBe(COPY.deckActions.cancel);
     fireEvent.keyDown(panel, { key: 'Tab', shiftKey: true });
     expect(document.activeElement?.textContent).toBe(COPY.deckActions.confirmPrint);

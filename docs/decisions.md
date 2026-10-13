@@ -706,15 +706,21 @@ including the wait's auto-export and "Print so far". **It lives in the PRINT VIE
 ALWAYS opens that view** (the developer's choice, later on 2026-10-01): the option was asked to sit
 beside "Print so far", but the wait is reached only while years are pending, so on a resolved deck it
 would have been unreachable. So `DeckActions`' Print opens "Print this deck" (`COPY.deckActions.printTitle`).
-**Since 2026-10-13 the view has two steps** (`isConfirmingPrint`, reset on open and on Cancel). Step 1:
-the sheet count (resolved) or the wait (pending), a press (Print, or "Print so far" while waiting) that
-only opens step 2, and Cancel. Step 2: the same text, **the option**, the one press that exports
-(`COPY.deckActions.confirmPrint`) and Cancel. The option sits in step 2, directly above the press it
-qualifies, not beside the first press. The pending case behaves as it did: opening the view is the press
-that starts the wait, and the wait still exports by itself when the last year lands, then turns into the
-resolved view in place — **but only once step 2 is open**, so nothing is written to a file before the
-player has moved past step 1. A full export reports nothing (`exportDone` was deleted); only a partial
-one speaks, in `exportDonePartial`.
+**Since 2026-10-13 the view has a confirmation step, and a resolved deck opens straight on it**
+(`isConfirmingPrint`, reset on open and on Cancel). The confirmation: the sheet count, **the option**
+(when offered), the one press that exports (`COPY.deckActions.confirmPrint`) and Cancel. Step 1 exists
+only while years are pending: the wait, "Print so far" (which only opens the confirmation) and Cancel. A
+resolved deck had a step 1 for a few hours of that day, and its press was redundant, so it was removed.
+The confirmation is **derived**: `isConfirmStep = isConfirmingPrint || isDeckResolved`, so a wait that
+resolves switches the view to the confirmation by itself. **It does NOT export when that happens**: the
+auto-export effect reads the stored `isConfirmingPrint`, not `isConfirmStep`, so the wait's auto-export
+fires only for a player who already pressed "Print so far", and one still on the wait lands on the
+confirmation and presses Print themselves — nothing is written to a file before the player has
+confirmed. The option sits in the confirmation, directly above the press it qualifies. Opening the view
+while pending is still the press that starts the wait. The panel under the Print button no longer
+carries a sentence while years are pending (`printWaitsForYears` was deleted): it shows the sheet count
+only when the deck is resolved, and nothing while pending, since the wait is the view's own. A full
+export reports nothing (`exportDone` was deleted); only a partial one speaks, in `exportDonePartial`.
 **The title changes for that view only**: the dialog stays "Keep this deck" over the three actions. The
 view is `DeckActions`' state and the heading is the host's element, so the host passes
 `renderHeading(view)` and `DeckActions` renders it first, in a fragment — the dialog's `<h2>` (still the

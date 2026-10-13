@@ -122,14 +122,13 @@ function renderActions(overrides: Partial<DeckActionsProps> = {}) {
 }
 
 /**
- * Print a resolved deck: the actions view's Print OPENS the print view, the view's Print (the same
- * label) moves to the confirmation step, and the confirm press is the one that exports (2026-10-13).
+ * Print a resolved deck: the actions view's Print OPENS the print view, which on a resolved deck is
+ * the confirmation step already, and the confirm press is the one that exports (2026-10-13).
  */
 function printDeck(
   label: string = COPY.deckActions.print,
   confirmLabel: string = COPY.deckActions.confirmPrint,
 ): void {
-  fireEvent.click(screen.getByRole('button', { name: label }));
   fireEvent.click(screen.getByRole('button', { name: label }));
   fireEvent.click(screen.getByRole('button', { name: confirmLabel }));
 }
@@ -529,12 +528,12 @@ describe('DeckActions', () => {
       expect(screen.queryByText(COPY.deckActions.waitingHeading)).not.toBeNull();
       expect(screen.queryByText(COPY.deckActions.waitingDetail(1))).not.toBeNull();
 
-      // The last one lands from step 1: the wait is over and NOTHING has started. The view offers
-      // the full Print, still step 1.
+      // The last one lands from step 1: the wait is over and NOTHING has started. The view moves to
+      // the confirmation by itself and waits for the confirm press.
       rerender(<DeckActions {...props} pendingYearCount={0} />);
       expect(screen.queryByText(COPY.deckActions.waitingHeading)).toBeNull();
       expect(screen.queryByRole('button', { name: COPY.deckActions.printing(0, 6) })).toBeNull();
-      expect(screen.queryByRole('button', { name: COPY.deckActions.print })).not.toBeNull();
+      expect(screen.queryByRole('button', { name: COPY.deckActions.confirmPrint })).not.toBeNull();
       expect(saveMock).not.toHaveBeenCalled();
 
       // The same wait, confirmed (step 2) before the last year lands: now it exports by itself.
@@ -606,14 +605,12 @@ describe('DeckActions', () => {
       expect(screen.queryByRole('status')).toBeNull();
     });
 
-    it('should say what is outstanding instead of a sheet count while years are pending', () => {
+    it('should show no sheet count while years are pending', () => {
       // `sheetsForDeck` counts only the cards that already have a year, so mid-crawl it is a figure
-      // that would climb while the player read it -- and it would be describing a deck nobody is
-      // going to print, since the press waits for the rest.
+      // that would climb while the player read it, so nothing is shown until the deck resolves.
       const { container, props } = renderActions({ pendingYearCount: 7 });
       const text = container.textContent ?? '';
 
-      expect(text).toContain(COPY.deckActions.printWaitsForYears(7));
       expect(text).not.toContain(
         COPY.deckActions.sheetSummary(sheetsForDeck(props.deck, props.keepYearless)),
       );
@@ -771,17 +768,13 @@ describe('DeckActions', () => {
     }
 
     it('should render the option only in the confirmation step, unticked, above its Print', () => {
-      // 2026-10-13: the option sits in step 2 of the print view, above the press that exports.
+      // 2026-10-13: the option sits in the confirmation step, above the press that exports -- and a
+      // resolved deck opens straight on it.
       renderActions();
       expect(
         screen.queryByRole('checkbox', { name: COPY.deckActions.blankUnconfirmed }),
       ).toBeNull();
 
-      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
-      // Step 1 has no option; the confirmation step holds it.
-      expect(
-        screen.queryByRole('checkbox', { name: COPY.deckActions.blankUnconfirmed }),
-      ).toBeNull();
       fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
 
       const box = blankUnconfirmedBox();
@@ -823,7 +816,6 @@ describe('DeckActions', () => {
       renderActions({ skipUnconfirmed: true, deck: [unchecked, highConfidenceCard] });
 
       fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
-      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
       fireEvent.click(blankUnconfirmedBox());
       fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.confirmPrint }));
       await waitFor(() => {
@@ -864,7 +856,6 @@ describe('DeckActions', () => {
       renderActions({ deck: [lowConfidenceCard, highConfidenceCard] });
 
       fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
-      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
       fireEvent.click(blankUnconfirmedBox());
       expect(blankUnconfirmedBox().checked).toBe(true);
       fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.confirmPrint }));
@@ -893,16 +884,51 @@ describe('DeckActions', () => {
       fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
 
       expect(saveMock).not.toHaveBeenCalled();
+      // A resolved deck opens on the confirmation: the option and the one press that exports.
       expect(
         screen.queryByRole('checkbox', { name: COPY.deckActions.blankUnconfirmed }),
-      ).toBeNull();
-      expect(screen.queryByRole('button', { name: COPY.deckActions.confirmPrint })).toBeNull();
+      ).not.toBeNull();
+      expect(screen.queryByRole('button', { name: COPY.deckActions.confirmPrint })).not.toBeNull();
       expect(screen.queryByRole('button', { name: COPY.deckActions.copyLink })).toBeNull();
       expect(screen.queryByRole('button', { name: COPY.deckActions.cancel })).not.toBeNull();
       expect(screen.queryByText(COPY.deckActions.waitingHeading)).toBeNull();
       expect(container.textContent ?? '').toContain(
         COPY.deckActions.sheetSummary(sheetsForDeck(props.deck, props.keepYearless)),
       );
+    });
+
+    it('should open a resolved deck on the confirmation, with no second Print inside the view', () => {
+      // 2026-10-13: the step-1 press is gone on a resolved deck. The only Print-labelled button is
+      // the actions view's, which the print view replaces.
+      renderActions();
+
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
+
+      expect(screen.queryByRole('button', { name: COPY.deckActions.confirmPrint })).not.toBeNull();
+      expect(screen.queryByRole('button', { name: COPY.deckActions.print })).toBeNull();
+      expect(screen.queryByRole('button', { name: COPY.deckActions.printPartial })).toBeNull();
+      expect(
+        screen.queryByRole('checkbox', { name: COPY.deckActions.blankUnconfirmed }),
+      ).not.toBeNull();
+    });
+
+    it('should switch an unconfirmed wait to the confirmation when the deck resolves, without exporting', () => {
+      const { rerender, props } = renderActions({ pendingYearCount: 2 });
+
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
+      expect(screen.queryByRole('button', { name: COPY.deckActions.printPartial })).not.toBeNull();
+      expect(screen.queryByRole('button', { name: COPY.deckActions.confirmPrint })).toBeNull();
+
+      rerender(<DeckActions {...props} pendingYearCount={0} />);
+
+      expect(screen.queryByRole('button', { name: COPY.deckActions.confirmPrint })).not.toBeNull();
+      expect(screen.queryByRole('button', { name: COPY.deckActions.printPartial })).toBeNull();
+      expect(
+        screen.queryByRole('checkbox', { name: COPY.deckActions.blankUnconfirmed }),
+      ).not.toBeNull();
+      expect(document.activeElement?.textContent).toBe(COPY.deckActions.cancel);
+      expect(saveMock).not.toHaveBeenCalled();
+      expect(toDataURLMock).not.toHaveBeenCalled();
     });
 
     it('should ask the host for the heading of the view on show', () => {
@@ -923,10 +949,6 @@ describe('DeckActions', () => {
       fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
       expect(document.activeElement?.textContent).toBe(COPY.deckActions.cancel);
 
-      // And again on the step change, which unmounts the press that was focused.
-      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
-      expect(document.activeElement?.textContent).toBe(COPY.deckActions.cancel);
-
       fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.cancel }));
       expect(document.activeElement).toBe(
         screen.getByRole('button', { name: COPY.deckActions.print }),
@@ -938,10 +960,8 @@ describe('DeckActions', () => {
       renderActions();
 
       fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
-      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
       fireEvent.click(screen.getByRole('checkbox', { name: COPY.deckActions.blankUnconfirmed }));
       fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.cancel }));
-      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
       fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
 
       expect(

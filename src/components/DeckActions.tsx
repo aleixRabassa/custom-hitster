@@ -307,15 +307,20 @@ export function DeckActions({
    *
    *  The blank-years option cannot live in the wait alone: the wait is reached
    *  only while years are pending, so on a resolved deck it would be unreachable.
-   *  Print therefore opens "Print this deck" in TWO steps (2026-10-13). Step 1:
-   *  the sheet count (resolved) or the wait (pending), a press that only moves
-   *  to step 2, and Cancel. Step 2: the same text, the option, the one press that
-   *  exports ("Print"), and Cancel. Nothing is written to a file before it.
+   *  Print therefore opens "Print this deck" (2026-10-13). A RESOLVED deck goes
+   *  straight to the confirmation: the sheet count, the option, the one press
+   *  that exports ("Print"), and Cancel. A PENDING deck has a step 1 first: the
+   *  wait, a press that only moves to the confirmation, and Cancel. Nothing is
+   *  written to a file before the confirm press.
    * ===========================================================================
    */
   const [isPrintViewOpen, setIsPrintViewOpen] = useState(false);
 
-  /** Step 2 of the print view: the option and the press that exports. Reset on open and close. */
+  /**
+   * The player pressed "Print so far" in the wait's step 1. Reset on open and close. Read by the
+   * auto-export effect: a wait the player has not confirmed never writes a file, even when the deck
+   * resolves under it. Rendering reads `isConfirmStep` below, which also covers a resolved deck.
+   */
   const [isConfirmingPrint, setIsConfirmingPrint] = useState(false);
 
   /**
@@ -347,6 +352,13 @@ export function DeckActions({
   const isWaitingForYears = hasAskedToPrint && !isDeckResolved;
 
   /**
+   * The confirmation step is DERIVED too: confirmed by the press, or implied by a resolved deck.
+   * An unconfirmed wait whose last year lands therefore switches to the confirmation by itself --
+   * and does NOT export, because the auto-export effect reads the stored `isConfirmingPrint`.
+   */
+  const isConfirmStep = isConfirmingPrint || isDeckResolved;
+
+  /**
    * The wait's Cancel button, so focus can follow the view.
    *
    * Pressing Print unmounts the button that was focused. Without this, focus falls to `<body>`, and
@@ -372,7 +384,7 @@ export function DeckActions({
   const wasPrintViewOpenRef = useRef(false);
   useEffect(() => {
     if (isPrintViewOpen) {
-      // Also on the step change: the press that moved to step 2 has just been unmounted.
+      // Also on the step change: the press that moved to the confirmation has just been unmounted.
       cancelRef.current?.focus();
     } else if (wasPrintViewOpenRef.current) {
       const print = printButtonRef.current;
@@ -380,7 +392,7 @@ export function DeckActions({
       else copyButtonRef.current?.focus();
     }
     wasPrintViewOpenRef.current = isPrintViewOpen;
-  }, [isPrintViewOpen, isConfirmingPrint]);
+  }, [isPrintViewOpen, isConfirmStep]);
 
   const [copyState, setCopyState] = useState<CopyState>('idle');
   /**
@@ -511,10 +523,11 @@ export function DeckActions({
    * end screen has no other way out -- the game screen's dialog has its own Close, but this
    * component cannot assume one exists.
    *
-   * Two states, two steps. RESOLVED: the sheet count and Print. PENDING: the wait, shaped like the
-   * screen that dealt the deck, and "Print so far". Either press only opens step 2, which adds the
-   * option and the confirm press -- and when the last year lands on a confirmed wait it exports by
-   * itself and the view turns into the resolved one in place.
+   * Two states. RESOLVED: straight to the confirmation -- the sheet count, the option and Print.
+   * PENDING: step 1 first, the wait (shaped like the screen that dealt the deck) and "Print so
+   * far", which only opens the confirmation. When the last year lands the view turns into the
+   * confirmation in place; on a confirmed wait it also exports by itself, on an unconfirmed one it
+   * waits for the press.
    *
    * The wait is a COUNT, never a list. The cards still looking up a year are the ones whose answer
    * the player has not seen, so naming one here would spoil the card they are looking at.
@@ -567,7 +580,7 @@ export function DeckActions({
           )}
 
           {/*
-            STEP 2 ONLY. The print option, directly above the press it qualifies, in the same box and control
+            CONFIRMATION ONLY (a resolved deck, or after "Print so far"). The print option, directly above the press it qualifies, in the same box and control
             the picker's deal options use (`OptionCheckbox.tsx`). Disabled while an export is
             working, so the file being built cannot disagree with the box.
 
@@ -575,7 +588,7 @@ export function DeckActions({
             `skipUnconfirmed`): no card left in the deck has a `low` year. `blankUnconfirmed` then
             stays at its default `false`, since nothing can tick it.
           */}
-          {!isConfirmingPrint || !offersBlankUnconfirmed ? null : (
+          {!isConfirmStep || !offersBlankUnconfirmed ? null : (
             <div className={OPTION_GROUP_CLASS_NAME}>
               <OptionCheckbox
                 label={copy.deckActions.blankUnconfirmed}
@@ -601,13 +614,13 @@ export function DeckActions({
                "N cards left out, no year yet" line below -- the label says what
                the button prints, so a caption repeating it was cut as noise.
 
-               In step 1 this press only opens step 2; the file is written by
-               the confirm press. It does not touch `hasAskedToPrint`, so the
+               Step 1 exists only while years are pending: this press only opens
+               the confirmation; the file is written by the confirm press. It does not touch `hasAskedToPrint`, so the
                wait survives and the full deck still exports itself when the last
                year lands on a confirmed wait. Two files, both asked for.
               ===================================================================
             */}
-            {isConfirmingPrint ? (
+            {isConfirmStep ? (
               <button
                 type="button"
                 onClick={handleExport}
@@ -631,9 +644,7 @@ export function DeckActions({
               >
                 {pdf.status === 'working'
                   ? copy.deckActions.printing(pdf.completed, pdf.total)
-                  : isDeckResolved
-                    ? copy.deckActions.print
-                    : copy.deckActions.printPartial}
+                  : copy.deckActions.printPartial}
               </button>
             )}
 
@@ -708,22 +719,17 @@ export function DeckActions({
         </button>
 
         {/*
-        Two different sentences, because there are two different things worth knowing before the
-        press.
+        RESOLVED: the sheet count and the duplex setting.
 
-        RESOLVED: the sheet count and the duplex setting -- the print view repeats it beside its own
-        press, where the reasoning for it is written down.
-
-        PENDING: no sheet count at all. `sheetsForDeck` counts only the cards that are already
-        printable -- a final year, or a kept yearless card -- so mid-crawl it is a number that would climb while the player read it -- and since the
-        press now WAITS for the rest, it would also be describing a deck nobody is going to print.
-        Saying what the press will do is more useful than a figure that is about to be wrong.
+        PENDING: nothing. `sheetsForDeck` counts only the cards that are already printable, so
+        mid-crawl it would climb while the player read it; the print view's wait states what is
+        outstanding.
       */}
-        <p className="text-center text-xs text-fg-muted">
-          {isDeckResolved
-            ? copy.deckActions.sheetSummary(sheets)
-            : copy.deckActions.printWaitsForYears(pendingYearCount)}
-        </p>
+        {isDeckResolved && (
+          <p className="text-center text-xs text-fg-muted">
+            {copy.deckActions.sheetSummary(sheets)}
+          </p>
+        )}
 
         <ExportMessage state={pdf} />
 

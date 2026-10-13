@@ -613,13 +613,11 @@ describe('GameScreen', () => {
     render(renderScreen({ skipUnconfirmed: true }));
     fireEvent.click(screen.getByRole('button', { name: COPY.controls.keepDeck }));
     fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
-    fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
     expect(blankBox()).toBeNull();
 
     cleanup();
     render(renderScreen({ skipUnconfirmed: false }));
     fireEvent.click(screen.getByRole('button', { name: COPY.controls.keepDeck }));
-    fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
     fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
     expect(blankBox()).not.toBeNull();
   });
