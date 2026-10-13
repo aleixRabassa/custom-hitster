@@ -239,7 +239,7 @@ export interface LandingScreenProps {
    */
   errorCode?: StartFailureCode;
   /**
-   * The "Deal cards with no year found" checkbox, CONTROLLED: checked means a card whose final
+   * The "Shuffle in cards with no year found" checkbox, CONTROLLED: checked means a card whose final
    * answer is "no year" stays in the deck -- the stored `keepYearless`, under the label it has had
    * since the afternoon of 2026-10-01 (it read "Skip cards with no year found", inverted, that
    * morning). Named for what the box SAYS.
@@ -252,7 +252,7 @@ export interface LandingScreenProps {
   dealYearless: boolean;
   onDealYearlessChange: (dealYearless: boolean) => void;
   /**
-   * The "Deal cards with an unconfirmed year" checkbox (2026-10-01), CONTROLLED and owned exactly
+   * The "Shuffle in cards with doubtful year" checkbox (2026-10-01), CONTROLLED and owned exactly
    * like the one above. Checked KEEPS a card whose final year no second provider confirmed, so it
    * is the stored `skipUnconfirmed` INVERTED -- `App.tsx` is the one place that inverts it.
    */
@@ -830,10 +830,10 @@ export function LandingScreen({
            developer's second wording of the day; the morning's pair read "Skip ..." and
            skipped when checked):
 
-           - "Deal cards with no year found" -- the 2026-09-30 "Keep cards with no year
+           - "Shuffle in cards with no year found" -- the 2026-09-30 "Keep cards with no year
              found" (spike §12.8) under a new label, same polarity. Unchecked by default,
              because the default behaviour never changed: a final "no year" drops its card.
-           - "Deal cards with an unconfirmed year" -- a card whose final year no second
+           - "Shuffle in cards with doubtful year" -- a card whose final year no second
              provider confirmed stays. Checked by default, for the same reason: such a card
              was always dealt, and the player unticks this to drop it.
 

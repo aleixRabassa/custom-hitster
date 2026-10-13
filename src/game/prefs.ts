@@ -1,9 +1,9 @@
 /**
  * The player's remembered preferences (2026-09-30, plan.year-fetch-rework-ui.md step 3).
  *
- * Two, both deal options on the picker (2026-10-01): `keepYearless`, "Deal cards with no year found"
+ * Two, both deal options on the picker (2026-10-01): `keepYearless`, "Shuffle in cards with no year found"
  * (spike §12.8's "Keep cards with no year found"), and `skipUnconfirmed`, which the picker shows
- * INVERTED as "Deal cards with an unconfirmed year". The labels changed twice on 2026-10-01 (a
+ * INVERTED as "Shuffle in cards with doubtful year". The labels changed twice on 2026-10-01 and once more on 2026-10-13 ("Shuffle in ..."; a
  * "Skip ..." pair in the morning, the "Deal ..." pair after); the stored fields never changed
  * meaning, so no record did. Built
  * exactly like `locale.ts` -- pure, framework-free, an injected `StorageLike` exactly as
@@ -42,12 +42,12 @@ export const PREFS_STORAGE_KEY = 'jitster:prefs:v1';
 export interface Prefs {
   /**
    * Whether a final "no year" KEEPS its card. Default OFF (the developer's choice): the picker's
-   * "Deal cards with no year found", unchecked.
+   * "Shuffle in cards with no year found", unchecked.
    */
   readonly keepYearless: boolean;
   /**
    * Whether a final unconfirmed (`low`) year DROPS its card. Default OFF: unconfirmed years play,
-   * which the picker shows as "Deal cards with an unconfirmed year" CHECKED -- that checkbox is
+   * which the picker shows as "Shuffle in cards with doubtful year" CHECKED -- that checkbox is
    * this value inverted.
    */
   readonly skipUnconfirmed: boolean;

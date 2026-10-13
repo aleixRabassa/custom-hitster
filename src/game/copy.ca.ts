@@ -53,9 +53,9 @@ export const COPY_CA = {
     playlistLinkPlaceholder: COPY.landing.playlistLinkPlaceholder,
     removeRow: (position: number) => `Treu la playlist ${position}`,
     addRow: 'Afegeix una altra playlist',
-    // 2026-10-01 PROPOSALS, not yet read by a native speaker (docs/development.md §5).
-    dealYearless: 'Reparteix les cartes sense any',
-    dealUnconfirmed: "Reparteix les cartes amb l'any sense confirmar",
+    // The developer's own wording (2026-10-13).
+    dealYearless: 'Barreja les cartes sense any trobat',
+    dealUnconfirmed: 'Barreja les cartes amb any dubtós',
     atMaxRows: (maxPlaylists: number) => `El màxim és de ${maxPlaylists} playlists per baralla.`,
     start: 'Comença',
     starting: 'Carregant…',

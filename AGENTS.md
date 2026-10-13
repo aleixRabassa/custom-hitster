@@ -109,7 +109,7 @@ Phases 1–8 are code complete. The work after them is the **year-fetch rework**
 
 ### Deal options [§ Deal options]
 
-- **"Deal cards with no year found" (unticked by default) is `keepYearless`; "Deal cards with an unconfirmed year" (ticked by default) is `!skipUnconfirmed`.** The stored model never inverted; the one inversion is in `App.tsx`. Renaming the stored fields to match the labels is the edit to refuse.
+- **"Shuffle in cards with no year found" (unticked by default) is `keepYearless`; "Shuffle in cards with doubtful year" (ticked by default) is `!skipUnconfirmed`.** The stored model never inverted; the one inversion is in `App.tsx`. Renaming the stored fields to match the labels is the edit to refuse.
 - Both rules are one function, `isDroppedAnswer`, at `START`, `YEAR_RESOLVED` and `RESUME`. **A provisional year is never dropped by `skipUnconfirmed`** (Restart re-deals through `START`). The card-1 gate is skipped only when nothing can be dropped (`keepYearless && !skipUnconfirmed`).
 - Remembered under `jitster:prefs:v1` by `prefs.ts`: validated per field on read, rebuilt field by field on write. **New deals use the recipient's prefs; Restart and Play again use the session's; a resume uses the save's.** A link never carries the sender's choice. The PDF reads the session's `keepYearless`.
 - `OptionCheckbox`: `touch-target` on the label, the focus ring on the input, `text-sm` on the caption span, no `aria-label`, no `value` (the leak audit reads it).

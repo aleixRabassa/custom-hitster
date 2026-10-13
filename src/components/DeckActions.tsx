@@ -177,7 +177,7 @@ export interface DeckActionsProps {
   keepYearless: boolean;
   /**
    * Whether this SESSION drops cards with an unconfirmed year, from `state.skipUnconfirmed`
-   * (the picker's "Deal cards with an unconfirmed year", UNticked).
+   * (the picker's "Shuffle in cards with doubtful year", UNticked).
    *
    * On, the print view does not offer "Leave unconfirmed years blank" (2026-10-01, the developer's
    * call): the session has already removed every card whose final year is `low`, so the box would

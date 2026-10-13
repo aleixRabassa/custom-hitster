@@ -460,7 +460,7 @@ it does not read `MotionConfig reducedMotion="user"` and still slides under `red
 
 **`src/components/ErrorBoundary.tsx` is the only class component in the app, and its fallback MUST NEVER render the caught error's message or stack.** `componentDidCatch` has no hook equivalent, which is why it is a class. It wraps `<App />` from **`main.tsx`, outside it** — a boundary catches only what is below it, so one rendered inside `App` would be unmounted by the very exception it exists to catch. The leak rule is the load-bearing part: every prop in the app flows through the tree it catches and the deck is in there, so an error string can quote a track title, artist or year. State holds a **boolean, not the `Error`**, so the leak is unavailable rather than merely avoided; the detail goes to `console.error`, which is not a rendered surface. **"Show the error so the player can report it" is the natural next change and it is the one that turns a crash screen into a spoiler** — `ErrorBoundary.test.tsx` throws an error containing a fixture card's title, artist and year and asserts all three are absent.
 
-**An `ended` session with an EMPTY deck goes to the landing screen with a warning, not to the end screen.** A card whose FINAL year answer is null is removed from the deck while the session drops yearless cards (the default — "Deal cards with no year found" unticked), and since 2026-10-01 a final `low` card while it skips unconfirmed years, so a playlist the provider vote cannot place drains to zero; a session that drops neither never shrinks, so `deckCollapsed` can fire only on an empty deal and the check stays exact in every mode; that used to reach the end screen reading "Deck finished" over a count of **0**. `App.tsx` derives `deckCollapsed` from `status === 'ended' && deck.length === 0` — exact, because every other route to `ended` leaves the played cards in the deck — and checks it **before** `endedView`. The warning is `no-years-found`, which is why **`messages.ts` owns `StartFailureCode = PlaylistClientErrorCode | 'no-years-found'`**: the code is produced by the session, not by a fetch, and adding it to the client's own union would make that type claim a code `fetchPlaylist` cannot return. One slot, one union, no fifth view.
+**An `ended` session with an EMPTY deck goes to the landing screen with a warning, not to the end screen.** A card whose FINAL year answer is null is removed from the deck while the session drops yearless cards (the default — "Shuffle in cards with no year found" unticked), and since 2026-10-01 a final `low` card while it skips unconfirmed years, so a playlist the provider vote cannot place drains to zero; a session that drops neither never shrinks, so `deckCollapsed` can fire only on an empty deal and the check stays exact in every mode; that used to reach the end screen reading "Deck finished" over a count of **0**. `App.tsx` derives `deckCollapsed` from `status === 'ended' && deck.length === 0` — exact, because every other route to `ended` leaves the played cards in the deck — and checks it **before** `endedView`. The warning is `no-years-found`, which is why **`messages.ts` owns `StartFailureCode = PlaylistClientErrorCode | 'no-years-found'`**: the code is produced by the session, not by a fetch, and adding it to the client's own union would make that type claim a code `fetchPlaylist` cannot return. One slot, one union, no fifth view.
 
 **A sixth developer decision landed on 2026-08-06, and it reverses a Phase 4 checkbox: the song
 keeps playing when the card is FLIPPED.** Audio now stops on exactly two things — the card
@@ -479,7 +479,7 @@ something `plan.md` had already resolved, so read these before "fixing" the code
 
 - **A card whose year lookup finds nothing is REMOVED from the deck** (`gameReducer`, `YEAR_RESOLVED`)
   — **as of 2026-09-30, a card whose FINAL answer is null is removed, unless the session keeps yearless
-  cards** (`GameState.keepYearless`, shown on the picker as "Deal cards with no year found" since 2026-10-01; see the options'
+  cards** (`GameState.keepYearless`, shown on the picker as "Shuffle in cards with no year found" since 2026-10-13, "Deal cards with no year found" before; see the options'
   block). A `resolve` that found nothing is not a final null: the card stays PENDING and goes to
   `verify`. This reverses `plan.md` §6's `confidence: 'none'` follow-on, which had it stay and play —
   and the option is the developer's way of asking for that follow-on back, per session. **Low
@@ -577,8 +577,8 @@ it is a stored format, a failing pin is fixed by reverting, and a future algorit
 bring a version back, or accept the same re-deal knowingly. **A mid-game link
 carries `&card=<trackId>`** and the recipient starts ON that card (`START.startCardId`; card 1 plus the
 `startCardMissing` notice when the card is gone); the end screen's link does not, because its position is the
-last card. So the card-1 gate is now "the CURRENT card's answer is **final**" (and only with "Deal cards with no
-year found" OFF or "Deal cards with an unconfirmed year" unticked — nothing gates only when both allow every card, see the options' block), the resolver crawls from the start card and
+last card. So the card-1 gate is now "the CURRENT card's answer is **final**" (and only with "Shuffle in cards with no
+year found" OFF or "Shuffle in cards with doubtful year" unticked — nothing gates only when both allow every card, see the options' block), the resolver crawls from the start card and
 wraps, and `GameState.startIndex` (the lowest index this player has been on; saved, absent = 0) is what the end
 screen's `cardsPlayed` subtracts. The copy-failed fallback `<input value>` beside an unflipped card now holds that
 track id — the QR already encodes it, and the leak tests subtract it by exact string. **A link over a saved game is
@@ -638,7 +638,7 @@ number | null, note?, providerYear? }`: the `confidence` and `source` properties
 numeric year is read as `high`. The developer reviewed the table, so a year in it is the answer; a provider vote's
 "unconfirmed" describes how the vote went, not what the developer checked, and no longer applies. Consequences: the
 97 entries that were `low` (final provider answers that were not confirmed) are now `high`, so their reveal never
-shows "Unconfirmed year", and "Deal cards with an unconfirmed year" unticked (`skipUnconfirmed`) never drops a
+shows "Unconfirmed year", and "Shuffle in cards with doubtful year" unticked (`skipUnconfirmed`) never drops a
 preloaded year. A preloaded `null` (still allowed by the format; none exist today) is unchanged: dropped unless the
 session keeps yearless cards. **The manual marker moved from `source: "manual"` to the presence of a `note`** —
 a hand-added entry without a `note` is a provider entry, and a `--refresh` overwrites it. `pnpm preload-years` still
@@ -755,7 +755,7 @@ branches**. Since 2026-09-30 the gate waits for `year === undefined` **and for p
 `verify` stage can no longer correct — and `selectPrintableCards(deck, { keepYearless })` leaves
 provisional cards out and COUNTS them in every export, **"Print so far" included** (the developer's
 decision: nothing on paper can still change). A `year === null` card is the option's call: with
-`keepYearless` ON ("Deal cards with no year found" ticked) it is printed with its title and artist in their usual places and
+`keepYearless` ON ("Shuffle in cards with no year found" ticked) it is printed with its title and artist in their usual places and
 the year area **left blank** to write in by hand (`drawBack` skips only the year's `text` call — no
 box, no line, `backLayout()` and the print palette untouched); with it OFF it is dropped, and only a
 resumed pre-reversal save holds one. `options` is required, so no caller can forget to decide the
@@ -784,12 +784,12 @@ reached before either dynamic import.
 
 ## Deal options
 
-**THE PICKER HAS TWO DEAL OPTIONS AS OF 2026-10-01, AND BOTH DEAL WHEN TICKED: "DEAL CARDS WITH NO YEAR
-FOUND" (UNCHECKED BY DEFAULT) AND "DEAL CARDS WITH AN UNCONFIRMED YEAR" (CHECKED BY DEFAULT).** The labels
+**THE PICKER HAS TWO DEAL OPTIONS AS OF 2026-10-01, AND BOTH DEAL WHEN TICKED: "SHUFFLE IN CARDS WITH NO YEAR
+FOUND" (UNCHECKED BY DEFAULT) AND "SHUFFLE IN CARDS WITH DOUBTFUL YEAR" (CHECKED BY DEFAULT).** The labels
 moved twice that day, at the developer's request: in the morning the pair read "Skip cards with no year
 found" / "Skip cards with an unconfirmed year" and skipped when ticked; by the afternoon they read
 "Deal …" (Spanish "Repartir cartas sin año" / "Repartir cartas con año no confirmado") and deal when
-ticked. The first is the 2026-09-30 **"Keep cards with no year found"**
+ticked. On 2026-10-13, again at the developer's request, the wording became "Shuffle in …" (Spanish "Baraja las cartas sin año encontrado" / "Baraja las cartas con año dudoso" and Catalan "Barreja les cartes sense any trobat" / "Barreja les cartes amb any dubtós", all the developer's own), with the polarity and the model unchanged. The first is the 2026-09-30 **"Keep cards with no year found"**
 ([`plan.year-fetch-rework-ui.md`](./plans/plan.year-fetch-rework-ui.md), spike §12.8) under a new
 label and its original polarity; its hint ("useful to print the whole deck…") was deleted with
 `COPY.landing.keepYearlessHint` and the `aria-describedby`. **The model never inverted**:

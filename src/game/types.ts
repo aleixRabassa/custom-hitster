@@ -111,7 +111,7 @@ export interface GameState {
   /** Whether the current card is showing its revealed side. Reset by `NEXT`. */
   isFlipped: boolean;
   /**
-   * The picker's "Deal cards with no year found" (spike §12.8's "Keep cards with no year found";
+   * The picker's "Shuffle in cards with no year found" (spike §12.8's "Keep cards with no year found";
    * plan.year-fetch-rework-game.md, spike
    * §12.8), fixed for the whole session at `START`. When true, a final null KEEPS the card
    * with `year: null` and nothing gates on a year, so the game starts at once; when false,
@@ -124,7 +124,7 @@ export interface GameState {
    */
   keepYearless: boolean;
   /**
-   * The picker's "Deal cards with an unconfirmed year" UNTICKED (2026-10-01 -- the checkbox is this
+   * The picker's "Shuffle in cards with doubtful year" UNTICKED (2026-10-01 -- the checkbox is this
    * value inverted, and `App.tsx` is the one place that inverts it), fixed for the session at
    * `START` exactly like `keepYearless`. When true, a card whose FINAL answer is a year at `low`
    * confidence -- a year no second provider confirmed, which the reveal labels "Unconfirmed year"

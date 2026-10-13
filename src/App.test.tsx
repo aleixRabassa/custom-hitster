@@ -2269,7 +2269,7 @@ describe('App', () => {
     const LINK_SEARCH = `?playlist=${PLAYLIST.id}&seed=${LINK_SEED}`;
 
     /**
-     * The picker's "Deal cards with no year found", by its visible caption. It IS `keepYearless`,
+     * The picker's "Shuffle in cards with no year found", by its visible caption. It IS `keepYearless`,
      * so it is unchecked by default and one click is what keeps yearless cards.
      */
     function dealYearlessBox(): HTMLInputElement {
@@ -2277,7 +2277,7 @@ describe('App', () => {
     }
 
     /**
-     * The picker's "Deal cards with an unconfirmed year": `skipUnconfirmed` INVERTED, so it is
+     * The picker's "Shuffle in cards with doubtful year": `skipUnconfirmed` INVERTED, so it is
      * checked by default and one click is what drops unconfirmed cards.
      */
     function dealUnconfirmedBox(): HTMLInputElement {
@@ -2294,7 +2294,7 @@ describe('App', () => {
       return JSON.parse(storage.map.get(PREFS_STORAGE_KEY) ?? 'null');
     }
 
-    it('should deal with keepYearless when "Deal cards with no year found" is ticked', async () => {
+    it('should deal with keepYearless when "Shuffle in cards with no year found" is ticked', async () => {
       // Every lookup finds nothing. With the option OFF that is the collapse to the picker's
       // `no-years-found` warning (asserted above); ON, every card stays and the game plays on.
       stubDroppingYearApi();
@@ -2535,7 +2535,7 @@ describe('App', () => {
       expect(fetch).not.toHaveBeenCalled();
     });
 
-    it('should drop unconfirmed cards when "Deal cards with an unconfirmed year" is unticked', async () => {
+    it('should drop unconfirmed cards when "Shuffle in cards with doubtful year" is unticked', async () => {
       // Every lookup settles FINAL at `low` -- a year no second provider confirmed. Ticked (the
       // default), that is an ordinary playable deck; unticked, every card leaves and the deck collapses to the
       // picker's warning, exactly as a deck of final nulls does with the other option.
@@ -2570,7 +2570,7 @@ describe('App', () => {
       expect(storedPrefs(storage)).toEqual({ keepYearless: false, skipUnconfirmed: true });
     });
 
-    it('should play unconfirmed cards with "Deal cards with an unconfirmed year" ticked', async () => {
+    it('should play unconfirmed cards with "Shuffle in cards with doubtful year" ticked', async () => {
       vi.stubGlobal(
         'fetch',
         vi.fn(() =>

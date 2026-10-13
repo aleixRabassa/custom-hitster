@@ -49,7 +49,7 @@ export interface StartOptions {
   seed?: string;
   startCardId?: string;
   /**
-   * Whether a final "no year" keeps its card -- the picker's "Deal cards with no year found"
+   * Whether a final "no year" keeps its card -- the picker's "Shuffle in cards with no year found"
    * (plan.year-fetch-rework-game.md; relabelled 2026-10-01), fixed for the
    * session -- see `GameState.keepYearless`. REQUIRED, like `START.keepYearless`, so no call site
    * can forget to decide it: the picker and the link deal pass the remembered preference, and

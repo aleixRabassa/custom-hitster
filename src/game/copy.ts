@@ -178,9 +178,11 @@ export const COPY = {
      * the day, reversing the "Skip ..." pair of the same morning): the first keeps a card whose
      * final answer is "no year" (spike §12.8's "Keep cards with no year found"), the second keeps a
      * card whose final year no second provider confirmed. Worded from the developer's Spanish.
+     * Reworded 2026-10-13 ("Deal …" → "Shuffle in …", from the developer's Spanish "Baraja …");
+     * polarity unchanged (checked still deals/keeps).
      */
-    dealYearless: 'Deal cards with no year found',
-    dealUnconfirmed: 'Deal cards with an unconfirmed year',
+    dealYearless: 'Shuffle in cards with no year found',
+    dealUnconfirmed: 'Shuffle in cards with doubtful year',
     atMaxRows: (maxPlaylists: number) => `${maxPlaylists} playlists is the maximum for one deck.`,
     start: 'Start',
     starting: 'Loading…',

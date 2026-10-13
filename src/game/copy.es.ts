@@ -46,9 +46,9 @@ export const COPY_ES = {
     playlistLinkPlaceholder: COPY.landing.playlistLinkPlaceholder,
     removeRow: (position: number) => `Quitar playlist ${position}`,
     addRow: 'Añadir otra playlist',
-    // The developer's own wording (2026-10-01).
-    dealYearless: 'Repartir cartas sin año',
-    dealUnconfirmed: 'Repartir cartas con año no confirmado',
+    // The developer's own wording (2026-10-13; 'Repartir …' before).
+    dealYearless: 'Baraja las cartas sin año encontrado',
+    dealUnconfirmed: 'Baraja las cartas con año dudoso',
     atMaxRows: (maxPlaylists: number) => `El máximo son ${maxPlaylists} playlists por mazo.`,
     start: 'Empezar',
     starting: 'Cargando…',
@@ -151,7 +151,7 @@ export const COPY_ES = {
     save: 'Guardar esta playlist',
     saved: 'Guardada en tus playlists',
     print: 'Imprimir como cartas en PDF',
-    // The developer's own wording (2026-10-01).
+    // The developer's own wording (2026-10-13; 'Repartir …' before).
     printTitle: 'Imprimir este mazo',
     // 2026-10-01 PROPOSAL, not yet read by a native speaker (docs/development.md §5).
     blankUnconfirmed: 'Dejar en blanco los años no confirmados',

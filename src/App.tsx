@@ -362,9 +362,9 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
   const [savedPlaylists, setSavedPlaylists] = useState(() => loadLibrary(libraryStorage));
 
   /**
-   * The picker's two deal options: "Deal cards with no year found" (plan.year-fetch-rework-ui.md
+   * The picker's two deal options: "Shuffle in cards with no year found" (plan.year-fetch-rework-ui.md
    * step 5, where it read "Keep cards with no year found" -- stored as `keepYearless`, see below) and
-   * "Deal cards with an unconfirmed year" (2026-10-01, stored inverted as `skipUnconfirmed`).
+   * "Shuffle in cards with doubtful year" (2026-10-01, stored inverted as `skipUnconfirmed`).
    *
    * ===========================================================================
    *  THE PREFERENCE, NOT THE SESSION'S VALUE -- AND THE TWO ARE DIFFERENT THINGS.
@@ -399,7 +399,7 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
     THE "DEAL CARDS WITH AN UNCONFIRMED YEAR" CHECKBOX IS `skipUnconfirmed` INVERTED, and this is
     the one place that inverts it: `LandingScreen` takes `dealUnconfirmed` so its prop reads like
     its label, while the model, the save and `prefs.ts` kept the stored polarity so no stored value
-    changed meaning. "Deal cards with no year found" IS `keepYearless`, uninverted. (Both boxes read
+    changed meaning. "Shuffle in cards with no year found" IS `keepYearless`, uninverted. (Both boxes read
     "Skip ..." and skipped when ticked on the morning of 2026-10-01; the developer reversed that the
     same day. Only the labels and this mapping moved, never the stored fields.)
   */

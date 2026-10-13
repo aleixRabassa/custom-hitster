@@ -1,7 +1,7 @@
 /**
  * One labelled on/off option: a native checkbox, restyled, inside its own `<label>` (2026-10-01).
  *
- * Shared by the picker's deal options ("Deal cards with no year found", "Deal cards with an
+ * Shared by the picker's deal options ("Shuffle in cards with no year found", "Deal cards with an
  * unconfirmed year") and the PDF export's "Leave unconfirmed years blank", so the three read as one
  * control and the rules below live in one place. Presentational: the value and its change callback
  * are the host's.
