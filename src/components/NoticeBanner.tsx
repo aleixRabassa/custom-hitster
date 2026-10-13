@@ -157,7 +157,7 @@ export function NoticeBanner({
         `transition-opacity` is always on, so a fade has a "from" state; only `opacity-0` toggles.
         The duration is a token (`--duration-notice-fade`), mirrored by the container's timer.
       */
-      className={`flex w-full max-w-(--card-width) items-start gap-3 rounded-lg border border-warning-border/60 bg-warning-surface/40 px-3 py-2 text-xs text-warning-text transition-opacity duration-(--duration-notice-fade) ${
+      className={`flex w-full max-w-(--card-width) items-center gap-3 rounded-lg border border-warning-border/60 bg-warning-surface/40 px-3 py-2 text-xs text-warning-text transition-opacity duration-(--duration-notice-fade) ${
         isFading ? 'opacity-0' : 'opacity-100'
       }`}
     >
