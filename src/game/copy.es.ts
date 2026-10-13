@@ -145,7 +145,7 @@ export const COPY_ES = {
 
   deckActions: {
     copyLink: 'Copiar enlace para compartir',
-    shareCaption: 'Comparte la partida en el estado actual exacto',
+    shareCaption: 'Comparte la partida en el estado actual',
     save: 'Guardar esta playlist',
     saved: 'Guardada en tus playlists',
     print: 'Imprimir como cartas en PDF',

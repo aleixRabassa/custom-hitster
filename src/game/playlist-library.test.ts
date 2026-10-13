@@ -444,6 +444,18 @@ describe('the base name', () => {
     expect(storage.map.get(LIBRARY_STORAGE_KEY)).toBe(rawBefore);
   });
 
+  it('should drop a stored trailing full stop on read, single or multi', () => {
+    const storage = memoryStorage();
+    seedV2(storage, [
+      { ids: ['a'], name: 'Openings Català.', savedAt: 2_000 },
+      { ids: ['b', 'c'], name: 'Foo. +1 more', savedAt: 1_000 },
+    ]);
+    const rawBefore = storage.map.get(LIBRARY_STORAGE_KEY);
+
+    expect(loadLibrary(storage).map((saved) => saved.name)).toEqual(['Openings Català', 'Foo']);
+    expect(storage.map.get(LIBRARY_STORAGE_KEY)).toBe(rawBefore);
+  });
+
   it('should leave a single-playlist entry untouched', () => {
     // A one-playlist label never had a count, so a name that merely LOOKS like one is a title.
     const storage = memoryStorage();

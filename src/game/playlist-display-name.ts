@@ -37,10 +37,82 @@ export const PLAYLIST_NAME_OVERRIDES: Readonly<Record<string, string>> = {
   [JITSTER_OFFICIAL_PLAYLIST_ID]: 'Jitster official',
 };
 
+/**
+ * Abbreviations whose stop belongs to the word, compared lowercased and without the stop. English,
+ * Spanish and Catalan, the three languages the app speaks.
+ */
+const ABBREVIATIONS: ReadonlySet<string> = new Set([
+  'vol',
+  'vols',
+  'no',
+  'nº',
+  'núm',
+  'num',
+  'nr',
+  'pt',
+  'ed',
+  'op',
+  'ep',
+  'feat',
+  'ft',
+  'vs',
+  'etc',
+  'jr',
+  'sr',
+  'sra',
+  'srta',
+  'mr',
+  'mrs',
+  'ms',
+  'dr',
+  'dra',
+  'st',
+  'inc',
+  'ltd',
+  'co',
+  'bros',
+  'orig',
+  'pàg',
+  'pág',
+  'pg',
+  'aprox',
+  'approx',
+]);
+
+/**
+ * Whether the stop ending `trimmed` is part of its last word rather than punctuation added after
+ * the title: an ellipsis ("Hits..."), an abbreviation ("Grandes Éxitos Vol."), an initial
+ * ("Vitamin C.") or a word with inner stops ("U.S.A.", "a.m.").
+ */
+function stopBelongsToName(trimmed: string): boolean {
+  if (trimmed.endsWith('..')) return true;
+
+  const lastWord = trimmed.slice(trimmed.search(/\S+$/), -1);
+  if (lastWord.includes('.')) return true;
+  if ([...lastWord].length === 1 && /\p{L}/u.test(lastWord)) return true;
+
+  return ABBREVIATIONS.has(lastWord.toLowerCase());
+}
+
+/**
+ * A trailing full stop ADDED after the title is punctuation, not part of it: "Openings Català."
+ * shows as "Openings Català". A stop that belongs to the name -- see `stopBelongsToName` -- stays.
+ * Applied on read as well (`playlist-library.ts`), so a name already saved with it heals without a
+ * migration. Trailing whitespace is ignored, since a Spotify title can carry it, and a name that is
+ * nothing but a stop keeps it rather than becoming an empty label.
+ */
+export function withoutTrailingPeriod(name: string): string {
+  const trimmed = name.trimEnd();
+  if (!trimmed.endsWith('.') || stopBelongsToName(trimmed)) return name;
+
+  const stripped = trimmed.slice(0, -1).trimEnd();
+  return stripped === '' ? name : stripped;
+}
+
 /** The label to show for a playlist: the app's own where it has one, the Spotify title otherwise. */
 export function playlistDisplayName(playlist: {
   readonly id: string;
   readonly name: string;
 }): string {
-  return PLAYLIST_NAME_OVERRIDES[playlist.id] ?? playlist.name;
+  return withoutTrailingPeriod(PLAYLIST_NAME_OVERRIDES[playlist.id] ?? playlist.name);
 }

@@ -673,7 +673,7 @@ export function DeckActions({
         </button>
 
         {/*
-        The caption claims the exact current state: the link carries the shuffle and the card the
+        The caption claims the current state: the link carries the shuffle and the card the
         player is on. See the header block and copy.ts for what the link does not promise.
       */}
         <p className="text-center text-xs text-fg-muted">{copy.deckActions.shareCaption}</p>

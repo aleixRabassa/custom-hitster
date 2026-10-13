@@ -39,7 +39,7 @@
  */
 
 import { MAX_DECK_PLAYLISTS, truncatePlaylistName } from './deck-merge';
-import { PLAYLIST_NAME_OVERRIDES } from './playlist-display-name';
+import { PLAYLIST_NAME_OVERRIDES, withoutTrailingPeriod } from './playlist-display-name';
 import type { StorageLike } from './persistence';
 
 /**
@@ -325,7 +325,7 @@ function validateEntry(value: unknown): SavedPlaylist | null {
 /**
  * The entry's BASE name -- the first playlist's truncated name, no count -- whatever was stored.
  *
- * Two repairs, both applied on READ so an old library heals without a migration; the stored
+ * Three repairs, all applied on READ so an old library heals without a migration; the stored
  * payload is never rewritten and the version is not bumped.
  *
  * 1. AN APP-CHOSEN LABEL WINS (2026-09-24). If `ids[0]` has an override, the override is the
@@ -339,16 +339,20 @@ function validateEntry(value: unknown): SavedPlaylist | null {
  *    only language that existed) produced for this entry's id count -- a mismatched count means
  *    the text is not that suffix, and a name is never guessed at. The one false positive is a
  *    playlist genuinely titled "Foo +2 more" saved in a three-playlist deck, which reads "Foo".
+ * 3. A TRAILING FULL STOP IS DROPPED (2026-10-13), through `withoutTrailingPeriod`, the same rule
+ *    `playlistDisplayName` applies, so a row saved as "Openings Català." matches the HUD.
  */
 function displayedEntryName(ids: readonly string[], storedName: string): string {
   const override = PLAYLIST_NAME_OVERRIDES[ids[0]!];
   if (override !== undefined) return truncatePlaylistName(override);
 
   const others = ids.length - 1;
-  if (others === 0) return storedName;
-
-  const legacySuffix = legacyLabelSuffix(others);
-  return storedName.endsWith(legacySuffix) ? storedName.slice(0, -legacySuffix.length) : storedName;
+  const legacySuffix = others === 0 ? '' : legacyLabelSuffix(others);
+  const base =
+    legacySuffix !== '' && storedName.endsWith(legacySuffix)
+      ? storedName.slice(0, -legacySuffix.length)
+      : storedName;
+  return withoutTrailingPeriod(base);
 }
 
 /**

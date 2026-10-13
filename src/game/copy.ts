@@ -311,12 +311,12 @@ export const COPY = {
   deckActions: {
     copyLink: 'Copy share link',
     /**
-     * Claims the EXACT CURRENT STATE since 2026-10-13 (it used to promise "same playlist, same
+     * Claims the CURRENT STATE since 2026-10-13 (it used to promise "same playlist, same
      * shuffle" and carry two variants): the link carries the shuffle and the card the player is on.
      * Yearless cards are still dropped at play time and editorial playlists still refresh, so it
      * must never say "the same deck".
      */
-    shareCaption: 'Share the game in its exact current state',
+    shareCaption: 'Share the game in its current state',
     save: 'Save this playlist',
     saved: 'Saved to your playlists',
     print: 'Print as PDF cards',

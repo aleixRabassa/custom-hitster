@@ -325,7 +325,7 @@ describe('DeckActions', () => {
       expect(linkParams(writeText.mock.calls[0]?.[0]).get('card')).toBeNull();
     });
 
-    it('should claim the exact current state, with or without a current card', () => {
+    it('should claim the current state, with or without a current card', () => {
       // The caption is the sentence that has to be believed, and it is one string for both hosts.
       renderActions({ currentCardId: CURRENT_CARD_ID });
       expect(document.body.textContent ?? '').toContain(COPY.deckActions.shareCaption);
