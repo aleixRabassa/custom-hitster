@@ -1298,7 +1298,7 @@ package id by **`should target the android_app namespace and the committed packa
 `src/pwa/assetlinks.test.ts`, and joined across files by **`should agree with android/twa-manifest.json
 about the package id`** beside it (2026-09-23) — the only thing that can catch the two copies drifting
 apart. The same file now also pins every fingerprint's format and that the deployed list equals
-`twa-manifest.json`'s; only the **count of two** waits for Play's key at step 11.
+`twa-manifest.json`'s; and since 2026-10-19 **`should list three colon-separated SHA-256 fingerprints`** pins the count.
 **`id` resolves against the ORIGIN**, so the origin sits inside the app's identity: the last rule below is
 the same fact seen from the other end — so moving to a custom domain later is a rebuilt shell and a new
 asset-links deployment for the TWA, a SECOND install identity for every browser PWA install, and never a
@@ -1348,16 +1348,13 @@ widen it to `.*` and the file comes back as `index.html` with a **200**, which t
 statement at all and the installed app grows an address bar — **a URL bar on a green build**, the single
 failure this plan is shaped to prevent. `assetlinks.test.ts` pins that character class, and a string
 assertion is the honest ceiling there (re-implementing path-to-regexp in a test would be worse than no
-test). And **the fingerprint list holds exactly ONE fingerprint as of 2026-09-21, which is not the
-finished state and is not a bug either** — it is the **upload key**, read off the built APK with
-`apksigner verify --print-certs` and deployed ahead of the plan's own schedule because the developer
-asked for the URL bar to go on the first sideloaded install; that press decided plan 3's open question,
-which had parked the move for a stall that never came. **It verifies every LOCAL sideload and nothing a
-tester installs**, because Play re-signs with its own app signing key. So step 11 **ADDS** Google's
-fingerprint beside this one and **never replaces it**: a one-fingerprint file is **a valid file that
-produces a URL bar** on exactly the installs that come from the store, which is the classic version of
-the mistake and is now half-committed on purpose. Do not guess a value into it, and do not read the
-single entry as finished. Fuller reasoning in
+test). And **the fingerprint list holds THREE fingerprints as of 2026-10-19** — the **upload key** (read off the built APK
+with `apksigner verify --print-certs`, deployed 2026-09-21) plus Play's **current** and **previous** app-signing keys,
+read from the Console's app-signing page (the post-quantum variant of the previous key is deliberately not listed).
+The upload key alone verified every LOCAL sideload and nothing a tester installed, because Play re-signs with its own
+key: a file missing the key an install was signed with is **a valid file that produces a URL bar** on exactly those
+installs, which is what the installed Play build showed until this change. A future key change **ADDS** an entry, raises
+the count in `assetlinks.test.ts` and **never replaces** one. Fuller reasoning in
 [`docs/architecture.md`](./architecture.md) §3; the device checks are rows in
 [`docs/development.md`](./development.md) §5, where **rows 1 and 6 are half passed as of
 2026-09-21** — the bar was seen and then seen gone on one sideloaded build, either side of this

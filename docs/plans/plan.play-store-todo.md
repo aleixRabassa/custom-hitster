@@ -404,13 +404,17 @@ fingerprint generateAssetLinks`, so `twa-manifest.json` is the record of which f
         the decided open question. `generateAssetLinks` runs implicitly inside `fingerprint add` and
         writes `android/assetlinks.json`, which is now git-ignored: `twa-manifest.json`'s `fingerprints`
         array is the record and that file is output. **Play's fingerprint is still owed** — re-run `add`
-        for it after step 10, which is what completes this sub-item._
-  - [ ] `[agent]` Copy the generated statement into `public/.well-known/assetlinks.json` — never
+        for it after step 10, which is what completes this sub-item._ _→ **Completed 2026-10-19**: read
+        from the Console, **three** fingerprints, not two, because the app-signing page lists a previous
+        app-signing key (first used 2026-09-21) beside the current one; added as `play` and
+        `play-previous`. The post-quantum variant of the previous key is not added._
+  - [x] `[agent]` Copy the generated statement into `public/.well-known/assetlinks.json` — never
         hand-edit two files — then write the two tests deferred from plan 1 step 4 (Unit Tests, batch
         B), run the four checks, commit, push. _→ **Copy and deploy done 2026-09-21 for the one
         fingerprint.** The package-id cross-pin and the fingerprint-format test were written
-        2026-09-23 (batch B below); only the count-of-two assertion is still owed — write it when
-        Play's fingerprint lands. Reasoning in `assetlinks.test.ts`'s header._
+        2026-09-23 (batch B below). _→ **Completed 2026-10-19**: statement copied with all three
+        fingerprints and the count test written asserting three. Reasoning in `assetlinks.test.ts`'s
+        header._
   - [ ] `[agent]` After the deploy, wait out the checker's cache — **3600 seconds, not the 600 this
         plan was written with** (measured 2026-09-21: the `maxAge` on a VALID statement is
         `3599.998s`, where the `ERROR_CODE_MALFORMED_CONTENT` response measured on 2026-09-19 carried
@@ -527,14 +531,14 @@ future `any` stays green while a lock fails — the reason is in the test's own 
 
 **Batch B — after both fingerprints exist (step 11), in `src/pwa/assetlinks.test.ts`:**
 
-- [ ] `should list two colon-separated SHA-256 fingerprints` — count and format, deferred from plan 1
+- [x] `should list three colon-separated SHA-256 fingerprints` — count and format, deferred from plan 1
       step 4. One fingerprint is a valid file that produces a URL bar on half the installs.
       _→ **The FORMAT half landed 2026-09-23** as `should list only well-formed fingerprints, and
 exactly the ones the shell records`: every entry is a 32-pair uppercase SHA-256, the list is
       non-empty, and it is the same set as `android/twa-manifest.json`'s `fingerprints` — true at one
-      fingerprint and at two. **The count of two is still deliberately unwritten**: it is red until
-      Play's fingerprint lands at step 11, and it is added then beside the format test, which does
-      not change._
+      fingerprint and at two. **The count landed 2026-10-19** as
+`should list three colon-separated SHA-256 fingerprints`, asserting three: the upload key plus Play's current
+and previous app-signing keys._
 - [x] `should agree with android/twa-manifest.json about the package id` — the cross-file pin,
       deferred from plan 1 step 4; the file it needed did not exist until step 4 here. **It exists as
       of 2026-09-20 and this test is still deliberately unwritten**: it needs no fingerprint and could

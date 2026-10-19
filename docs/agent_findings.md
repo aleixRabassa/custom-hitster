@@ -2451,3 +2451,13 @@ Rule: AGENTS.md § Google Play ("Web play stops at card 2").
 - **Guard 4 includes the gate**, so ArrowLeft (and every key) is dead under it and there is no in-page step back.
 - **`backdrop-blur-md`'s first use in the repo.** Dist CSS grep after the build: `.backdrop-blur-md` (with `--blur-md: 12px`), `.z-40`, `.bg-page\/60` and `.contents` are all emitted.
 - Unverified on a device: if the referrer misreads, app players are blocked from card 2.
+
+## 2026-10-19 — Play installs showed the URL bar because assetlinks.json held only the upload key
+
+Rule: AGENTS.md § Google Play (the fingerprint list); reasoning in `docs/decisions.md` and `docs/architecture.md` §3.
+
+- **Cause**: `public/.well-known/assetlinks.json` carried only the upload key, and Play re-signs what the store serves with its own app-signing key, so the Digital Asset Links check failed for store installs (URL bar, no error).
+- **Where the fingerprints live in the Console**: "Protegida con Play → Protección de Play Store → Gestionar la firma de aplicaciones de Play" (URL `.../app/<id>/keymanagement`). The old "Integridad de la app" page now only redirects there.
+- **What the page shows**: the current app-signing key ("En uso"), a "previous" app-signing key (first used 2026-09-21) with a classic and a post-quantum variant, and the upload key. The page's own Digital Asset Links JSON snippet lists **only the current key**, so copying the snippet alone would still miss installs signed with the previous one.
+- **What was added**: both classic signing keys (`play`, `play-previous`) beside the upload key, via `bubblewrap fingerprint add <sha256> --name=<name>`. The post-quantum variant is not listed. The count test asserts three.
+- `bubblewrap fingerprint add` rewrites `twa-manifest.json` without its trailing newline; restore it by hand.

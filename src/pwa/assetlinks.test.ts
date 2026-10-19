@@ -31,23 +31,20 @@
  *  `index.html` with a 200, which is the failure mode that looks most like
  *  success.
  *
- *  ONE ASSERTION IS STILL DELIBERATELY ABSENT: THE COUNT OF TWO.
- *  The list carries the UPLOAD key, added ahead of schedule on 2026-09-21
- *  so the first sideloaded install would stop showing a URL bar. It does NOT
- *  yet carry Play's app-signing key, which does not exist until the Console
- *  does. So a count test asserting TWO would be red right now for a file
- *  that is deliberately half-complete, and a count test asserting ONE would
- *  go red at step 11 on the correct change -- which is the worse of the two,
- *  because it teaches that completing the file is a regression. Add
- *  `should list two colon-separated SHA-256 fingerprints` when the second
- *  fingerprint lands, and assert two.
+ *  THE LIST HOLDS THREE FINGERPRINTS, AND A COUNT TEST SAYS SO.
+ *  The UPLOAD key (added 2026-09-21, so a sideloaded install shows no URL
+ *  bar) and Play's two APP-SIGNING keys, read from the Console on 2026-10-19:
+ *  the current one and the previous one that installs made before the change
+ *  are still signed with. Play re-signs what the store serves, so an install
+ *  from the store carries one of the signing keys, never the upload key; a
+ *  statement missing the key an install was signed with is a URL bar on
+ *  exactly those installs and nowhere else. Dropping to two or growing to
+ *  four must be a decision someone makes in this file, not a drift: a future
+ *  key change ADDS an entry and raises the count here, and never replaces one.
  *
- *  WHAT LANDED ON 2026-09-23 INSTEAD is everything in batch B that does not
- *  depend on the count: the cross-file package-id pin, and a fingerprint
+ *  WHAT ELSE IS PINNED is the cross-file package-id check, and a fingerprint
  *  test that checks the FORMAT of every entry and that the list is the same
- *  set `android/twa-manifest.json` records. Both are true at one fingerprint
- *  and stay true at two, so neither has to change at step 11 -- only the
- *  count assertion is added then.
+ *  set `android/twa-manifest.json` records.
  * ===========================================================================
  */
 
@@ -145,12 +142,10 @@ describe('the digital asset links statement', () => {
     // ===================================================================
     expect(target?.package_name).toBe(PACKAGE_ID);
 
-    // The LENGTH is deliberately not asserted -- see this file's header. The list held zero
-    // fingerprints until 2026-09-21, holds one (the upload key) now, and holds two once Play's
-    // app-signing key is read at step 11; a length assertion would be wrong at two of those
-    // three moments. What is asserted is that the key is present and is an array, because
-    // Android rejects a statement missing the field entirely -- which is what keeps every
-    // fingerprint change a VALUE change rather than a structural one.
+    // The LENGTH is asserted by its own test below, not here. What this asserts is that the
+    // key is present and is an array, because Android rejects a statement missing the field
+    // entirely -- which is what keeps every fingerprint change a VALUE change rather than a
+    // structural one.
     expect(Array.isArray(target?.sha256_cert_fingerprints)).toBe(true);
   });
 
@@ -162,8 +157,8 @@ describe('the digital asset links statement', () => {
   });
 
   it('should list only well-formed fingerprints, and exactly the ones the shell records', () => {
-    // NOT the count test -- see this file's header. Every assertion here holds at one
-    // fingerprint and at two, so step 11 adds the count beside it rather than rewriting it.
+    // NOT the count test, which follows this one. Every assertion here holds at any number
+    // of fingerprints, so the count can change without rewriting it.
     const fingerprints = readStatements()[0]?.target?.sha256_cert_fingerprints;
 
     expect(Array.isArray(fingerprints)).toBe(true);
@@ -185,6 +180,19 @@ describe('the digital asset links statement', () => {
     // neither tool promises an order and an order difference is not a drift.
     const recorded = (readTwaManifest().fingerprints ?? []).map((entry) => entry.value);
     expect([...listed].sort()).toEqual([...recorded].sort());
+  });
+
+  it('should list three colon-separated SHA-256 fingerprints', () => {
+    const fingerprints = readStatements()[0]?.target?.sha256_cert_fingerprints;
+
+    expect(Array.isArray(fingerprints)).toBe(true);
+
+    // Three: the upload key, Play's current app-signing key and its previous one (first used
+    // 2026-09-21; installs made before the rotation are signed with it). The Console's
+    // post-quantum variant of the previous key is deliberately not listed. Two would leave
+    // one population of installs with a URL bar; the format test above checks each entry's
+    // shape, this one checks that none went missing.
+    expect(fingerprints as unknown[]).toHaveLength(3);
   });
 
   it('should ship a non-empty privacy policy page', () => {

@@ -1274,25 +1274,22 @@ carry a comment saying so.
 fingerprint produces an app that installs, launches and plays perfectly — with a Chrome URL bar
 pinned across the top of every screen and no error message anywhere. That bar is the entire
 difference between a store app and a bookmark, and nothing announces it. The file therefore carries
-**two** fingerprints, the Play app-signing key and the upload key: either alone is a _valid file_
-that verifies for half the installs and shows the bar on the other half — Google's app signing key
-covers what users install from the store, the upload key covers what the developer sideloads.
+**three** fingerprints, the Play app-signing key (current and previous) and the upload key: any one missing is a _valid file_
+that verifies for some installs and shows the bar on the rest — Google's app signing keys
+cover what users install from the store (the previous one covers installs made before the key changed), the upload key covers what the developer sideloads.
 
-**The list was empty until 2026-09-21 and now carries one of the two — the upload key — and the
+**The list was empty until 2026-09-21, then carried the upload key alone, and since 2026-10-19 carries all three — and the
 half-step is the interesting part.** The emptiness was never a placeholder left lying around: it was
 sequencing, deploying the statement and proving its path reachable _before_ any keystore existed, so
 "is the file reachable and un-rewritten" could be debugged separately from "are the fingerprints
 right", two questions that otherwise present as the same vague symptom. That separation paid off —
 the empty file's `ERROR_CODE_MALFORMED_CONTENT` from Google's checker is what proved the fetch path
 on 2026-09-19. The upload key was then added alone, out of the plan's order, because the first
-sideloaded install showed the bar and the developer asked for it gone; the plan had parked exactly
-this trade as an open question, to be taken only if Play identity verification stalled, and the ask
-overrode the gate. **The cost is precisely stated**: the deployed file is now correct for sideloads
-and incomplete for the store, so between here and the first tester install the repo holds a file
-that verifies half the world. Google's fingerprint joins it at the plan's step 11 — **an addition,
-never a replacement** — and the fingerprint-count test and the package-id cross-pin against
-`android/twa-manifest.json` are written then, because a count test asserting two would be red until
-the Console exists. **`android/twa-manifest.json`'s `fingerprints` array is the record**, and
+sideloaded install showed the bar and the developer asked for it gone. **The cost showed up as predicted**: the
+store-installed app kept the bar, because Play re-signs with its own key. Both of Play's classic app-signing keys
+(the Console lists a current one and a previous one first used 2026-09-21; the post-quantum variant is not added) were
+added beside it on 2026-10-19 — **an addition, never a replacement** — and
+`should list three colon-separated SHA-256 fingerprints` pins the count. **`android/twa-manifest.json`'s `fingerprints` array is the record**, and
 `public/.well-known/assetlinks.json` is generated from it by `bubblewrap fingerprint
 generateAssetLinks` and copied across; the intermediate `android/assetlinks.json` is git-ignored so
 the statement cannot acquire two homes that disagree.
@@ -1308,8 +1305,8 @@ store asks for. **PWABuilder was rejected for a different reason**: its packagin
 version control, so `android/twa-manifest.json` could not be the committed record of what a release
 was built from.
 
-**What is built.** The four manifest fields, the privacy page, the asset-links file (upload key
-only), their tests, the toolchain (versions in [`development.md`](./development.md) §9), and since 2026-09-20 the generated shell (`android/`, only
+**What is built.** The four manifest fields, the privacy page, the asset-links file (three
+fingerprints), their tests, the toolchain (versions in [`development.md`](./development.md) §9), and since 2026-09-20 the generated shell (`android/`, only
 `twa-manifest.json` tracked). Release status lives in
 [`plans/plan.play-store-todo.md`](./plans/plan.play-store-todo.md) and nowhere else; the device
 checks are rows in [`development.md`](./development.md) §5.
