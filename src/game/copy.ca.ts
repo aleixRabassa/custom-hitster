@@ -204,6 +204,14 @@ export const COPY_CA = {
     confirm: 'Acaba la partida',
   },
 
+  // Unreviewed proposal (no native-speaker read), like the rest of this catalogue.
+  playGate: {
+    title: "Continua jugant a l'app",
+    body: "A partir de la segona carta, la partida continua a l'app d'Android. Instal·la-la gratis des de Google Play per seguir jugant.",
+    install: 'Instal·la des de Google Play',
+    endGame: 'Acaba la partida',
+  },
+
   errorBoundary: {
     heading: 'Alguna cosa ha anat malament',
     body: "El joc ha trobat un problema inesperat i s'ha hagut d'aturar. Normalment es resol tornant a carregar la pàgina. Els detalls s'han escrit a la consola del navegador.",

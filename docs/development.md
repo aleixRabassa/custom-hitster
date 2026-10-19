@@ -768,6 +768,19 @@ the browser's own back button now opens the exit confirmation, on desktop and in
 accepted deliberately (a mis-swiped back loses the game there too) and there is no user-agent sniff, so
 seeing it is the code working.
 
+### The Play gate (web play stops at card 2) — built 2026-10-19, all of it Pending
+
+None of it can be checked by a test: jsdom's `document.referrer` is `''` and there is no TWA.
+
+**To run any other game-screen row past card 1 in a desktop browser**, set the tab's verdict in DevTools before dealing: `sessionStorage.setItem('jitster:launcher:v1', 'play')`. It lasts for that tab only, and no link can carry it.
+
+| #   | Check                                                                                                                                                                                                    | Result  |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| 1   | In the **installed Play app**, advance past card 2: no gate. Repeat after killing and reopening the app, and after a reload.                                                                             | Pending |
+| 2   | In **Chrome on the same phone** and on **desktop**, advance to card 2: the blurred gate appears and the install link opens Play.                                                                         | Pending |
+| 3   | Under the gate, a back press opens the exit dialog **on top** of it; Keep playing returns to the gate, and End game ends the game.                                                                       | Pending |
+| 4   | **The `customtabs` fallback**: launch the installed app with Chrome disabled (another browser hosts it) and advance past card 2: no gate. It is the one launch path where the referrer could be missing. | Pending |
+
 ### The welcome screen, the year-cards PDF and the left swipe — built 2026-09-18, all of it Pending
 
 Two developer requests outside any plan. The unit tests cover the container flag (welcome first, picker
@@ -884,16 +897,16 @@ The decisions (`linkArrivalIntent`, the reducer's start card, both algorithms) a
 cases are driven through `App.test.tsx` with an injected query string. What no local check reaches is a real
 address bar, a real reload, two real devices, and the TWA sharing Chrome's `localStorage`.
 
-| #   | Check                                                                                                                                                             | Status  |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
-| 1   | **Share a link mid-game from one phone and open it on another**: the recipient starts on the sender's card, and the cards after it come in the same order.        | Pending |
-| 2   | **Share after "Play again"** and open it on a second device: the order matches the sender's (this was the bug).                                                   | Pending |
-| 3   | **A link minted by `104c1e2` (it carries `v=2`)** still deals the order its sender saw after this deploy — the `v` is ignored now, and the algorithm is the same. | Pending |
-| 4   | **Reload a link-opened tab mid-game, flipped and unflipped**: no prompt, same card, same flip state.                                                              | Pending |
-| 5   | **Open a different link with a game in progress**: the prompt appears; "Keep my game" resumes it; "Play the shared deck" deals the link.                          | Pending |
-| 6   | **The prompt in the browser for a game started in the installed app** (the TWA shares Chrome's storage), and the reverse.                                         | Pending |
-| 7   | **After End or Exit, reload the link-opened tab**: the link deals again from its card (or card 1), with a fresh crawl.                                            | Pending |
-| 8   | **The Spanish and Catalan prompt and share caption read naturally** — part of the native-speaker pass the three-languages section already owes.                   | Pending |
+| #   | Check                                                                                                                                                                                               | Status  |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| 1   | **Share a link mid-game from one phone and open it on another**: the recipient starts on the sender's card, and the cards after it come in the same order.                                          | Pending |
+| 2   | **Share after "Play again"** and open it on a second device: the order matches the sender's (this was the bug).                                                                                     | Pending |
+| 3   | **A link minted by `104c1e2` (it carries `v=2`)** still deals the order its sender saw after this deploy — the `v` is ignored now, and the algorithm is the same.                                   | Pending |
+| 4   | **Reload a link-opened tab mid-game, flipped and unflipped**: no prompt, same card, same flip state.                                                                                                | Pending |
+| 5   | **Open a different link with a game in progress**: the prompt appears; "Keep my game" resumes it; "Play the shared deck" deals the link.                                                            | Pending |
+| 6   | **The prompt in the browser for a game started in the installed app** (the TWA shares Chrome's storage), and the reverse. Since 2026-10-19 the browser side resumes into the Play gate from card 2. | Pending |
+| 7   | **After End or Exit, reload the link-opened tab**: the link deals again from its card (or card 1), with a fresh crawl.                                                                              | Pending |
+| 8   | **The Spanish and Catalan prompt and share caption read naturally** — part of the native-speaker pass the three-languages section already owes.                                                     | Pending |
 
 ### Restart from the exit dialog and the icon-only Back button — built 2026-09-29, all of it Pending
 

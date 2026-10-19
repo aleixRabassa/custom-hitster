@@ -1236,7 +1236,9 @@ entry's identity. And **`pendingCleanupTraversals` cannot be justified by a loca
 discards a queued traversal when a `pushState` beats it, where Chrome re-resolves the delta and fires
 the phantom pop that the counter exists to swallow. The browser-side change is **accepted, not
 suppressed**: desktop and mobile-Chrome back now open the confirmation too, and there is deliberately
-no user-agent sniff. Full reasoning in [`docs/architecture.md`](./architecture.md) §3; **every
+no user-agent sniff. _(2026-10-19: the back press STILL has no launcher check. The Play gate below is the
+one place that tells the launchers apart, and it does it by referrer.)_ Full reasoning in
+[`docs/architecture.md`](./architecture.md) §3; **every
 device check is still outstanding** and cannot be run in Chrome.
 
 **THE STORE SHELL IS A FOURTH TOP-LEVEL TREE.** _Updated 2026-10-01: `bubblewrap init` created
@@ -1309,6 +1311,33 @@ launchers**: a game started in the installed app resumes in the browser, and the
 persistence design doing its job, not a defect**, and it is what makes the back-press block's "a relaunch
 resumes" true at all. Namespacing the keys per launcher to "fix" it breaks that, and a renamed key is not
 read — the 2026-09-30 `hitster:*` → `jitster:*` rename (see the rename block) paid exactly that cost once, on purpose. Unverified on a device; it is step 9.
+_Amended 2026-10-19: a game started in the app and resumed in the browser now lands in the Play gate from
+card 2 on (below); a game started in the browser is not gated on card 1 and is gated as soon as it reaches 2._
+
+**WEB PLAY STOPS AT CARD 2 (developer decision 2026-10-19).** Outside the Google Play app, from the second
+card of the deck (`currentIndex >= 1`, zero-based), a blurred overlay (`PlayGateOverlay`) covers the game with
+a link to the Play listing and an "End game" button. Enabled at once, with no feature flag, **even though the
+listing is not public yet**: the link 404s for everyone who is not a tester until production. Reasoning, in
+the order it was settled:
+
+- **The launcher is the referrer, not a `start_url` tail.** A TWA's launch navigation carries
+  `document.referrer = android-app://aleixrabassa.playlistjitster/`. `start_url` is permanent and pinned by
+  tests, so a `?source=twa` tail would move the app's identity.
+- **The verdict is kept in `sessionStorage`, never `localStorage`.** The referrer exists only on the launch
+  navigation, so a reload loses it and something must remember it. `localStorage` is shared with Chrome
+  (the block above), so a flag there would mark the browser as the app for ever and the gate would never
+  show on the web. `sessionStorage` is per tab and dies with it.
+- **Literal card-2 reading.** A web recipient of a mid-game `&card=` link that lands on card 2 or later is
+  gated at once. The gate is derived, with no stored flag: a Restart (index 0) lifts it, and so would a step
+  back to card 1 -- but Guard 4 suspends the key handler and the backdrop covers the swipe, so under the
+  gate no in-page step back exists. That is accepted: the way out is the app, End game or the back-press dialog.
+- **Deliberate exceptions.** "End game" ends the session without `ExitConfirmDialog` (there is nothing left
+  to lose), and audio is stopped when the gate comes up and Play is a no-op under it, against the rule that
+  audio stops only on a card change and a confirmed Exit. The overlay is `z-40`, below the dialogs' `z-50`, so
+  the exit dialog a back press opens stays on top.
+- **The risk, stated: detection can only be verified in the installed app against production.** If the
+  referrer is ever not what is assumed (a different Chrome version, a verification failure), **app players are
+  blocked from card 2**. The rows in `docs/development.md` §5 are the check, and they have not been run.
 
 **The origin `https://playlistjitster.vercel.app` is load-bearing and permanent**, and
 `public/.well-known/assetlinks.json` is fetched from it by the **Android system verifier**, not by the

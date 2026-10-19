@@ -383,6 +383,17 @@ export const COPY = {
     confirm: 'End game',
   },
 
+  /**
+   * The web player's wall from the second card on (2026-10-19): a blurred overlay over the game,
+   * shown only outside the Play app. Playlist-level and generic -- it names no card.
+   */
+  playGate: {
+    title: 'Keep playing in the app',
+    body: 'From the second card on, the game continues in the Android app. Install it free from Google Play to carry on.',
+    install: 'Install from Google Play',
+    endGame: 'End game',
+  },
+
   errorBoundary: {
     heading: 'Something went wrong',
     /** GENERIC, and it stays generic: no message, no stack, no code. See `ErrorBoundary.tsx`. */

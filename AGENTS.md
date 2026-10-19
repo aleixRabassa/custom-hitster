@@ -84,8 +84,8 @@ Phases 1–8 are code complete. The work after them is the **year-fetch rework**
 
 ### The game session [§ The game session]
 
-- **The song keeps playing when the card is flipped**; audio stops only on a card change and a confirmed Exit. It **pauses** (not stops, no auto-resume) on `visibilitychange` when hidden. Never set `navigator.mediaSession.metadata`.
-- **Exit goes through `ExitConfirmDialog`** (Keep playing / Restart game / End game). **Guard 4** in `GameScreen` suspends the window key handler while any dialog is open — it is an OR over the dialog flags, and a new dialog must join it. A restart usually leaves `GameScreen` mounted, so `handleRestartConfirmed` closes the dialog and stops audio by hand, and `CardStack` is keyed on `seed`.
+- **The song keeps playing when the card is flipped**; audio stops only on a card change and a confirmed Exit (and the Play gate, see § Google Play). It **pauses** (not stops, no auto-resume) on `visibilitychange` when hidden. Never set `navigator.mediaSession.metadata`.
+- **Exit goes through `ExitConfirmDialog`** (Keep playing / Restart game / End game) — except the Play gate's End game, see § Google Play. **Guard 4** in `GameScreen` suspends the window key handler while any dialog is open — it is an OR over the dialog flags, and a new dialog must join it. A restart usually leaves `GameScreen` mounted, so `handleRestartConfirmed` closes the dialog and stops audio by hand, and `CardStack` is keyed on `seed`.
 - The preparing screen shows **no count** (`resolvedCount` stays exported, rendered nowhere).
 - **`ErrorBoundary` is the only class component**, wraps `<App />` from `main.tsx`, and its fallback **never renders the error's message or stack** (its state is a boolean) — "show the error so players can report it" turns it into a spoiler. No footer under its `role="alert"`.
 
@@ -156,6 +156,7 @@ Phases 1–8 are code complete. The work after them is the **year-fetch rework**
 - **`@bubblewrap/cli` is installed with `npm i -g` and never enters `devDependencies`.** The keystore is never committed; leaking an upload key is the unrecoverable direction.
 - **The application id (`aleixrabassa.playlistjitster`), `manifest.id` and `start_url` are permanent after the first publish** — changing one installs a second app with no error. `id` is written out explicitly and pinned by tests, including across `android/twa-manifest.json`.
 - **The TWA shares `localStorage` with the browser by design**; do not namespace the keys per launcher.
+- **Web play stops at card 2** (2026-10-19): outside the Play app, `isPlayGated` (`launcher.ts`, derived from `currentIndex >= 1`, never stored) puts `PlayGateOverlay` over the game. The launcher is the referrer `android-app://aleixrabassa.playlistjitster/`, present only on the launch navigation, so the verdict lives in **`sessionStorage`, never `localStorage`** (the shared store would mark the browser as the app for ever). App tests inject `launcher="play"`; jsdom's referrer is `''`. **End game skips `ExitConfirmDialog` and audio is silenced under the gate, both deliberate exceptions**; the overlay is `z-40` under the `z-50` dialogs, `useBackNavigation` has no launcher check, and Guard 4 includes the gate (so ArrowLeft is dead under it).
 - **The origin `https://playlistjitster.vercel.app` is permanent.** `assetlinks.json` is not precached; `vercel.json`'s rewrite must keep its `[^.]*` dot exclusion; the fingerprint list holds only the upload key today — step 11 **adds** Play's key beside it and never replaces it.
 
 ### The name [§ The name and the rename boundary]

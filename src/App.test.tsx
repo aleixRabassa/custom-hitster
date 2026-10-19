@@ -30,7 +30,8 @@ import {
 import { StrictMode } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import App from './App';
+import AppBase from './App';
+import type { AppProps } from './App';
 import {
   fixtureDeck,
   highConfidenceCard,
@@ -343,6 +344,15 @@ async function flushHistoryTraversal(): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 0));
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
+}
+
+/**
+ * `App` as every test below but the gate's own wants it: launched from the Play app. jsdom's
+ * `document.referrer` is `''`, which reads as a plain browser and would put the Play gate over
+ * every test that advances past card 1. Props still win, so `launcher="web"` overrides it.
+ */
+function App(props: AppProps) {
+  return <AppBase launcher="play" {...props} />;
 }
 
 function renderApp(fetchImpl: PlaylistFetch, storage = memoryStorage()) {
@@ -2682,6 +2692,61 @@ describe('App', () => {
       expect(screen.queryByText('1990')).toBeNull();
       const inners = screen.getAllByTestId('card-inner');
       expect(inners.some((inner) => inner.getAttribute('data-flipped') === 'true')).toBe(true);
+    });
+  });
+
+  describe('the Play gate', () => {
+    async function reachFirstCard(launcher: 'web' | 'play') {
+      stubYearApi();
+      render(
+        <AppBase
+          launcher={launcher}
+          storage={memoryStorage()}
+          fetchImpl={playlistFetch(200, playlistResult())}
+        />,
+      );
+      startPlaylist();
+      await waitFor(() => {
+        expect(screen.queryByTestId('hud')).not.toBeNull();
+      });
+    }
+
+    it('should not gate card 1 on the web, then gate card 2', async () => {
+      await reachFirstCard('web');
+      expect(screen.queryByRole('dialog', { name: COPY.playGate.title })).toBeNull();
+
+      fireEvent.keyDown(window, { key: 'ArrowRight' });
+
+      await waitFor(() => {
+        expect(screen.queryByRole('dialog', { name: COPY.playGate.title })).not.toBeNull();
+      });
+    });
+
+    it('should end the game from the gate without asking', async () => {
+      await reachFirstCard('web');
+      fireEvent.keyDown(window, { key: 'ArrowRight' });
+      await waitFor(() => {
+        expect(screen.queryByRole('dialog', { name: COPY.playGate.title })).not.toBeNull();
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: COPY.playGate.endGame }));
+
+      await waitFor(() => {
+        expect(screen.queryByRole('dialog', { name: COPY.playGate.title })).toBeNull();
+      });
+      expect(screen.queryByRole('dialog', { name: COPY.exitDialog.title })).toBeNull();
+      expect(screen.queryByTestId('hud')).toBeNull();
+    });
+
+    it('should never gate a player launched from the Play app', async () => {
+      await reachFirstCard('play');
+
+      fireEvent.keyDown(window, { key: 'ArrowRight' });
+      await waitFor(() => {
+        expect(cardsLeftInHud()).toBeGreaterThanOrEqual(0);
+      });
+
+      expect(screen.queryByRole('dialog', { name: COPY.playGate.title })).toBeNull();
     });
   });
 });

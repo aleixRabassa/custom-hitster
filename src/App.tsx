@@ -39,9 +39,10 @@ import { NoticeBanner } from './components/NoticeBanner';
 import { PreparingScreen } from './components/PreparingScreen';
 import { ReplaceSessionPrompt } from './components/ReplaceSessionPrompt';
 import { WelcomeScreen } from './components/WelcomeScreen';
-import { readLocalStorage } from './game/browser-storage';
+import { readLocalStorage, readSessionStorage } from './game/browser-storage';
 import { linkArrivalIntent, parseDeckLink } from './game/deck-link';
 import { deckBaseName, deckLabel } from './game/deck-merge';
+import { isPlayGated, resolveLauncher } from './game/launcher';
 import { loadLibrary, removePlaylist, savePlaylist, savedDeckKey } from './game/playlist-library';
 import { loadPrefs, savePrefs } from './game/prefs';
 import { useGameSession } from './game/use-game-session';
@@ -51,6 +52,7 @@ import { useTimedDismiss } from './hooks/useTimedDismiss';
 import { spotifyPlaylistUrl } from '../shared/spotify-url';
 import type { DeckLink } from './game/deck-link';
 import type { MergedDeck } from './game/deck-merge';
+import type { Launcher } from './game/launcher';
 import type { StartFailureCode } from './game/messages';
 import type { PlaylistFetch } from './game/playlist-client';
 import type { StorageLike } from './game/persistence';
@@ -140,6 +142,13 @@ export interface AppProps {
    * the real app, where it falls back to `window.location.search` read ONCE (see below).
    */
   search?: string;
+  /**
+   * Which surface launched the page. A PROP for the same reason: jsdom's `document.referrer` is
+   * always `''`, which reads as `web`, so `App.test.tsx` injects `play` unless it is testing the
+   * gate. Undefined in the real app, where it is resolved ONCE from the referrer and the tab's
+   * `sessionStorage` (see `launcher.ts`).
+   */
+  launcher?: Launcher;
 }
 
 /**
@@ -153,7 +162,7 @@ function shareOrigin(): string {
   return `${window.location.origin}${window.location.pathname}`;
 }
 
-export default function App({ storage, fetchImpl, search }: AppProps = {}) {
+export default function App({ storage, fetchImpl, search, launcher: launcherProp }: AppProps = {}) {
   // The active language's copy. This container renders no sentence of its own; it reads the
   // catalogue only to name the deck, because `deckLabel()` is pure and takes the `deck` block.
   const copy = useCopy();
@@ -187,6 +196,14 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
   } = usePlaylist(fetchImpl ? { fetchImpl } : {});
 
   const [endedView, setEndedView] = useState<EndedView>('end-screen');
+
+  // Resolved once, at mount: the referrer exists only on the launch navigation, and the verdict is
+  // remembered in this tab's `sessionStorage` -- never `localStorage`, which the TWA shares.
+  const [launcher] = useState<Launcher>(
+    () =>
+      launcherProp ??
+      resolveLauncher({ referrer: document.referrer, storage: readSessionStorage() }),
+  );
 
   /**
    * Has the player pressed the welcome screen's button yet?
@@ -996,6 +1013,9 @@ export default function App({ storage, fetchImpl, search }: AppProps = {}) {
         // `status === 'playing'` is the whole condition, and reaching this line is that condition.
         // Derived here because `GameScreen` deliberately knows nothing about `GameStatus`.
         isPlayable
+        // The web player's wall from the second card on -- derived, never stored, so stepping back to
+        // card 1 or a Restart lifts it by itself.
+        isPlayGated={isPlayGated({ currentIndex: state.currentIndex, launcher })}
         cardsRemaining={cardsRemaining}
         // One string, which is the deck label -- the HUD already truncates a long name, and it is
         // the same label the end screen and the PDF filename read.

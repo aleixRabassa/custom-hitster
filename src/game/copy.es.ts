@@ -194,6 +194,14 @@ export const COPY_ES = {
     confirm: 'Terminar partida',
   },
 
+  // Unreviewed proposal (no native-speaker read), like the rest of this catalogue.
+  playGate: {
+    title: 'Sigue jugando en la app',
+    body: 'A partir de la segunda carta, la partida continúa en la app de Android. Instálala gratis desde Google Play para seguir jugando.',
+    install: 'Instalar desde Google Play',
+    endGame: 'Terminar partida',
+  },
+
   errorBoundary: {
     heading: 'Algo ha ido mal',
     body: 'El juego ha tenido un problema inesperado y ha tenido que pararse. Recargar suele solucionarlo. Los detalles se han escrito en la consola del navegador.',

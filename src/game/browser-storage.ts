@@ -57,3 +57,15 @@ export function readLocalStorage(): StorageLike {
     return NO_STORAGE;
   }
 }
+
+/**
+ * `sessionStorage`, guarded the same way. Only the launcher verdict uses it (`launcher.ts`) --
+ * never `localStorage`, which the TWA shares with the browser.
+ */
+export function readSessionStorage(): StorageLike {
+  try {
+    return window.sessionStorage;
+  } catch {
+    return NO_STORAGE;
+  }
+}

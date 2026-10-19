@@ -66,6 +66,7 @@ function renderScreen(props: {
   keepYearless?: boolean;
   skipUnconfirmed?: boolean;
   isPlayable?: boolean;
+  isPlayGated?: boolean;
   notice?: ReactNode;
 }) {
   const element = (
@@ -80,6 +81,7 @@ function renderScreen(props: {
       onExit={props.onExit ?? vi.fn()}
       onRestart={props.onRestart ?? vi.fn()}
       isPlayable={props.isPlayable ?? true}
+      isPlayGated={props.isPlayGated ?? false}
       // HUD props, arbitrary here: every assertion in this file is about the audio element or the
       // key handler, and the HUD is covered on its own in `Hud.test.tsx`.
       cardsRemaining={0}
@@ -987,5 +989,91 @@ describe('GameScreen back navigation', () => {
 
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(onExit).not.toHaveBeenCalled();
+  });
+});
+
+describe('GameScreen Play gate', () => {
+  beforeEach(() => {
+    calls = [];
+    toStringMock.mockReset();
+    toStringMock.mockImplementation((text) => Promise.resolve(`<svg>QR(${text})</svg>`));
+    clearQrCache();
+
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(function (
+      this: HTMLMediaElement,
+    ) {
+      calls.push(`play:${this.getAttribute('src') ?? ''}`);
+      return Promise.resolve();
+    });
+    vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(function (
+      this: HTMLMediaElement,
+    ) {
+      calls.push(`pause:${this.getAttribute('src') ?? ''}`);
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  const gate = () => screen.queryByRole('dialog', { name: COPY.playGate.title });
+
+  it('should show the gate only while gated', () => {
+    const { rerender } = render(renderScreen({ isPlayGated: false }));
+    expect(gate()).toBeNull();
+
+    rerender(renderScreen({ isPlayGated: true }));
+    expect(gate()).not.toBeNull();
+
+    rerender(renderScreen({ isPlayGated: false }));
+    expect(gate()).toBeNull();
+  });
+
+  it('should not flip or advance from the keyboard while gated', () => {
+    const onFlip = vi.fn();
+    const onNext = vi.fn();
+    const onPrevious = vi.fn();
+    render(renderScreen({ isPlayGated: true, onFlip, onNext, onPrevious }));
+
+    fireEvent.keyDown(window, { key: ' ' });
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    fireEvent.keyDown(window, { key: 'ArrowLeft' });
+
+    expect(onFlip).not.toHaveBeenCalled();
+    expect(onNext).not.toHaveBeenCalled();
+    expect(onPrevious).not.toHaveBeenCalled();
+  });
+
+  it('should keep the game behind the gate inert', () => {
+    const { container } = render(renderScreen({ isPlayGated: true }));
+
+    expect(container.querySelector('[inert]')).not.toBeNull();
+    expect(gate()?.closest('[inert]')).toBeNull();
+  });
+
+  it('should end the game from the gate without the exit confirmation', () => {
+    const onExit = vi.fn();
+    render(renderScreen({ isPlayGated: true, onExit }));
+
+    fireEvent.click(screen.getByRole('button', { name: COPY.playGate.endGame }));
+
+    expect(onExit).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('dialog', { name: COPY.exitDialog.title })).toBeNull();
+  });
+
+  it('should pause the audio when the gate comes up and never play under it', () => {
+    const { rerender } = render(renderScreen({}));
+    screen.getByRole('button', { name: COPY.controls.play }).click();
+    expect(calls).toContain(`play:${highConfidenceCard.previewUrl}`);
+    calls = [];
+
+    rerender(renderScreen({ isPlayGated: true }));
+    expect(calls).toContain(`pause:${highConfidenceCard.previewUrl}`);
+    calls = [];
+
+    // The control is behind an inert wrapper in a browser; jsdom has no inert, so press it anyway.
+    screen.getByRole('button', { name: COPY.controls.play, hidden: true }).click();
+    expect(calls.filter((call) => call.startsWith('play:'))).toEqual([]);
   });
 });

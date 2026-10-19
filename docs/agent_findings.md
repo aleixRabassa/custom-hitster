@@ -2437,3 +2437,17 @@ nativo, pero no has subido símbolos de depuración".
   bundle has none. It is a warning, not an error, and does not block the release.
 - If it comes back, check the uploaded bundle in Play Console (App bundle explorer, "Native platforms") before
   touching `app/build.gradle`. `bubblewrap update` regenerates that file, so a hand edit there would be lost anyway.
+
+## 2026-10-19 — The Play gate: TWA detection by referrer, kept in sessionStorage
+
+Rule: AGENTS.md § Google Play ("Web play stops at card 2").
+
+- **Detection** is `document.referrer` = `android-app://aleixrabassa.playlistjitster/`, present **only on the TWA's
+  launch navigation**. `launcher.ts` matches the package exactly (a `.evil` look-alike is `web`) and writes the
+  verdict to **`sessionStorage`** so a reload in that tab keeps it. `localStorage` is shared with Chrome and
+  would mark the browser as the app for ever.
+- **jsdom's referrer is `''`**, so every `<App>` in `App.test.tsx` goes through a wrapper that injects
+  `launcher="play"`; only the gate's own tests pass `web`.
+- **Guard 4 includes the gate**, so ArrowLeft (and every key) is dead under it and there is no in-page step back.
+- **`backdrop-blur-md`'s first use in the repo.** Dist CSS grep after the build: `.backdrop-blur-md` (with `--blur-md: 12px`), `.z-40`, `.bg-page\/60` and `.contents` are all emitted.
+- Unverified on a device: if the referrer misreads, app players are blocked from card 2.

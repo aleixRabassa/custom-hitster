@@ -89,6 +89,7 @@ import { ExitConfirmDialog } from './ExitConfirmDialog';
 import { FloatingNotice } from './FloatingNotice';
 import { Footer } from './Footer';
 import { Hud } from './Hud';
+import { PlayGateOverlay } from './PlayGateOverlay';
 import { useCopy } from '../hooks/useLocale';
 import { useBackNavigation } from '../hooks/useBackNavigation';
 import { useCardAudio } from '../hooks/useCardAudio';
@@ -134,6 +135,12 @@ export interface GameScreenProps {
    * knowledge it is supposed not to have.
    */
   isPlayable: boolean;
+  /**
+   * Whether the web player's wall is up (2026-10-19): outside the Play app, from the second card on.
+   * The container derives it from the launcher and `currentIndex` (`isPlayGated` in `launcher.ts`);
+   * this screen only obeys. While true nothing plays and the keyboard is dead, see guard 4.
+   */
+  isPlayGated: boolean;
   /** Cards still to come after the current one, from `cardsRemaining`. Straight to the HUD. */
   cardsRemaining: number;
   /**
@@ -222,6 +229,7 @@ export function GameScreen({
   onExit,
   onRestart,
   isPlayable,
+  isPlayGated,
   cardsRemaining,
   playlistName,
   playlistIds,
@@ -238,6 +246,17 @@ export function GameScreen({
   const currentCard = deck[currentIndex];
   const audio = useCardAudio(currentCard?.previewUrl);
   const { audioRef, stop } = audio;
+
+  /**
+   * NOTHING PLAYS UNDER THE PLAY GATE (2026-10-19) -- a deliberate exception to "audio stops only on
+   * a card change and a confirmed Exit". The player cannot act on the game, so a preview left
+   * running behind the wall would be sound from a screen they cannot use. Silenced when the gate
+   * comes up, and `gatedAudio` below makes Play a no-op for as long as it stays.
+   */
+  useEffect(() => {
+    if (isPlayGated) stop();
+  }, [isPlayGated, stop]);
+  const gatedAudio = isPlayGated ? { ...audio, play: () => {} } : audio;
 
   /**
    * Whether the exit confirmation is showing. SCREEN state, and it stays here.
@@ -299,14 +318,14 @@ export function GameScreen({
    *     button is activated, so one press would BOTH toggle audio and
    *     flip the card -- revealing the answer as a side effect of
    *     pressing play.
-   *  4. EITHER MODAL. Not a guard inside the handler but the effect's
+   *  4. ANY MODAL. Not a guard inside the handler but the effect's
    *     own condition, below: while a dialog is open the card is behind a
    *     backdrop, and a → that dealt the next card under it would mean
    *     answering a modal and losing a card in the same keystroke.
    *     Guard 3 covers Space (focus is on a dialog button) but nothing
-   *     covers → , and Escape belongs to the dialog alone. It covers BOTH
-   *     dialogs -- the exit confirmation and the deck-actions panel -- and
-   *     a third one added later must be added to this condition too.
+   *     covers → , and Escape belongs to the dialog alone. It covers the
+   *     exit confirmation, the deck-actions panel and the Play gate (2026-10-19),
+   *     and another one added later must be added to this condition too.
    *
    *  A LAYOUT EFFECT, NOT A PASSIVE ONE (2026-09-29), so the listener and
    *  the card arrive in ONE commit. A passive effect runs after the commit
@@ -322,7 +341,7 @@ export function GameScreen({
    * ===================================================================
    */
   useLayoutEffect(() => {
-    if (!isPlayable || isExitConfirmOpen || isDeckActionsOpen) return;
+    if (!isPlayable || isExitConfirmOpen || isDeckActionsOpen || isPlayGated) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
       // Guard 1. Held keys.
@@ -362,7 +381,7 @@ export function GameScreen({
     window.addEventListener('keydown', handleKeyDown);
 
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isPlayable, isExitConfirmOpen, isDeckActionsOpen, onFlip, onNext, onPrevious]);
+  }, [isPlayable, isExitConfirmOpen, isDeckActionsOpen, isPlayGated, onFlip, onNext, onPrevious]);
 
   /**
    * The Exit button ASKS. It no longer ends the game.
@@ -410,10 +429,11 @@ export function GameScreen({
    * called here, below the handlers, because that is where they exist; the hook itself attaches
    * its listener once and reads whatever the latest render passed.
    *
-   * GUARD 4 NEEDS NO CHANGE, and that was verified rather than assumed: it gates the window key
-   * handler on the two dialog flags, and this adds no third dialog -- back either closes one of
-   * those two or opens the exit confirmation, so the OR above still covers everything that puts a
-   * backdrop over the card.
+   * GUARD 4 NEEDS NO CHANGE FOR THE BACK PRESS, and that was verified rather than assumed: back
+   * adds no dialog of its own -- it either closes one of the two flags or opens the exit
+   * confirmation. It has NO launcher check either (2026-10-19): under the Play gate it still opens
+   * the exit dialog, which is `z-50` above the gate's `z-40`, and the gate (a third term in that OR,
+   * from its own prop) is lifted by neither.
    */
   useBackNavigation({
     isDeckActionsOpen,
@@ -454,6 +474,13 @@ export function GameScreen({
       <audio ref={audioRef} preload="none" data-testid="session-audio" />
 
       {/*
+        `contents` so the wrapper adds no box to the column; `inert` while gated so assistive
+        technology and Tab cannot reach the game behind the overlay. Always mounted, so the gate
+        coming up and going away never remounts the stack or the audio element. The overlay and the
+        two dialogs sit OUTSIDE it, which keeps the exit dialog (opened by a back press) usable.
+      */}
+      <div className="contents" inert={isPlayGated}>
+        {/*
         Above the card rather than below it. A notice is read once and then ignored, so it belongs
         out of the thumb's way -- the bottom of a phone screen is where the card and its controls
         are, and a banner there would be dismissed by accident mid-swipe.
@@ -467,11 +494,11 @@ export function GameScreen({
         on a phone short enough that the column already fills the screen, the banner can reach past
         the top padding -- a row in docs/development.md §5. It is transient, so that was accepted.
       */}
-      <FloatingNotice notice={notice} gap="mb-3">
-        <Hud cardsRemaining={cardsRemaining} playlistName={playlistName} />
-      </FloatingNotice>
+        <FloatingNotice notice={notice} gap="mb-3">
+          <Hud cardsRemaining={cardsRemaining} playlistName={playlistName} />
+        </FloatingNotice>
 
-      {/*
+        {/*
         ===========================================================================
          THE CARD AND ITS CAPTION ARE ONE GROUP, AND THE CAPTION USED TO BE ON THE
          CARD'S FACE (moved out 2026-08-11, at the developer's request).
@@ -498,25 +525,25 @@ export function GameScreen({
          document twice per card.
         ===========================================================================
       */}
-      <div className="flex flex-col items-center gap-3">
-        <CardStack
-          /*
+        <div className="flex flex-col items-center gap-3">
+          <CardStack
+            /*
             Keyed on the seed so a mid-game Restart (2026-09-29) REMOUNTS the stack. Without it the
             stack's latched index delta reads the jump to card 1 as a step back and plays the
             "previous card slides in" entrance; a fresh mount shows the new first card at rest, as
             the session's first card always is. Only `START` changes the seed.
           */
-          key={seed}
-          deck={deck}
-          currentIndex={currentIndex}
-          isFlipped={isFlipped}
-          onFlip={onFlip}
-          onNext={onNext}
-          onPrevious={onPrevious}
-          isEnabled={isPlayable}
-        />
+            key={seed}
+            deck={deck}
+            currentIndex={currentIndex}
+            isFlipped={isFlipped}
+            onFlip={onFlip}
+            onNext={onNext}
+            onPrevious={onPrevious}
+            isEnabled={isPlayable}
+          />
 
-        {/*
+          {/*
           Generic, exactly as it was on the card: it says how a card is used and never anything
           about the track, so it is safe on a screen showing an unflipped card.
 
@@ -530,25 +557,25 @@ export function GameScreen({
           number anywhere. It is dimmer than the `text-fg` it carried on the card because it is no
           longer the only thing on a dark face: it sits under a glowing card on the page.
         */}
-        <p className="text-xs text-fg-muted">{copy.game.scanCaption}</p>
-      </div>
+          <p className="text-xs text-fg-muted">{copy.game.scanCaption}</p>
+        </div>
 
-      {/*
+        {/*
         OUTSIDE the stack, and that placement is a bug fix rather than a layout preference.
         These three buttons were on the card's hidden face until the card became tappable in
         Phase 5, at which point a pointer-up on any of them bubbled into the card's gesture
         handler and flipped the card -- so pressing Play revealed the answer. `CardControls`
         documents it in full.
       */}
-      <CardControls
-        audio={audio}
-        onExit={handleExitRequest}
-        onKeepDeck={() => {
-          setIsDeckActionsOpen(true);
-        }}
-      />
+        <CardControls
+          audio={gatedAudio}
+          onExit={handleExitRequest}
+          onKeepDeck={() => {
+            setIsDeckActionsOpen(true);
+          }}
+        />
 
-      {/*
+        {/*
         ===========================================================================
          THE COPYRIGHT LINE, MID-GAME (2026-08-12).
 
@@ -567,7 +594,15 @@ export function GameScreen({
          subtract it by exact string -- see `LandingScreen.test.tsx`.
         ===========================================================================
       */}
-      <Footer />
+        <Footer />
+      </div>
+
+      {/*
+        The Play gate. `z-40`, under the dialogs' `z-50`: a back press still opens the exit
+        confirmation on top of it (`useBackNavigation` is unchanged). "End game" skips that
+        confirmation on purpose -- there is nothing left to lose -- and is the confirmed-exit handler.
+      */}
+      {isPlayGated ? <PlayGateOverlay onEndGame={handleExitConfirmed} /> : null}
 
       {/*
         Last in the DOM, so they are last in the tab order and paint over everything above without
