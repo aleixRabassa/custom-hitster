@@ -394,6 +394,12 @@ export const COPY = {
     endGame: 'End game',
   },
 
+  /** The transient message after a triple click on the logo toggles the hidden developer mode. */
+  devMode: {
+    on: 'Developer mode on',
+    off: 'Developer mode off',
+  },
+
   errorBoundary: {
     heading: 'Something went wrong',
     /** GENERIC, and it stays generic: no message, no stack, no code. See `ErrorBoundary.tsx`. */

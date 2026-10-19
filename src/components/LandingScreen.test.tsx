@@ -18,6 +18,7 @@ import { auditableText } from './__fixtures__/auditable-text';
 import { fixtureDeck } from './__fixtures__/cards';
 import { LONG_PRESS_DURATION_MS } from '../game/gestures';
 import { MAX_DECK_PLAYLISTS } from '../game/deck-merge';
+import { LOGO_CLICK_WINDOW_MS } from '../game/dev-mode';
 import { CATALOGUES } from '../game/i18n';
 import { LANGUAGE_NAMES, LOCALES } from '../game/locale';
 import { PLAYLIST_ERROR_MESSAGES } from '../game/messages';
@@ -38,6 +39,7 @@ function renderLanding(props: Partial<Parameters<typeof LandingScreen>[0]> = {})
     <LandingScreen
       onSubmit={onSubmit}
       onBack={onBack}
+      {...(props.onLogoTripleClick ? { onLogoTripleClick: props.onLogoTripleClick } : {})}
       isLoading={props.isLoading ?? false}
       // A fresh profile's defaults: yearless cards dropped, unconfirmed ones dealt.
       dealYearless={props.dealYearless ?? false}
@@ -1590,5 +1592,53 @@ describe('LandingScreen in another language', () => {
     fireEvent.click(screen.getByRole('button', { name: copy.landing.start }));
 
     expect(screen.getByRole('alert').textContent).toBe(errorMessages['invalid-url']);
+  });
+});
+
+describe('LandingScreen logo triple click', () => {
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
+
+  function clickAt(logo: HTMLElement, gapsMs: number[]) {
+    fireEvent.click(logo);
+    for (const gap of gapsMs) {
+      vi.setSystemTime(Date.now() + gap);
+      fireEvent.click(logo);
+    }
+  }
+
+  it('should fire after three quick clicks', () => {
+    vi.useFakeTimers();
+    const onLogoTripleClick = vi.fn();
+    renderLanding({ onLogoTripleClick });
+
+    clickAt(screen.getByRole('img', { name: COPY.landing.logoAlt }), [100, 100]);
+
+    expect(onLogoTripleClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('should not fire after two clicks', () => {
+    vi.useFakeTimers();
+    const onLogoTripleClick = vi.fn();
+    renderLanding({ onLogoTripleClick });
+
+    clickAt(screen.getByRole('img', { name: COPY.landing.logoAlt }), [100]);
+
+    expect(onLogoTripleClick).not.toHaveBeenCalled();
+  });
+
+  it('should not fire when the clicks are spaced beyond the window', () => {
+    vi.useFakeTimers();
+    const onLogoTripleClick = vi.fn();
+    renderLanding({ onLogoTripleClick });
+
+    clickAt(screen.getByRole('img', { name: COPY.landing.logoAlt }), [
+      LOGO_CLICK_WINDOW_MS + 1,
+      LOGO_CLICK_WINDOW_MS + 1,
+    ]);
+
+    expect(onLogoTripleClick).not.toHaveBeenCalled();
   });
 });

@@ -104,7 +104,16 @@ describe('isPlayGated', () => {
     [1, 'play', false],
     [99, 'play', false],
   ] as const)('should read index %i on %s as %s', (currentIndex, launcher, expected) => {
-    expect(isPlayGated({ currentIndex, launcher })).toBe(expected);
+    expect(isPlayGated({ currentIndex, launcher, devMode: false })).toBe(expected);
+  });
+
+  it.each([
+    [0, 'web'],
+    [1, 'web'],
+    [99, 'web'],
+    [1, 'play'],
+  ] as const)('should never gate index %i on %s in developer mode', (currentIndex, launcher) => {
+    expect(isPlayGated({ currentIndex, launcher, devMode: true })).toBe(false);
   });
 });
 

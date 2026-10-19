@@ -82,6 +82,7 @@ import {
 } from '../game/playlist-display-name';
 import { planSelectionToggle, selectedPlaylistIds } from '../game/playlist-selection';
 import { useLocale } from '../hooks/useLocale';
+import { useTripleClick } from '../hooks/useTripleClick';
 import { isSpotifyShortLink, parsePlaylistUrl, spotifyPlaylistUrl } from '../../shared/spotify-url';
 import type { Copy } from '../game/copy';
 import type { StartFailureCode } from '../game/messages';
@@ -217,6 +218,8 @@ export interface LandingScreenProps {
    * browser chrome (the TWA). The container owns the flag this flips; see `App.tsx`.
    */
   onBack: () => void;
+  /** Fired by three quick clicks on the logo: the hidden developer-mode toggle. */
+  onLogoTripleClick?: () => void;
   /**
    * The player's saved playlists, most-recent-first, from `playlist-library.ts` via the container.
    *
@@ -263,6 +266,7 @@ export interface LandingScreenProps {
 export function LandingScreen({
   onSubmit,
   onBack,
+  onLogoTripleClick,
   isLoading,
   errorCode,
   savedPlaylists = [],
@@ -273,6 +277,7 @@ export function LandingScreen({
   onDealUnconfirmedChange,
 }: LandingScreenProps) {
   const { copy, errorMessages, locale, setLocale } = useLocale();
+  const handleLogoClick = useTripleClick(onLogoTripleClick);
   const [rows, setRows] = useState<PlaylistRow[]>(() => [{ id: 'row-1', value: '' }]);
 
   /**
@@ -630,6 +635,9 @@ export function LandingScreen({
               height={384}
               fetchPriority="high"
               className="size-48"
+              // The hidden developer-mode toggle: deliberately not a control (no button, no role),
+              // so the screen's button count and the logo's accessible name stay as they were.
+              onClick={handleLogoClick}
             />
           </h1>
           <p className="text-xl font-semibold text-fg-secondary">

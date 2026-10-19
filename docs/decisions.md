@@ -1316,7 +1316,8 @@ card 2 on (below); a game started in the browser is not gated on card 1 and is g
 
 **WEB PLAY STOPS AT CARD 2 (developer decision 2026-10-19).** Outside the Google Play app, from the second
 card of the deck (`currentIndex >= 1`, zero-based), a blurred overlay (`PlayGateOverlay`) covers the game with
-a link to the Play listing and an "End game" button. Enabled at once, with no feature flag, **even though the
+a link to the Play listing and an "End game" button. Enabled at once, with no server-side flag (the only switch
+is the developer mode, below), **even though the
 listing is not public yet**: the link 404s for everyone who is not a tester until production. Reasoning, in
 the order it was settled:
 
@@ -1335,6 +1336,16 @@ the order it was settled:
   to lose), and audio is stopped when the gate comes up and Play is a no-op under it, against the rule that
   audio stops only on a card change and a confirmed Exit. The overlay is `z-40`, below the dialogs' `z-50`, so
   the exit dialog a back press opens stays on top.
+- **Developer mode lifts it (amended 2026-10-19).** Three quick clicks or taps on the logo, on the welcome screen
+  or the picker, toggle a hidden mode; a transient "Developer mode on" / "Developer mode off" (`DevModeToast`,
+  a `fixed` overlay so the `pt-8` logo contract holds) says which. It is stored in **`localStorage`**
+  (`jitster:devmode:v1`, the exact literal `'on'`; off removes the key), the opposite of the launcher verdict:
+  it is the developer's own flag and should outlive the tab. The TWA sharing `localStorage` is harmless, since
+  inside the app the gate is already off. It is an **extra input to `isPlayGated`** (`devMode`), never a faked
+  `'play'` launcher, so `resolveLauncher` and the `sessionStorage` verdict are untouched. The sequence is
+  counted by hand (3 clicks, 500 ms between consecutive ones; `registerLogoClick` in `dev-mode.ts`), not from
+  `event.detail`, which is unreliable on touch. The handler sits on the logo `<img>`, deliberately not a
+  `<button>`: the screens' tests pin exact button counts and the `h1`'s empty text.
 - **The risk, stated: detection can only be verified in the installed app against production.** If the
   referrer is ever not what is assumed (a different Chrome version, a verification failure), **app players are
   blocked from card 2**. The rows in `docs/development.md` §5 are the check, and they have not been run.

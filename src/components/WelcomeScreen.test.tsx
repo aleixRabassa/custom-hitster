@@ -13,6 +13,7 @@ import { COPYRIGHT_NOTICE } from './Footer';
 import { LocaleProvider } from './LocaleProvider';
 import { WelcomeScreen, YEAR_CARDS_PDF_PATH } from './WelcomeScreen';
 import { COPY } from '../game/copy';
+import { LOGO_CLICK_WINDOW_MS } from '../game/dev-mode';
 import { CATALOGUES } from '../game/i18n';
 import { LANGUAGE_NAMES, LOCALES, type Locale } from '../game/locale';
 import type { StorageLike } from '../game/persistence';
@@ -276,5 +277,53 @@ describe('WelcomeScreen', () => {
     }
     expect(screen.getByRole('button', { name: LANGUAGE_NAMES.es, pressed: true })).not.toBeNull();
     expect(document.documentElement.lang).toBe('es');
+  });
+});
+
+describe('WelcomeScreen logo triple click', () => {
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
+
+  function clickAt(logo: HTMLElement, gapsMs: number[]) {
+    fireEvent.click(logo);
+    for (const gap of gapsMs) {
+      vi.setSystemTime(Date.now() + gap);
+      fireEvent.click(logo);
+    }
+  }
+
+  it('should fire after three quick clicks', () => {
+    vi.useFakeTimers();
+    const onLogoTripleClick = vi.fn();
+    render(<WelcomeScreen onStart={vi.fn()} onLogoTripleClick={onLogoTripleClick} />);
+
+    clickAt(screen.getByRole('img', { name: COPY.welcome.logoAlt }), [100, 100]);
+
+    expect(onLogoTripleClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('should not fire after two clicks', () => {
+    vi.useFakeTimers();
+    const onLogoTripleClick = vi.fn();
+    render(<WelcomeScreen onStart={vi.fn()} onLogoTripleClick={onLogoTripleClick} />);
+
+    clickAt(screen.getByRole('img', { name: COPY.welcome.logoAlt }), [100]);
+
+    expect(onLogoTripleClick).not.toHaveBeenCalled();
+  });
+
+  it('should not fire when the clicks are spaced beyond the window', () => {
+    vi.useFakeTimers();
+    const onLogoTripleClick = vi.fn();
+    render(<WelcomeScreen onStart={vi.fn()} onLogoTripleClick={onLogoTripleClick} />);
+
+    clickAt(screen.getByRole('img', { name: COPY.welcome.logoAlt }), [
+      LOGO_CLICK_WINDOW_MS + 1,
+      LOGO_CLICK_WINDOW_MS + 1,
+    ]);
+
+    expect(onLogoTripleClick).not.toHaveBeenCalled();
   });
 });

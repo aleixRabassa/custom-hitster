@@ -77,13 +77,19 @@ export function resolveLauncher({
   }
 }
 
-/** Is the game closed to this player at this card? Derived, never stored. */
+/**
+ * Is the game closed to this player at this card? Derived, never stored. `devMode` (the hidden
+ * triple-click toggle, `dev-mode.ts`) lifts the gate; it is its own input, never a faked `'play'`
+ * launcher.
+ */
 export function isPlayGated({
   currentIndex,
   launcher,
+  devMode,
 }: {
   currentIndex: number;
   launcher: Launcher;
+  devMode: boolean;
 }): boolean {
-  return launcher === 'web' && currentIndex >= FIRST_GATED_CARD_INDEX;
+  return launcher === 'web' && !devMode && currentIndex >= FIRST_GATED_CARD_INDEX;
 }

@@ -202,6 +202,11 @@ export const COPY_ES = {
     endGame: 'Terminar partida',
   },
 
+  devMode: {
+    on: 'Modo desarrollador activado',
+    off: 'Modo desarrollador desactivado',
+  },
+
   errorBoundary: {
     heading: 'Algo ha ido mal',
     body: 'El juego ha tenido un problema inesperado y ha tenido que pararse. Recargar suele solucionarlo. Los detalles se han escrito en la consola del navegador.',

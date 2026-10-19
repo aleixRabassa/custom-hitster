@@ -2452,6 +2452,16 @@ Rule: AGENTS.md § Google Play ("Web play stops at card 2").
 - **`backdrop-blur-md`'s first use in the repo.** Dist CSS grep after the build: `.backdrop-blur-md` (with `--blur-md: 12px`), `.z-40`, `.bg-page\/60` and `.contents` are all emitted.
 - Unverified on a device: if the referrer misreads, app players are blocked from card 2.
 
+## 2026-10-19 — Developer mode: triple click on the logo lifts the Play gate
+
+Rule: AGENTS.md § Google Play ("Web play stops at card 2"); reasoning in `docs/decisions.md`.
+
+- **The handler is on the logo `<img>`, not a `<button>`**: `WelcomeScreen.test.tsx` and `LandingScreen.test.tsx` pin exact button counts and an `h1` with empty text. ESLint has no `jsx-a11y` rules here, so no disable comment was needed.
+- **Clicks are counted by hand** (`registerLogoClick`, 3 clicks, 500 ms gap), not from `event.detail`, which is unreliable for touch. `Date.now()` is the clock so `vi.useFakeTimers` plus `vi.setSystemTime` drives it.
+- **The toast is rendered only while it has a message** (a `fixed`, `pointer-events-none` overlay beside the welcome screen or picker), so it adds no `role="status"` or button to either screen at rest. It reuses `useTimedDismiss` (10 s + 500 ms fade).
+- **`App.test.tsx` reads the real `localStorage` for the flag** (like the preferences), so the developer-mode tests remove the key in their own `afterEach`.
+- **Do not run `prettier --write` over the whole tree on this Windows checkout**: the working copies are CRLF under `core.autocrlf`, and it rewrites every file to LF (status shows ~100 modified files with no content diff). Format only the files you touched.
+
 ## 2026-10-19 — Play installs showed the URL bar because assetlinks.json held only the upload key
 
 Rule: AGENTS.md § Google Play (the fingerprint list); reasoning in `docs/decisions.md` and `docs/architecture.md` §3.

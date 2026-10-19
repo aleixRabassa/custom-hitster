@@ -212,6 +212,12 @@ export const COPY_CA = {
     endGame: 'Acaba la partida',
   },
 
+  // Unreviewed proposal (no native-speaker read), like the rest of this catalogue.
+  devMode: {
+    on: 'Mode desenvolupador activat',
+    off: 'Mode desenvolupador desactivat',
+  },
+
   errorBoundary: {
     heading: 'Alguna cosa ha anat malament',
     body: "El joc ha trobat un problema inesperat i s'ha hagut d'aturar. Normalment es resol tornant a carregar la pàgina. Els detalls s'han escrit a la consola del navegador.",

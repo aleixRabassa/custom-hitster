@@ -33,6 +33,7 @@
 
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 
+import { DevModeToast } from './components/DevModeToast';
 import { EndScreen } from './components/EndScreen';
 import { LandingScreen } from './components/LandingScreen';
 import { NoticeBanner } from './components/NoticeBanner';
@@ -42,6 +43,7 @@ import { WelcomeScreen } from './components/WelcomeScreen';
 import { readLocalStorage, readSessionStorage } from './game/browser-storage';
 import { linkArrivalIntent, parseDeckLink } from './game/deck-link';
 import { deckBaseName, deckLabel } from './game/deck-merge';
+import { loadDevMode, saveDevMode } from './game/dev-mode';
 import { isPlayGated, resolveLauncher } from './game/launcher';
 import { loadLibrary, removePlaylist, savePlaylist, savedDeckKey } from './game/playlist-library';
 import { loadPrefs, savePrefs } from './game/prefs';
@@ -163,8 +165,9 @@ function shareOrigin(): string {
 }
 
 export default function App({ storage, fetchImpl, search, launcher: launcherProp }: AppProps = {}) {
-  // The active language's copy. This container renders no sentence of its own; it reads the
-  // catalogue only to name the deck, because `deckLabel()` is pure and takes the `deck` block.
+  // The active language's copy. This container renders no sentence of its own beyond the developer
+  // toast; it reads the catalogue to name the deck, because `deckLabel()` is pure and takes the
+  // `deck` block.
   const copy = useCopy();
   const {
     state,
@@ -204,6 +207,25 @@ export default function App({ storage, fetchImpl, search, launcher: launcherProp
       launcherProp ??
       resolveLauncher({ referrer: document.referrer, storage: readSessionStorage() }),
   );
+
+  // The hidden developer mode (`dev-mode.ts`): a triple click on the logo. Read through the guarded
+  // `localStorage` on the first render, like the preferences.
+  const [devMode, setDevMode] = useState(() => loadDevMode(readLocalStorage()));
+  const [devModeToast, setDevModeToast] = useState<{ on: boolean } | null>(null);
+
+  const handleToggleDevMode = useCallback(() => {
+    // Derived from the render's state, not a functional update: an updater with a storage write in
+    // it would run twice under StrictMode.
+    const next = !devMode;
+    setDevMode(next);
+    saveDevMode(readLocalStorage(), next);
+    setDevModeToast({ on: next });
+  }, [devMode]);
+
+  const dismissDevModeToast = useCallback(() => {
+    setDevModeToast(null);
+  }, []);
+  const { isFading: isDevModeToastFading } = useTimedDismiss(devModeToast, dismissDevModeToast);
 
   /**
    * Has the player pressed the welcome screen's button yet?
@@ -855,6 +877,7 @@ export default function App({ storage, fetchImpl, search, launcher: launcherProp
     <LandingScreen
       onSubmit={handleSubmit}
       onBack={handleBackToWelcome}
+      onLogoTripleClick={handleToggleDevMode}
       isLoading={requestState.status === 'loading'}
       {...(startFailureCode ? { errorCode: startFailureCode } : {})}
       savedPlaylists={savedPlaylists}
@@ -871,8 +894,22 @@ export default function App({ storage, fetchImpl, search, launcher: launcherProp
    * choice is the one flag, computed ONCE as `picker`: every branch that shows either returns it,
    * so the three branches cannot drift into reading two different conditions.
    */
-  const welcome = <WelcomeScreen onStart={handleEnterPicker} />;
-  const picker = hasEnteredPicker ? landing : welcome;
+  const welcome = (
+    <WelcomeScreen onStart={handleEnterPicker} onLogoTripleClick={handleToggleDevMode} />
+  );
+  // The developer-mode toast is a fixed overlay beside whichever of the two shows: it is where the
+  // logo is, and it takes no room in either screen.
+  const picker = (
+    <>
+      {hasEnteredPicker ? landing : welcome}
+      {devModeToast === null ? null : (
+        <DevModeToast
+          message={devModeToast.on ? copy.devMode.on : copy.devMode.off}
+          isFading={isDevModeToastFading}
+        />
+      )}
+    </>
+  );
 
   /**
    * The notice banner, or null. Built once and given to whichever screen is showing, because it has
@@ -1015,7 +1052,7 @@ export default function App({ storage, fetchImpl, search, launcher: launcherProp
         isPlayable
         // The web player's wall from the second card on -- derived, never stored, so stepping back to
         // card 1 or a Restart lifts it by itself.
-        isPlayGated={isPlayGated({ currentIndex: state.currentIndex, launcher })}
+        isPlayGated={isPlayGated({ currentIndex: state.currentIndex, launcher, devMode })}
         cardsRemaining={cardsRemaining}
         // One string, which is the deck label -- the HUD already truncates a long name, and it is
         // the same label the end screen and the PDF filename read.

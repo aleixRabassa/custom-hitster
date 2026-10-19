@@ -46,6 +46,7 @@
 
 import { MAX_DECK_PLAYLISTS } from '../game/deck-merge';
 import { useCopy, useLocale } from '../hooks/useLocale';
+import { useTripleClick } from '../hooks/useTripleClick';
 import { Footer } from './Footer';
 import { LanguageSection } from './LanguageSelector';
 import type { ReactNode } from 'react';
@@ -61,6 +62,8 @@ export const YEAR_CARDS_PDF_PATH = '/year-cards-1970-2033.pdf';
 export interface WelcomeScreenProps {
   /** The big button. Takes the player to the playlist picker; nothing else happens. */
   onStart: () => void;
+  /** Fired by three quick clicks on the logo: the hidden developer-mode toggle. */
+  onLogoTripleClick?: () => void;
 }
 
 /**
@@ -166,9 +169,10 @@ function Step({
   );
 }
 
-export function WelcomeScreen({ onStart }: WelcomeScreenProps) {
+export function WelcomeScreen({ onStart, onLogoTripleClick }: WelcomeScreenProps) {
   const copy = useCopy();
   const { locale, setLocale } = useLocale();
+  const handleLogoClick = useTripleClick(onLogoTripleClick);
 
   return (
     /*
@@ -207,6 +211,9 @@ export function WelcomeScreen({ onStart }: WelcomeScreenProps) {
             height={384}
             fetchPriority="high"
             className="size-48"
+            // The hidden developer-mode toggle: deliberately not a control (no button, no role), so
+            // the screen's button count and the logo's accessible name stay as they were.
+            onClick={handleLogoClick}
           />
         </h1>
 

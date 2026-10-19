@@ -40,6 +40,7 @@ import {
   pendingYearCard,
 } from './components/__fixtures__/cards';
 import { COPY } from './game/copy';
+import { DEV_MODE_STORAGE_KEY } from './game/dev-mode';
 import { PLAYLIST_ERROR_MESSAGES } from './game/messages';
 import { clearQrCache } from './game/qr-cache';
 import { resetBackNavigationTraversals } from './hooks/useBackNavigation';
@@ -2747,6 +2748,94 @@ describe('App', () => {
       });
 
       expect(screen.queryByRole('dialog', { name: COPY.playGate.title })).toBeNull();
+    });
+
+    describe('developer mode', () => {
+      // The app reads `localStorage` for this flag (like the preferences). Under this Node's jsdom
+      // the global is not a working Storage, so each test gets a memory one behind the getter;
+      // the outer `restoreAllMocks` puts the real one back.
+      let devStore: StorageLike;
+      beforeEach(() => {
+        devStore = memoryStorage();
+        vi.spyOn(window, 'localStorage', 'get').mockReturnValue(devStore as Storage);
+      });
+
+      function tripleClick(element: HTMLElement) {
+        fireEvent.click(element);
+        fireEvent.click(element);
+        fireEvent.click(element);
+      }
+
+      it('should toggle on and off with a triple click on the welcome logo, with a message', () => {
+        stubHangingYearApi();
+        renderApp(playlistFetch(200, playlistResult()));
+        const logo = screen.getByRole('img', { name: COPY.welcome.logoAlt });
+
+        tripleClick(logo);
+        expect(screen.getByRole('status').textContent).toBe(COPY.devMode.on);
+        expect(devStore.getItem(DEV_MODE_STORAGE_KEY)).toBe('on');
+
+        tripleClick(logo);
+        expect(screen.getByRole('status').textContent).toBe(COPY.devMode.off);
+        expect(devStore.getItem(DEV_MODE_STORAGE_KEY)).toBeNull();
+      });
+
+      it('should toggle from the picker logo too', () => {
+        stubHangingYearApi();
+        renderApp(playlistFetch(200, playlistResult()));
+        fireEvent.click(screen.getByRole('button', { name: COPY.welcome.enter }));
+
+        tripleClick(screen.getByRole('img', { name: COPY.landing.logoAlt }));
+
+        expect(screen.getByRole('status').textContent).toBe(COPY.devMode.on);
+      });
+
+      it('should not toggle on two clicks', () => {
+        stubHangingYearApi();
+        renderApp(playlistFetch(200, playlistResult()));
+        const logo = screen.getByRole('img', { name: COPY.welcome.logoAlt });
+
+        fireEvent.click(logo);
+        fireEvent.click(logo);
+
+        expect(screen.queryByRole('status')).toBeNull();
+        expect(devStore.getItem(DEV_MODE_STORAGE_KEY)).toBeNull();
+      });
+
+      it('should lift the web gate when switched on before dealing', async () => {
+        stubYearApi();
+        render(
+          <AppBase
+            launcher="web"
+            storage={memoryStorage()}
+            fetchImpl={playlistFetch(200, playlistResult())}
+          />,
+        );
+        tripleClick(screen.getByRole('img', { name: COPY.welcome.logoAlt }));
+        startPlaylist();
+        await waitFor(() => {
+          expect(screen.queryByTestId('hud')).not.toBeNull();
+        });
+
+        fireEvent.keyDown(window, { key: 'ArrowRight' });
+        await waitFor(() => {
+          expect(cardsLeftInHud()).toBeGreaterThanOrEqual(0);
+        });
+
+        expect(screen.queryByRole('dialog', { name: COPY.playGate.title })).toBeNull();
+      });
+
+      it('should lift the web gate when the flag is already remembered', async () => {
+        devStore.setItem(DEV_MODE_STORAGE_KEY, 'on');
+        await reachFirstCard('web');
+
+        fireEvent.keyDown(window, { key: 'ArrowRight' });
+        await waitFor(() => {
+          expect(cardsLeftInHud()).toBeGreaterThanOrEqual(0);
+        });
+
+        expect(screen.queryByRole('dialog', { name: COPY.playGate.title })).toBeNull();
+      });
     });
   });
 });
