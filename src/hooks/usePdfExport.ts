@@ -184,7 +184,16 @@ export function usePdfExport(keepYearless: boolean): UsePdfExportResult {
             if (generationRef.current !== generation) return;
           }
 
-          const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+          // `compress: true` in the CONSTRUCTOR: without it jsPDF stores every 512x512 QR PNG as a raw
+          // RGB stream (786,432 bytes each), so a 47-card deck downloaded as 36,994,892 bytes. Measured
+          // with this repo's jspdf and qrcode: 127 KB with the option, 775 KB with `addImage(..., 'FAST')`
+          // alone, 771 KB with both. The `toDataURL` PNGs stay (AGENTS.md).
+          const doc = new jsPDF({
+            unit: 'mm',
+            format: 'a4',
+            orientation: 'portrait',
+            compress: true,
+          });
           // A standard font, hence `pdf-text.ts`: WinAnsi cannot draw Cyrillic or CJK, and embedding a
           // font that could costs more than the whole rest of this chunk.
           doc.setFont('helvetica', 'normal');

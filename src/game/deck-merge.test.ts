@@ -47,6 +47,31 @@ function loaded(
 }
 
 describe('mergePlaylists', () => {
+  it('should list a playlist entered in two rows once and count its skipped cards once', () => {
+    const merged = mergePlaylists([
+      loaded('one', [card('a'), card('b')], { skippedCount: 3, truncated: true }),
+      loaded('one', [card('a'), card('b')], { skippedCount: 3, truncated: true }),
+      loaded('two', [card('c')]),
+    ]);
+
+    expect(merged.ok).toBe(true);
+    if (!merged.ok) return;
+
+    expect(merged.deck.playlists.map((entry) => entry.id)).toEqual(['one', 'two']);
+    expect(merged.deck.cards.map((entry) => entry.id)).toEqual(['a', 'b', 'c']);
+    expect(merged.deck.skippedCount).toBe(3);
+  });
+
+  it('should collapse a deck of one playlist entered twice to a single playlist', () => {
+    const merged = mergePlaylists([loaded('one', [card('a')]), loaded('one', [card('a')])]);
+
+    expect(merged.ok).toBe(true);
+    if (!merged.ok) return;
+
+    expect(merged.deck.playlists).toHaveLength(1);
+    expect(merged.deck.cards).toHaveLength(1);
+  });
+
   it('should merge two loaded playlists into one deck in row order', () => {
     const merged = mergePlaylists([
       loaded('one', [card('a'), card('b')]),

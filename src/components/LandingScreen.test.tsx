@@ -347,6 +347,36 @@ describe('LandingScreen', () => {
     );
   });
 
+  it('should hide a stale request error once a press is rejected on the row, and show the next one', () => {
+    const props = {
+      onSubmit: vi.fn(),
+      onBack: vi.fn(),
+      isLoading: false,
+      dealYearless: false,
+      onDealYearlessChange: vi.fn(),
+      dealUnconfirmed: true,
+      onDealUnconfirmedChange: vi.fn(),
+      savedPlaylists: [],
+      onRemoveSaved: vi.fn(),
+    };
+    const { rerender } = render(<LandingScreen {...props} errorCode="not-found-or-private" />);
+    const serverMessage = PLAYLIST_ERROR_MESSAGES['not-found-or-private'];
+    expect(screen.getByText(serverMessage)).toBeTruthy();
+
+    submit('nonsense');
+
+    // The row's message is there, the old request's is not: one press, one explanation.
+    expect(props.onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByText(PLAYLIST_ERROR_MESSAGES['invalid-url'])).toBeTruthy();
+    expect(screen.queryByText(serverMessage)).toBeNull();
+
+    // A real request resets it, so the same server error answering that request shows again.
+    submit(PLAYLIST_URL);
+    expect(props.onSubmit).toHaveBeenCalledTimes(1);
+    rerender(<LandingScreen {...props} errorCode="not-found-or-private" />);
+    expect(screen.getByText(serverMessage)).toBeTruthy();
+  });
+
   it('should render the new offline and empty-playlist copy in the same alert slot', () => {
     // ===================================================================
     //  THE POINT OF PHASE 7's ERROR WORK: two new failures, NO NEW SCREEN.
@@ -396,12 +426,11 @@ describe('LandingScreen', () => {
 
   it('should keep a row error and the container error in separate slots', () => {
     /*
-      Two error SOURCES with two slots since multi-playlist, and that is the reversal worth pinning.
-      Before the rows they shared one, so a local parse failure had to overwrite the server's
-      message; now the container's slot describes the REQUEST (a batch in which nothing loaded, or
-      `no-years-found`) and a row's describes the box it sits under. Both can be true at once --
-      the previous submission failed AND the value now typed is not a link -- and hiding either
-      would be hiding something the player needs.
+      Two error SOURCES with two slots since multi-playlist: the container's describes the REQUEST,
+      a row's describes the box it sits under. They coexist when both are current (the container's
+      alone here, until a press) -- but a press rejected on the row makes the container's message
+      stale, so it is hidden (2026-10-19, reversing the earlier "both at once" pin): two
+      contradictory messages about one press read as a bug.
     */
     renderLanding({ errorCode: 'upstream-unavailable' });
     expect(screen.getByRole('alert').textContent).toBe(
@@ -411,9 +440,8 @@ describe('LandingScreen', () => {
     submit('nonsense');
 
     const messages = screen.getAllByRole('alert').map((alert) => alert.textContent);
-    expect(messages).toContain(PLAYLIST_ERROR_MESSAGES['invalid-url']);
-    expect(messages).toContain(PLAYLIST_ERROR_MESSAGES['upstream-unavailable']);
-    // And only the row's is wired to an input. The container's describes no single box.
+    expect(messages).toEqual([PLAYLIST_ERROR_MESSAGES['invalid-url']]);
+    // And the row's is wired to its input.
     expect(rowInput(0).getAttribute('aria-describedby')).toBe(
       screen.getAllByRole('alert')[0]?.getAttribute('id'),
     );

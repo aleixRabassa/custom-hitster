@@ -41,10 +41,12 @@ import type { DeckActionsProps, DeckActionsView } from './DeckActions';
  * `vi.mock` intercepts by specifier rather than by import form, so the same doubles serve the
  * dynamic `import()`s in `usePdfExport` -- the finding `QrCode.test.tsx` records.
  */
-const { toDataURLMock, saveMock, textMock } = vi.hoisted(() => ({
+const { toDataURLMock, saveMock, textMock, constructorMock } = vi.hoisted(() => ({
   // `vi.hoisted` is required: the factories below are hoisted above ordinary `const` declarations.
   toDataURLMock: vi.fn<(text: string, options?: unknown) => Promise<string>>(),
   saveMock: vi.fn<(fileName: string) => void>(),
+  // The options `usePdfExport` hands the `jsPDF` constructor.
+  constructorMock: vi.fn<(options: unknown) => void>(),
   // Every string `drawBack` puts on a card's answer side, which is how the blank year is observed.
   textMock: vi.fn<(text: string | string[], x: number, y: number, options?: unknown) => void>(),
 }));
@@ -54,6 +56,10 @@ vi.mock('qrcode', () => ({ toDataURL: toDataURLMock }));
 vi.mock('jspdf', () => {
   /** Every call `usePdfExport` makes, with only the two that RETURN anything doing any work. */
   class FakeDoc {
+    constructor(options?: unknown) {
+      constructorMock(options);
+    }
+
     setFont() {}
     setDrawColor() {}
     setLineWidth() {}
@@ -165,6 +171,7 @@ describe('DeckActions', () => {
     );
     saveMock.mockReset();
     textMock.mockReset();
+    constructorMock.mockReset();
   });
 
   afterEach(() => {
@@ -429,6 +436,31 @@ describe('DeckActions', () => {
   });
 
   describe('the printable export', () => {
+    it('should create the document compressed, or every QR is stored as a raw RGB stream', async () => {
+      // Production measured 36,994,892 bytes for 47 cards without it and 127 KB with it.
+      render(
+        <DeckActions
+          playlistIds={[PLAYLIST_ID]}
+          playlistName="Rock Classics"
+          seed={SEED}
+          shareOrigin={ORIGIN}
+          onSavePlaylist={vi.fn()}
+          isPlaylistSaved={false}
+          deck={fixtureDeck.filter((card) => typeof card.year === 'number')}
+          pendingYearCount={0}
+          keepYearless={false}
+          skipUnconfirmed={false}
+        />,
+      );
+
+      printDeck();
+
+      await waitFor(() => {
+        expect(saveMock).toHaveBeenCalledTimes(1);
+      });
+      expect(constructorMock).toHaveBeenCalledWith(expect.objectContaining({ compress: true }));
+    });
+
     it('should label, report and name the export in the active language', async () => {
       // `usePdfExport` reads the locale for the one string the document carries: its file name.
       const { copy } = CATALOGUES.es;

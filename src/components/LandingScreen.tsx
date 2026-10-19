@@ -279,6 +279,10 @@ export function LandingScreen({
   const { copy, errorMessages, locale, setLocale } = useLocale();
   const handleLogoClick = useTripleClick(onLogoTripleClick);
   const [rows, setRows] = useState<PlaylistRow[]>(() => [{ id: 'row-1', value: '' }]);
+  // True once a press was rejected client-side, which hides the container's `errorCode` (about the
+  // previous request) beside the row's own message. Cleared when `onSubmit` fires, so the next
+  // request's error, even an identical one, shows.
+  const [isRequestErrorStale, setIsRequestErrorStale] = useState(false);
 
   /**
    * The next row id to hand out.
@@ -424,8 +428,14 @@ export function LandingScreen({
 
     setRows(validated);
 
-    if (hasError) return;
+    if (hasError) {
+      // The rows now say what is wrong with THIS press; the container's slot still describes the
+      // previous request and would contradict them.
+      setIsRequestErrorStale(true);
+      return;
+    }
 
+    setIsRequestErrorStale(false);
     onSubmit(urls);
   };
 
@@ -907,7 +917,7 @@ export function LandingScreen({
           same reason a row's message has one -- otherwise a screen-reader user gets no signal that
           a submission failed at all.
         */}
-          {errorCode === undefined ? null : (
+          {errorCode === undefined || isRequestErrorStale ? null : (
             <p role="alert" className="text-sm text-danger">
               {playlistErrorMessage(errorCode, errorMessages)}
             </p>

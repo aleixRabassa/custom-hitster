@@ -533,6 +533,16 @@ governs INPUT; a saved session describes a deck that already exists), and **a li
 rejected, never truncated**. Full reasoning in
 [`docs/architecture.md`](./architecture.md) §3, "The combined deck".
 
+**THE SAME PLAYLIST IN TWO ROWS IS ONE PLAYLIST, AND A PRESS REJECTED ON A ROW HIDES THE PREVIOUS
+REQUEST'S ERROR (2026-10-19, found testing production).** `mergePlaylists` skips a loaded playlist
+whose id it already holds — a bare id in one row and its URL in another dealt "87 cards from 3
+playlists" and "PEGAO +2 playlists" — so its `truncated` and `skippedCount` are not counted twice;
+the dedupe is in the merge, not the form, because a short link resolves only on the server. And
+`LandingScreen` hides the container's `errorCode` once a press is rejected client-side, until the
+next real `onSubmit`: the old message described a value no longer in the box and contradicted the
+row's. **This reverses the earlier "both at once" pin** in `LandingScreen.test.tsx` — the
+developer's choice, 2026-10-19.
+
 **HOLDING A SUGGESTED PLAYLIST SELECTS IT AS OF 2026-08-12, AND THE SELECTION IS DERIVED FROM THE
 ROWS RATHER THAN STORED — that is the whole design, and a `Set` in component state is the change that
 breaks it.** A suggestion is lit exactly when some form row parses to its id (via the shared

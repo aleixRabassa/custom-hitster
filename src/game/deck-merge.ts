@@ -119,6 +119,12 @@ export function mergePlaylists(outcomes: readonly PlaylistOutcome[]): MergeOutco
     }
 
     const { result } = outcome;
+
+    // The same playlist entered twice (a bare id in one row, its URL in another). Its cards would
+    // all be duplicates anyway, but the playlist itself, its truncated flag and its skipped count
+    // would be counted twice in the notice, the label and the saved deck. First occurrence wins.
+    if (playlists.some((existing) => existing.id === result.playlist.id)) continue;
+
     playlists.push(result.playlist);
     truncated = truncated || result.truncated;
     skippedCount += result.skippedCount;
