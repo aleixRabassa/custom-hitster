@@ -212,9 +212,9 @@ export function savePlaylist(storage: StorageLike, entry: SavedPlaylist): SavedP
     ===========================================================================
   */
   const clean: SavedPlaylist = {
-    ids: entry.ids
-      .filter((id): id is string => typeof id === 'string' && id !== '')
-      .slice(0, MAX_DECK_PLAYLISTS),
+    ids: distinctCapped(
+      entry.ids.filter((id): id is string => typeof id === 'string' && id !== ''),
+    ),
     name: entry.name,
     savedAt: entry.savedAt,
   };
@@ -296,9 +296,17 @@ function validateLibrary(value: unknown): SavedPlaylist[] | null {
   for (const candidate of rawEntries) {
     const entry = isLegacy ? liftLegacyEntry(candidate) : validateEntry(candidate);
     if (!entry) return null;
-    // A duplicate deck is corruption rather than data: `savePlaylist` cannot produce one.
+    /*
+      A DUPLICATE DECK IS DROPPED, NOT A REASON TO REJECT THE LIBRARY (2026-10-19, the developer's
+      choice). It used to be corruption -- `savePlaylist` cannot produce one -- but `validateIds`
+      now dedupes ids on read, so an entry saved before `mergePlaylists` stopped holding a playlist
+      twice (['X','X','Y']) collapses onto the same key as a newer ['X','Y']. Rejecting would wipe
+      a library the player curated over one legacy row, which is worse than the bug. The list is
+      most-recent-first (`savePlaylist` puts the new entry at the front), so the first entry met
+      is the most recent and the later one is the one dropped.
+    */
     const key = savedDeckKey(entry);
-    if (seen.has(key)) return null;
+    if (seen.has(key)) continue;
     seen.add(key);
     entries.push(entry);
   }
@@ -366,7 +374,7 @@ function legacyLabelSuffix(others: number): string {
 }
 
 /**
- * A non-empty array of non-empty strings, CAPPED AT `MAX_DECK_PLAYLISTS` on read.
+ * A non-empty array of non-empty strings, DEDUPED (see `distinctCapped`) and CAPPED AT `MAX_DECK_PLAYLISTS` on read.
  *
  * ===========================================================================
  *  CAPPED HERE, UNLIKE A STORED SESSION, AND THE ASYMMETRY IS THE POINT
@@ -392,7 +400,19 @@ function validateIds(value: unknown): string[] | null {
     ids.push(id);
   }
 
-  return ids.slice(0, MAX_DECK_PLAYLISTS);
+  return distinctCapped(ids);
+}
+
+/**
+ * Repeated ids dropped (first occurrence and its order kept), THEN capped at `MAX_DECK_PLAYLISTS`,
+ * so a deduped entry keeps up to five DISTINCT ids (2026-10-19). Shared by the read (`validateIds`)
+ * and the write (`savePlaylist`): an entry saved before `mergePlaylists` skipped a playlist it
+ * already held can carry the same id twice, which showed as "+2 playlists" and never matched the
+ * deduped session deck. Read does not rewrite storage; the entry is fixed in memory and the store
+ * is repaired by the next write.
+ */
+function distinctCapped(ids: readonly string[]): string[] {
+  return [...new Set(ids)].slice(0, MAX_DECK_PLAYLISTS);
 }
 
 /** A v1 entry, whose single `id` becomes `[id]`. Every other field is validated unchanged. */

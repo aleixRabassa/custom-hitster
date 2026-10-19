@@ -542,6 +542,11 @@ the dedupe is in the merge, not the form, because a short link resolves only on 
 next real `onSubmit`: the old message described a value no longer in the box and contradicted the
 row's. **This reverses the earlier "both at once" pin** in `LandingScreen.test.tsx` — the
 developer's choice, 2026-10-19.
+The library dedupes ids on read too (`validateIds`, before the five-id cap), because an entry saved
+before this fix could hold `['X','X','Y']`, which read "+2 playlists" and never matched the deduped
+deck. That entry can then collide with a newer `['X','Y']`; `validateLibrary` keeps the first met —
+the most recent, the list being most-recent-first — instead of rejecting the library, because
+clearing a curated library over one legacy row is worse than dropping a duplicate.
 
 **HOLDING A SUGGESTED PLAYLIST SELECTS IT AS OF 2026-08-12, AND THE SELECTION IS DERIVED FROM THE
 ROWS RATHER THAN STORED — that is the whole design, and a `Set` in component state is the change that

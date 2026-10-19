@@ -113,13 +113,6 @@ describe('playlist-library', () => {
       JSON.stringify({ version: LIBRARY_VERSION, entries: [{ ids: [], name: 'x', savedAt: 1 }] }),
       JSON.stringify({ version: LIBRARY_VERSION, entries: [{ ids: 'a', name: 'x', savedAt: 1 }] }),
       JSON.stringify({ version: LIBRARY_VERSION, entries: [{ ids: [7], name: 'x', savedAt: 1 }] }),
-      // Two entries naming the same SET of playlists, in a different order: one deck, so a store
-      // holding both is corruption -- `savePlaylist` cannot produce it.
-      JSON.stringify({
-        version: LIBRARY_VERSION,
-        entries: [entry('a', { ids: ['a', 'b'] }), entry('a', { ids: ['b', 'a'] })],
-      }),
-      JSON.stringify({ version: LIBRARY_VERSION, entries: [entry('a'), entry('a')] }),
     ]) {
       const storage = memoryStorage();
       storage.map.set(LIBRARY_STORAGE_KEY, raw);
@@ -127,6 +120,75 @@ describe('playlist-library', () => {
       expect(() => loadLibrary(storage)).not.toThrow();
       expect(loadLibrary(storage)).toEqual([]);
     }
+  });
+
+  it('should keep the most recent of two entries naming the same deck instead of clearing the library', () => {
+    // Reversed 2026-10-19: two entries with one `savedDeckKey` used to reject the WHOLE library as
+    // corruption. Id dedupe on read makes a legacy ['X','X','Y'] collide with a newer ['X','Y'], and
+    // clearing a curated library over one legacy row is worse than dropping a duplicate.
+    const storage = memoryStorage();
+    const x = 'X'.repeat(22);
+    const y = 'Y'.repeat(22);
+    const z = 'Z'.repeat(22);
+    storage.map.set(
+      LIBRARY_STORAGE_KEY,
+      JSON.stringify({
+        version: LIBRARY_VERSION,
+        entries: [
+          { ids: [x, x, y], name: 'Newer', savedAt: 3_000 },
+          { ids: [z], name: 'Other', savedAt: 2_000 },
+          { ids: [x, y], name: 'Older', savedAt: 1_000 },
+          { ids: [y, x], name: 'Older, reordered', savedAt: 500 },
+        ],
+      }),
+    );
+
+    expect(loadLibrary(storage)).toEqual([
+      { ids: [x, y], name: 'Newer', savedAt: 3_000 },
+      { ids: [z], name: 'Other', savedAt: 2_000 },
+    ]);
+  });
+
+  it('should drop repeated ids on read, keeping the first occurrence and its order', () => {
+    const storage = memoryStorage();
+    const x = 'X'.repeat(22);
+    const y = 'Y'.repeat(22);
+    storage.map.set(
+      LIBRARY_STORAGE_KEY,
+      JSON.stringify({
+        version: LIBRARY_VERSION,
+        entries: [{ ids: [x, x, y], name: 'Playlist', savedAt: 1_000 }],
+      }),
+    );
+
+    expect(loadLibrary(storage).map((saved) => saved.ids)).toEqual([[x, y]]);
+  });
+
+  it('should dedupe ids before the cap, so a repeat does not cost a distinct playlist', () => {
+    const storage = memoryStorage();
+    const ids = ['a', 'b', 'a', 'c', 'd', 'e', 'f'].map((c) => c.repeat(22));
+    storage.map.set(
+      LIBRARY_STORAGE_KEY,
+      JSON.stringify({
+        version: LIBRARY_VERSION,
+        entries: [{ ids, name: 'Playlist', savedAt: 1_000 }],
+      }),
+    );
+
+    expect(loadLibrary(storage)[0]?.ids).toEqual(
+      ['a', 'b', 'c', 'd', 'e'].map((c) => c.repeat(22)),
+    );
+  });
+
+  it('should write distinct ids too', () => {
+    const storage = memoryStorage();
+    const x = 'X'.repeat(22);
+    const y = 'Y'.repeat(22);
+
+    const written = savePlaylist(storage, { ids: [x, x, y], name: 'Playlist', savedAt: 1_000 });
+
+    expect(written[0]?.ids).toEqual([x, y]);
+    expect(loadLibrary(storage)[0]?.ids).toEqual([x, y]);
   });
 
   it('should clear the key after rejecting a corrupt payload', () => {
