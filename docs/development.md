@@ -265,10 +265,10 @@ Six things about the card cannot be asserted from a test, and the last one canno
 | Check                                                                                                                                        | Status                                                                 |
 | -------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
 | Flip and Next                                                                                                                                | **Verified 2026-08-05 — works**                                        |
-| Play and pause; audio keeps playing through a flip and stops on advance                                                                      | Pending — needs a real deck                                            |
-| **Devtools DOM search on an UNFLIPPED card** for the current track's title, artist and year — all three must be absent, not merely invisible | Pending                                                                |
+| Play and pause; audio keeps playing through a flip and stops on advance                                                                      | **Verified 2026-10-19** — Playwright, headless Chrome, production      |
+| **Devtools DOM search on an UNFLIPPED card** for the current track's title, artist and year — all three must be absent, not merely invisible | **Verified 2026-10-19** (title and artist) — Playwright, production    |
 | **Scan the QR with a real phone** and confirm it opens the right track in Spotify                                                            | **Verified 2026-08-05 on the PNG** — owed again for the SVG, see below |
-| A preview-less track disables Play/Pause while Exit and the QR stay live (rare — ~0.5% of tracks; Reggae Classics has two)                   | Pending                                                                |
+| A preview-less track disables Play/Pause while Exit and the QR stay live (rare — ~0.5% of tracks; Reggae Classics has two)                   | **Verified 2026-10-19** — Disney: top 100, Playwright, production      |
 | The four year states render distinctly (plain / unconfirmed / "check this one yourself" / still looking up)                                  | Pending                                                                |
 | **On Android (or Chrome's media panel): start playback and confirm the notification and lock screen show no track title or artist**          | Pending — needs real hardware                                          |
 
@@ -317,16 +317,18 @@ The three back rows are jsdom-proof in the usual way: it computes no layout, so 
 
 The end-to-end checks worth running by hand, each pinning a decision:
 
-| Check                                                                                            | Status  |
-| ------------------------------------------------------------------------------------------------ | ------- |
-| Every suggested playlist loads and deals a deck (re-run whenever the set is edited)              | Pending |
-| A `spotify.link` URL from a phone's share sheet loads the right playlist                         | Pending |
-| A legacy `/user/{user}/playlist/{id}` URL loads instead of erroring                              | Pending |
-| A private/deleted playlist and a track URL each produce their inline error copy                  | Pending |
-| The truncation notice appears for a 100-track playlist and **never blocks Start**                | Pending |
-| Exit returns to the landing screen; finishing the deck reaches the end screen                    | Pending |
-| **Restart re-deals with a fresh order and costs no lookups** — watch the network tab stay silent | Pending |
-| Reload mid-deck and confirm the session resumes on the same card                                 | Pending |
+| Check                                                                                            | Status                                          |
+| ------------------------------------------------------------------------------------------------ | ----------------------------------------------- |
+| Every suggested playlist loads and deals a deck (re-run whenever the set is edited)              | **Verified 2026-10-19** (all 13, production)    |
+| A `spotify.link` URL from a phone's share sheet loads the right playlist                         | Pending                                         |
+| A legacy `/user/{user}/playlist/{id}` URL loads instead of erroring                              | **Verified 2026-10-19** (production API)        |
+| A private/deleted playlist and a track URL each produce their inline error copy                  | **Verified 2026-10-19** (production)            |
+| The truncation notice appears for a 100-track playlist and **never blocks Start**                | **Verified 2026-10-19** (production)            |
+| Exit returns to the landing screen; finishing the deck reaches the end screen                    | **Verified 2026-10-19** (production)            |
+| **Restart re-deals with a fresh order and costs no lookups** — watch the network tab stay silent | **Verified 2026-10-19** (zero `/api/` requests) |
+| Reload mid-deck and confirm the session resumes on the same card                                 | **Verified 2026-10-19** (production)            |
+
+Verified 2026-10-19 with Playwright driving headless Chrome against production. Mouse drags and keyboard only; nothing here was touched by a thumb, so the gesture table above stays Pending. The same run counted **one `/api/year` request per card per stage, never two of a stage in flight** on a cold 50-card deck (35 `resolve`, 4 `verify`, all 200), which is the double-crawl row below.
 
 **Step 15 of `plan.phase-4-6-screens.md` (deleted 2026-10-07; in git history) is owed and needs a preview deployment**, not a dev server — it is Phase 3's progressive-loading verification, deferred until there was a UI to exercise it through. Deploy a preview **with Upstash configured** (the cache and the gate are backed by the same two variables) and confirm:
 
