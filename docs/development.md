@@ -110,7 +110,7 @@ curl -s "http://localhost:3000/api/playlist?url=https://spotify.link/YOUR_CODE_H
   | grep -o '"name":"[^"]*"' | head -1
 
 # And the SSRF guard, which you can fake: a non-Spotify host is refused before
-# any request is made, so this must be 502 upstream-unavailable and must NOT
+# any request is made, so this must be 400 invalid-url and must NOT
 # reach example.com. (The unit tests cover this properly; this is the eyeball.)
 curl -i "http://localhost:3000/api/playlist?url=https://spotify.link.evil.example/abc"
 ```

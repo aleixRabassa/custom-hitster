@@ -115,7 +115,7 @@ false and showed the front door with no warning. Seeding the flag from the link 
 status closes all three; a `deckLink` check anywhere reopens one. It is ephemeral: a reload shows the front door again, and a "seen it" flag
 in `localStorage` was deliberately not built. Four things to know. **The PDF is `public/year-cards-1970-2033.pdf`, served statically and NOT precached** —
 the worker's `globPatterns` has no `pdf` on purpose (240 kB on every install, for a file most players
-never download), and `vercel.json`'s SPA rewrite already excludes any path with a dot. **It is pinned
+never download), and `vercel.json`'s SPA rewrite already excludes any path with a dot. **`vercel.json` also sets `Content-Disposition: attachment` on it, with no filename** (2026-10-19): Vercel's automatic `inline; filename="year-cards-1970-2033.pdf"` wins over the link's `download` attribute, so the file saved without the `jitster-` prefix; a filename in our header would give the name a second home beside `copy.welcome.yearCardsFileName`. **It is pinned
 `binary` in `.gitattributes`** (2026-09-19), because a PDFsharp file has no NUL in its first 8 kB, so git's
 text heuristic let `core.autocrlf` strip its 23 carriage returns on add — the blob shipped 23 bytes short
 with a broken `startxref` from `fbb4860` until the re-add; any future NUL-free binary needs the same line.

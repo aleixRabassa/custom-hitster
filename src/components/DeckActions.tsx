@@ -394,6 +394,43 @@ export function DeckActions({
     wasPrintViewOpenRef.current = isPrintViewOpen;
   }, [isPrintViewOpen, isConfirmStep]);
 
+  /**
+   * The print view's primary button (the confirm "Print", or "Print so far" in step 1) -- only one
+   * of the two is ever rendered, so one ref serves both.
+   *
+   * ===========================================================================
+   *  PRESSING IT DISABLES THE BUTTON THAT HAS FOCUS, AND CHROME MOVES FOCUS TO
+   *  `<body>` FOR THE WHOLE EXPORT -- AND NEVER GIVES IT BACK (measured in
+   *  production, 2026-10-19: activeElement is BODY while working and after the
+   *  download).
+   *
+   *  Same lost place as the cases above, so the same answer: while the export
+   *  works, focus goes to Cancel (never disabled), and when it stops it goes back
+   *  to the primary button. `hasMovedFocusToCancelRef` is the proof that WE put
+   *  it there: a player who tabbed elsewhere mid-export is not yanked back, and
+   *  neither is one who is on Cancel by their own choice.
+   * ===========================================================================
+   */
+  const printPrimaryRef = useRef<HTMLButtonElement>(null);
+  const hasMovedFocusToCancelRef = useRef(false);
+  const isExportWorking = pdf.status === 'working';
+  useEffect(() => {
+    if (!isPrintViewOpen) {
+      hasMovedFocusToCancelRef.current = false;
+      return;
+    }
+    const active = document.activeElement;
+    if (isExportWorking) {
+      if (!active || active === document.body || active === printPrimaryRef.current) {
+        cancelRef.current?.focus();
+        hasMovedFocusToCancelRef.current = true;
+      }
+    } else if (hasMovedFocusToCancelRef.current) {
+      hasMovedFocusToCancelRef.current = false;
+      if (active === cancelRef.current) printPrimaryRef.current?.focus();
+    }
+  }, [isPrintViewOpen, isExportWorking]);
+
   const [copyState, setCopyState] = useState<CopyState>('idle');
   /**
    * The link, held only once a copy has FAILED.
@@ -622,6 +659,7 @@ export function DeckActions({
             */}
             {isConfirmStep ? (
               <button
+                ref={printPrimaryRef}
                 type="button"
                 onClick={handleExport}
                 // Disabled only while working: `exportDeck` bumps its own generation counter, so a
@@ -637,6 +675,7 @@ export function DeckActions({
               </button>
             ) : (
               <button
+                ref={printPrimaryRef}
                 type="button"
                 onClick={() => setIsConfirmingPrint(true)}
                 disabled={pdf.status === 'working'}

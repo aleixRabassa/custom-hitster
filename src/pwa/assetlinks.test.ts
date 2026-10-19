@@ -245,4 +245,17 @@ describe('the digital asset links statement', () => {
     expect(typeof source).toBe('string');
     expect(source as string).toContain('[^.]*');
   });
+
+  it('should send the year-cards PDF as an attachment with no filename', () => {
+    // A `filename` in Content-Disposition beats the link's `download` attribute (HTML download
+    // algorithm), and Vercel's automatic inline header names the file `year-cards-1970-2033.pdf`.
+    // The name lives in `copy.ts`, so the header must carry none.
+    const config = JSON.parse(readFileSync(join(repoRoot, 'vercel.json'), 'utf8')) as {
+      headers?: { source?: string; headers?: { key: string; value: string }[] }[];
+    };
+
+    const rule = config.headers?.find((entry) => entry.source === '/year-cards-1970-2033.pdf');
+    const disposition = rule?.headers?.find((h) => h.key === 'Content-Disposition');
+    expect(disposition?.value).toBe('attachment');
+  });
 });

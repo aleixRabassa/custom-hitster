@@ -987,6 +987,39 @@ describe('DeckActions', () => {
       );
     });
 
+    it('should move focus to Cancel while the export works, and back to Print when it finishes', async () => {
+      // Pressing Print disables the focused button; Chrome then leaves focus on `<body>` for good
+      // (measured in production, 2026-10-19). The export is held pending so `working` stays.
+      let release: () => void = () => {};
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      toDataURLMock.mockImplementation((text) =>
+        gate.then(() => `data:image/png;base64,QR(${text})`),
+      );
+      renderActions();
+
+      fireEvent.click(screen.getByRole('button', { name: COPY.deckActions.print }));
+      const print = screen.getByRole('button', { name: COPY.deckActions.confirmPrint });
+      print.focus();
+      fireEvent.click(print);
+
+      await waitFor(() => {
+        expect((print as HTMLButtonElement).disabled).toBe(true);
+      });
+      expect(document.activeElement?.textContent).toBe(COPY.deckActions.cancel);
+
+      release();
+      await waitFor(() => {
+        expect(saveMock).toHaveBeenCalled();
+      });
+      await waitFor(() => {
+        expect(document.activeElement).toBe(
+          screen.getByRole('button', { name: COPY.deckActions.confirmPrint }),
+        );
+      });
+    });
+
     it('should keep the option across a Cancel, for as long as the panel is open', () => {
       // The option is the PANEL's state, not the view's: Cancel and Print again find it as left.
       renderActions();

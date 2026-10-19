@@ -6,6 +6,12 @@
       "maxDuration": 30
     }
   },
+  "headers": [
+    {
+      "source": "/year-cards-1970-2033.pdf",
+      "headers": [{ "key": "Content-Disposition", "value": "attachment" }]
+    }
+  ],
   "rewrites": [
     {
       "source": "/((?!api/|@)[^.]*)",

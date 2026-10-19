@@ -2486,3 +2486,10 @@ Found by testing https://playlistjitster.vercel.app.
 - An entry such as `['X','X','Y']` in `jitster:library:v1` read as "+2 playlists", never matched the deduped session deck in `isPlaylistSaved` (`savedDeckKey` differs), and a second save added another row.
 - `playlist-library.ts` now dedupes ids on read (`validateIds`, keeping the first occurrence, before the five-id cap) and on write (`savePlaylist`, through the same `distinctCapped`). The read does not rewrite storage: the entry is fixed in memory and the store is repaired by the next write.
 - Dedupe makes old and new entries collide on `savedDeckKey`. `validateLibrary` used to reject the whole library on a duplicate key; it now keeps the first entry met (the most recent, since the list is most-recent-first) and drops the later one. The test that pinned "duplicate key clears the library" was reversed.
+
+## 2026-10-19 — Production test 2: the year-cards PDF name and focus on the print press
+
+- **The welcome screen's PDF saved as `year-cards-1970-2033.pdf`**, not `jitster-year-cards-1970-2033.pdf`. Cause: Vercel serves static files with `Content-Disposition: inline; filename="year-cards-1970-2033.pdf"`, and a Content-Disposition filename beats `<a download>` in the HTML download algorithm.
+- **Fix**: a `headers` entry in `vercel.json` sets `Content-Disposition: attachment` with no filename, so the `download` attribute names the file (the name stays in `copy.ts`). Pinned in `src/pwa/assetlinks.test.ts`. Check after a deploy with `curl -I` on the PDF, or Playwright's `suggestedFilename()`.
+- **Print press dropped focus to `<body>`**: the confirm "Print" (and "Print so far") is disabled while the export works, and Chrome moved focus to body for the whole export and after the download. `DeckActions` now moves focus to Cancel while working and back to the primary button when the export stops, only if it was the one that moved it.
+- **A stale doc line was corrected**: `docs/development.md` said the SSRF example `https://spotify.link.evil.example/abc` returns 502 `upstream-unavailable`; the code (`isSpotifyShortLink`) and production return 400 `invalid-url`, before any request.
