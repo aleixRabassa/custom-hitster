@@ -2540,3 +2540,11 @@ Found by testing https://playlistjitster.vercel.app.
 - Nothing in the build reads a `.md` or `docs/` file (grep of `src/`, `api/`, `shared/`, `vite.config.ts`, `index.html`, `public/`: only comments mention them).
 - Local exit codes, running the exact string with `sh -c` (HEAD substituted by the SHA): prev 4ac3119 / head 772ee4e (docs only) = 0; dec6c2b / 4ac3119 (vercel.json + src) = 1; d8744d1 / 772ee4e (spans code commits) = 1; empty previous = 1; 0000000 (missing commit) = 1.
 - Not verified on Vercel itself: the first real docs-only push should show Canceled.
+
+## 2026-10-20 — The stage-less `/api/year` path is gone
+
+- **Removed:** the MusicBrainz-only branch of `api/year.ts` (no `stage`), its legacy `ERROR_MESSAGE` table, its per-tier `CACHE_CONTROL` table and the `invalidRequestMessage` ternary. No client has sent a request without `stage` since 2026-09-30. Kept: `resolveYear()`, `api/_lib/musicbrainz.ts`, `ttlFor`, the `mbyear:` cache and `MusicBrainzLookupResult`, all used by the MusicBrainz provider.
+- **The hang trap:** a missing `stage` was never rejected (only a present-but-invalid one is), so deleting the legacy branch alone leaves the handler falling off its `try` without answering, and the request hangs to the function timeout. The stub answers explicitly, before the `title`/`artist` checks.
+- **500, not 400:** a request with no `stage` now answers `500` `{ code: 'not-configured' }` with `Cache-Control: no-store`. The pre-vote client (git `104c1e2`, old `resolver.ts`) settles `invalid-request` as a final null and would drop every card, collapsing the deck to `no-years-found`; `not-configured` makes it stop lookups cleanly and play a yearless deck. A present-but-invalid `stage` stays a 400.
+- **Sunset:** the stub may become a 400 after 2026-12-01. Old edge copies of the 30-day legacy body are gone, because Vercel scopes its CDN cache per deployment.
+- **Consequence:** `MUSICBRAINZ_USER_AGENT` is now only ever skipped with a warning; the loud 500 is for "every provider unconfigured".

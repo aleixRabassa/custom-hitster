@@ -271,13 +271,6 @@ describe('ttlFor', () => {
     expect(edge(true, false, true)).toBe(Math.min(...ttls));
     // The short window is itself shorter than every entry it could be built from.
     expect(PROVISIONAL_EDGE_SECONDS).toBeLessThan(NO_YEAR_TTL_SECONDS);
-
-    // The stage-less legacy path keeps its own per-tier table in `api/year.ts`, unchanged
-    // byte for byte (`api/_lib/year-endpoint.test.ts` pins the header strings); the same rule holds there.
-    const legacyEdgeSeconds = { high: 2_592_000, low: 86_400, none: 3_600 };
-    expect(ttlFor(HIGH)).toBeGreaterThanOrEqual(legacyEdgeSeconds.high);
-    expect(ttlFor(LOW)).toBeGreaterThanOrEqual(legacyEdgeSeconds.low);
-    expect(ttlFor(NONE)).toBeGreaterThanOrEqual(legacyEdgeSeconds.none);
   });
 });
 

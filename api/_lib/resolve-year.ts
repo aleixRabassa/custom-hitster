@@ -6,7 +6,8 @@
  * gives for keeping handlers thin — logic that grows in a handler is logic that cannot be
  * tested. Everything it depends on is injected, so the ordering guarantees below are
  * assertions in `api/_lib/resolve-year.test.ts` instead of prose. `api/year.ts` stays what
- * it should be: a method guard, input validation, and a status mapping.
+ * it should be: a method guard, input validation, and a status mapping. Today this is the
+ * MusicBrainz provider's engine (`musicbrainz-provider.ts`), not an endpoint of its own.
  */
 
 import {
@@ -50,7 +51,7 @@ export async function resolveYear(
   // ---- Configuration is checked BEFORE the cache ------------------------------
   // The adapter guards this too, but a check there alone is reached only on a cache MISS,
   // so a deployment with no `MUSICBRAINZ_USER_AGENT` would serve warm tracks happily and
-  // 500 on cold ones. That reads as an intermittent fault, which is precisely the
+  // fail cold ones. That reads as an intermittent fault, which is precisely the
   // confusing-to-diagnose failure decision 17 exists to prevent. A misconfigured
   // deployment can resolve nothing new, so it should say so on every request.
   if (deps.userAgent.trim() === '') {

@@ -244,7 +244,7 @@ describe('keyed gates', () => {
   });
 
   it('should keep the MusicBrainz defaults unchanged', async () => {
-    // The stage-less legacy path and the staged path share this one budget, so the defaults
+    // Every MusicBrainz caller shares this one budget, so the defaults
     // every factory falls back to are MusicBrainz's, and they are exactly what they were.
     expect(PROVIDER_GATES.musicbrainz).toEqual({
       key: 'mbgate:v1',

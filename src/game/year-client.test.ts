@@ -98,9 +98,8 @@ describe('lookupYear', () => {
   });
 
   it('should send the stage', async () => {
-    // ALWAYS sent (plan.year-fetch-rework-game.md step 3): a stage-less request reaches the
-    // server's legacy MusicBrainz-only path, whose body has no `final`, so this client must never
-    // make one. Both values, so neither is hard-coded.
+    // ALWAYS sent (plan.year-fetch-rework-game.md step 3): a stage-less request gets the server's
+    // 500 stub, never a year, so this client must never make one. Both values, so neither is hard-coded.
     for (const stage of ['resolve', 'verify'] as const) {
       const { fetchImpl, urls } = stubFetch();
 
@@ -278,13 +277,13 @@ describe('lookupYear', () => {
   });
 
   it('should reject a 200 without a boolean final as unexpected-payload', async () => {
-    // `final` is the ONLY field that tells pending, provisional and final apart. The body most
-    // likely to lack it is the stage-less legacy one, and guessing either way is wrong: "true"
+    // `final` is the ONLY field that tells pending, provisional and final apart. A body without it
+    // is not this server's, and guessing either way is wrong: "true"
     // turns every cached null into a dropped card, "false" verifies a card for ever.
-    const legacy: Record<string, unknown> = { ...SUCCESS };
-    delete legacy['final'];
+    const withoutFinal: Record<string, unknown> = { ...SUCCESS };
+    delete withoutFinal['final'];
 
-    for (const body of [legacy, { ...SUCCESS, final: 'true' }, { ...SUCCESS, final: null }]) {
+    for (const body of [withoutFinal, { ...SUCCESS, final: 'true' }, { ...SUCCESS, final: null }]) {
       const { fetchImpl } = stubFetch({ body });
 
       expect(await lookupYear(TRACK, { fetchImpl, stage: 'resolve' })).toEqual({

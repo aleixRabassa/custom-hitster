@@ -9,32 +9,24 @@ import { createDeezerLookup } from './_lib/deezer.js';
 import { createItunesLookup } from './_lib/itunes.js';
 import { createMusicBrainzLookup } from './_lib/musicbrainz-provider.js';
 import { PROVIDER_GATES, createRateLimitGate } from './_lib/rate-limit.js';
-import { resolveYear } from './_lib/resolve-year.js';
 import { runStage } from './_lib/year-pipeline.js';
 import type { ProviderRegistry } from './_lib/provider-lookup.js';
-import type {
-  MusicBrainzLookupResult,
-  YearErrorCode,
-  YearErrorResult,
-  YearStage,
-} from '../shared/types.js';
+import type { YearErrorCode, YearErrorResult, YearStage } from '../shared/types.js';
 
 /**
  * `GET /api/year?title=…&artist=…&durationMs=…[&stage=resolve|verify]`
  *
  * Resolves ONE track's original release year. Deliberately thin, like `api/playlist.ts`:
  * it guards the method, validates the query, delegates, and translates a typed error union
- * into HTTP. Two delegates, one per path:
+ * into HTTP. The one delegate is `runStage()` in `api/_lib/year-pipeline.ts`, which asks the
+ * providers of `YEAR_PROVIDER_PLAN` and returns the vote (plan.year-fetch-rework-server.md).
+ * `resolve` answers fast, possibly provisionally; `verify` asks the precision provider and is
+ * final unless a provider failed.
  *
- * - **No `stage`**: `resolveYear()`, MusicBrainz alone, exactly as before the provider vote.
- *   All the ordering that matters there -- cache before gate, the tier ladder, negatives
- *   cached too -- lives in `api/_lib/resolve-year.ts`, where it is unit-tested.
- * - **`stage=resolve` or `stage=verify`**: `runStage()` in `api/_lib/year-pipeline.ts`, which
- *   asks the three providers of `YEAR_PROVIDER_PLAN` and returns the vote
- *   (plan.year-fetch-rework-server.md). `resolve` answers fast, possibly provisionally;
- *   `verify` asks the precision provider and is final unless a provider failed.
+ * A request with NO `stage` is the pre-vote client's URL. It gets a 500 `not-configured` stub
+ * (see `STAGE_REQUIRED_MESSAGE`), not an answer; sunset 2026-12-01.
  *
- * If logic starts accumulating here, it belongs in one of those two modules or in `shared/`.
+ * If logic starts accumulating here, it belongs in `year-pipeline.ts` or in `shared/`.
  *
  * ONE TRACK PER REQUEST, not a batch (decision 4). The client sequences the calls itself.
  * That keeps this endpoint trivial, makes every response individually edge-cacheable, needs
@@ -58,27 +50,13 @@ const ERROR_STATUS: Record<YearErrorCode, number> = {
   'unexpected-payload': 502,
 };
 
-/**
- * Safe, short, hand-written text per code, for the STAGE-LESS legacy path. Never raw upstream
- * output, never the Upstash token. Unchanged byte for byte: that path is MusicBrainz alone,
- * so "MusicBrainz" is still the accurate word in it.
- */
-const ERROR_MESSAGE: Record<YearErrorCode, string> = {
-  'invalid-request': 'A title and an artist are required.',
-  'rate-limited': 'Too many year lookups at once. Retry shortly.',
-  'not-configured': 'MUSICBRAINZ_USER_AGENT is not set on the server, so year lookups cannot run.',
-  'upstream-unavailable': 'MusicBrainz could not be reached right now. Please try again.',
-  'unexpected-payload': 'MusicBrainz returned something unexpected. This is a bug on our side.',
-};
-
-/** The codes the staged path can return. It never answers `unexpected-payload`: see below. */
+/** The codes this endpoint can return. It never answers `unexpected-payload`: see below. */
 type StagedErrorCode = Exclude<YearErrorCode, 'unexpected-payload'>;
 
 /**
- * The same, for `?stage=`. Separate because three of the legacy sentences name MusicBrainz,
- * and on this path the code means something wider: `not-configured` is "EVERY provider is
- * unconfigured" and `upstream-unavailable` is "every provider that was asked failed". A
- * single provider's `unexpected-payload` is folded into the second (the driver treats it as
+ * Safe, short, hand-written text per code. Never raw upstream output, never the Upstash
+ * token. `not-configured` is "EVERY provider is unconfigured" and `upstream-unavailable` is
+ * "every provider that was asked failed". A single provider's `unexpected-payload` is folded into the second (the driver treats it as
  * one more failure), so it has no entry here.
  */
 const STAGED_ERROR_MESSAGE: Record<StagedErrorCode, string> = {
@@ -88,6 +66,15 @@ const STAGED_ERROR_MESSAGE: Record<StagedErrorCode, string> = {
   'upstream-unavailable': 'No year provider could be reached right now. Please try again.',
 };
 
+/**
+ * The body of the stage-less stub. The pre-vote client (git 104c1e2) settles `not-configured`
+ * by stopping lookups and playing a yearless deck, but settles `invalid-request` as a final
+ * null and drops EVERY card -- hence a 500, never a 400. Sunset 2026-12-01: after that it may
+ * become a 400 (decisions.md, "The stage-less /api/year path is gone").
+ */
+const STAGE_REQUIRED_MESSAGE =
+  'This endpoint needs stage=resolve or stage=verify. Reload the app to update it.';
+
 const STAGES: readonly YearStage[] = ['resolve', 'verify'];
 
 /**
@@ -96,39 +83,18 @@ const STAGES: readonly YearStage[] = ['resolve', 'verify'];
  */
 const MAX_FIELD_LENGTH = 300;
 
-/**
- * Edge caching for the STAGE-LESS path, tiered by how likely the answer is to change.
- *
- * A `high`-confidence year is a historical fact, so the edge can hold it for a long time and
- * absorb repeat requests ahead of both Redis and MusicBrainz. A `none` result is the one
- * most likely to improve as MusicBrainz's data does, so it gets a short window. `low` sits
- * between: correct often enough to cache, wrong often enough not to pin for a month.
- *
- * **Every value here must be <= the matching TTL in `api/_lib/cache.ts`.** An edge miss is
- * free -- it falls through to Redis -- while a Redis miss costs two requests against a
- * 1 req/s budget shared by every user, so Redis must never be the one to expire first.
- * `should never let the edge outlive the entries an answer was built from` in
- * `cache.test.ts` checks these values against the Redis TTLs. The staged path does not use
- * this table: its rule is `stagedEdgeMaxAgeSeconds()`, per answer.
- */
-const CACHE_CONTROL: Record<'high' | 'low' | 'none', string> = {
-  high: 'public, s-maxage=2592000, stale-while-revalidate=86400',
-  low: 'public, s-maxage=86400, stale-while-revalidate=86400',
-  none: 'public, s-maxage=3600, stale-while-revalidate=3600',
-};
-
-/** One day: the longest stale window the legacy table ever grants, kept as the staged cap. */
+/** One day: the longest stale window an answer is ever granted. */
 const MAX_STALE_WHILE_REVALIDATE_SECONDS = 86_400;
 
 /**
- * The staged path's `Cache-Control`. The max-age comes from `stagedEdgeMaxAgeSeconds()` --
+ * The `Cache-Control` of an answer. The max-age comes from `stagedEdgeMaxAgeSeconds()` --
  * bounded by the shortest TTL of the entries a final answer was built from, ~60 s for a
  * provisional one or a final reached with a provider skipped, and `0` for a provisional one
  * built on a provider that failed or was busy this call. `0` is sent as `no-store`, never as
  * `s-maxage=0`: the client retries that answer on the same URL within a second or two, and
  * nothing anywhere -- edge or browser -- may hand a retry the body it is retrying. The stale
- * window mirrors the legacy table's shape: never longer than the max-age, never longer than
- * a day.
+ * window is never longer than the max-age, never longer than a day. Every value must stay
+ * <= the matching TTL in `api/_lib/cache.ts` (`cache.test.ts` checks it).
  */
 function stagedCacheControl(maxAgeSeconds: number): string {
   if (maxAgeSeconds <= 0) return 'no-store';
@@ -141,17 +107,19 @@ function stagedCacheControl(maxAgeSeconds: number): string {
  * rather than throwing it away on every invocation -- which would make it useless -- and so
  * the "which adapter did we pick" lines are logged once instead of on every call.
  *
- * ONE cache object backs both paths and all three providers: `resolveYear()` writes the
- * `mbyear:` entry the staged path's batched read looks for (see `api/_lib/cache.ts`).
- * MusicBrainz's gate is likewise ONE object shared by both paths, because MusicBrainz counts
- * our requests, not our endpoints.
+ * ONE cache object backs all three providers: `resolveYear()` inside the MusicBrainz
+ * provider writes the `mbyear:` entry the batched read looks for (see `api/_lib/cache.ts`).
  */
 const cache = createCache();
 const gate = createRateLimitGate();
 const deezerGate = createRateLimitGate(process.env, fetch, PROVIDER_GATES.deezer);
 const itunesGate = createRateLimitGate(process.env, fetch, PROVIDER_GATES.itunes);
 
-/** The User-Agent, read per request -- see the legacy call below for why. */
+/**
+ * The User-Agent, read per request rather than at module scope so an unset variable is a
+ * skipped provider on every call, instead of a throw during cold start where the only symptom
+ * is FUNCTION_INVOCATION_FAILED.
+ */
 const readUserAgent = (): string => process.env['MUSICBRAINZ_USER_AGENT'] ?? '';
 
 /**
@@ -205,29 +173,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    // `undefined` means the parameter is ABSENT, which selects the legacy path. Present but
-    // not one of the two stages -- an empty `?stage=` included -- is a bad request, never a
-    // silent fall back to the legacy path, which answers a different body.
+    // `undefined` means the parameter is ABSENT, answered by the stub below. Present but not
+    // one of the two stages -- an empty `?stage=` included -- is a bad request.
     const rawStage = firstValue(req.query['stage']);
     const stage = STAGES.find((candidate) => candidate === rawStage);
     if (rawStage !== undefined && stage === undefined) {
       sendError(res, 'invalid-request', STAGED_ERROR_MESSAGE['invalid-request']);
       return;
     }
-    const invalidRequestMessage =
-      stage === undefined
-        ? ERROR_MESSAGE['invalid-request']
-        : STAGED_ERROR_MESSAGE['invalid-request'];
+    // Explicit on purpose: a handler that fell off the `try` here would hang to the function
+    // timeout instead of answering. Checked before the title and artist, so the stub is
+    // answered whatever else the query carries.
+    if (stage === undefined) {
+      res.setHeader('Cache-Control', 'no-store');
+      res.status(ERROR_STATUS['not-configured']).json({
+        code: 'not-configured',
+        message: STAGE_REQUIRED_MESSAGE,
+      } satisfies YearErrorResult);
+      return;
+    }
 
     const title = firstValue(req.query['title'])?.trim() ?? '';
     const artist = firstValue(req.query['artist'])?.trim() ?? '';
 
     if (title === '' || artist === '') {
-      sendError(res, 'invalid-request', invalidRequestMessage);
+      sendError(res, 'invalid-request', STAGED_ERROR_MESSAGE['invalid-request']);
       return;
     }
     if (title.length > MAX_FIELD_LENGTH || artist.length > MAX_FIELD_LENGTH) {
-      sendError(res, 'invalid-request', invalidRequestMessage);
+      sendError(res, 'invalid-request', STAGED_ERROR_MESSAGE['invalid-request']);
       return;
     }
 
@@ -236,65 +210,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const rawDuration = Number.parseInt(firstValue(req.query['durationMs']) ?? '', 10);
     const durationMs = Number.isFinite(rawDuration) && rawDuration > 0 ? rawDuration : undefined;
 
-    if (stage !== undefined) {
-      await handleStage(res, stage, { title, artist, durationMs });
-      return;
-    }
-
-    // ---- The stage-less LEGACY path: MusicBrainz alone, byte for byte ------------------
-    // Kept for tabs still running the client from before the provider vote: the service
-    // worker WAITS rather than calling `skipWaiting` (see `vite.config.ts`), so such a tab
-    // lives until every tab of the app is closed, and it keeps calling this URL with no
-    // `stage`. That client drops any card that comes back `null` and has never read `final`,
-    // so it must keep getting exactly the body, headers and 30-day edge cache it always got.
-    //
-    // THIS PATH STILL ANSWERS THE LOUD `not-configured` 500 ON A MISSING
-    // `MUSICBRAINZ_USER_AGENT`, ON PURPOSE, while the staged path skips MusicBrainz with a
-    // warning. Both follow the same rule -- only "every provider skipped" is loud -- and this
-    // path HAS only one provider, so skipping it is every provider skipped. Do not "fix" one
-    // path to match the other.
-    const outcome = await resolveYear(
-      { title, artist, durationMs },
-      {
-        cache,
-        gate,
-        // The real global `fetch`; injected so the adapter's tests run offline.
-        fetchImpl: fetch,
-        // Read per request rather than at module scope so an unset variable is reported as a
-        // clean 500 on every call, instead of throwing during cold start where the only
-        // symptom is FUNCTION_INVOCATION_FAILED.
-        userAgent: readUserAgent(),
-      },
-    );
-
-    if (!outcome.ok) {
-      sendError(res, outcome.code, ERROR_MESSAGE[outcome.code], outcome.retryAfterMs);
-      return;
-    }
-
-    // Built field by field rather than spread, so an added internal field can never leak.
-    const body: MusicBrainzLookupResult = {
-      year: outcome.result.year,
-      confidence: outcome.result.confidence,
-      cached: outcome.result.cached,
-      cleanedTitle: outcome.result.cleanedTitle,
-      stripped: outcome.result.stripped,
-    };
-    if (outcome.result.source !== undefined) body.source = outcome.result.source;
-    if (outcome.result.reason !== undefined) body.reason = outcome.result.reason;
-    // Set only when a fallback query against a rewritten title found the year -- today, a
-    // dropped remix suffix. Always accompanied by `confidence: 'low'`.
-    if (outcome.result.viaTitle !== undefined) body.viaTitle = outcome.result.viaTitle;
-
-    res.setHeader('Cache-Control', CACHE_CONTROL[body.confidence]);
-    res.status(200).json(body);
+    await handleStage(res, stage, { title, artist, durationMs });
   } catch {
     res.status(500).json({ code: 'internal-error', message: 'Something went wrong.' });
   }
 }
 
 /**
- * The staged path: `runStage()` and its status mapping.
+ * `runStage()` and its status mapping.
  *
  * | `runStage()`                         | HTTP                                             |
  * | ------------------------------------ | ------------------------------------------------ |

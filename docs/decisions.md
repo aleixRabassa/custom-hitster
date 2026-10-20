@@ -914,7 +914,7 @@ incapable of testing it. Measured 21 of 22 exact live. **Since 2026-09-30 that `
 not the card's answer** (the provider-vote block below): on the staged `/api/year` a MusicBrainz
 `high` is confirmed only when a second provider agrees, and alone it is kept as the strongest
 UNCONFIRMED answer — `low` on the wire. Everything above is still true of MusicBrainz's own scorer
-and of the stage-less legacy path, which returns the ladder's answer as it always did.
+and of `resolveYear()`, which the MusicBrainz provider still wraps whole (the stage-less path that returned the ladder's answer directly was removed 2026-10-20).
 
 **AND AS OF 2026-09-30 THE CLEANER READS THE LAST TRAILING SEGMENT FIRST, AND AS OF 2026-10-01 THE
 QUERY LADDER ASKS THE ARTIST GUESS BEFORE THE UNBOUNDED FULL ARTIST** (`plan.year-fetch-rework-mb-fixes.md`, deleted 2026-10-07; in git history).
@@ -1108,12 +1108,21 @@ Re-adding it is a plan step, a trust tier, a `YearProviderId` member and an adap
   return that null with no gate permit and no fetch when `durationMs` is undefined, because spending a
   Deezer search and a slot on the 3 s global iTunes gate would buy a null known in advance; the
   no-write rule in `withAnswerCache` is the second guard behind them.
-- **The stage-less `/api/year` is the old MusicBrainz-only path, byte for byte, and it stays** for
-  tabs still running the pre-vote client: the service worker waits rather than calling `skipWaiting`,
-  so such a tab lives until every tab closes, and it drops any card that comes back `null`. **It still
-  answers the loud `not-configured` 500 on a missing `MUSICBRAINZ_USER_AGENT`, on purpose** — it has
-  one provider, so skipping it is "every provider skipped", the same rule as the staged path. Do not
-  "fix" one path to match the other.
+- **The stage-less `/api/year` path was REMOVED on 2026-10-20 and is now a one-line stub** (this
+  replaces the earlier block that kept it "byte for byte" for tabs on the pre-vote client). Why it
+  went: no client has sent a request without `stage` since 2026-09-30, and keeping it cost a second
+  code path, a second per-tier `Cache-Control` table and a second `not-configured` rule. The stub: a
+  request with no `stage` answers `500`, body `{ code: 'not-configured', message }`, `Cache-Control:
+no-store`, and asks no provider. **A 500, not a 400, on purpose**: the pre-vote client (git
+  `104c1e2`, old `resolver.ts`) settles `invalid-request` as a final null and would drop EVERY card
+  (the deck collapses to `no-years-found`), while `not-configured` makes it stop lookups cleanly and
+  play a yearless deck. **The stub must answer explicitly**: `stage` absent was never rejected, so
+  deleting the branch alone would let the handler fall off its `try` and hang to the function
+  timeout. A present-but-invalid `stage` keeps its 400 `invalid-request`. **Sunset: after 2026-12-01
+  the stub may become a 400.** Old edge copies of the 30-day legacy body are gone: Vercel scopes its
+  CDN cache per deployment. Kept: `resolveYear()`, `api/_lib/musicbrainz.ts`, `ttlFor` and the
+  `mbyear:` cache, which the MusicBrainz provider uses. `MUSICBRAINZ_USER_AGENT` is therefore only
+  ever skipped with a warning; the loud 500 remains for "every provider unconfigured".
 
 Three as-built facts. **The handler's tests are `api/_lib/year-endpoint.test.ts`, NOT
 `api/year.test.ts`** (the plan's name): `vercel.json` deploys every `api/*.ts` as a function, so a test
@@ -1518,7 +1527,7 @@ a reason to touch one of them.
 **Environment variables** — reference in [`docs/api.md`](./api.md), annotated in `.env.example`
 
 - **The provider vote added NO variable (2026-09-30).** Deezer and iTunes are keyless public search APIs, the iTunes storefront (`ITUNES_STOREFRONT = 'ES'`) is a constant in `api/_lib/itunes.ts`, and there is no Discogs variable because there is no Discogs. Do not add one "for later".
-- **`MUSICBRAINZ_USER_AGENT` is SKIPPED WITH A WARNING on the staged path and still a LOUD 500 on the stage-less one**, and that asymmetry is the one rule applied to two paths (see the provider-vote block). Unset, `?stage=` leaves MusicBrainz out of the vote, lists it in `skipped` and warns once per cold start — and its batched read still uses `mbyear:` answers already cached, where the legacy path answers 500 even for warm tracks. Set it in development and production all the same; it is sent to a third party on every lookup, so it carries a real contact address.
+- **`MUSICBRAINZ_USER_AGENT` is SKIPPED WITH A WARNING.** Unset, `?stage=` leaves MusicBrainz out of the vote, lists it in `skipped` and warns once per cold start — and its batched read still uses `mbyear:` answers already cached. Only "every provider unconfigured" is the loud `not-configured` 500. (Until 2026-10-20 the stage-less path was a second, loud answer to the same variable; it was removed, see the provider-vote block.) Set it in development and production all the same; it is sent to a third party on every lookup, so it carries a real contact address.
 - **`UPSTASH_REDIS_REST_URL` / `_TOKEN` now back THREE gates and TWO caches**: `mbgate:v1` (1.1 s), `deezergate:v1` (120 ms) and `itunesgate:v1` (3 s), all with a 1.5 s maximum wait, plus the `mbyear:` year cache and the `yearprov:` provider-answer cache. The gates are global rather than per client because every request leaves from Vercel's shared egress IPs, so a provider's per-IP limit is a limit across all players. Production only: without it everything falls back per instance and logs so once. Under `vercel dev` that means `verify` finds none of `resolve`'s answers and re-asks every provider, and iTunes gets unpaced traffic from your own IP (it answers excess with 403s).
 
 **No Spotify credentials exist or are needed.** Spotify's Feb 2026 API changes mean no credentialed path can serve "anyone with a public link", so the app reads the public embed endpoint anonymously. Before adding a `SPOTIFY_CLIENT_ID`, read [`docs/plans/plan.md`](./plans/plan.md) §2 — **it is a product decision, not an oversight.**

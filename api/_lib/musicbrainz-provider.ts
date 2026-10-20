@@ -12,9 +12,8 @@
  *
  *  It cleans the title itself and owns the `mbyear:` cache entry, so handing it
  *  a pre-cleaned title (or re-implementing its steps here) would be a second
- *  copy of logic that `resolve-year.test.ts` pins -- and the stage-less legacy
- *  `/api/year` path still calls it directly. That test file is untouched by
- *  this plan, which is the proof its behaviour did not change.
+ *  copy of logic that `resolve-year.test.ts` pins. (Until 2026-10-20 the
+ *  stage-less `/api/year` path also called it directly; that path is gone.)
  * ===========================================================================
  *
  * AND IT IS NEVER WRAPPED IN THE STORE ANSWER CACHE (`withAnswerCache` in `cache.ts`).
@@ -34,8 +33,7 @@
  * | `not-configured`         | `skipped`, naming `MUSICBRAINZ_USER_AGENT` -- NOT a 500      |
  *
  * The last row is the developer's decision (2026-09-30): every provider is skippable with a
- * warning, MusicBrainz included, and only "every provider failed" is loud. The stage-less
- * legacy path keeps its 500 on purpose -- see `api/year.ts`.
+ * warning, MusicBrainz included, and only "every provider failed" is loud.
  */
 
 import { resolveYear } from './resolve-year.js';

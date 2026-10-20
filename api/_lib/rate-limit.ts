@@ -100,8 +100,8 @@ const MUSICBRAINZ_GATE: GateOptions = {
  * the module header for why a per-player limit would not be one.
  *
  * - **MusicBrainz**: its published policy, 1 req/s, plus the 100 ms of headroom above.
- *   Unchanged, so the stage-less legacy path and the staged path share ONE budget through
- *   one key -- as they must, since MusicBrainz counts requests, not endpoints.
+ *   Unchanged, so every MusicBrainz caller shares ONE budget through one key -- as they
+ *   must, since MusicBrainz counts requests, not endpoints.
  * - **Deezer**: 120 ms, i.e. ~8 req/s. Deezer's documented quota is 50 requests per 5 s,
  *   i.e. 10 req/s, and it enforces it by answering HTTP 200 with a `{"error":{"code":4}}`
  *   body (spike §11.2) -- a refusal `api/_lib/deezer.ts` has to read out of the body, so

@@ -153,9 +153,13 @@ Set `MUSICBRAINZ_USER_AGENT` in `.env.local` first, with a real contact address.
 > behave as documented.
 
 ```bash
-curl "http://localhost:3000/api/year?title=Billie%20Jean&artist=Michael%20Jackson&durationMs=293826"
-# {"year":1982,"confidence":"high","source":"release-group","cached":false,
-#  "cleanedTitle":"Billie Jean","stripped":{…}}
+curl "http://localhost:3000/api/year?stage=resolve&title=Billie%20Jean&artist=Michael%20Jackson&durationMs=293826"
+# {"year":1982,"confidence":"high","source":"vote","agreedBy":[…],"cached":false,
+#  "cleanedTitle":"Billie Jean","stripped":{…},"final":true}
+
+# A request with no stage is the 500 stub (removed 2026-10-20; may become a 400 after 2026-12-01).
+curl -i "http://localhost:3000/api/year?title=Billie%20Jean&artist=Michael%20Jackson"
+# HTTP 500, {"code":"not-configured",…}, Cache-Control: no-store
 ```
 
 Pass `durationMs` whenever you have it. It becomes a `dur:` bound on the MusicBrainz query, and that bound is what makes the answer accurate rather than merely plausible — see [`api.md`](./api.md) §1.
@@ -168,7 +172,7 @@ Watch the cold-start log lines. They tell you which mode you are in, and they ex
 (one such line per gate: mbgate:v1, deezergate:v1, itunesgate:v1)
 ```
 
-The staged path, `?stage=resolve` then `?stage=verify` (2026-09-30). Same query, plus the stage; see [`api.md`](./api.md) §1 for the body:
+`?stage=resolve` then `?stage=verify` (2026-09-30). Same query, plus the stage; see [`api.md`](./api.md) §1 for the body:
 
 ```bash
 # resolve: Deezer and MusicBrainz in parallel. Expect "final":true with "source":"vote" and
@@ -178,7 +182,7 @@ curl -s "http://localhost:3000/api/year?stage=resolve&title=Billie%20Jean&artist
 # verify: asks iTunes (and, with no Upstash, Deezer and MusicBrainz again). Final unless a provider failed.
 curl -s "http://localhost:3000/api/year?stage=verify&title=Billie%20Jean&artist=Michael%20Jackson&durationMs=293826"
 
-# An unknown or empty stage is a 400, never a silent fall back to the legacy body.
+# An unknown or empty stage is a 400 `invalid-request`; an absent one is the 500 stub above.
 curl -i "http://localhost:3000/api/year?stage=&title=Imagine&artist=John%20Lennon"
 ```
 
@@ -188,31 +192,28 @@ The checks worth running by hand, because each pins a decision rather than a val
 
 ```bash
 # A remaster suffix must be stripped AND still resolve — verbatim it returns zero results.
-curl -s ".../api/year?title=Bohemian%20Rhapsody%20-%20Remastered%202011&artist=Queen&durationMs=354320"
+curl -s ".../api/year?stage=resolve&title=Bohemian%20Rhapsody%20-%20Remastered%202011&artist=Queen&durationMs=354320"
 # expect year 1975 and cleanedTitle "Bohemian Rhapsody"
 
 # Nonsense must be year:null / confidence:none with a reason — not a wrong year, not a 500.
-curl -s ".../api/year?title=Zzzqqq%20Nope&artist=Nobody%20At%20All"
+curl -s ".../api/year?stage=resolve&title=Zzzqqq%20Nope&artist=Nobody%20At%20All"
 
-# Unset MUSICBRAINZ_USER_AGENT and restart: every STAGE-LESS call must be 500 not-configured,
-# including ones that would have hit the cache.
-curl -i ".../api/year?title=Billie%20Jean&artist=Michael%20Jackson"
-# ...while the STAGED path skips MusicBrainz instead: a 200 with "skipped":["musicbrainz"], and one
+# Unset MUSICBRAINZ_USER_AGENT and restart: MusicBrainz is skipped, not fatal: a 200 with "skipped":["musicbrainz"], and one
 # "[year-pipeline] musicbrainz skipped: MUSICBRAINZ_USER_AGENT is not set" line per cold start.
 curl -s ".../api/year?stage=resolve&title=Billie%20Jean&artist=Michael%20Jackson&durationMs=293826"
 
 # Wrong verb: 405 with an Allow header.
-curl -i -X POST ".../api/year?title=Imagine&artist=John%20Lennon"
+curl -i -X POST ".../api/year?stage=resolve&title=Imagine&artist=John%20Lennon"
 ```
 
 **These two need Upstash configured**, because both depend on state surviving between requests, which under `vercel dev` it does not (see the warning above). Without it the first prints `cached:false` twice and the second prints five `200`s — that is the dev server, not a bug:
 
 ```bash
 # Same track twice: the second must report cached:true and return instantly.
-curl -s ".../api/year?title=Billie%20Jean&artist=Michael%20Jackson&durationMs=293826" | grep -o '"cached":[a-z]*'
+curl -s ".../api/year?stage=resolve&title=Billie%20Jean&artist=Michael%20Jackson&durationMs=293826" | grep -o '"cached":[a-z]*'
 
 # Several at once: expect a 429 with retryAfterMs, not a hang and not a MusicBrainz 503.
-for i in 1 2 3 4 5; do curl -s -o /dev/null -w "%{http_code} " ".../api/year?title=Imagine&artist=John%20Lennon&durationMs=$((187000+i))"; done
+for i in 1 2 3 4 5; do curl -s -o /dev/null -w "%{http_code} " ".../api/year?stage=resolve&title=Imagine&artist=John%20Lennon&durationMs=$((187000+i))"; done
 ```
 
 **A 429 is expected behaviour under load, not a bug.** MusicBrainz allows 1 request per second and a lookup costs two, so a client firing several cards at once will be told to come back. It carries `retryAfterMs` and a `Retry-After` header; Phase 3's progressive loading is built to back off on exactly this.
@@ -354,7 +355,7 @@ latency. Every row needs a **preview deployment with both Upstash variables conf
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------- |
 | 1   | **Production contention on the shared iTunes and MusicBrainz gates.** The gate is 3 s and a caller waits at most 1.5 s for a permit, so of two `verify` calls that reach iTunes within 3 s of each other, the second must get a **429** with `retryAfterMs` and a `Retry-After` header, never a hang and never an Apple 403 (which would now show up as `"skipped":["itunes"]` on a 200). Only a card whose `resolve` came back `"final":false` reaches iTunes (a Deezer + MusicBrainz agreement never does), so pick two such cards and fire their `verify` requests within 3 s of each other, then read the two statuses. **The MusicBrainz half** (2026-10-01): a MusicBrainz lookup whose first query missed waits up to ~3.5 s (`SPENT_LOOKUP_MAX_WAIT_MS`) for each later permit under contention, where the first query waits 1.5 s and answers 429. Measure how often that longer wait is used, and how long it runs, across concurrent cold `resolve` calls — its frequency is unmeasured, and it is what the idle function time costs. | Pending |
 | 2   | **The second round trip, unmeasured** (spike §12.4). The ~40% of cards that `resolve` does not confirm pay a second `/api/year` call for `verify`, and the spike measured the providers, not that extra request's network and cold-start cost ("a warm Vercel function adds tens of milliseconds; a cold start adds more"). Measure `resolve` then `verify` wall clock on a real deployment, warm and cold, and record it beside §12.4's figures.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | Pending |
-| 3   | **Plan 2 step 15, the smoke test.** One `resolve` and one `verify` each for a **recent** song and an **old** one; confirm the `mbyear:` entries already in Redis are **hit** rather than re-fetched (on a card the legacy path already resolved, `resolve` returns in Deezer's time rather than MusicBrainz's 1.3–3.6 s, and the `mbyear:` key's TTL in the Upstash data browser does not reset; a fully warm card answers `"cached":true`); and confirm a **stage-less** request still answers exactly as before, body and `Cache-Control`. **And (2026-10-01, review B1/W2/W4)**: a non-final staged answer built on a failed or busy provider comes back `Cache-Control: no-store` and a retry of the same URL reaches the function (a fresh `x-vercel-cache: MISS`, not `HIT`); a busy-`resolve` 200 carries `retryAfterMs` in its body. No dev server has an edge cache, so this is observable only here.                                                                                                                                   | Pending |
+| 3   | **Plan 2 step 15, the smoke test.** One `resolve` and one `verify` each for a **recent** song and an **old** one; confirm the `mbyear:` entries already in Redis are **hit** rather than re-fetched (on a card the legacy path already resolved, `resolve` returns in Deezer's time rather than MusicBrainz's 1.3–3.6 s, and the `mbyear:` key's TTL in the Upstash data browser does not reset; a fully warm card answers `"cached":true`); and (superseded 2026-10-20: the stage-less path was removed, and a stage-less request now answers the 500 stub) check that a stage-less request answers `500 not-configured` with `Cache-Control: no-store`. **And (2026-10-01, review B1/W2/W4)**: a non-final staged answer built on a failed or busy provider comes back `Cache-Control: no-store` and a retry of the same URL reaches the function (a fresh `x-vercel-cache: MISS`, not `HIT`); a busy-`resolve` 200 carries `retryAfterMs` in its body. No dev server has an edge cache, so this is observable only here.                      | Pending |
 
 ### The provisional year and the two lanes — built 2026-09-30, all of it Pending
 

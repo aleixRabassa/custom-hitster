@@ -98,9 +98,8 @@ export interface SharedYearCache extends YearCache, ProviderAnswerCache {}
  *  `api/year.ts` sets a `Cache-Control` as well, and the two caches are NOT
  *  interchangeable: an edge miss is free, because it falls through to Redis,
  *  while a Redis miss costs requests against budgets that are global across
- *  all users. So Redis must never expire first. For the staged path the rule
- *  is `stagedEdgeMaxAgeSeconds()` below; for the stage-less legacy path it is
- *  the per-tier table in `api/year.ts`.
+ *  all users. So Redis must never expire first. The edge rule is
+ *  `stagedEdgeMaxAgeSeconds()` below.
  *
  *  An earlier version of this file had two tiers, not three, and violated the
  *  rule in the direction that matters: a `low` year was pinned in Redis for

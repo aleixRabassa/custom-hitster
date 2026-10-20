@@ -222,8 +222,8 @@ export type MusicBrainzYearSource = 'release-group' | 'recording';
  * Where the year a player sees came from, once more than one provider can answer
  * (plan.year-fetch-rework-server.md, 2026-09-30).
  *
- * - `release-group` / `recording`: MusicBrainz's own two signals, above. Also what the
- *   stage-less legacy `/api/year` path still returns, byte for byte.
+ * - `release-group` / `recording`: MusicBrainz's own two signals, above. What the
+ *   MusicBrainz provider reports (until 2026-10-20 also the stage-less path's body).
  * - `deezer` / `itunes`: the year of that store's lone answer, kept because nobody agreed.
  * - `vote`: two independent providers agreed on it (`agreedBy` names them).
  */
@@ -383,10 +383,9 @@ export interface RecordingCandidate {
 }
 
 /**
- * The MusicBrainz-only lookup body: what `resolveYear()` returns and what the STAGE-LESS
- * legacy `GET /api/year` still answers with, byte for byte, for tabs running a client from
- * before the provider vote (the service worker waits rather than calling `skipWaiting`, so
- * such tabs live until every tab closes). It has no `final`: that client never read one.
+ * The MusicBrainz-only lookup body: what `resolveYear()` returns, internal to the MusicBrainz
+ * provider. Until 2026-10-20 it was also the body of the stage-less `GET /api/year`, which
+ * now answers a 500 stub. It has no `final`: only the vote has one.
  */
 export interface MusicBrainzLookupResult {
   year: number | null;
@@ -471,10 +470,10 @@ export interface YearLookupResult {
  * - `rate-limited`         -> 429. The 1 req/s gate is busy. Carries `retryAfterMs`; Phase 3
  *                             backs off and retries that card later. NOT an error condition --
  *                             it is the designed back-pressure signal (decision 12).
- * - `not-configured`       -> 500. `MUSICBRAINZ_USER_AGENT` is unset. Deliberately loud and
- *                             deliberately a 500: it is a deployment fault, not a bad request,
- *                             and MusicBrainz's own rejection of an anonymous call is far
- *                             harder to diagnose (decision 17).
+ * - `not-configured`       -> 500. EVERY provider is unconfigured (one provider's missing
+ *                             `MUSICBRAINZ_USER_AGENT` is a skip with a warning), or the request
+ *                             had no `stage` (the stub, sunset 2026-12-01). Deliberately a 500:
+ *                             a deployment fault, not a bad request (decision 17).
  * - `upstream-unavailable` -> 502. MusicBrainz failed, timed out, or answered non-200 after
  *                             the single 503 retry. Transient.
  * - `unexpected-payload`   -> 502. It answered 200 with something we could not parse. NOT

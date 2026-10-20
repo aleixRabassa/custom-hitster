@@ -9,20 +9,16 @@
  * The handler builds its cache, gates and registry at module scope (once per cold start), so
  * each test imports a FRESH copy of the module after `vi.resetModules()`, with the
  * environment and the global `fetch` stubbed first. The two store adapters and the
- * MusicBrainz provider are replaced by controllable doubles for the staged path -- what is
- * under test is the routing, the status mapping and the headers, not the providers, which
- * have suites of their own. The legacy path runs the REAL `resolveYear()` over fixture
- * payloads, because "byte for byte unchanged" is only worth asserting end to end.
+ * MusicBrainz provider are replaced by controllable doubles -- what is under test is the
+ * routing, the status mapping and the headers, not the providers, which have suites of their
+ * own. The global `fetch` is stubbed to a counter, so a test can assert that nothing reached
+ * the network.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-import {
-  NO_WOMAN_NO_CRY,
-  noWomanNoCryReleaseGroups,
-  noWomanNoCrySearch,
-} from './__fixtures__/musicbrainz-payloads.js';
+import { NO_WOMAN_NO_CRY } from './__fixtures__/musicbrainz-payloads.js';
 import type { ProviderLookup, ProviderOutcome } from './provider-lookup.js';
 import type { ProviderAnswer, YearProviderId } from '../../shared/types.js';
 import { cleanTrackTitle } from '../../shared/year.js';
@@ -112,22 +108,21 @@ const TRACK_QUERY = {
   durationMs: String(NO_WOMAN_NO_CRY.durationMs),
 };
 
-let musicBrainzFetches = 0;
+let fetchCalls = 0;
 
 beforeEach(() => {
   vi.resetModules();
   control.outcomes = {};
   control.calls = {};
-  musicBrainzFetches = 0;
+  fetchCalls = 0;
   // No Upstash, so the cold start picks the memory cache and per-instance gates.
   vi.stubEnv('UPSTASH_REDIS_REST_URL', '');
   vi.stubEnv('UPSTASH_REDIS_REST_TOKEN', '');
   vi.stubEnv('MUSICBRAINZ_USER_AGENT', USER_AGENT);
-  // The legacy path's real MusicBrainz adapter reads the global `fetch` per request.
-  vi.stubGlobal('fetch', (url: string) => {
-    musicBrainzFetches += 1;
-    const body = url.includes('/release-group?') ? noWomanNoCryReleaseGroups : noWomanNoCrySearch;
-    return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) });
+  // Every provider is a double, so no request should ever leave the handler.
+  vi.stubGlobal('fetch', () => {
+    fetchCalls += 1;
+    return Promise.reject(new Error('unexpected network request'));
   });
   // Cold-start adapter lines ("using in-memory cache", "per-instance pacing").
   vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -140,47 +135,22 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('/api/year without a stage (the legacy path)', () => {
-  it("should return today's MusicBrainz-only body and headers, unchanged", async () => {
-    const response = await request(TRACK_QUERY);
-
-    expect(response.status).toBe(200);
-    // `toEqual` on the whole body: no `final`, no `agreedBy`, no `skipped` -- the old client
-    // has never read them, and nothing new may appear on this path.
-    expect(response.body).toEqual({
-      year: NO_WOMAN_NO_CRY.expectedYear,
-      confidence: 'high',
-      source: 'release-group',
-      cached: false,
-      cleanedTitle: CLEANED.title,
-      stripped: CLEANED.stripped,
-    });
-    expect(response.headers).toEqual({
-      'Cache-Control': 'public, s-maxage=2592000, stale-while-revalidate=86400',
-    });
-    expect(musicBrainzFetches).toBe(2);
-    // The provider registry is never consulted on this path.
-    expect(control.calls).toEqual({});
-  });
-
-  it('should keep the loud not-configured 500 for a missing User-Agent', async () => {
-    // One provider, so "skipped with a warning" would be "every provider skipped".
-    vi.stubEnv('MUSICBRAINZ_USER_AGENT', '');
-
+describe('/api/year without a stage (the 500 stub)', () => {
+  it('should answer a not-configured 500 that nothing stores, and ask no provider', async () => {
     const response = await request(TRACK_QUERY);
 
     expect(response.status).toBe(500);
     expect(response.body).toEqual({
       code: 'not-configured',
-      message: 'MUSICBRAINZ_USER_AGENT is not set on the server, so year lookups cannot run.',
+      message: expect.any(String),
     });
+    expect(response.headers).toEqual({ 'Cache-Control': 'no-store' });
+    expect(control.calls).toEqual({});
+    expect(fetchCalls).toBe(0);
   });
 
-  it('should keep the legacy invalid-request message', async () => {
-    expect(await request({ title: '', artist: 'Someone' })).toMatchObject({
-      status: 400,
-      body: { code: 'invalid-request', message: 'A title and an artist are required.' },
-    });
+  it('should answer the same stub whatever else the query carries', async () => {
+    expect(await request({})).toMatchObject({ status: 500, body: { code: 'not-configured' } });
   });
 });
 
@@ -206,8 +176,8 @@ describe('/api/year?stage=', () => {
       final: true,
     });
     expect(control.calls).toEqual({ deezer: 1, musicbrainz: 1 });
-    // The legacy path's MusicBrainz was not the one asked.
-    expect(musicBrainzFetches).toBe(0);
+    // The doubles answered; no request reached the network.
+    expect(fetchCalls).toBe(0);
   });
 
   it('should route stage=verify to the vote, asking iTunes', async () => {
@@ -229,13 +199,13 @@ describe('/api/year?stage=', () => {
     expect(control.calls['itunes']).toBe(1);
   });
 
-  it('should answer 400 for an unknown or empty stage, never falling back to legacy', async () => {
+  it('should answer 400 for an unknown or empty stage, never the stub', async () => {
     for (const stage of ['final', '', 'RESOLVE']) {
       const response = await request({ ...TRACK_QUERY, stage });
       expect(response).toMatchObject({ status: 400, body: { code: 'invalid-request' } });
     }
     expect(control.calls).toEqual({});
-    expect(musicBrainzFetches).toBe(0);
+    expect(fetchCalls).toBe(0);
   });
 
   it('should map a refused gate permit to 429 with retryAfterMs and Retry-After', async () => {

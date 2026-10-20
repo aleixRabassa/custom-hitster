@@ -53,9 +53,8 @@ export interface YearLookupOptions {
   fetchImpl: YearFetch;
   /**
    * Which half of the lookup to run (plan.year-fetch-rework-game.md step 3). REQUIRED, and always
-   * sent: a request with no `stage` reaches the server's legacy MusicBrainz-only path, whose body
-   * has no `final` and which an old client answers by dropping every null -- this client must
-   * never make one. `resolver.ts` decides which stage a card needs; this module only carries it.
+   * sent: a request with no `stage` gets the server's 500 `not-configured` stub (sunset
+   * 2026-12-01), never a year -- this client must never make one. `resolver.ts` decides which stage a card needs; this module only carries it.
    */
   stage: YearStage;
   /**
@@ -190,10 +189,8 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
  * lost its hint just means no back-off, which is what every answer without one gets anyway.
  *
  * `final` MUST be a boolean (2026-09-30). It is the only field that tells pending, provisional
- * and final apart, so a body without it cannot be acted on at all -- and the body most likely to
- * lack it is the stage-less legacy MusicBrainz-only one, edge-cached for 30 days, which any
- * request that lost its `stage` on the way (a rewrite, a stale cached URL) would bring back.
- * Treating a missing `final` as "true" would turn
+ * and final apart, so a body without it cannot be acted on at all -- and a body without it
+ * is a proxy's or a stale deployment's, not this server's. Treating a missing `final` as "true" would turn
  * every such cached null into a dropped card; as "false", into a card verified forever. Neither
  * is a guess worth making, so it is `unexpected-payload` and retried like one.
  */

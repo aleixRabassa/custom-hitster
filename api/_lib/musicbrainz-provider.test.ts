@@ -171,7 +171,7 @@ describe('createMusicBrainzLookup', () => {
 
   it('should skip a missing User-Agent as not-configured rather than failing', async () => {
     // The developer's decision (2026-09-30): every provider is skippable with a warning,
-    // MusicBrainz included. Only the stage-less legacy path still turns this into a 500.
+    // MusicBrainz included. Only "every provider unconfigured" is a 500.
     let fetched = false;
     const lookup = createMusicBrainzLookup({
       cache: createMemoryCache(),

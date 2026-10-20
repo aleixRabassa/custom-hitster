@@ -109,9 +109,9 @@
  *   like a failure: the 403 was an answer the provider sent, and `cached` claims none was.
  *
  * ONE KNOWN CONSEQUENCE OF READING `mbyear:` HERE: a deployment with no
- * `MUSICBRAINZ_USER_AGENT` still uses MusicBrainz answers that are already cached, where the
- * stage-less path answers 500 even for warm tracks (`resolve-year.ts`, "Configuration is
- * checked BEFORE the cache"). That rule existed to stop a misconfiguration looking
+ * `MUSICBRAINZ_USER_AGENT` still uses MusicBrainz answers that are already cached, where
+ * `resolveYear()` itself answers `not-configured` even for warm tracks (`resolve-year.ts`,
+ * "Configuration is checked BEFORE the cache"). That rule existed to stop a misconfiguration looking
  * intermittent; here the skip is logged and listed in `skipped`, so it is visible either way,
  * and a correct cached answer is not thrown away to make the point.
  */
