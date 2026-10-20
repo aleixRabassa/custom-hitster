@@ -42,6 +42,14 @@ describe('Hud', () => {
     expect(screen.queryByText('Reggae Classics')).not.toBeNull();
   });
 
+  it("should render the playlist name as the game screen's level-1 heading", () => {
+    // The game screen has no other heading; without this, heading navigation finds nothing on the
+    // screen where the game is played (axe `page-has-heading-one`).
+    render(<Hud cardsRemaining={5} playlistName="Reggae Classics" />);
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Reggae Classics' })).not.toBeNull();
+  });
+
   it('should match the card width rather than a content column', () => {
     // The HUD sits directly above the card and is supposed to line up with it. It was `max-w-sm`
     // (24rem) against a card of `w-72` (18rem), so on any viewport wide enough for either to reach

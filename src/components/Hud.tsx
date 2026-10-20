@@ -52,8 +52,12 @@ export function Hud({ cardsRemaining, playlistName }: HudProps) {
         distinction is the whole leak rule in miniature: a player chose this playlist and already
         knows what it is called. `truncate` because a user-created playlist name has no length
         limit worth relying on.
+
+        It is also the game screen's one `<h1>`, so heading navigation finds something on the screen
+        where the game is played (axe `page-has-heading-one`, found on production 2026-10-20). The
+        deck name is playlist-level, so this leaks nothing; preflight unstyles headings.
       */}
-      <span className="truncate">{playlistName}</span>
+      <h1 className="truncate">{playlistName}</h1>
 
       {/*
         `role="status"` so the count is announced as it changes -- it is the only feedback a

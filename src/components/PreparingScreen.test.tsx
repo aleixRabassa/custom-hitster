@@ -31,6 +31,12 @@ describe('PreparingScreen', () => {
     expect(screen.getByRole('status').textContent ?? '').not.toMatch(/\d/);
   });
 
+  it('should render its heading as the one level-1 heading', () => {
+    render(<PreparingScreen />);
+
+    expect(screen.getByRole('heading', { level: 1, name: COPY.preparing.heading })).not.toBeNull();
+  });
+
   it('should say the game starts before the deck is fully resolved', () => {
     // The card-1 gate waits for ONE lookup, not the whole deck -- and with the count gone this is
     // the only line that says so, which makes it the whole of the screen's honesty about the wait.

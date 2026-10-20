@@ -81,7 +81,8 @@ export function PreparingScreen({ notice }: PreparingScreenProps) {
         */}
           <Spinner />
 
-          <p className="text-lg font-medium">{copy.preparing.heading}</p>
+          {/* This screen's one `<h1>` (axe `page-has-heading-one`, found on production 2026-10-20). */}
+          <h1 className="text-lg font-medium">{copy.preparing.heading}</h1>
 
           {/*
           Sets the expectation honestly: the wait is one lookup, not the whole deck.
