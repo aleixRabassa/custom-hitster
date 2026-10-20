@@ -140,9 +140,17 @@ export function CardRevealSide({ card }: CardRevealSideProps) {
           >= 15.5rem    title 3 + artist 2 = 8.5rem  -> card >= 18.5rem (content 15.5rem)
           >= 18.75rem   title 4 + artist 3 = 11.75rem -> card >= 21.75rem (content 18.75rem)
         `wrap-anywhere` lets an unbreakable word wrap, and `w-full min-w-0` gives it a width to wrap in.
+
+        BOTH `<p>`s CARRY `px-2.5`. In a `text-center` clamp, Chrome centres the last visible line and
+        only then substitutes the "...", so when that line is nearly full the ellipsis lands past the
+        `<p>`'s box and `overflow: hidden` clips its last dot ("From.."). Measured on production
+        2026-10-20: scrollWidth beat clientWidth by 8px (title) and 4px (artist). Overflow clips at the
+        PADDING edge, so 10px of padding gives the ellipsis room. The padding narrows the text width,
+        which can change how many lines a string needs, never how many lines are allowed, so the
+        vertical budget above is unchanged.
       */}
       <div className="flex w-full min-w-0 flex-col gap-1">
-        <p className="line-clamp-2 text-xl font-semibold wrap-anywhere text-fg @min-[15.5rem]:line-clamp-3 @min-[18.75rem]:line-clamp-4">
+        <p className="line-clamp-2 px-2.5 text-xl font-semibold wrap-anywhere text-fg @min-[15.5rem]:line-clamp-3 @min-[18.75rem]:line-clamp-4">
           {card.title}
         </p>
         {/*
@@ -151,7 +159,7 @@ export function CardRevealSide({ card }: CardRevealSideProps) {
           real artist names, so "Earth, Wind & Fire" would render as three artists and corrupt
           the reveal -- the payoff of the entire game.
         */}
-        <p className="line-clamp-1 text-base wrap-anywhere text-fg-secondary @min-[14rem]:line-clamp-2 @min-[18.75rem]:line-clamp-3">
+        <p className="line-clamp-1 px-2.5 text-base wrap-anywhere text-fg-secondary @min-[14rem]:line-clamp-2 @min-[18.75rem]:line-clamp-3">
           {card.artist}
         </p>
       </div>

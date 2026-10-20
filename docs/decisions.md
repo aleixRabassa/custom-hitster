@@ -317,6 +317,8 @@ Production test 3 found the year pushed off the card. Real titles and artist lis
 
 The fix: every `YearSlot` wrapper is `shrink-0`; title and artist take `line-clamp-*` tiered by a container query, with `CardRevealSide`'s root as the `@container`; `wrap-anywhere` on both and `w-full min-w-0` on their block. The clamp is visual only: the full strings stay in the live region, which is the one place that announces track data.
 
+A follow-up the same day: on production the ellipsis showed as ".." ("From.."). Chrome centres a nearly full last line and then substitutes the "…", which lands past the `<p>`'s box, and `overflow: hidden` clips its last dot (scrollWidth exceeded clientWidth by 8px on the title, 4px on the artist). `px-2.5` on both `<p>`s fixes it, because overflow clips at the padding edge; `overflow-wrap: break-word` and the like changed nothing, and `text-align: left` also fixed it but is rejected, the face being centred by design.
+
 The arithmetic: a container query measures the content box, so with `p-6` the width tested is cardSize minus 3rem. Height left for title and artist is cardSize minus 10rem (3rem padding, 5.5rem year block, 1.5rem gap). Lines are 1.75rem (title), 1.5rem (artist), 0.25rem between. Base title 2 + artist 1 = 5.25rem (the 15rem card overflows by 0.25rem, absorbed by the padding). `@min-[14rem]` (card 17rem): artist 2, 6.75rem. `@min-[15.5rem]` (card 18.5rem): title 3 + artist 2 = 8.5rem. `@min-[18.75rem]` (card 21.75rem): title 4 + artist 3 = 11.75rem; the 24rem maximum leaves 14rem. Moving the tiers needs this arithmetic redone. Nothing here has been seen on a device after the fix.
 
 ## Gestures and deck animation

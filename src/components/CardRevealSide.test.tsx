@@ -185,12 +185,14 @@ describe('CardRevealSide', () => {
       expect(title.className).toContain('@min-[15.5rem]:line-clamp-3');
       expect(title.className).toContain('@min-[18.75rem]:line-clamp-4');
       expect(title.className).toContain('wrap-anywhere');
+      expect(title.className).toContain('px-2.5');
 
       const artist = screen.getByText(longArtist);
       expect(artist.className).toContain('line-clamp-1');
       expect(artist.className).toContain('@min-[14rem]:line-clamp-2');
       expect(artist.className).toContain('@min-[18.75rem]:line-clamp-3');
       expect(artist.className).toContain('wrap-anywhere');
+      expect(artist.className).toContain('px-2.5');
 
       expect(title.parentElement?.className).toContain('w-full');
       expect(title.parentElement?.className).toContain('min-w-0');
