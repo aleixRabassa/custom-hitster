@@ -282,16 +282,28 @@ describe('the digital asset links statement', () => {
   });
 
   it('should skip the build only when nothing but documentation changed since the last deployment', () => {
-    // Pinned verbatim so an edit is deliberate. Exit 0 skips, exit 1 builds. It diffs against
-    // VERCEL_GIT_PREVIOUS_SHA (the last successful deployment), never HEAD^: a push of a code
-    // commit followed by a docs commit must still build. A missing or empty SHA (shallow clone,
-    // first deploy) builds. Inline, never a .sh file: this checkout is CRLF.
+    // Pinned verbatim so an edit is deliberate. Exit 0 skips, exit 1 builds; the logic (diff
+    // against VERCEL_GIT_PREVIOUS_SHA, never HEAD^; build on any doubt) is in the script, whose
+    // header explains why it is Node and not a shell one-liner or a .sh file.
     const config = JSON.parse(readFileSync(join(repoRoot, 'vercel.json'), 'utf8')) as {
       ignoreCommand?: string;
     };
 
-    expect(config.ignoreCommand).toBe(
-      'if [ -n "$VERCEL_GIT_PREVIOUS_SHA" ] && git cat-file -e "$VERCEL_GIT_PREVIOUS_SHA^{commit}" 2>/dev/null && git diff --quiet "$VERCEL_GIT_PREVIOUS_SHA" HEAD -- . \':(exclude)docs\' \':(exclude,glob)**/*.md\'; then echo \'Only docs changed since the last deployment: skipping the build\'; exit 0; else exit 1; fi',
+    expect(config.ignoreCommand).toBe('node scripts/vercel-ignore-build.mjs');
+    expect(readFileSync(join(repoRoot, 'scripts/vercel-ignore-build.mjs'), 'utf8')).toContain(
+      'VERCEL_GIT_PREVIOUS_SHA',
     );
+  });
+
+  it('should keep ignoreCommand within the vercel.json schema limit', () => {
+    // The schema caps `ignoreCommand` at 256 characters, and Vercel rejects the WHOLE config
+    // when it is longer: every deployment fails at validation and production silently stays on
+    // the last good one (2026-10-20, a 304-character one-liner). Nothing local validates the
+    // schema, so this is the guard.
+    const config = JSON.parse(readFileSync(join(repoRoot, 'vercel.json'), 'utf8')) as {
+      ignoreCommand?: string;
+    };
+
+    expect(config.ignoreCommand?.length ?? 0).toBeLessThanOrEqual(256);
   });
 });
