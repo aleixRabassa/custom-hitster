@@ -167,6 +167,65 @@ describe('CardRevealSide', () => {
     render(<CardRevealSide card={pendingYearCard} />);
     expect(screen.getByRole('status').textContent).toContain(COPY.card.yearPending);
   });
+  describe('long titles and artists (2026-10-20)', () => {
+    // Real tracks from the suggested playlists: 223 characters between them pushed the year off a
+    // 256px and a 312px card in production.
+    const longTitle =
+      'Tumbando el Club (feat. C.R.O, Obiewanshot, YSY A, Cazzu, KHEA, Lucho SSJ, Coqeein Montana, Marcianos Crew & Duki) - Remix';
+    const longArtist =
+      'Lisa Gerrard, Klaus Badelt, Hans Zimmer, Gavin Greenaway, The Lyndhurst Orchestra, Bruce Fowler, Yvonne S. Moriarty, Walt Fowler, Ladd McIntosh, Elizabeth Finch';
+    const longCard: Card = { ...highConfidenceCard, title: longTitle, artist: longArtist };
+
+    it('should clamp the title and artist in container-query tiers and wrap long words', () => {
+      // jsdom computes no layout, so the classes are the assertion.
+      render(<CardRevealSide card={longCard} />);
+
+      const title = screen.getByText(longTitle);
+      expect(title.className).toContain('line-clamp-2');
+      expect(title.className).toContain('@min-[15.5rem]:line-clamp-3');
+      expect(title.className).toContain('@min-[18.75rem]:line-clamp-4');
+      expect(title.className).toContain('wrap-anywhere');
+
+      const artist = screen.getByText(longArtist);
+      expect(artist.className).toContain('line-clamp-1');
+      expect(artist.className).toContain('@min-[14rem]:line-clamp-2');
+      expect(artist.className).toContain('@min-[18.75rem]:line-clamp-3');
+      expect(artist.className).toContain('wrap-anywhere');
+
+      expect(title.parentElement?.className).toContain('w-full');
+      expect(title.parentElement?.className).toContain('min-w-0');
+      expect(screen.getByRole('status').className).toContain('@container');
+    });
+
+    it('should keep the full title and artist in the live region', () => {
+      // The clamp is visual only: the announcement carries the whole strings, verbatim.
+      render(<CardRevealSide card={longCard} />);
+
+      const live = screen.getByRole('status');
+      expect(live.textContent).toContain(longTitle);
+      expect(live.textContent).toContain(longArtist);
+      expect(screen.getByText(longTitle).getAttribute('title')).toBeNull();
+      expect(screen.getByText(longArtist).getAttribute('aria-label')).toBeNull();
+      expect(screen.getAllByRole('status')).toHaveLength(1);
+    });
+
+    it('should never let any year state shrink out of the card', () => {
+      const cases: Array<[Card, string]> = [
+        [highConfidenceCard, '1975'],
+        [provisionalCard, '1975'],
+        [pendingYearCard, COPY.card.yearPending],
+        [noYearCard, COPY.card.yearUnknown],
+      ];
+
+      for (const [card, text] of cases) {
+        render(<CardRevealSide card={card} />);
+        const wrapper = screen.getByText(text).closest('div');
+        expect(wrapper?.className, card.id).toContain('shrink-0');
+        cleanup();
+      }
+    });
+  });
+
   describe('the provisional state (plan.year-fetch-rework-ui.md)', () => {
     it('should show the provisional year with COPY.card.yearProvisional', () => {
       expect(yearStateOf(provisionalCard)).toBe('provisional');

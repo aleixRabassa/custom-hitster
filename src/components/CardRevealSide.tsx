@@ -119,19 +119,41 @@ export function CardRevealSide({ card }: CardRevealSideProps) {
     // else in the app.
     <div
       role="status"
-      className="flex h-full w-full flex-col items-center justify-center gap-6 p-6 text-center"
+      className="@container flex h-full w-full flex-col items-center justify-center gap-6 p-6 text-center"
     >
       <YearSlot card={card} />
 
-      <div className="flex flex-col gap-1">
-        <p className="text-xl font-semibold text-fg">{card.title}</p>
+      {/*
+        THE TITLE AND ARTIST ARE CLAMPED, VISUALLY ONLY (2026-10-20). Real tracks carry 160-character
+        artist lists and 120-character titles; unclamped, the column outgrew a 256px and a 312px card
+        and `justify-center` pushed the YEAR -- the payoff of the game -- above the card's top edge.
+        The full strings stay in the DOM, inside the live region, so a screen reader still reads them
+        in full: no `title=`, no `aria-label`, no second region.
+
+        The tiers are a container query on the wrapper above. A container query measures the
+        container's CONTENT box, so with `p-6` the width tested is cardSize - 3rem. Height budget for
+        title + artist is cardSize - 10rem (3rem padding + 5.5rem year block [3.75 + 0.5 gap + 1.25
+        notice] + 1.5rem gap-6). Lines: title 1.75rem, artist 1.5rem, `gap-1` 0.25rem.
+          base          title 2 + artist 1 = 5.25rem -> fits a card of 15.25rem (the 15rem minimum
+                        overflows by 0.25rem, absorbed by the padding, the year stays inside)
+          >= 14rem      title 2 + artist 2 = 6.75rem -> card >= 16.75rem (content 13.75rem, rounded up)
+          >= 15.5rem    title 3 + artist 2 = 8.5rem  -> card >= 18.5rem (content 15.5rem)
+          >= 18.75rem   title 4 + artist 3 = 11.75rem -> card >= 21.75rem (content 18.75rem)
+        `wrap-anywhere` lets an unbreakable word wrap, and `w-full min-w-0` gives it a width to wrap in.
+      */}
+      <div className="flex w-full min-w-0 flex-col gap-1">
+        <p className="line-clamp-2 text-xl font-semibold wrap-anywhere text-fg @min-[15.5rem]:line-clamp-3 @min-[18.75rem]:line-clamp-4">
+          {card.title}
+        </p>
         {/*
           The artist string is rendered VERBATIM. `shared/artists.ts` documents why splitting
           it is forbidden for display: the separators Spotify joins with also occur inside
           real artist names, so "Earth, Wind & Fire" would render as three artists and corrupt
           the reveal -- the payoff of the entire game.
         */}
-        <p className="text-base text-fg-secondary">{card.artist}</p>
+        <p className="line-clamp-1 text-base wrap-anywhere text-fg-secondary @min-[14rem]:line-clamp-2 @min-[18.75rem]:line-clamp-3">
+          {card.artist}
+        </p>
       </div>
     </div>
   );
@@ -144,7 +166,7 @@ function YearSlot({ card }: { card: Card }) {
   switch (state) {
     case 'pending':
       return (
-        <div className="flex flex-col items-center gap-2">
+        <div className="flex shrink-0 flex-col items-center gap-2">
           {/*
             ===================================================================
              A SPINNER SINCE 2026-08-11. IT WAS FOUR STATIC DOTS -- `····` --
@@ -188,7 +210,7 @@ function YearSlot({ card }: { card: Card }) {
       // rendering an empty year.
       if (card.year === null || card.year === undefined) {
         return (
-          <div className="flex flex-col items-center gap-2">
+          <div className="flex shrink-0 flex-col items-center gap-2">
             <p className="text-year-none font-bold text-fg-heading">{copy.card.yearUnknown}</p>
             <p className="text-sm text-warning">{copy.card.yearUnknownDetail}</p>
           </div>
@@ -196,7 +218,7 @@ function YearSlot({ card }: { card: Card }) {
       }
 
       return (
-        <div className="flex flex-col items-center gap-2">
+        <div className="flex shrink-0 flex-col items-center gap-2">
           {/*
             `text-fg-year` is the one text colour Phase 8 changed, and it is the ring's green rather
             than the near-white `--color-fg-strong` it replaced: the year is the payoff of the game

@@ -311,6 +311,14 @@ because the reference's nodes are solid and three rings read as noise at 20px. T
 rationale is not wrong, it is answered — see the comment above `KeepDeckIcon`. `aria-label` is
 unchanged ("Keep this deck"), and `CardControls.test.tsx` pins the shape counts and the `fill="none"`.
 
+### The reveal face clamps title and artist (2026-10-20)
+
+Production test 3 found the year pushed off the card. Real titles and artist lists are long (a 223-character title+artist pair, a 160-character artist list, a 34-character unbreakable word), and the unclamped column overflowed a 256px (320px viewport) and a 312px (390px viewport) card; `justify-center` pushed the year above the top edge, the artist fell off the bottom and the long word was clipped. A 384px card fit.
+
+The fix: every `YearSlot` wrapper is `shrink-0`; title and artist take `line-clamp-*` tiered by a container query, with `CardRevealSide`'s root as the `@container`; `wrap-anywhere` on both and `w-full min-w-0` on their block. The clamp is visual only: the full strings stay in the live region, which is the one place that announces track data.
+
+The arithmetic: a container query measures the content box, so with `p-6` the width tested is cardSize minus 3rem. Height left for title and artist is cardSize minus 10rem (3rem padding, 5.5rem year block, 1.5rem gap). Lines are 1.75rem (title), 1.5rem (artist), 0.25rem between. Base title 2 + artist 1 = 5.25rem (the 15rem card overflows by 0.25rem, absorbed by the padding). `@min-[14rem]` (card 17rem): artist 2, 6.75rem. `@min-[15.5rem]` (card 18.5rem): title 3 + artist 2 = 8.5rem. `@min-[18.75rem]` (card 21.75rem): title 4 + artist 3 = 11.75rem; the 24rem maximum leaves 14rem. Moving the tiers needs this arithmetic redone. Nothing here has been seen on a device after the fix.
+
 ## Gestures and deck animation
 
 **A LEFT SWIPE STEPS BACK ONE CARD AS OF 2026-09-18, A RIGHT SWIPE STILL ADVANCES, AND THE DECK IS NO
