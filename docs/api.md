@@ -388,6 +388,8 @@ All values but one are read server-side only. Copy `.env.example` to `.env.local
 | `UPSTASH_REDIS_REST_TOKEN` | Production only                                        | Same place — shown alongside the REST URL.                                                                                                                                     |
 | `MUSICBRAINZ_USER_AGENT`   | Set it everywhere, but **optional** on the staged path | You write it. Format `AppName/Version ( contact )`. MusicBrainz rate-limits to 1 req/s and blocks anonymous traffic. Unset, MusicBrainz is skipped **with a warning** (below). |
 
+The Upstash database is in AWS `eu-west-2` (London) and the functions are pinned to `lhr1` by `regions` in `vercel.json`, so each Redis round trip stays in one region; if you create a database elsewhere, move the region with it.
+
 **What actually happens when each one is missing** — this is the table to read before concluding something is broken:
 
 | Missing                         | Runtime consequence                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |

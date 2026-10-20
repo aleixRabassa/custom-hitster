@@ -2570,3 +2570,9 @@ Rule: AGENTS.md / decisions.md § Decks ("A browser-local cache of final years")
 - `vercel.json`'s schema caps `ignoreCommand` at **256 characters**. The inline shell one-liner from 0dda0d1 had 304, so Vercel rejected the configuration: 0dda0d1 and 1721963 show "Deployment failed" on GitHub (their status links to the project-configuration docs) and production stayed on 4ac3119. Typecheck, lint, tests, build and a local run of the command all passed; none of them validates the schema.
 - How it was found: the stage-less `/api/year` stub never appeared on production, a never-requested stage-less URL was still a `MISS` answered by the old code, and `https://api.github.com/repos/aleixRabassa/custom-hitster/commits/<sha>/status` (public, no `gh` login needed) showed the failures. Validating with ajv against `https://openapi.vercel.sh/vercel.json` reproduced the `maxLength` error.
 - Fixed by moving the logic to `scripts/vercel-ignore-build.mjs` (exit codes checked locally in throwaway worktrees for docs-only, code, spanning, empty and missing SHAs) and a test capping the command's length. **After any `vercel.json` change, check the commit's Vercel status before assuming it deployed.**
+
+## 2026-10-20 — Functions moved to lhr1, next to Upstash
+
+- Facts measured 2026-10-20: functions ran in `iad1` (`X-Vercel-Id: cdg1::iad1::…`); the Upstash Redis database is in AWS `eu-west-2` (London, confirmed by the developer); users are in Spain (edge `cdg1`). Every `/api/year` request makes several Redis calls (three gates, two caches), and a CDN miss with a Redis hit was about 150 ms slower than a CDN hit.
+- Change: `"regions": ["lhr1"]` in `vercel.json`, pinned in `src/pwa/assetlinks.test.ts`. The whole file was validated against Vercel's schema with ajv.
+- The effect is checked on production by `X-Vercel-Id` showing `::lhr1::` instead of `::iad1::`.

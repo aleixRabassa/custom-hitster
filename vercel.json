@@ -2,6 +2,7 @@
   "buildCommand": "pnpm build",
   "ignoreCommand": "node scripts/vercel-ignore-build.mjs",
   "outputDirectory": "dist",
+  "regions": ["lhr1"],
   "functions": {
     "api/*.ts": {
       "maxDuration": 30

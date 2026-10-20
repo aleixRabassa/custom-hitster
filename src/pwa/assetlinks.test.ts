@@ -306,4 +306,14 @@ describe('the digital asset links statement', () => {
 
     expect(config.ignoreCommand?.length ?? 0).toBeLessThanOrEqual(256);
   });
+
+  it('should run the functions in lhr1, next to the Upstash database', () => {
+    // Colocated with the Upstash database (eu-west-2, London) because every year lookup makes
+    // several Redis round trips; moving one without the other puts the Atlantic back between them.
+    const config = JSON.parse(readFileSync(join(repoRoot, 'vercel.json'), 'utf8')) as {
+      regions?: string[];
+    };
+
+    expect(config.regions).toEqual(['lhr1']);
+  });
 });

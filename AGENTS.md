@@ -213,6 +213,7 @@ Phases 1–8 are code complete. The work after them is the **year-fetch rework**
 - **The provider vote added no variable**: Deezer and iTunes are keyless, the iTunes storefront is a constant. Do not add one "for later".
 - **`MUSICBRAINZ_USER_AGENT` is skipped with a warning** (a loud 500 only when every provider is unconfigured). Set it everywhere; it carries a real contact address.
 - **`UPSTASH_REDIS_REST_URL` / `_TOKEN` back three global gates** (`mbgate:v1` 1.1 s, `deezergate:v1` 120 ms, `itunesgate:v1` 3 s) **and two caches** (`mbyear:`, `yearprov:`). Without them everything falls back per instance: under `vercel dev`, `verify` re-asks every provider and iTunes may answer with 403s.
+- **Functions run in `lhr1` (`vercel.json` `regions`) because the Upstash database is in AWS `eu-west-2` (London); the two must move together.** Every `/api/year` request makes several Redis round trips, and moving one without the other puts the Atlantic back between them. Reasoning and measurements: `docs/decisions.md`.
 - **No Spotify credentials exist or are needed** — the app reads the public embed endpoint anonymously. Adding a `SPOTIFY_CLIENT_ID` is a product decision; read [`docs/plans/plan.md`](./docs/plans/plan.md) §2 first.
 - **The embed payload has no "added by" field**, spiked twice — do not spike it again, do not add an optional `addedBy` to `Card`, do not build UI against it. Re-run procedure in [`docs/agent_findings.md`](./docs/agent_findings.md) (2026-08-06).
 
