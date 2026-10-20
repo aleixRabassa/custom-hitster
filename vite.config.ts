@@ -104,8 +104,14 @@ export default defineConfig({
            real playlist: an editorial playlist refreshes its tracks, and the player
            would get yesterday's deck with no way to tell. And `/api/year`'s
            freshness story is the Upstash cache on the SERVER side, which has its own
-           TTL and is shared between players; a second, unmanaged copy sitting in one
-           browser is not an extension of that design, it is a hole in it.
+           TTL and is shared between players; a second, unmanaged copy of the RESPONSES
+           sitting in one browser is not an extension of that design, it is a hole in it.
+
+           The one narrow exception (2026-10-20) is NOT this worker: `src/game/year-cache.ts`
+           keeps a versioned, final-only, id-keyed store of the vote's answers in
+           localStorage, the same shape as the bundled preloaded table. It carries a
+           signature of the vote, so it invalidates itself; this worker still caches no
+           raw `/api/year` response.
 
            So offline means: the shell loads, and a SAVED SESSION stays playable
            minus audio and minus further year lookups. Pressing Start offline

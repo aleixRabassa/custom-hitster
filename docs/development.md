@@ -1079,8 +1079,10 @@ Mostly carried forward from the Phase 0 research; measurements and reasoning in 
   precaches the build output only — `runtimeCaching` is empty, and that is a decision rather than an
   unfinished corner. Caching `/api/playlist` would deal a deck that no longer matches the real playlist,
   because an editorial playlist has its tracks refreshed by Spotify; and `/api/year`'s freshness story is
-  the shared Upstash cache on the server, so a second unmanaged copy in one browser is a hole in that
-  design rather than an extension of it. **What works offline:** the app loads, and a saved session
+  the shared Upstash cache on the server, so a second unmanaged copy of the responses in one browser is a
+  hole in that design rather than an extension of it. (The one narrow exception, 2026-10-20, is app code,
+  not the worker: `jitster:years:v1`, a versioned, final-only, id-keyed store of the vote's answers, so a
+  playlist already played re-deals offline with its years.) **What works offline:** the app loads, and a saved session
   resumes and stays fully playable — the QR is a data URL, the flip and the swipe are local, and resolved
   years travel with the cards. **What does not:** audio previews, year lookups for unresolved cards, and
   starting a new deck (which produces Phase 7's `offline` copy immediately rather than hanging). This is

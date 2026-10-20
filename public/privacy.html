@@ -129,7 +129,7 @@
 
       <h2>What stays on your device</h2>
       <p>
-        The app uses your browser's <code>localStorage</code> under exactly three keys, and none is
+        The app uses your browser's <code>localStorage</code> under exactly six keys, and none is
         ever transmitted anywhere:
       </p>
       <ul>
@@ -146,9 +146,24 @@
           <code>jitster:locale:v1</code> — the language you picked (English, Spanish or Catalan), so
           the app opens in it next time.
         </li>
+        <li>
+          <code>jitster:prefs:v1</code> — your two choices on the start screen about cards with a
+          missing or doubtful year, so they are ticked the way you left them.
+        </li>
+        <li>
+          <code>jitster:devmode:v1</code> — a flag that exists only if you switched on the app's
+          developer mode (three quick clicks on the logo).
+        </li>
+        <li>
+          <code>jitster:years:v1</code> — release years the app has already looked up, stored as a
+          Spotify track id and a year (never a title or an artist) and kept for up to 30 days, so a
+          playlist you played before deals again without looking anything up, even offline.
+        </li>
       </ul>
       <p>
-        All three are written and read by your browser only. There is no account, no sync and no
+        All six are written and read by your browser only. The app also notes, in
+        <code>sessionStorage</code> and only until you close the tab, whether it was opened from the
+        Android app (<code>jitster:launcher:v1</code>). There is no account, no sync and no
         server copy of any of them. Deck PDFs and share links are also produced entirely on your
         device: a share link is just playlist ids plus a shuffle seed placed on your clipboard, and
         a printable deck is generated in the browser and never uploaded.
@@ -235,7 +250,7 @@
       <h2>Deleting your data</h2>
       <p>
         Everything the app keeps is on your device. Clearing this site's data in your browser — on
-        Android, in Chrome, since the app runs inside it — removes both storage keys and leaves
+        Android, in Chrome, since the app runs inside it — removes every storage key above and leaves
         nothing behind. There is no server-side record tied to you, so there is nothing to request
         the deletion of.
       </p>

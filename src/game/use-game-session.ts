@@ -21,7 +21,7 @@ import { useCallback, useEffect, useReducer, useRef } from 'react';
 
 import { readLocalStorage } from './browser-storage';
 import { clearSession, loadSession, saveSession } from './persistence';
-import { loadPreloadedYears, withPreloadedYears } from './preloaded-years';
+import { isPreloadEnabled, loadPreloadedYears, withPreloadedYears } from './preloaded-years';
 import {
   cardsPlayed,
   cardsRemaining,
@@ -33,6 +33,8 @@ import {
 } from './reducer';
 import { createYearResolver } from './resolver';
 import { lookupYear } from './year-client';
+import { createYearCache, withLocalYearCache } from './year-cache';
+import type { YearCache } from './year-cache';
 import type { StorageLike } from './persistence';
 import type { YearResolver } from './resolver';
 import type { GameAction, GameState } from './types';
@@ -160,6 +162,11 @@ export function useGameSession(options: UseGameSessionOptions = {}): GameSession
 
   const resolverRef = useRef<YearResolver | null>(null);
 
+  // The browser-local cache of server-final years (`year-cache.ts`): loaded once per hook instance,
+  // on the first crawl, so a throwing storage or a large payload costs nothing before then. Off
+  // with the preloaded table (`VITE_PRELOADED_YEARS=off`).
+  const yearCacheRef = useRef<YearCache | null>(null);
+
   /**
    * Bumped by `start()` so a restart always produces a new session key, even when the caller
    * supplies the same seed twice (Phase 8's shareable deck URL makes that a real possibility).
@@ -189,9 +196,21 @@ export function useGameSession(options: UseGameSessionOptions = {}): GameSession
       //
       // CACHE FIRST: a track the preloaded table knows is answered final from it, with no request
       // (`withPreloadedYears`). The table promise is memoised, so this costs nothing per lookup.
+      //
+      // Then the local cache of server-final years, then the network (`withLocalYearCache`).
       lookup: withPreloadedYears(
-        (track, stage, signal) =>
-          lookupYear(track, { fetchImpl: globalThis.fetch.bind(globalThis), stage, signal }),
+        withLocalYearCache(
+          (track, stage, signal) => {
+            return lookupYear(track, {
+              fetchImpl: globalThis.fetch.bind(globalThis),
+              stage,
+              signal,
+            });
+          },
+          (yearCacheRef.current ??= createYearCache(storage, {
+            enabled: isPreloadEnabled(import.meta.env.VITE_PRELOADED_YEARS),
+          })),
+        ),
         loadPreloadedYears(import.meta.env.VITE_PRELOADED_YEARS),
       ),
       sleep: realSleep,
@@ -221,7 +240,7 @@ export function useGameSession(options: UseGameSessionOptions = {}): GameSession
     };
     // `sessionId` is intentionally not read in the body: it is here to RE-KEY this effect on a
     // new session. The deck is read through `stateRef` for the reason documented on it.
-  }, [isActive, sessionId]);
+  }, [isActive, sessionId, storage]);
 
   // ---- The priority jump ----------------------------------------------------
   // Tells the resolver which card the player is on: it is served first by whichever lane it

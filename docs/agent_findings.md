@@ -2548,3 +2548,19 @@ Found by testing https://playlistjitster.vercel.app.
 - **500, not 400:** a request with no `stage` now answers `500` `{ code: 'not-configured' }` with `Cache-Control: no-store`. The pre-vote client (git `104c1e2`, old `resolver.ts`) settles `invalid-request` as a final null and would drop every card, collapsing the deck to `no-years-found`; `not-configured` makes it stop lookups cleanly and play a yearless deck. A present-but-invalid `stage` stays a 400.
 - **Sunset:** the stub may become a 400 after 2026-12-01. Old edge copies of the 30-day legacy body are gone, because Vercel scopes its CDN cache per deployment.
 - **Consequence:** `MUSICBRAINZ_USER_AGENT` is now only ever skipped with a warning; the loud 500 is for "every provider unconfigured".
+
+## 2026-10-20 — A browser-local cache of final years
+
+Rule: AGENTS.md / decisions.md § Decks ("A browser-local cache of final years"). The developer amended the
+"`runtimeCaching` is empty on purpose" reasoning: the service worker still caches no raw `/api/year` response, but
+`src/game/year-cache.ts` keeps server-final years by track id in `localStorage` (`jitster:years:v1`).
+
+- **The write hook is the `lookup` wrapper, not `onResolved`.** `onResolved` also fires for client-made settlements (an
+  exhausted resolve or verify), so it cannot tell a server-final answer from a guess.
+- **The signature is the only invalidation.** The server caches no final vote and `YEAR_CACHE_SCHEMA_VERSION` is
+  MusicBrainz-only, so the payload is stamped with that version, every `PROVIDER_CACHE_VERSION`, the plan and the
+  trust order. All four were already exported; `shared/year-providers.ts` imports only `shared/year.ts` and
+  `shared/types.ts`, so importing it into the client pulls no Node API.
+- **`VITE_PRELOADED_YEARS=off` also disables it**, or a repeat load test from one browser asks nothing.
+- `public/privacy.html` said "exactly three keys" and omitted `jitster:prefs:v1` and `jitster:devmode:v1`; it now lists
+  all six `localStorage` keys (and the `sessionStorage` launcher verdict) accurately.

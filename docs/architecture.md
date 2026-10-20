@@ -642,6 +642,8 @@ Three features that add to the app without changing how a game is played, and al
   jitster:library:v1   ≤20 saved decks           (playlist-library.ts)
                        payload v2; reads v1
                        ids[] + name + savedAt only
+  jitster:years:v1     server-final years by id  (year-cache.ts)
+                       signature + {year, confidence, storedAt}; ≤4000
 ```
 
 **The link is (playlist ids + seed), plus — mid-game only — the current card** (`?playlist=…&seed=…[&card=<trackId>]`, 2026-09-29). For a few hours on 2026-09-29 it also carried a shuffle version (`v=2`), while the old Fisher-Yates was kept for older links; both were removed the same day, so a `v` param is now ignored rather than rejected, and a link minted before 2026-09-29 deals a different order than it did — accepted by the developer. `card` is a track id, case-preserved, and starts the recipient on that card; the end screen's link carries none, since its position is the last card. Query params rather than a hash fragment — a hash is marginally more private but is mangled by some chat clients, and this is a link people paste into WhatsApp.
@@ -1165,8 +1167,12 @@ Four decisions carry the design:
 - **The precache is the build output and NOTHING else.** `runtimeCaching` is empty, and that is a
   decision rather than an omission: a cached `/api/playlist` response deals a deck that no longer
   matches the real playlist (editorial playlists refresh their tracks), and `/api/year`'s freshness
-  story is the shared Upstash cache on the server — a second unmanaged copy in one browser is a hole in
-  that design, not an extension of it. **Offline therefore means the shell loads and a saved session
+  story is the shared Upstash cache on the server — a second unmanaged copy of the responses in one
+  browser is a hole in that design, not an extension of it. **The one narrow exception (2026-10-20) is
+  not the worker:** `src/game/year-cache.ts` keeps a versioned, final-only, id-keyed store of the vote's
+  answers in `localStorage` (`jitster:years:v1`), asked after the bundled table and before the network
+  by `withLocalYearCache`, and invalidated whole by a signature of the vote; see decisions.md, "A
+  browser-local cache of final years". **Offline therefore means the shell loads and a saved session
   stays playable**, minus audio and minus further year lookups; pressing Start produces Phase 7's
   `offline` copy, which already refuses a request that cannot succeed.
 - **The update strategy WAITS rather than `skipWaiting`.** `registerType: 'prompt'` with no prompt UI
