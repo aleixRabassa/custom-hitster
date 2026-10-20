@@ -1235,6 +1235,14 @@ test sites. It is additive — **no save-format bump**, the `startIndex` precede
 
 **Comments in `index.html` are shipped bytes**, unlike comments in `src/` — it is the blocking document on the critical path and nothing strips it. Keep the reasoning in [`docs/architecture.md`](./architecture.md) §3 and one-line pointers in the file. Two literals there are load-bearing: `theme-color` **must** track `--color-page` by hand (a `meta` attribute cannot hold a `var()`), and the favicon is a small WebP (`logo.webp`, 12,892 bytes since the 2026-08-12 artwork) that replaced a **1.26 MB PNG which was costing 6.2 s of LCP** — never restore a large icon.
 
+### Hashed assets are cached as immutable (2026-10-20)
+
+**Why.** Vercel's default for static files is `public, max-age=0, must-revalidate`, hashed ones included (verified with curl on 2026-10-20 for `/assets/index-*.js`). Without the service worker, every visit revalidated every JS and CSS file, and Lighthouse's efficient-cache-policy audit flags it. `vercel.json` now sends `public, max-age=31536000, immutable` for `/assets/(.*)`.
+
+**Why it is safe.** Vite content-hashes everything under `/assets/` (default naming, and `public/` has no `assets/` folder), so a changed file is a new URL. `index.html` and `sw.js` are untouched and keep revalidating, which is what lets a deploy reach a player at all (the worker waits instead of calling `skipWaiting`). `src/pwa/assetlinks.test.ts` pins the header and asserts no other entry sets `Cache-Control`.
+
+**The trap.** An unhashed file placed under `public/assets/` would be served at `/assets/<name>` and frozen in browsers for a year, with no way to ship a fix. Anything unhashed goes elsewhere.
+
 ## Google Play: the back press and the TWA shell
 
 **THE ANDROID BACK PRESS IS AN IN-APP CONTROL AS OF 2026-08-12, SO THERE IS EXACTLY ONE `pushState` IN

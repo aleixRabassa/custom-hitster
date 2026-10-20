@@ -148,6 +148,7 @@ Phases 1–8 are code complete. The work after them is the **year-fetch rework**
 
 - `vite-plugin-pwa` in `generateSW` mode. **It precaches the build output only — `runtimeCaching` is empty on purpose** — and **it waits instead of calling `skipWaiting`** (a mid-game activation strands code-split chunks). No `devOptions`. The manifest is `src/pwa/manifest.ts`, imported only by `vite.config.ts`.
 - **Comments in `index.html` are shipped bytes.** `theme-color` tracks `--color-page` by hand. The favicon is a small WebP; never restore a large icon.
+- **Hashed `/assets/*` are `immutable` for a year via `vercel.json`; `index.html` and `sw.js` are never given a cache header** (they must revalidate, or a deploy never reaches a player). Anything unhashed must never be put under `public/assets/`.
 
 ### Google Play [§ Google Play: the back press and the TWA shell]
 

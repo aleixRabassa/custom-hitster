@@ -258,4 +258,26 @@ describe('the digital asset links statement', () => {
     const disposition = rule?.headers?.find((h) => h.key === 'Content-Disposition');
     expect(disposition?.value).toBe('attachment');
   });
+
+  it('should cache hashed assets as immutable and never give the shell a cache header', () => {
+    // Only `/assets/` is content-hashed, so only it may be frozen. `index.html` and `sw.js` must
+    // revalidate, or a deploy never reaches a player (the PWA waits instead of skipWaiting).
+    const config = JSON.parse(readFileSync(join(repoRoot, 'vercel.json'), 'utf8')) as {
+      headers?: { source?: string; headers?: { key: string; value: string }[] }[];
+    };
+    const entries = config.headers ?? [];
+    const cacheControlOf = (entry: (typeof entries)[number]) =>
+      entry.headers?.find((h) => h.key.toLowerCase() === 'cache-control')?.value;
+
+    const assets = entries.find((entry) => entry.source === '/assets/(.*)');
+    expect(assets).toBeDefined();
+    expect(assets && cacheControlOf(assets)).toBe('public, max-age=31536000, immutable');
+
+    const shellSources = ['/', '/index.html', '/sw.js', '/(.*)', '/:path*', '/(.*)\\.js'];
+    for (const entry of entries) {
+      if (cacheControlOf(entry) === undefined) continue;
+      expect(entry.source).toBe('/assets/(.*)');
+      expect(shellSources).not.toContain(entry.source);
+    }
+  });
 });

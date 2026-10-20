@@ -2521,3 +2521,8 @@ Found by testing https://playlistjitster.vercel.app.
 - **The new `<h1>`s from production test 5 were re-checked on the deploy**: axe clean on every screen including the real preparing screen (year API blocked so the card-1 gate holds) and the real end screen in es at 320px; the preparing live region still reads heading then detail; no clipping or horizontal overflow at 320 or 1280.
 - **Testing trap**: a mouse click moves the sequential-focus starting point, so a later `blur()` + Tab starts from the clicked control, not from the top of the page; reload before a Tab walk.
 - **None of this is the screen-reader pass**: axe and a Tab walk do not hear the reveal's live region, which is still the project's largest gap.
+
+## 2026-10-20 — Hashed assets were not cached, and the screen-transition focus gap is deferred
+
+- **Hashed assets were not cached.** Production returned `Cache-Control: public, max-age=0, must-revalidate` for `/assets/index-*.js` (curl, 2026-10-20), so every visit without the service worker revalidated every JS and CSS file. `vercel.json` now sends `public, max-age=31536000, immutable` for `/assets/(.*)`; `index.html` and `sw.js` get no cache header. See decisions.md, "Hashed assets are cached as immutable".
+- **Focus landing on `body` after a screen change is deferred on purpose.** On 2026-10-20 the developer decided NOT to fix it for now (deal, welcome to picker, game to end, Exit to picker). The benefit is for screen-reader users only and cannot be validated without a real reader, so it belongs with the screen-reader pass: move focus to each screen's `<h1>` with `tabIndex={-1}` and no ring, one shared hook, checked against Guard 4, the dialogs' own focus and the Play gate. This is justified, not an oversight; do not re-file it.
