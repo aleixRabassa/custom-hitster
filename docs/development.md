@@ -521,15 +521,15 @@ phone gets a card taller than its viewport ([`architecture.md`](./architecture.m
 
 **Keyboard only.** No mouse, no touch — Tab, Space and →.
 
-| Check                                                                                                     | Status  |
-| --------------------------------------------------------------------------------------------------------- | ------- |
-| Every interactive element shows a visible ring on Tab                                                     | Pending |
-| The ring is legible on the page, on a card face, on a control, and on the emerald button                  | Pending |
-| A **mouse click** leaves no ring behind — that is what `focus-visible` buys                               | Pending |
-| Tab order through the landing screen is sensible, and Enter submits                                       | Pending |
-| Space flips and → advances through several cards                                                          | Pending |
-| **Space on a focused button does not also flip the card** — Phase 5 guards it, Phase 7 restyled around it | Pending |
-| Exit is reachable and works                                                                               | Pending |
+| Check                                                                                                     | Status                                                                                                                                                                                                                                                       |
+| --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Every interactive element shows a visible ring on Tab                                                     | Verified 2026-10-20 on production (headless Chrome): every Tab stop on the welcome screen, the picker, the game's controls and both dialogs had an outline or ring and matched :focus-visible; the end screen, print view and replace prompt were not walked |
+| The ring is legible on the page, on a card face, on a control, and on the emerald button                  | Pending                                                                                                                                                                                                                                                      |
+| A **mouse click** leaves no ring behind — that is what `focus-visible` buys                               | Verified 2026-10-20 on production: a clicked language button has no outline and does not match :focus-visible                                                                                                                                                |
+| Tab order through the landing screen is sensible, and Enter submits                                       | Verified 2026-10-20 on production: welcome → picker (Back, link field, +, the two options, Start, 13 suggestions, languages, footer); Enter in the field deals                                                                                               |
+| Space flips and → advances through several cards                                                          | Verified 2026-10-20 on production                                                                                                                                                                                                                            |
+| **Space on a focused button does not also flip the card** — Phase 5 guards it, Phase 7 restyled around it | Verified 2026-10-20 on production: Space on a focused Play starts the song, on Keep this deck opens the dialog, and the card stays unflipped                                                                                                                 |
+| Exit is reachable and works                                                                               | Verified 2026-10-20 on production: Exit → dialog (focus on Keep playing) → End game, keyboard only; Escape returns focus to the button that opened each dialog                                                                                               |
 
 **Screen reader.** VoiceOver, NVDA or Narrator over one flip. This is the pass that matters most,
 because Phase 7 added the app's only live region that announces track data and the whole point of it is audible.
