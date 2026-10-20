@@ -1,5 +1,6 @@
 {
   "buildCommand": "pnpm build",
+  "ignoreCommand": "if [ -n \"$VERCEL_GIT_PREVIOUS_SHA\" ] && git cat-file -e \"$VERCEL_GIT_PREVIOUS_SHA^{commit}\" 2>/dev/null && git diff --quiet \"$VERCEL_GIT_PREVIOUS_SHA\" HEAD -- . ':(exclude)docs' ':(exclude,glob)**/*.md'; then echo 'Only docs changed since the last deployment: skipping the build'; exit 0; else exit 1; fi",
   "outputDirectory": "dist",
   "functions": {
     "api/*.ts": {

@@ -288,6 +288,8 @@ npx vercel deploy        # prints a preview URL the phone can open
 
 Open that URL on the phone. A preview deploy is the better option for iOS, which is stricter about non-HTTPS origins for some APIs; `npx vercel dev` on the same network works too. Every card path starts from a dealt deck, which needs `/api/playlist` and `/api/year`, so `pnpm dev` cannot serve it.
 
+**Docs-only pushes do not deploy.** `vercel.json`'s `ignoreCommand` skips the build (the deployment shows Canceled) when only `docs/` and `*.md` changed since the last successful deployment, and builds on any doubt. To force a deploy of such a push, change a non-doc file. See `decisions.md`, "Docs-only pushes do not deploy".
+
 What was never checked:
 
 | Check                                                                                                    | Why it matters                                                                                                   |

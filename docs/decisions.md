@@ -1243,6 +1243,13 @@ test sites. It is additive — **no save-format bump**, the `startIndex` precede
 
 **The trap.** An unhashed file placed under `public/assets/` would be served at `/assets/<name>` and frozen in browsers for a year, with no way to ship a fix. Anything unhashed goes elsewhere.
 
+### Docs-only pushes do not deploy (2026-10-20)
+
+**Why.** Vercel's CDN cache for function responses is scoped per deployment, so every deploy starts `/api/year` cold and the MusicBrainz, Deezer and iTunes budgets are spent again. Two docs-only pushes on 2026-10-20 wiped it for nothing. `vercel.json` carries an inline `ignoreCommand` (exit 0 skips, exit 1 builds) that skips only when `VERCEL_GIT_PREVIOUS_SHA` is set, that commit exists in the clone, and `git diff --quiet` against it, excluding `docs` and `*.md`, finds nothing. Anything else builds. Nothing in `src/`, `api/`, `shared/`, `vite.config.ts`, `index.html` or `public/` imports or reads a `.md` or `docs/` file (grepped 2026-10-20), which is what makes the exclusion safe.
+
+**The traps.** (1) Diff against the previous **deployment**, not `HEAD^`: a push of a code commit followed by a docs commit would otherwise skip the code. (2) The build clone is shallow (`--depth=10`), so the previous SHA may be missing; `git cat-file -e` guards it and a miss builds. (3) The command is inline, never a `.sh` file: this checkout is CRLF and a committed script could run with
+under Linux sh. (4) The string is pinned verbatim in `src/pwa/assetlinks.test.ts`, so an edit is deliberate. A skipped deployment shows as Canceled.
+
 ## Google Play: the back press and the TWA shell
 
 **THE ANDROID BACK PRESS IS AN IN-APP CONTROL AS OF 2026-08-12, SO THERE IS EXACTLY ONE `pushState` IN
